@@ -1,7 +1,7 @@
 spring:
   data:
     redis: # 基础 Redis 连接配置
-      host: 192.168.1.102
+      host: 192.168.1.106
       port: 6379
       database: 0
       timeout: 1800000 # 使用毫秒格式，兼容 Redis Lettuce
