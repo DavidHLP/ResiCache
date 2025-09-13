@@ -5,8 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Data
 @Builder
 @AllArgsConstructor
@@ -14,4 +12,6 @@ import java.time.LocalDateTime;
 public class CacheMata {
     private long ttl;
     private Object value;
+    private Class<?> type;
+    private Long visitTimes;
 }

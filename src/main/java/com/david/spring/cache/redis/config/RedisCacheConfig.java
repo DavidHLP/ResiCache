@@ -1,8 +1,14 @@
 package com.david.spring.cache.redis.config;
 
-import com.david.spring.cache.redis.manager.RedisProCacheManager;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.locks.DistributedLock;
+import com.david.spring.cache.redis.manager.RedisProCacheManager;
+import com.david.spring.cache.redis.protection.CachePenetration;
+import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,11 +26,6 @@ import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSeriali
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -43,10 +44,10 @@ public class RedisCacheConfig {
             RedisTemplate<String, Object> redisTemplate,
             CacheInvocationRegistry registry,
             Executor cacheRefreshExecutor,
-            DistributedLock distributedLock) {
+            DistributedLock distributedLock,
+            CachePenetration cachePenetration) {
         RedisCacheWriter cacheWriter =
                 RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
-
         // Key 用 String，Value 用 JSON
         RedisSerializationContext.SerializationPair<String> keyPair =
                 RedisSerializationContext.SerializationPair.fromSerializer(
@@ -81,7 +82,8 @@ public class RedisCacheConfig {
                 defaultCacheConfig,
                 registry,
                 cacheRefreshExecutor,
-                distributedLock);
+                distributedLock,
+                cachePenetration);
     }
 
     @Bean

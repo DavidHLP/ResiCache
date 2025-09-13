@@ -3,6 +3,9 @@ package com.david.spring.cache.redis.cache;
 import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.locks.LockUtils;
 import com.david.spring.cache.redis.meta.CacheMata;
+import com.david.spring.cache.redis.protection.CacheBreakdown;
+import com.david.spring.cache.redis.protection.CachePenetration;
+import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 
@@ -17,10 +20,10 @@ import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
 import java.time.Duration;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -32,6 +35,7 @@ public class RedisProCache extends RedisCache {
     private final Executor executor;
     private final RedisCacheConfiguration cacheConfiguration;
     private final DistributedLock distributedLock;
+    private final CachePenetration cachePenetration;
 
     public RedisProCache(
             String name,
@@ -40,13 +44,15 @@ public class RedisProCache extends RedisCache {
             RedisTemplate<String, Object> redisTemplate,
             CacheInvocationRegistry registry,
             Executor executor,
-            DistributedLock distributedLock) {
+            DistributedLock distributedLock,
+            CachePenetration cachePenetration) {
         super(name, cacheWriter, cacheConfiguration);
         this.redisTemplate = Objects.requireNonNull(redisTemplate);
         this.registry = Objects.requireNonNull(registry);
         this.executor = Objects.requireNonNull(executor);
         this.cacheConfiguration = Objects.requireNonNull(cacheConfiguration);
         this.distributedLock = Objects.requireNonNull(distributedLock);
+        this.cachePenetration = Objects.requireNonNull(cachePenetration);
     }
 
     @Override
@@ -206,6 +212,13 @@ public class RedisProCache extends RedisCache {
     public void put(@NonNull Object key, @Nullable Object value) {
         Object toStore = wrapIfMataAbsent(value, key);
         super.put(key, toStore);
+        // 成功写入后将 key 加入布隆过滤器（值非空时）
+        try {
+            if (value != null) {
+                String membershipKey = String.valueOf(key);
+                cachePenetration.addIfEnabled(getName(), membershipKey);
+            }
+        } catch (Exception ignore) {}
         // 雪崩保护：统一调用
         applyLitteredExpire(key, toStore);
     }
@@ -217,6 +230,12 @@ public class RedisProCache extends RedisCache {
         boolean firstInsert = wasKeyAbsentBeforePut(key);
         ValueWrapper previous = super.putIfAbsent(key, toStore);
         if (firstInsert) {
+            try {
+                if (value != null) {
+                    String membershipKey = String.valueOf(key);
+                    cachePenetration.addIfEnabled(getName(), membershipKey);
+                }
+            } catch (Exception ignore) {}
             applyLitteredExpire(key, toStore);
         }
         return previous;
@@ -238,22 +257,12 @@ public class RedisProCache extends RedisCache {
 
     @Override
     @NonNull
-    @SuppressWarnings("unchecked")
     public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
-        ValueWrapper wrapper = this.get(key);
-        if (wrapper != null) {
-            Object val = wrapper.get();
-            if (val != null) {
-                return (T) val;
-            }
-            // 若命中但值为 null，回退到加载器
-        }
-        // 首次加载：本地锁 -> 分布式锁，双重检查，避免缓存击穿与数据库过载
         String cacheKey = createCacheKey(key);
+        String membershipKey = String.valueOf(key);
         ReentrantLock localLock = registry.obtainLock(getName(), key);
         String distKey = "cache:load:" + cacheKey;
         long leaseTimeSec = 30L; // 防御性租期，避免锁永久占用
-
         log.debug(
                 "First-load attempt: name={}, redisKey={}, distKey={}, leaseTimeSec={}",
                 getName(),
@@ -261,82 +270,49 @@ public class RedisProCache extends RedisCache {
                 distKey,
                 leaseTimeSec);
 
+        // Bloom 预检：若启用且断言“不可能存在”，直接抛出 ValueRetrievalException，阻断穿透
+        if (cachePenetration.isEnabled(getName())) {
+            boolean mightContain = cachePenetration.mightContain(getName(), membershipKey);
+            if (!mightContain) {
+                log.debug("Bloom blocked load: name={}, bloomKey={}", getName(), membershipKey);
+                throw new Cache.ValueRetrievalException(
+                        key,
+                        valueLoader,
+                        new NoSuchElementException("Blocked by Bloom filter: " + membershipKey));
+            }
+        }
         try {
             T result =
-                    LockUtils.runWithLocalBlockThenDistBlock(
+                    CacheBreakdown.loadWithProtection(
+                            getName(),
+                            distKey,
                             localLock,
                             distributedLock,
-                            distKey,
                             leaseTimeSec,
                             TimeUnit.SECONDS,
-                            (LockUtils.ThrowingSupplier<T>)
-                                    () -> {
-                                        log.debug(
-                                                "First-load supplier start: name={}, redisKey={}, distKey={}",
-                                                getName(),
-                                                cacheKey,
-                                                distKey);
-
-                                        // 双重检查1（本地锁后）
-                                        ValueWrapper afterLocal = super.get(key);
-                                        if (afterLocal != null) {
-                                            Object val = afterLocal.get();
-                                            if (val != null) {
-
-                                                log.debug(
-                                                        "First-load hit after local-check, name={}, redisKey={}",
-                                                        getName(),
-                                                        cacheKey);
-
-                                                return (T) val;
-                                            }
-                                        }
-                                        // 双重检查2（分布式锁后）
-                                        ValueWrapper afterDist = super.get(key);
-                                        if (afterDist != null) {
-                                            Object val = afterDist.get();
-                                            if (val != null) {
-
-                                                log.debug(
-                                                        "First-load hit after dist-check, name={}, redisKey={}",
-                                                        getName(),
-                                                        cacheKey);
-
-                                                return (T) val;
-                                            }
-                                        }
-                                        // 真正回源加载
-
-                                        log.debug(
-                                                "First-load calling valueLoader: name={}, redisKey={}",
-                                                getName(),
-                                                cacheKey);
-
-                                        T value = valueLoader.call();
-                                        if (value == null) {
-                                            throw new Cache.ValueRetrievalException(
-                                                    key,
-                                                    valueLoader,
-                                                    new NullPointerException(
-                                                            "ValueLoader returned null"));
-                                        }
-                                        this.put(key, value);
-
-                                        log.debug(
-                                                "First-load loaded and cached: name={}, redisKey={}, valueType={}",
-                                                getName(),
-                                                cacheKey,
-                                                value.getClass().getSimpleName());
-
-                                        return value;
-                                    });
-
+                            () -> {
+                                ValueWrapper w = super.get(key);
+                                if (w != null) {
+                                    Object v = w.get();
+                                    if (v != null) {
+                                        // 命中缓存则补偿加入 Bloom
+                                        try {
+                                            cachePenetration.addIfEnabled(getName(), membershipKey);
+                                        } catch (Exception ignore) {}
+                                        @SuppressWarnings("unchecked")
+                                        T casted = (T) v;
+                                        return casted;
+                                    }
+                                }
+                                return null;
+                            },
+                            valueLoader::call,
+                            (val) -> this.put(key, val));
             log.debug(
                     "First-load finished: name={}, redisKey={}, distKey={}",
                     getName(),
                     cacheKey,
                     distKey);
-
             return result;
         } catch (Exception ex) {
             throw new Cache.ValueRetrievalException(key, valueLoader, ex);
@@ -358,12 +334,8 @@ public class RedisProCache extends RedisCache {
             }
         } catch (Exception ignored) {
         }
-        // 雪崩保护：将 TTL 在原有基础上减少 5%~20%
-        long effectiveTtl = ttlSecs;
-        if (ttlSecs > 1) {
-            double p = ThreadLocalRandom.current().nextDouble(0.05d, 0.20d); // 5%~20%
-            effectiveTtl = Math.max(1, (long) Math.floor(ttlSecs * (1.0d - p)));
-        }
+        // 雪崩保护：通过策略类对 TTL 进行抖动（随机缩短）
+        long effectiveTtl = ttlSecs > 0 ? CacheAvalanche.jitterTtlSeconds(ttlSecs) : ttlSecs;
         // 不再计算本地过期时间，仅使用元信息中的 TTL，并由 Redis 统一管理过期
         return CacheMata.builder().ttl(effectiveTtl).value(value).build();
     }

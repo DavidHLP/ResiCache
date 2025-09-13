@@ -1,8 +1,9 @@
 package com.david.spring.cache.redis.manager;
 
 import com.david.spring.cache.redis.cache.RedisProCache;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.locks.DistributedLock;
+import com.david.spring.cache.redis.protection.CachePenetration;
+import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 
 import jakarta.annotation.Nonnull;
 
@@ -32,6 +33,7 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
     private final Executor executor;
     @Getter private final RedisCacheConfiguration redisCacheConfiguration;
     private final DistributedLock distributedLock;
+    private final CachePenetration cachePenetration;
 
     private DefaultListableBeanFactory beanFactory;
 
@@ -42,7 +44,8 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
             RedisCacheConfiguration redisCacheConfiguration,
             CacheInvocationRegistry registry,
             Executor executor,
-            DistributedLock distributedLock) {
+            DistributedLock distributedLock,
+            CachePenetration cachePenetration) {
         super(cacheWriter, redisCacheConfiguration, initialCacheConfigurations);
         this.initialCacheConfigurations = initialCacheConfigurations;
         this.redisTemplate = cacheRedisTemplate;
@@ -51,9 +54,11 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
         this.registry = registry;
         this.executor = executor;
         this.distributedLock = distributedLock;
+        this.cachePenetration = cachePenetration;
     }
 
     @Override
+    @Nonnull
     protected Collection<RedisCache> loadCaches() {
         List<RedisCache> caches = new LinkedList<>();
         for (Map.Entry<String, RedisCacheConfiguration> entry :
@@ -71,7 +76,14 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
                 getInitialCacheConfigurations().getOrDefault(name, redisCacheConfiguration);
 
         return new RedisProCache(
-                name, cacheWriter, config, redisTemplate, registry, executor, distributedLock);
+                name,
+                cacheWriter,
+                config,
+                redisTemplate,
+                registry,
+                executor,
+                distributedLock,
+                cachePenetration);
     }
 
     @Override
@@ -83,4 +95,3 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
         super.initializeCaches(); // 重新加载 caches
     }
 }
-
