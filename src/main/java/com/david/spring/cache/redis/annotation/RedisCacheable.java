@@ -46,7 +46,7 @@ import java.lang.annotation.*;
  *   <tr><td>type</td><td>Class&lt;?&gt;</td><td>缓存值类型</td><td>Object.class</td></tr>
  * </table>
  *
- * @author David <david@example.com>
+ * @author David <lysf15520112973@163.com>
  * @version 1.0.0
  * @since 2025-09-11
  * @see org.springframework.cache.annotation.Cacheable

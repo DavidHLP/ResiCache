@@ -4,6 +4,7 @@ import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.manager.RedisProCacheManager;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -43,6 +44,7 @@ public class RedisCacheConfig {
             RedisConnectionFactory connectionFactory,
             RedisTemplate<String, Object> redisTemplate,
             CacheInvocationRegistry registry,
+            EvictInvocationRegistry evictRegistry,
             Executor cacheRefreshExecutor,
             DistributedLock distributedLock,
             CachePenetration cachePenetration) {
@@ -81,6 +83,7 @@ public class RedisCacheConfig {
                 redisTemplate,
                 defaultCacheConfig,
                 registry,
+                evictRegistry,
                 cacheRefreshExecutor,
                 distributedLock,
                 cachePenetration);

@@ -1,8 +1,8 @@
 package com.david.spring.cache.redis.aspect;
-
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.david.spring.cache.redis.support.KeyResolver;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -14,20 +14,36 @@ import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.expression.MethodBasedEvaluationContext;
-import org.springframework.context.expression.BeanFactoryResolver;
-import org.springframework.core.DefaultParameterNameDiscoverer;
-import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.expression.Expression;
-import org.springframework.expression.ExpressionParser;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
 
 import java.lang.reflect.Method;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+/**
+ * Redis缓存切面
+ * <p>
+ * 本切面用于处理{@link RedisCacheable}注解，在方法执行前后进行缓存操作。
+ * 主要功能包括注册缓存调用信息、解析缓存键等。
+ * </p>
+ * 
+ * <p>使用示例：</p>
+ * <pre>
+ * {@code
+ * @RedisCacheable(value = "userCache", key = "#userId")
+ * public User getUserById(Long userId) {
+ *     // ... 方法实现
+ * }
+ * }
+ * </pre>
+ * 
+ * @author David Huang [huangdawei0420@gmail.com]
+ * @version 1.0
+ * @since 2024-06-01
+ * @see RedisCacheable
+ * @see CacheInvocationRegistry
+ */
 @Slf4j
 @Aspect
 @Component
@@ -37,9 +53,7 @@ public class RedisCacheableAspect {
     private final CacheInvocationRegistry registry;
     private final KeyGenerator keyGenerator;
     private final ApplicationContext applicationContext;
-    private final ExpressionParser expressionParser = new SpelExpressionParser();
-    private final ParameterNameDiscoverer parameterNameDiscoverer =
-            new DefaultParameterNameDiscoverer();
+    // 统一通过 KeyResolver 解析 key
 
     public RedisCacheableAspect(
             CacheInvocationRegistry registry,
@@ -51,6 +65,17 @@ public class RedisCacheableAspect {
     }
 
     @SneakyThrows
+    /**
+     * 环绕通知方法，处理带有{@link RedisCacheable}注解的方法
+     * <p>
+     * 此方法会在目标方法执行前注册缓存调用信息，然后执行目标方法
+     * </p>
+     *
+     * @param joinPoint 连接点对象
+     * @param redisCacheable Redis缓存注解实例
+     * @return 目标方法的执行结果
+     * @throws Throwable 目标方法可能抛出的异常
+     */
     @Around("@annotation(redisCacheable)")
     public Object around(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) {
         try {
@@ -61,7 +86,16 @@ public class RedisCacheableAspect {
         return joinPoint.proceed();
     }
 
-    /** 注册缓存调用信息 */
+    /**
+     * 注册缓存调用信息
+     * <p>
+     * 此方法负责解析方法签名和参数，构建缓存调用对象并注册到缓存注册表中
+     * </p>
+     *
+     * @param joinPoint 连接点对象
+     * @param redisCacheable Redis缓存注解实例
+     * @throws NoSuchMethodException 如果无法找到对应方法
+     */
     private void registerInvocation(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable)
             throws NoSuchMethodException {
 
@@ -92,48 +126,39 @@ public class RedisCacheableAspect {
     }
 
     /**
-     * 解析注解中的 SpEL key，或回退到（可能是自定义的）KeyGenerator。
+     * 解析缓存键
+     * <p>
+     * 使用统一的KeyResolver解析缓存键，优先使用SpEL表达式，其次使用KeyGenerator
+     * </p>
+     *
+     * @param targetBean 目标Bean实例
+     * @param method 目标方法
+     * @param arguments 方法参数
+     * @param redisCacheable Redis缓存注解实例
+     * @return 解析后的缓存键
      */
     private Object resolveCacheKey(
             Object targetBean, Method method, Object[] arguments, RedisCacheable redisCacheable) {
-        // 1) 优先使用 SpEL key 表达式
-        try {
-            String keySpEL = redisCacheable.key();
-            if (keySpEL != null && !keySpEL.isBlank()) {
-                MethodBasedEvaluationContext context =
-                        new MethodBasedEvaluationContext(
-                                targetBean, method, arguments, parameterNameDiscoverer);
-                context.setBeanResolver(new BeanFactoryResolver(applicationContext));
-                Expression expression = expressionParser.parseExpression(keySpEL);
-                Object val = expression.getValue(context);
-                if (val != null) {
-                    return val;
-                }
-            }
-        } catch (Exception ex) {
-            log.warn("Failed to evaluate key SpEL: {}", ex.getMessage());
-        }
-
-        // 2) 未指定 SpEL 或解析失败时，使用 KeyGenerator（支持注解里指定的 keyGenerator 名称）
-        try {
-            KeyGenerator generator = this.keyGenerator;
-            String keyGenName = redisCacheable.keyGenerator();
-            if (keyGenName != null && !keyGenName.isBlank()) {
-                try {
-                    generator = applicationContext.getBean(keyGenName, KeyGenerator.class);
-                } catch (Exception e) {
-                    log.warn("Failed to get KeyGenerator bean '{}': {}", keyGenName, e.getMessage());
-                }
-            }
-            return generator.generate(targetBean, method, arguments);
-        } catch (Exception e) {
-            log.warn("Failed to generate key via KeyGenerator: {}", e.getMessage());
-            // 3) 最后兜底：使用 SimpleKey 语义
-            return org.springframework.cache.interceptor.SimpleKeyGenerator.generateKey(arguments);
-        }
+        return KeyResolver.resolveKey(
+                targetBean,
+                method,
+                arguments,
+                redisCacheable.key(),
+                redisCacheable.keyGenerator(),
+                applicationContext,
+                this.keyGenerator);
     }
 
-    /** 根据 JoinPoint 获取具体方法 */
+    /**
+     * 根据连接点获取具体方法
+     * <p>
+     * 通过连接点信息获取目标类和方法签名，反射获取具体Method对象
+     * </p>
+     *
+     * @param joinPoint 连接点对象
+     * @return 目标方法对象
+     * @throws NoSuchMethodException 如果目标类中不存在对应方法
+     */
     private Method getSpecificMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
         Object target = joinPoint.getTarget();
         String methodName = joinPoint.getSignature().getName();
@@ -142,7 +167,16 @@ public class RedisCacheableAspect {
         return target.getClass().getMethod(methodName, parameterTypes);
     }
 
-    /** 获取缓存名数组（合并 value 与 cacheNames） */
+    /**
+     * 获取缓存名称数组
+     * <p>
+     * 合并{@link RedisCacheable#value()}和{@link RedisCacheable#cacheNames()}的值，
+     * 去除空值和空白字符串，并保持顺序
+     * </p>
+     *
+     * @param redisCacheable Redis缓存注解实例
+     * @return 合并后的缓存名称数组
+     */
     private String[] getCacheNames(RedisCacheable redisCacheable) {
         Set<String> list = new LinkedHashSet<>();
         for (String v : redisCacheable.value()) if (v != null && !v.isBlank()) list.add(v);

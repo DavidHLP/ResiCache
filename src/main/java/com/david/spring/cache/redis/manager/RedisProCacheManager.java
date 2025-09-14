@@ -4,6 +4,7 @@ import com.david.spring.cache.redis.cache.RedisProCache;
 import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
 
 import jakarta.annotation.Nonnull;
 
@@ -30,6 +31,7 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
     private final RedisTemplate<String, Object> redisTemplate;
     private final RedisCacheWriter cacheWriter;
     private final CacheInvocationRegistry registry;
+    private final EvictInvocationRegistry evictRegistry;
     private final Executor executor;
     @Getter private final RedisCacheConfiguration redisCacheConfiguration;
     private final DistributedLock distributedLock;
@@ -43,6 +45,7 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
             RedisTemplate<String, Object> cacheRedisTemplate,
             RedisCacheConfiguration redisCacheConfiguration,
             CacheInvocationRegistry registry,
+            EvictInvocationRegistry evictRegistry,
             Executor executor,
             DistributedLock distributedLock,
             CachePenetration cachePenetration) {
@@ -52,6 +55,7 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
         this.cacheWriter = cacheWriter;
         this.redisCacheConfiguration = redisCacheConfiguration;
         this.registry = registry;
+        this.evictRegistry = evictRegistry;
         this.executor = executor;
         this.distributedLock = distributedLock;
         this.cachePenetration = cachePenetration;
@@ -81,6 +85,7 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
                 config,
                 redisTemplate,
                 registry,
+                evictRegistry,
                 executor,
                 distributedLock,
                 cachePenetration);

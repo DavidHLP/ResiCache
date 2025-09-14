@@ -45,6 +45,15 @@ public class CacheInvocationRegistry {
         keyLocks.remove(k);
     }
 
+    /**
+     * 按 cacheName 批量清理注册信息与本地锁。
+     */
+    public void removeAll(String cacheName) {
+        if (cacheName == null) return;
+        invocations.keySet().removeIf(k -> cacheName.equals(k.cacheName()));
+        keyLocks.keySet().removeIf(k -> cacheName.equals(k.cacheName()));
+    }
+
     private record Key(String cacheName, Object key) {
 
         @Override
