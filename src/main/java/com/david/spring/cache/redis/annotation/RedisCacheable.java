@@ -128,7 +128,7 @@ public @interface RedisCacheable {
      * @see #cacheResolver()
      */
     @AliasFor(annotation = Cacheable.class)
-    String cacheManager() default "";
+    String cacheManager() default "redisProCacheManager";
 
     /**
      * 缓存解析器Bean名称，用于自定义缓存解析逻辑。

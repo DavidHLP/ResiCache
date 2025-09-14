@@ -137,7 +137,6 @@ public class RedisCacheableAspect {
                 targetBean,
                 method,
                 arguments,
-                redisCacheable.key(),
                 redisCacheable.keyGenerator(),
                 applicationContext,
                 this.keyGenerator);

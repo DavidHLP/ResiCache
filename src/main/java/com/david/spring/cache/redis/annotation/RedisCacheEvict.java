@@ -70,7 +70,7 @@ public @interface RedisCacheEvict {
      * @return 缓存管理器名称，默认空字符串
      */
     @AliasFor(annotation = CacheEvict.class)
-    String cacheManager() default "";
+    String cacheManager() default "redisProCacheManager";
 
     /**
      * 指定缓存解析器Bean名称

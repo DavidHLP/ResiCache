@@ -38,8 +38,8 @@ import java.util.concurrent.Executor;
 @Configuration
 public class RedisCacheConfig {
 
-    @Bean
     @Primary
+    @Bean("redisProCacheManager")
     public RedisProCacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
             RedisTemplate<String, Object> redisTemplate,

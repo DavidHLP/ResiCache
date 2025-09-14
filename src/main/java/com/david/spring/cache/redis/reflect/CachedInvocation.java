@@ -18,6 +18,7 @@ public class CachedInvocation {
     private Object targetBean;
     private Method targetMethod;
     private Object[] arguments;
+    private CachedInvocationContext cachedInvocationContext;
 
     public Object invoke()
             throws ClassNotFoundException,
@@ -31,4 +32,17 @@ public class CachedInvocation {
         invoker.prepare();
         return invoker.invoke();
     }
+
+    public record CachedInvocationContext(
+            String[] cacheNames,
+            String key,
+            String condition,
+            boolean sync,
+            String[] value,
+            String keyGenerator,
+            String cacheManager,
+            String cacheResolver,
+            String unless,
+            long ttl,
+            Class<?> type) {}
 }

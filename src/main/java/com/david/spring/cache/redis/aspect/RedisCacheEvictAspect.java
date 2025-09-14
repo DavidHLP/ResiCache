@@ -99,12 +99,19 @@ public class RedisCacheEvictAspect {
                         .arguments(arguments)
                         .targetBean(targetBean)
                         .targetMethod(method)
-                        .cacheNames(cacheNames)
-                        .key(key)
-                        .allEntries(allEntries)
-                        .beforeInvocation(redisCacheEvict.beforeInvocation())
-                        .condition(nullToEmpty(redisCacheEvict.condition()))
-                        .sync(redisCacheEvict.sync())
+                        .evictInvocationContext(
+                                EvictInvocation.EvictInvocationContext.builder()
+                                        .value(redisCacheEvict.value())
+                                        .cacheNames(redisCacheEvict.cacheNames())
+                                        .key(key == null ? null : key.toString())
+                                        .keyGenerator(redisCacheEvict.keyGenerator())
+                                        .cacheManager(redisCacheEvict.cacheManager())
+                                        .cacheResolver(redisCacheEvict.cacheResolver())
+                                        .condition(nullToEmpty(redisCacheEvict.condition()))
+                                        .allEntries(allEntries)
+                                        .beforeInvocation(redisCacheEvict.beforeInvocation())
+                                        .sync(redisCacheEvict.sync())
+                                        .build())
                         .build();
 
         for (String cacheName : cacheNames) {
@@ -116,7 +123,9 @@ public class RedisCacheEvictAspect {
                     method.getName(),
                     key,
                     allEntries,
-                    invocation.isBeforeInvocation());
+                    invocation.getEvictInvocationContext() == null
+                            ? null
+                            : invocation.getEvictInvocationContext().beforeInvocation());
         }
     }
 
@@ -147,7 +156,6 @@ public class RedisCacheEvictAspect {
                 targetBean,
                 method,
                 arguments,
-                redisCacheEvict.key(),
                 redisCacheEvict.keyGenerator(),
                 applicationContext,
                 this.keyGenerator);

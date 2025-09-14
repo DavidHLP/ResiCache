@@ -1,8 +1,7 @@
 package com.david.spring.cache.redis.registry;
 
 import com.david.spring.cache.redis.reflect.EvictInvocation;
-
-import jakarta.annotation.Nonnull;
+import com.david.spring.cache.redis.registry.records.Key;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -59,14 +58,5 @@ public class EvictInvocationRegistry {
         if (cacheName == null) return;
         invocations.keySet().removeIf(k -> cacheName.equals(k.cacheName()));
         keyLocks.keySet().removeIf(k -> cacheName.equals(k.cacheName()));
-    }
-
-    private record Key(String cacheName, Object key) {
-
-        @Override
-        @Nonnull
-        public String toString() {
-            return cacheName + "::" + key;
-        }
     }
 }
