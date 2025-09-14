@@ -1,8 +1,10 @@
-package com.david.spring.cache.redis.manager;
+package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.cache.RedisProCache;
 import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.protection.CachePenetration;
+import com.david.spring.cache.redis.protection.CacheBreakdown;
+import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
 
@@ -36,6 +38,8 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
     @Getter private final RedisCacheConfiguration redisCacheConfiguration;
     private final DistributedLock distributedLock;
     private final CachePenetration cachePenetration;
+    private final CacheBreakdown cacheBreakdown;
+    private final CacheAvalanche cacheAvalanche;
 
     private DefaultListableBeanFactory beanFactory;
 
@@ -48,7 +52,9 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
             EvictInvocationRegistry evictRegistry,
             Executor executor,
             DistributedLock distributedLock,
-            CachePenetration cachePenetration) {
+            CachePenetration cachePenetration,
+            CacheBreakdown cacheBreakdown,
+            CacheAvalanche cacheAvalanche) {
         super(cacheWriter, redisCacheConfiguration, initialCacheConfigurations);
         this.initialCacheConfigurations = initialCacheConfigurations;
         this.redisTemplate = cacheRedisTemplate;
@@ -59,6 +65,8 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
         this.executor = executor;
         this.distributedLock = distributedLock;
         this.cachePenetration = cachePenetration;
+        this.cacheBreakdown = cacheBreakdown;
+        this.cacheAvalanche = cacheAvalanche;
     }
 
     @Override
@@ -88,7 +96,9 @@ public class RedisProCacheManager extends RedisCacheManager implements BeanFacto
                 evictRegistry,
                 executor,
                 distributedLock,
-                cachePenetration);
+                cachePenetration,
+                cacheBreakdown,
+                cacheAvalanche);
     }
 
     @Override

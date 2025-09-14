@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.utils;
 
 import com.david.spring.cache.redis.annotation.RedisCacheable;
-import com.david.spring.cache.redis.manager.RedisProCacheManager;
+import com.david.spring.cache.redis.core.RedisProCacheManager;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;

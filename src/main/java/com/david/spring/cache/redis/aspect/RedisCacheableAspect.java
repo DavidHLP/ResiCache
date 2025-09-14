@@ -1,9 +1,11 @@
 package com.david.spring.cache.redis.aspect;
 
+import static cn.hutool.core.text.CharSequenceUtil.nullToEmpty;
+
 import com.david.spring.cache.redis.annotation.RedisCacheable;
+import com.david.spring.cache.redis.aspect.support.KeyResolver;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.support.KeyResolver;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -12,8 +14,6 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -47,18 +47,11 @@ import java.lang.reflect.Method;
 public class RedisCacheableAspect {
 
     private final CacheInvocationRegistry registry;
-    private final KeyGenerator keyGenerator;
-    private final ApplicationContext applicationContext;
 
     // 统一通过 KeyResolver 解析 key
 
-    public RedisCacheableAspect(
-            CacheInvocationRegistry registry,
-            KeyGenerator keyGenerator,
-            ApplicationContext applicationContext) {
+    public RedisCacheableAspect(CacheInvocationRegistry registry) {
         this.registry = registry;
-        this.keyGenerator = keyGenerator;
-        this.applicationContext = applicationContext;
     }
 
     /**
@@ -99,7 +92,7 @@ public class RedisCacheableAspect {
         String[] cacheNames =
                 KeyResolver.getCacheNames(redisCacheable.value(), redisCacheable.cacheNames());
 
-        // 计算与 Spring Cache 一致的 Key：优先使用 SpEL key，其次使用（可能自定义的）KeyGenerator
+        // 计算与 Spring Cache 一致的 Key：优先使用 SpE L key，其次使用（可能自定义的）KeyGenerator
         Object key = resolveCacheKey(targetBean, method, arguments, redisCacheable);
 
         CachedInvocation cachedInvocation =
@@ -107,6 +100,20 @@ public class RedisCacheableAspect {
                         .arguments(arguments)
                         .targetBean(targetBean)
                         .targetMethod(method)
+                        .cachedInvocationContext(
+                                CachedInvocation.CachedInvocationContext.builder()
+                                        .value(redisCacheable.value())
+                                        .cacheNames(redisCacheable.cacheNames())
+                                        .key(nullToEmpty(redisCacheable.key()))
+                                        .keyGenerator(redisCacheable.keyGenerator())
+                                        .cacheManager(redisCacheable.cacheManager())
+                                        .cacheResolver(redisCacheable.cacheResolver())
+                                        .condition(nullToEmpty(redisCacheable.condition()))
+                                        .unless(nullToEmpty(redisCacheable.unless()))
+                                        .sync(redisCacheable.sync())
+                                        .ttl(redisCacheable.ttl())
+                                        .type(redisCacheable.type())
+                                        .build())
                         .build();
 
         for (String cacheName : cacheNames) {
@@ -133,13 +140,7 @@ public class RedisCacheableAspect {
      */
     private Object resolveCacheKey(
             Object targetBean, Method method, Object[] arguments, RedisCacheable redisCacheable) {
-        return KeyResolver.resolveKey(
-                targetBean,
-                method,
-                arguments,
-                redisCacheable.keyGenerator(),
-                applicationContext,
-                this.keyGenerator);
+        return KeyResolver.resolveKey(targetBean, method, arguments, redisCacheable.keyGenerator());
     }
 
     /**

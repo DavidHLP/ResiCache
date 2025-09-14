@@ -54,6 +54,8 @@ public class RedisProCache extends RedisCache {
     private final RedisCacheConfiguration cacheConfiguration;
     private final DistributedLock distributedLock;
     private final CachePenetration cachePenetration;
+    private final CacheBreakdown cacheBreakdown;
+    private final CacheAvalanche cacheAvalanche;
 
     /**
      * 构造一个增强版 Redis 缓存实例。
@@ -69,6 +71,8 @@ public class RedisProCache extends RedisCache {
      * @param executor 执行器（不可为 null），用于异步任务（预刷新/延迟二次删除等）
      * @param distributedLock 分布式锁实现（不可为 null），用于首次加载与驱逐加锁
      * @param cachePenetration 缓存穿透保护器（不可为 null），例如布隆过滤器
+     * @param cacheBreakdown 缓存击穿保护器（不可为 null）
+     * @param cacheAvalanche 缓存雪崩保护器（不可为 null）
      * @since 1.0.0
      */
     public RedisProCache(
@@ -80,7 +84,9 @@ public class RedisProCache extends RedisCache {
             EvictInvocationRegistry evictRegistry,
             Executor executor,
             DistributedLock distributedLock,
-            CachePenetration cachePenetration) {
+            CachePenetration cachePenetration,
+            CacheBreakdown cacheBreakdown,
+            CacheAvalanche cacheAvalanche) {
         super(name, cacheWriter, cacheConfiguration);
         this.redisTemplate = Objects.requireNonNull(redisTemplate);
         this.registry = Objects.requireNonNull(registry);
@@ -89,6 +95,8 @@ public class RedisProCache extends RedisCache {
         this.cacheConfiguration = Objects.requireNonNull(cacheConfiguration);
         this.distributedLock = Objects.requireNonNull(distributedLock);
         this.cachePenetration = Objects.requireNonNull(cachePenetration);
+        this.cacheBreakdown = Objects.requireNonNull(cacheBreakdown);
+        this.cacheAvalanche = Objects.requireNonNull(cacheAvalanche);
     }
 
     /**
@@ -413,11 +421,10 @@ public class RedisProCache extends RedisCache {
         }
         try {
             T result =
-                    CacheBreakdown.loadWithProtection(
+                    cacheBreakdown.<T>loadWithProtection(
                             getName(),
                             distKey,
                             localLock,
-                            distributedLock,
                             leaseTimeSec,
                             TimeUnit.SECONDS,
                             () -> {
@@ -533,7 +540,7 @@ public class RedisProCache extends RedisCache {
         } catch (Exception ignored) {
         }
         // 雪崩保护：通过策略类对 TTL 进行抖动（随机缩短）
-        long effectiveTtl = ttlSecs > 0 ? CacheAvalanche.jitterTtlSeconds(ttlSecs) : ttlSecs;
+        long effectiveTtl = ttlSecs > 0 ? cacheAvalanche.jitterTtlSeconds(ttlSecs) : ttlSecs;
         // 不再计算本地过期时间，仅使用元信息中的 TTL，并由 Redis 统一管理过期
         return CacheMata.builder().ttl(effectiveTtl).value(value).build();
     }

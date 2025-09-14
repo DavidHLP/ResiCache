@@ -16,12 +16,10 @@ import java.lang.reflect.Method;
 
 /**
  * 缓存过期时间设置实现类
- * <p>
- * 该类实现ApplicationListener接口，监听ContextRefreshedEvent事件，
- * 当Spring容器初始化完成后，遍历所有Bean，处理带有@RedisCacheable注解的方法，
- * 初始化缓存过期时间。
- * </p>
- * 
+ *
+ * <p>该类实现ApplicationListener接口，监听ContextRefreshedEvent事件，
+ * 当Spring容器初始化完成后，遍历所有Bean，处理带有@RedisCacheable注解的方法， 初始化缓存过期时间。
+ *
  * @author david
  * @version 1.0.0
  * @since 2025-09-14
@@ -42,10 +40,8 @@ public class CacheExpireTime implements ApplicationListener<ContextRefreshedEven
 
     /**
      * 处理Spring容器刷新事件
-     * <p>
-     * 在Spring容器初始化完成后，扫描所有带有@Component注解的Bean，
-     * 并处理这些Bean中带有@RedisCacheable注解的方法，初始化缓存过期时间。
-     * </p>
+     *
+     * <p>在Spring容器初始化完成后，扫描所有带有@Component注解的Bean， 并处理这些Bean中带有@RedisCacheable注解的方法，初始化缓存过期时间。
      *
      * @param event 容器刷新事件
      */

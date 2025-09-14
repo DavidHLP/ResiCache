@@ -1,8 +1,10 @@
 package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.locks.DistributedLock;
-import com.david.spring.cache.redis.manager.RedisProCacheManager;
+import com.david.spring.cache.redis.core.RedisProCacheManager;
 import com.david.spring.cache.redis.protection.CachePenetration;
+import com.david.spring.cache.redis.protection.CacheBreakdown;
+import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -47,7 +49,9 @@ public class RedisCacheConfig {
             EvictInvocationRegistry evictRegistry,
             Executor cacheRefreshExecutor,
             DistributedLock distributedLock,
-            CachePenetration cachePenetration) {
+            CachePenetration cachePenetration,
+            CacheBreakdown cacheBreakdown,
+            CacheAvalanche cacheAvalanche) {
         RedisCacheWriter cacheWriter =
                 RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
         // Key 用 String，Value 用 JSON
@@ -86,7 +90,9 @@ public class RedisCacheConfig {
                 evictRegistry,
                 cacheRefreshExecutor,
                 distributedLock,
-                cachePenetration);
+                cachePenetration,
+                cacheBreakdown,
+                cacheAvalanche);
     }
 
     @Bean

@@ -1,9 +1,9 @@
 package com.david.spring.cache.redis.aspect;
 
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
+import com.david.spring.cache.redis.aspect.support.KeyResolver;
 import com.david.spring.cache.redis.reflect.EvictInvocation;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
-import com.david.spring.cache.redis.support.KeyResolver;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,8 +11,6 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -37,16 +35,9 @@ import java.lang.reflect.Method;
 public class RedisCacheEvictAspect {
 
     private final EvictInvocationRegistry registry;
-    private final KeyGenerator keyGenerator;
-    private final ApplicationContext applicationContext;
 
-    public RedisCacheEvictAspect(
-            EvictInvocationRegistry registry,
-            KeyGenerator keyGenerator,
-            ApplicationContext applicationContext) {
+    public RedisCacheEvictAspect(EvictInvocationRegistry registry) {
         this.registry = registry;
-        this.keyGenerator = keyGenerator;
-        this.applicationContext = applicationContext;
     }
 
     /**
@@ -100,18 +91,17 @@ public class RedisCacheEvictAspect {
                         .targetBean(targetBean)
                         .targetMethod(method)
                         .evictInvocationContext(
-                                EvictInvocation.EvictInvocationContext.builder()
-                                        .value(redisCacheEvict.value())
-                                        .cacheNames(redisCacheEvict.cacheNames())
-                                        .key(key == null ? null : key.toString())
-                                        .keyGenerator(redisCacheEvict.keyGenerator())
-                                        .cacheManager(redisCacheEvict.cacheManager())
-                                        .cacheResolver(redisCacheEvict.cacheResolver())
-                                        .condition(nullToEmpty(redisCacheEvict.condition()))
-                                        .allEntries(allEntries)
-                                        .beforeInvocation(redisCacheEvict.beforeInvocation())
-                                        .sync(redisCacheEvict.sync())
-                                        .build())
+                                new EvictInvocation.EvictInvocationContext(
+                                        redisCacheEvict.value(),
+                                        redisCacheEvict.cacheNames(),
+                                        nullToEmpty(redisCacheEvict.key()),
+                                        redisCacheEvict.keyGenerator(),
+                                        redisCacheEvict.cacheManager(),
+                                        redisCacheEvict.cacheResolver(),
+                                        nullToEmpty(redisCacheEvict.condition()),
+                                        redisCacheEvict.allEntries(),
+                                        redisCacheEvict.beforeInvocation(),
+                                        redisCacheEvict.sync()))
                         .build();
 
         for (String cacheName : cacheNames) {
@@ -153,12 +143,7 @@ public class RedisCacheEvictAspect {
     private Object resolveCacheKey(
             Object targetBean, Method method, Object[] arguments, RedisCacheEvict redisCacheEvict) {
         return KeyResolver.resolveKey(
-                targetBean,
-                method,
-                arguments,
-                redisCacheEvict.keyGenerator(),
-                applicationContext,
-                this.keyGenerator);
+                targetBean, method, arguments, redisCacheEvict.keyGenerator());
     }
 
     /**

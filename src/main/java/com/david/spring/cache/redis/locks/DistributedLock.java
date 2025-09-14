@@ -14,9 +14,8 @@ import java.util.function.Supplier;
 /**
  * 基于 Redisson 的分布式锁简单封装。
  *
- * 使用方式：
- *  - 直接注入本类，调用 lock/tryLock/unlock 或 withLock 辅助方法。
- *  - 默认使用非公平锁，可通过 getFairLock 获取公平锁实例做更细控制。
+ * <p>使用方式： - 直接注入本类，调用 lock/tryLock/unlock 或 withLock 辅助方法。 - 默认使用非公平锁，可通过 getFairLock
+ * 获取公平锁实例做更细控制。
  */
 @Slf4j
 @Component
@@ -25,6 +24,7 @@ public class DistributedLock {
 
     /** 锁 Key 的默认前缀，避免与业务普通 Key 冲突 */
     private static final String DEFAULT_LOCK_PREFIX = "lock:";
+
     private final RedissonClient redissonClient;
 
     private String buildKey(String rawKey) {
@@ -34,17 +34,13 @@ public class DistributedLock {
         return rawKey.startsWith(DEFAULT_LOCK_PREFIX) ? rawKey : DEFAULT_LOCK_PREFIX + rawKey;
     }
 
-    /**
-     * 阻塞加锁，达到 leaseTime 到期后自动释放。
-     */
+    /** 阻塞加锁，达到 leaseTime 到期后自动释放。 */
     public void lock(String key, long leaseTime, TimeUnit unit) {
         RLock lock = redissonClient.getLock(buildKey(key));
         lock.lock(leaseTime, unit);
     }
 
-    /**
-     * 在 waitTime 内尝试加锁，成功后在 leaseTime 到期自动释放。
-     */
+    /** 在 waitTime 内尝试加锁，成功后在 leaseTime 到期自动释放。 */
     public boolean tryLock(String key, long waitTime, long leaseTime, TimeUnit unit) {
         RLock lock = redissonClient.getLock(buildKey(key));
         try {
@@ -55,9 +51,7 @@ public class DistributedLock {
         }
     }
 
-    /**
-     * 释放锁：仅当当前线程持有该锁时才执行解锁。
-     */
+    /** 释放锁：仅当当前线程持有该锁时才执行解锁。 */
     public void unlock(String key) {
         RLock lock = redissonClient.getLock(buildKey(key));
         try {
@@ -69,9 +63,7 @@ public class DistributedLock {
         }
     }
 
-    /**
-     * 包裹执行：阻塞加锁后执行 Supplier，并在 finally 中安全释放。
-     */
+    /** 包裹执行：阻塞加锁后执行 Supplier，并在 finally 中安全释放。 */
     public <T> T withLock(String key, long leaseTime, TimeUnit unit, Supplier<T> supplier) {
         Objects.requireNonNull(supplier, "supplier must not be null");
         RLock lock = redissonClient.getLock(buildKey(key));
@@ -85,9 +77,7 @@ public class DistributedLock {
         }
     }
 
-    /**
-     * 包裹执行：阻塞加锁后执行 Runnable，并在 finally 中安全释放。
-     */
+    /** 包裹执行：阻塞加锁后执行 Runnable，并在 finally 中安全释放。 */
     public void withLock(String key, long leaseTime, TimeUnit unit, Runnable runnable) {
         Objects.requireNonNull(runnable, "runnable must not be null");
         RLock lock = redissonClient.getLock(buildKey(key));
