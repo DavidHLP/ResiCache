@@ -1,6 +1,7 @@
 package com.david.spring.cache.redis.config;
 
 import lombok.extern.slf4j.Slf4j;
+
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;

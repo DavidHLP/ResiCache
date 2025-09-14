@@ -6,26 +6,23 @@ import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
 import com.david.spring.cache.redis.support.KeyResolver;
 
 import lombok.extern.slf4j.Slf4j;
+
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.cache.interceptor.KeyGenerator;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-import org.springframework.context.ApplicationContext;
 
 import java.lang.reflect.Method;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 /**
- * RedisCacheEvictAspect 是 Spring AOP 切面，用于拦截带有 {@link RedisCacheEvict} 注解的方法，
- * 并注册缓存驱逐调用信息到注册表中。
- * <p>
- * 该切面会解析注解信息，构建驱逐调用对象（EvictInvocation），并将其注册到对应的缓存中。
- * </p>
+ * RedisCacheEvictAspect 是 Spring AOP 切面，用于拦截带有 {@link RedisCacheEvict} 注解的方法， 并注册缓存驱逐调用信息到注册表中。
+ *
+ * <p>该切面会解析注解信息，构建驱逐调用对象（EvictInvocation），并将其注册到对应的缓存中。
  *
  * @author David Huang [huangda1984@gmail.com]
  * @version 1.0
@@ -54,9 +51,8 @@ public class RedisCacheEvictAspect {
 
     /**
      * 环绕通知，用于处理带有 @RedisCacheEvict 注解的方法。
-     * <p>
-     * 在方法执行前后（根据配置）注册缓存驱逐调用信息，然后继续执行原方法。
-     * </p>
+     *
+     * <p>在方法执行前后（根据配置）注册缓存驱逐调用信息，然后继续执行原方法。
      *
      * @param joinPoint 连接点
      * @param redisCacheEvict 注解实例
@@ -76,9 +72,8 @@ public class RedisCacheEvictAspect {
 
     /**
      * 注册驱逐调用信息。
-     * <p>
-     * 此方法不会改变 Spring Cache 的驱逐语义，仅用于记录与对称设计。
-     * </p>
+     *
+     * <p>此方法不会改变 Spring Cache 的驱逐语义，仅用于记录与对称设计。
      *
      * @param joinPoint 连接点
      * @param redisCacheEvict 注解实例
@@ -90,7 +85,8 @@ public class RedisCacheEvictAspect {
         Method method = getSpecificMethod(joinPoint);
         Object targetBean = joinPoint.getTarget();
         Object[] arguments = joinPoint.getArgs();
-        String[] cacheNames = getCacheNames(redisCacheEvict);
+        String[] cacheNames =
+                KeyResolver.getCacheNames(redisCacheEvict.value(), redisCacheEvict.cacheNames());
 
         boolean allEntries = redisCacheEvict.allEntries();
         Object key = null;
@@ -136,9 +132,8 @@ public class RedisCacheEvictAspect {
 
     /**
      * 解析缓存 Key。
-     * <p>
-     * 使用统一的 KeyResolver 解析 key（SpEL -> KeyGenerator -> SimpleKey）。
-     * </p>
+     *
+     * <p>使用统一的 KeyResolver 解析 key（SpEL -> KeyGenerator -> SimpleKey）。
      *
      * @param targetBean 目标 Bean
      * @param method 方法
@@ -171,18 +166,5 @@ public class RedisCacheEvictAspect {
         Class<?>[] parameterTypes =
                 ((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
         return target.getClass().getMethod(methodName, parameterTypes);
-    }
-
-    /**
-     * 获取缓存名数组（合并 value 与 cacheNames）。
-     *
-     * @param ann 注解实例
-     * @return 缓存名数组
-     */
-    private String[] getCacheNames(RedisCacheEvict ann) {
-        Set<String> list = new LinkedHashSet<>();
-        for (String v : ann.value()) if (v != null && !v.isBlank()) list.add(v);
-        for (String v : ann.cacheNames()) if (v != null && !v.isBlank()) list.add(v);
-        return list.toArray(String[]::new);
     }
 }

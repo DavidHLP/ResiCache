@@ -11,10 +11,10 @@ import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 
 import java.lang.reflect.Method;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
-/**
- * 统一的 Key 解析工具：优先 SpEL，其次（可选的）KeyGenerator Bean，最后回退 SimpleKeyGenerator。
- */
+/** 统一的 Key 解析工具：优先 SpEL，其次（可选的）KeyGenerator Bean，最后回退 SimpleKeyGenerator。 */
 public final class KeyResolver {
 
     private static final ExpressionParser EXPRESSION_PARSER = new SpelExpressionParser();
@@ -50,7 +50,8 @@ public final class KeyResolver {
             KeyGenerator generator = defaultKeyGenerator;
             if (keyGeneratorBeanName != null && !keyGeneratorBeanName.isBlank()) {
                 try {
-                    generator = applicationContext.getBean(keyGeneratorBeanName, KeyGenerator.class);
+                    generator =
+                            applicationContext.getBean(keyGeneratorBeanName, KeyGenerator.class);
                 } catch (Exception ignore) {
                 }
             }
@@ -60,5 +61,12 @@ public final class KeyResolver {
 
         // 3) 兜底 SimpleKey 语义
         return org.springframework.cache.interceptor.SimpleKeyGenerator.generateKey(arguments);
+    }
+
+    public static String[] getCacheNames(String[] values, String[] cacheNames) {
+        Set<String> list = new LinkedHashSet<>();
+        for (String v : values) if (v != null && !v.isBlank()) list.add(v);
+        for (String v : cacheNames) if (v != null && !v.isBlank()) list.add(v);
+        return list.toArray(String[]::new);
     }
 }

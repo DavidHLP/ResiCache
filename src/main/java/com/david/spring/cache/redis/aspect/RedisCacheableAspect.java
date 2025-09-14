@@ -1,4 +1,5 @@
 package com.david.spring.cache.redis.aspect;
+
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
@@ -12,32 +13,27 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.stereotype.Component;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 /**
  * Redis缓存切面
- * <p>
- * 本切面用于处理{@link RedisCacheable}注解，在方法执行前后进行缓存操作。
- * 主要功能包括注册缓存调用信息、解析缓存键等。
- * </p>
- * 
- * <p>使用示例：</p>
- * <pre>
- * {@code
+ *
+ * <p>本切面用于处理{@link RedisCacheable}注解，在方法执行前后进行缓存操作。 主要功能包括注册缓存调用信息、解析缓存键等。
+ *
+ * <p>使用示例：
+ *
+ * <pre>{@code
  * @RedisCacheable(value = "userCache", key = "#userId")
  * public User getUserById(Long userId) {
  *     // ... 方法实现
  * }
- * }
- * </pre>
- * 
+ * }</pre>
+ *
  * @author David Huang [huangdawei0420@gmail.com]
  * @version 1.0
  * @since 2024-06-01
@@ -53,6 +49,7 @@ public class RedisCacheableAspect {
     private final CacheInvocationRegistry registry;
     private final KeyGenerator keyGenerator;
     private final ApplicationContext applicationContext;
+
     // 统一通过 KeyResolver 解析 key
 
     public RedisCacheableAspect(
@@ -64,18 +61,16 @@ public class RedisCacheableAspect {
         this.applicationContext = applicationContext;
     }
 
-    @SneakyThrows
     /**
      * 环绕通知方法，处理带有{@link RedisCacheable}注解的方法
-     * <p>
-     * 此方法会在目标方法执行前注册缓存调用信息，然后执行目标方法
-     * </p>
+     *
+     * <p>此方法会在目标方法执行前注册缓存调用信息，然后执行目标方法
      *
      * @param joinPoint 连接点对象
      * @param redisCacheable Redis缓存注解实例
      * @return 目标方法的执行结果
-     * @throws Throwable 目标方法可能抛出的异常
      */
+    @SneakyThrows
     @Around("@annotation(redisCacheable)")
     public Object around(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) {
         try {
@@ -88,9 +83,8 @@ public class RedisCacheableAspect {
 
     /**
      * 注册缓存调用信息
-     * <p>
-     * 此方法负责解析方法签名和参数，构建缓存调用对象并注册到缓存注册表中
-     * </p>
+     *
+     * <p>此方法负责解析方法签名和参数，构建缓存调用对象并注册到缓存注册表中
      *
      * @param joinPoint 连接点对象
      * @param redisCacheable Redis缓存注解实例
@@ -102,7 +96,8 @@ public class RedisCacheableAspect {
         Method method = getSpecificMethod(joinPoint);
         Object targetBean = joinPoint.getTarget();
         Object[] arguments = joinPoint.getArgs();
-        String[] cacheNames = getCacheNames(redisCacheable);
+        String[] cacheNames =
+                KeyResolver.getCacheNames(redisCacheable.value(), redisCacheable.cacheNames());
 
         // 计算与 Spring Cache 一致的 Key：优先使用 SpEL key，其次使用（可能自定义的）KeyGenerator
         Object key = resolveCacheKey(targetBean, method, arguments, redisCacheable);
@@ -127,9 +122,8 @@ public class RedisCacheableAspect {
 
     /**
      * 解析缓存键
-     * <p>
-     * 使用统一的KeyResolver解析缓存键，优先使用SpEL表达式，其次使用KeyGenerator
-     * </p>
+     *
+     * <p>使用统一的KeyResolver解析缓存键，优先使用SpEL表达式，其次使用KeyGenerator
      *
      * @param targetBean 目标Bean实例
      * @param method 目标方法
@@ -151,9 +145,8 @@ public class RedisCacheableAspect {
 
     /**
      * 根据连接点获取具体方法
-     * <p>
-     * 通过连接点信息获取目标类和方法签名，反射获取具体Method对象
-     * </p>
+     *
+     * <p>通过连接点信息获取目标类和方法签名，反射获取具体Method对象
      *
      * @param joinPoint 连接点对象
      * @return 目标方法对象
@@ -165,22 +158,5 @@ public class RedisCacheableAspect {
         Class<?>[] parameterTypes =
                 ((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
         return target.getClass().getMethod(methodName, parameterTypes);
-    }
-
-    /**
-     * 获取缓存名称数组
-     * <p>
-     * 合并{@link RedisCacheable#value()}和{@link RedisCacheable#cacheNames()}的值，
-     * 去除空值和空白字符串，并保持顺序
-     * </p>
-     *
-     * @param redisCacheable Redis缓存注解实例
-     * @return 合并后的缓存名称数组
-     */
-    private String[] getCacheNames(RedisCacheable redisCacheable) {
-        Set<String> list = new LinkedHashSet<>();
-        for (String v : redisCacheable.value()) if (v != null && !v.isBlank()) list.add(v);
-        for (String v : redisCacheable.cacheNames()) if (v != null && !v.isBlank()) list.add(v);
-        return list.toArray(String[]::new);
     }
 }
