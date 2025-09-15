@@ -38,6 +38,18 @@ jobs:
                 <password>${{ secrets.OSSRH_PASSWORD }}</password>
               </server>
             </servers>
+            <profiles>
+              <profile>
+                <id>ossrh</id>
+                <activation>
+                  <activeByDefault>true</activeByDefault>
+                </activation>
+                <properties>
+                  <gpg.executable>gpg</gpg.executable>
+                  <gpg.passphrase>${{ secrets.GPG_PASSPHRASE }}</gpg.passphrase>
+                </properties>
+              </profile>
+            </profiles>
           </settings>' > ~/.m2/settings.xml
 
       - name: 导入GPG密钥
