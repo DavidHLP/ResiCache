@@ -1,10 +1,10 @@
 package com.david.spring.cache.redis.config;
 
-import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.core.RedisProCacheManager;
-import com.david.spring.cache.redis.protection.CachePenetration;
-import com.david.spring.cache.redis.protection.CacheBreakdown;
+import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheAvalanche;
+import com.david.spring.cache.redis.protection.CacheBreakdown;
+import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -12,15 +12,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import lombok.extern.slf4j.Slf4j;
-
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -37,105 +37,113 @@ import java.util.concurrent.Executor;
 
 @Slf4j
 @EnableCaching
-@Configuration
+@AutoConfiguration(after = RedisAutoConfiguration.class)
+@ConditionalOnClass({RedisTemplate.class, RedisCacheWriter.class})
 public class RedisCacheConfig {
 
-    @Primary
-    @Bean("redisProCacheManager")
-    public RedisProCacheManager cacheManager(
-            RedisConnectionFactory connectionFactory,
-            RedisTemplate<String, Object> redisTemplate,
-            CacheInvocationRegistry registry,
-            EvictInvocationRegistry evictRegistry,
-            Executor cacheRefreshExecutor,
-            DistributedLock distributedLock,
-            CachePenetration cachePenetration,
-            CacheBreakdown cacheBreakdown,
-            CacheAvalanche cacheAvalanche) {
-        RedisCacheWriter cacheWriter =
-                RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
-        // Key 用 String，Value 用 JSON
-        RedisSerializationContext.SerializationPair<String> keyPair =
-                RedisSerializationContext.SerializationPair.fromSerializer(
-                        new StringRedisSerializer());
-        // 配置支持 JavaTime 的 ObjectMapper
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        objectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY);
+	@Bean("redisProCacheManager")
+	@ConditionalOnMissingBean(RedisProCacheManager.class)
+	public RedisProCacheManager cacheManager(
+			RedisConnectionFactory connectionFactory,
+			CacheInvocationRegistry registry,
+			EvictInvocationRegistry evictRegistry,
+			Executor cacheRefreshExecutor,
+			DistributedLock distributedLock,
+			CachePenetration cachePenetration,
+			CacheBreakdown cacheBreakdown,
+			CacheAvalanche cacheAvalanche) {
+		RedisCacheWriter cacheWriter =
+				RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
+		// Key 用 String，Value 用 JSON
+		RedisSerializationContext.SerializationPair<String> keyPair =
+				RedisSerializationContext.SerializationPair.fromSerializer(
+						new StringRedisSerializer());
+		// 配置支持 JavaTime 的 ObjectMapper
+		ObjectMapper objectMapper = new ObjectMapper();
+		objectMapper.registerModule(new JavaTimeModule());
+		objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+		objectMapper.activateDefaultTyping(
+				LaissezFaireSubTypeValidator.instance,
+				ObjectMapper.DefaultTyping.NON_FINAL,
+				JsonTypeInfo.As.PROPERTY);
 
-        GenericJackson2JsonRedisSerializer jsonSerializer =
-                new GenericJackson2JsonRedisSerializer(objectMapper);
+		GenericJackson2JsonRedisSerializer jsonSerializer =
+				new GenericJackson2JsonRedisSerializer(objectMapper);
 
-        RedisSerializationContext.SerializationPair<Object> valuePair =
-                RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer);
+		RedisSerializationContext.SerializationPair<Object> valuePair =
+				RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer);
 
-        RedisCacheConfiguration defaultCacheConfig =
-                RedisCacheConfiguration.defaultCacheConfig()
-                        .entryTtl(Duration.ofSeconds(60))
-                        .serializeKeysWith(keyPair) // 覆盖 key 序列化
-                        .serializeValuesWith(valuePair); // 覆盖 value 序列化
+		RedisCacheConfiguration defaultCacheConfig =
+				RedisCacheConfiguration.defaultCacheConfig()
+						.entryTtl(Duration.ofSeconds(60))
+						.serializeKeysWith(keyPair) // 覆盖 key 序列化
+						.serializeValuesWith(valuePair); // 覆盖 value 序列化
 
-        Map<String, RedisCacheConfiguration> initialCacheConfiguration = new HashMap<>();
+		Map<String, RedisCacheConfiguration> initialCacheConfiguration = new HashMap<>();
 
-        return new RedisProCacheManager(
-                cacheWriter,
-                initialCacheConfiguration,
-                redisTemplate,
-                defaultCacheConfig,
-                registry,
-                evictRegistry,
-                cacheRefreshExecutor,
-                distributedLock,
-                cachePenetration,
-                cacheBreakdown,
-                cacheAvalanche);
-    }
+		// 直接创建 RedisTemplate 实例
+		RedisTemplate<String, Object> redisTemplate = createRedisTemplate(connectionFactory);
 
-    @Bean
-    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(factory);
+		return new RedisProCacheManager(
+				cacheWriter,
+				initialCacheConfiguration,
+				redisTemplate,
+				defaultCacheConfig,
+				registry,
+				evictRegistry,
+				cacheRefreshExecutor,
+				distributedLock,
+				cachePenetration,
+				cacheBreakdown,
+				cacheAvalanche);
+	}
 
-        StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        // 为 RedisTemplate 再创建一个支持 JavaTime 的 ObjectMapper
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        objectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY);
 
-        GenericJackson2JsonRedisSerializer jsonSerializer =
-                new GenericJackson2JsonRedisSerializer(objectMapper);
+	@Bean
+	@ConditionalOnMissingBean(KeyGenerator.class)
+	public KeyGenerator keyGenerator() {
+		return new SimpleKeyGenerator();
+	}
 
-        template.setKeySerializer(stringSerializer);
-        template.setValueSerializer(jsonSerializer);
-        template.setHashKeySerializer(stringSerializer);
-        template.setHashValueSerializer(jsonSerializer);
+	@Bean(name = "cacheRefreshExecutor")
+	@ConditionalOnMissingBean(name = "cacheRefreshExecutor")
+	public Executor cacheRefreshExecutor() {
+		ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+		executor.setCorePoolSize(2);
+		executor.setMaxPoolSize(8);
+		executor.setQueueCapacity(128);
+		executor.setThreadNamePrefix("cache-refresh-");
+		executor.setAwaitTerminationSeconds(5);
+		executor.initialize();
+		return executor;
+	}
 
-        template.afterPropertiesSet();
-        return template;
-    }
+	/**
+	 * 创建配置好的 RedisTemplate 实例
+	 */
+	private RedisTemplate<String, Object> createRedisTemplate(RedisConnectionFactory factory) {
+		RedisTemplate<String, Object> template = new RedisTemplate<>();
+		template.setConnectionFactory(factory);
 
-    @Bean
-    public KeyGenerator keyGenerator() {
-        return new SimpleKeyGenerator();
-    }
+		StringRedisSerializer stringSerializer = new StringRedisSerializer();
+		// 为 RedisTemplate 创建一个支持 JavaTime 的 ObjectMapper
+		ObjectMapper objectMapper = new ObjectMapper();
+		objectMapper.registerModule(new JavaTimeModule());
+		objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+		objectMapper.activateDefaultTyping(
+				LaissezFaireSubTypeValidator.instance,
+				ObjectMapper.DefaultTyping.NON_FINAL,
+				JsonTypeInfo.As.PROPERTY);
 
-    @Bean(name = "cacheRefreshExecutor")
-    public Executor cacheRefreshExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(8);
-        executor.setQueueCapacity(128);
-        executor.setThreadNamePrefix("cache-refresh-");
-        executor.setAwaitTerminationSeconds(5);
-        executor.initialize();
-        return executor;
-    }
+		GenericJackson2JsonRedisSerializer jsonSerializer =
+				new GenericJackson2JsonRedisSerializer(objectMapper);
+
+		template.setKeySerializer(stringSerializer);
+		template.setValueSerializer(jsonSerializer);
+		template.setHashKeySerializer(stringSerializer);
+		template.setHashValueSerializer(jsonSerializer);
+
+		template.afterPropertiesSet();
+		return template;
+	}
 }

@@ -17,17 +17,6 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
-/**
- * RedisCacheEvictAspect 是 Spring AOP 切面，用于拦截带有 {@link RedisCacheEvict} 注解的方法， 并注册缓存驱逐调用信息到注册表中。
- *
- * <p>该切面会解析注解信息，构建驱逐调用对象（EvictInvocation），并将其注册到对应的缓存中。
- *
- * @author David Huang [huangda1984@gmail.com]
- * @version 1.0
- * @see RedisCacheEvict
- * @see EvictInvocation
- * @see EvictInvocationRegistry
- */
 @Slf4j
 @Aspect
 @Component
@@ -40,16 +29,6 @@ public class RedisCacheEvictAspect {
         this.registry = registry;
     }
 
-    /**
-     * 环绕通知，用于处理带有 @RedisCacheEvict 注解的方法。
-     *
-     * <p>在方法执行前后（根据配置）注册缓存驱逐调用信息，然后继续执行原方法。
-     *
-     * @param joinPoint 连接点
-     * @param redisCacheEvict 注解实例
-     * @return 原方法的返回值
-     * @throws Throwable 如果原方法抛出异常
-     */
     @Around("@annotation(redisCacheEvict)")
     public Object around(ProceedingJoinPoint joinPoint, RedisCacheEvict redisCacheEvict)
             throws Throwable {
@@ -61,23 +40,13 @@ public class RedisCacheEvictAspect {
         return joinPoint.proceed();
     }
 
-    /**
-     * 注册驱逐调用信息。
-     *
-     * <p>此方法不会改变 Spring Cache 的驱逐语义，仅用于记录与对称设计。
-     *
-     * @param joinPoint 连接点
-     * @param redisCacheEvict 注解实例
-     * @throws NoSuchMethodException 如果无法获取具体方法
-     */
     private void registerInvocation(ProceedingJoinPoint joinPoint, RedisCacheEvict redisCacheEvict)
             throws NoSuchMethodException {
 
         Method method = getSpecificMethod(joinPoint);
         Object targetBean = joinPoint.getTarget();
         Object[] arguments = joinPoint.getArgs();
-        String[] cacheNames =
-                KeyResolver.getCacheNames(redisCacheEvict.value(), redisCacheEvict.cacheNames());
+        String[] cacheNames = KeyResolver.getCacheNames(redisCacheEvict.value(), redisCacheEvict.cacheNames());
 
         boolean allEntries = redisCacheEvict.allEntries();
         Object key = null;
@@ -85,27 +54,27 @@ public class RedisCacheEvictAspect {
             key = resolveCacheKey(targetBean, method, arguments, redisCacheEvict);
         }
 
-        EvictInvocation invocation =
-                EvictInvocation.builder()
-                        .arguments(arguments)
-                        .targetBean(targetBean)
-                        .targetMethod(method)
-                        .evictInvocationContext(
-                                new EvictInvocation.EvictInvocationContext(
-                                        redisCacheEvict.value(),
-                                        redisCacheEvict.cacheNames(),
-                                        nullToEmpty(redisCacheEvict.key()),
-                                        redisCacheEvict.keyGenerator(),
-                                        redisCacheEvict.cacheManager(),
-                                        redisCacheEvict.cacheResolver(),
-                                        nullToEmpty(redisCacheEvict.condition()),
-                                        redisCacheEvict.allEntries(),
-                                        redisCacheEvict.beforeInvocation(),
-                                        redisCacheEvict.sync()))
-                        .build();
+        EvictInvocation invocation = EvictInvocation.builder()
+                .arguments(arguments)
+                .targetBean(targetBean)
+                .targetMethod(method)
+                .evictInvocationContext(
+                        new EvictInvocation.EvictInvocationContext(
+                                redisCacheEvict.value(),
+                                redisCacheEvict.cacheNames(),
+                                nullToEmpty(redisCacheEvict.key()),
+                                redisCacheEvict.keyGenerator(),
+                                redisCacheEvict.cacheManager(),
+                                redisCacheEvict.cacheResolver(),
+                                nullToEmpty(redisCacheEvict.condition()),
+                                redisCacheEvict.allEntries(),
+                                redisCacheEvict.beforeInvocation(),
+                                redisCacheEvict.sync()))
+                .build();
 
         for (String cacheName : cacheNames) {
-            if (cacheName == null || cacheName.isBlank()) continue;
+            if (cacheName == null || cacheName.isBlank())
+                continue;
             registry.register(cacheName.trim(), key, invocation);
             log.debug(
                     "Registered EvictInvocation for cache={}, method={}, key={}, allEntries={}, beforeInvocation={}",
@@ -119,45 +88,20 @@ public class RedisCacheEvictAspect {
         }
     }
 
-    /**
-     * 如果字符串为 null 则转换为空字符串。
-     *
-     * @param s 输入字符串
-     * @return 非 null 的字符串
-     */
     private String nullToEmpty(String s) {
         return s == null ? "" : s;
     }
 
-    /**
-     * 解析缓存 Key。
-     *
-     * <p>使用统一的 KeyResolver 解析 key（SpEL -> KeyGenerator -> SimpleKey）。
-     *
-     * @param targetBean 目标 Bean
-     * @param method 方法
-     * @param arguments 方法参数
-     * @param redisCacheEvict 注解实例
-     * @return 解析后的缓存 Key
-     */
     private Object resolveCacheKey(
             Object targetBean, Method method, Object[] arguments, RedisCacheEvict redisCacheEvict) {
         return KeyResolver.resolveKey(
                 targetBean, method, arguments, redisCacheEvict.keyGenerator());
     }
 
-    /**
-     * 根据连接点获取具体方法。
-     *
-     * @param joinPoint 连接点
-     * @return 具体方法
-     * @throws NoSuchMethodException 如果方法不存在
-     */
     private Method getSpecificMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
         Object target = joinPoint.getTarget();
         String methodName = joinPoint.getSignature().getName();
-        Class<?>[] parameterTypes =
-                ((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
+        Class<?>[] parameterTypes = ((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
         return target.getClass().getMethod(methodName, parameterTypes);
     }
 }

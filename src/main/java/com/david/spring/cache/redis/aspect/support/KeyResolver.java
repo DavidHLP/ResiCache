@@ -9,14 +9,12 @@ import java.lang.reflect.Method;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/** 统一的 Key 解析工具：优先指定的 KeyGenerator Bean，其次默认 KeyGenerator Bean，最后回退 SimpleKeyGenerator。 */
 public final class KeyResolver {
 
     private KeyResolver() {}
 
     public static Object resolveKey(
             Object targetBean, Method method, Object[] arguments, String keyGeneratorBeanName) {
-        // 1) 优先使用指定的 KeyGenerator Bean；失败则尝试按类型解析默认的 KeyGenerator
         try {
             KeyGenerator generator =
                     ContextBeanSupport.resolveKeyGenerator(null, keyGeneratorBeanName);
@@ -26,7 +24,6 @@ public final class KeyResolver {
         } catch (Exception ignore) {
         }
 
-        // 2) 兜底 SimpleKey 语义
         return SimpleKeyGenerator.generateKey(arguments);
     }
 

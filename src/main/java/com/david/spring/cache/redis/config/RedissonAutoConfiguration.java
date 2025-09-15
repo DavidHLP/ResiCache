@@ -5,27 +5,29 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
-import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
 /**
- * 基于 Spring 的 RedissonClient 简易配置。
- *
+ * Redisson自动配置类
+ * 基于 Spring Boot 的 RedissonClient 自动配置
+ * <p>
  * 仅在容器中不存在 RedissonClient 时生效，支持：
  *  - 根据 spring.data.redis.url 直接配置（推荐）
  *  - 或根据 host/port/database/username/password 组装单机地址
  */
 @Slf4j
-@AutoConfiguration(after = RedisAutoConfiguration.class)
+@Configuration
 @EnableConfigurationProperties(RedisProperties.class)
 @ConditionalOnClass(RedissonClient.class)
-public class RedissonConfig {
+@ConditionalOnProperty(name = "spring.data.redis.redisson.enabled", havingValue = "true", matchIfMissing = true)
+public class RedissonAutoConfiguration {
 
     @Bean(destroyMethod = "shutdown")
     @ConditionalOnMissingBean(RedissonClient.class)

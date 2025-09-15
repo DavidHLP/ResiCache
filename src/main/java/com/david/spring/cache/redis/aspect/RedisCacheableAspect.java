@@ -20,26 +20,6 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
-/**
- * Redis缓存切面
- *
- * <p>本切面用于处理{@link RedisCacheable}注解，在方法执行前后进行缓存操作。 主要功能包括注册缓存调用信息、解析缓存键等。
- *
- * <p>使用示例：
- *
- * <pre>{@code
- * @RedisCacheable(value = "userCache", key = "#userId")
- * public User getUserById(Long userId) {
- *     // ... 方法实现
- * }
- * }</pre>
- *
- * @author David Huang [huangdawei0420@gmail.com]
- * @version 1.0
- * @since 2024-06-01
- * @see RedisCacheable
- * @see CacheInvocationRegistry
- */
 @Slf4j
 @Aspect
 @Component
@@ -48,21 +28,10 @@ public class RedisCacheableAspect {
 
     private final CacheInvocationRegistry registry;
 
-    // 统一通过 KeyResolver 解析 key
 
     public RedisCacheableAspect(CacheInvocationRegistry registry) {
         this.registry = registry;
     }
-
-    /**
-     * 环绕通知方法，处理带有{@link RedisCacheable}注解的方法
-     *
-     * <p>此方法会在目标方法执行前注册缓存调用信息，然后执行目标方法
-     *
-     * @param joinPoint 连接点对象
-     * @param redisCacheable Redis缓存注解实例
-     * @return 目标方法的执行结果
-     */
     @SneakyThrows
     @Around("@annotation(redisCacheable)")
     public Object around(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) {
@@ -74,15 +43,6 @@ public class RedisCacheableAspect {
         return joinPoint.proceed();
     }
 
-    /**
-     * 注册缓存调用信息
-     *
-     * <p>此方法负责解析方法签名和参数，构建缓存调用对象并注册到缓存注册表中
-     *
-     * @param joinPoint 连接点对象
-     * @param redisCacheable Redis缓存注解实例
-     * @throws NoSuchMethodException 如果无法找到对应方法
-     */
     private void registerInvocation(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable)
             throws NoSuchMethodException {
 
@@ -92,7 +52,6 @@ public class RedisCacheableAspect {
         String[] cacheNames =
                 KeyResolver.getCacheNames(redisCacheable.value(), redisCacheable.cacheNames());
 
-        // 计算与 Spring Cache 一致的 Key：优先使用 SpE L key，其次使用（可能自定义的）KeyGenerator
         Object key = resolveCacheKey(targetBean, method, arguments, redisCacheable);
 
         CachedInvocation cachedInvocation =
@@ -127,31 +86,11 @@ public class RedisCacheableAspect {
         }
     }
 
-    /**
-     * 解析缓存键
-     *
-     * <p>使用统一的KeyResolver解析缓存键，优先使用SpEL表达式，其次使用KeyGenerator
-     *
-     * @param targetBean 目标Bean实例
-     * @param method 目标方法
-     * @param arguments 方法参数
-     * @param redisCacheable Redis缓存注解实例
-     * @return 解析后的缓存键
-     */
     private Object resolveCacheKey(
             Object targetBean, Method method, Object[] arguments, RedisCacheable redisCacheable) {
         return KeyResolver.resolveKey(targetBean, method, arguments, redisCacheable.keyGenerator());
     }
 
-    /**
-     * 根据连接点获取具体方法
-     *
-     * <p>通过连接点信息获取目标类和方法签名，反射获取具体Method对象
-     *
-     * @param joinPoint 连接点对象
-     * @return 目标方法对象
-     * @throws NoSuchMethodException 如果目标类中不存在对应方法
-     */
     private Method getSpecificMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
         Object target = joinPoint.getTarget();
         String methodName = joinPoint.getSignature().getName();
