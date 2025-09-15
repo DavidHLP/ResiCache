@@ -2,7 +2,7 @@ name: Publish package to Maven Central and GitHub Packages
 
 on:
   release:
-    types: [created]
+    types: [ created ]
 
 jobs:
   publish:
@@ -20,8 +20,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          gpg-private-key: ${{ secrets.GPG_SECRET }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
       # 生成自定义 settings.xml
       - name: Create settings.xml
@@ -53,3 +51,5 @@ jobs:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          gpg-private-key: ${{ secrets.GPG_SECRET }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
