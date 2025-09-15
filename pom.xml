@@ -45,6 +45,11 @@
         <java.version>17</java.version>
         <redisson.version>3.17.6</redisson.version>
         <hutool.version>5.8.22</hutool.version>
+        <encoding>UTF-8</encoding>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <project.build.sourceEncoding>${encoding}</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>${encoding}</project.reporting.outputEncoding>
     </properties>
 
     <dependencies>
@@ -113,49 +118,88 @@
     </dependencies>
 
     <build>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>${encoding}</encoding>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.0</version>
+                <version>3.2.1</version>
+                <inherited>false</inherited>
                 <executions>
                     <execution>
-                        <id>attach-sources</id>
-                        <goals><goal>jar</goal></goals>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.6.3</version>
+                <version>3.3.0</version>
+                <inherited>false</inherited>
+                <configuration>
+                    <nohelp>true</nohelp>
+                    <charset>${encoding}</charset>
+                    <encoding>${encoding}</encoding>
+                    <docencoding>${encoding}</docencoding>
+                </configuration>
                 <executions>
                     <execution>
-                        <id>attach-javadocs</id>
+                        <phase>compile</phase>
                         <goals>
                             <goal>jar</goal>
                         </goals>
                     </execution>
                 </executions>
             </plugin>
+
+            <!-- ！！！重点插件一，gpg 相关插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>1.6</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- ！！！重点插件二，新的发布插件 -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.8.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>true</autoPublish>
+                </configuration>
+            </plugin>
+
         </plugins>
     </build>
-
-    <profiles>
-        <profile>
-            <id>snapshot</id>
-            <properties>
-                <maven.deploy.skip>false</maven.deploy.skip>
-            </properties>
-        </profile>
-    </profiles>
-
-    <distributionManagement>
-        <repository>
-            <id>ossrh</id>
-            <name>Central Repository OSSRH</name>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-        </repository>
-    </distributionManagement>
 
 </project>
