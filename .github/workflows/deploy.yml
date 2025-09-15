@@ -12,23 +12,39 @@ jobs:
       packages: write
 
     steps:
+      # 1️⃣ 检出代码
       - uses: actions/checkout@v4
 
-      # 安装 JDK 17（纯手动，不依赖 setup-java 的 GPG 功能）
+      # 2️⃣ 安装 JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 导入 GPG 私钥
-      - name: Import GPG key
+      # 3️⃣ 安装 GPG（Ubuntu Runner 默认有 gpg，但确保最新版）
+      - name: Install GPG
+        run: sudo apt-get update && sudo apt-get install -y gnupg2
+
+      # 4️⃣ 导入 GPG 私钥并设置信任
+      - name: Import GPG key and set trust
+        id: gpg
         run: |
+          # 导入私钥
           echo "${{ secrets.GPG_SECRET }}" | gpg --batch --import
-          # 确认 key 是否导入成功
+
+          # 获取导入的 key ID
+          KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)
+
+          echo "GPG_KEY_ID=$KEY_ID" >> $GITHUB_ENV
+
+          # 设置永久信任
+          echo -e "5\ny\n" | gpg --command-fd 0 --edit-key $KEY_ID trust
+
+          # 验证
           gpg --list-secret-keys --keyid-format LONG
 
-      # 生成自定义 settings.xml
+      # 5️⃣ 创建 Maven settings.xml
       - name: Create settings.xml
         run: |
           mkdir -p ~/.m2
@@ -51,9 +67,13 @@ jobs:
           </settings>
           EOF
 
-      # 部署
-      - name: Deploy artifacts
-        run: mvn --batch-mode deploy -s ~/.m2/settings.xml -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
+      # 6️⃣ 部署 Maven artifacts
+      - name: Deploy artifacts to Maven Central and GitHub Packages
+        run: |
+          mvn --batch-mode deploy -s ~/.m2/settings.xml \
+            -Dgpg.keyname=$GPG_KEY_ID \
+            -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}" \
+            -DskipTests
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
