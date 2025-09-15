@@ -13,17 +13,17 @@ jobs:
       - name: Set up Apache Maven Central
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'CacheGuard'
           java-version: '17'      # 一般只需要修改这里，8 17 21 等等
           server-id: central
           server-username: SERVER_USERNAME
           server-password: SERVER_PASSWORD
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-private-key: ${{ secrets.GPG_SECRET }}
           gpg-passphrase: GPG_PASSPHRASE
 
       - name: Publish to Apache Maven Central
         run: mvn deploy
         env:
-          SERVER_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          SERVER_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          SERVER_USERNAME: ${{ secrets.SERVER_USERNAME }}
+          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSWORD }}
