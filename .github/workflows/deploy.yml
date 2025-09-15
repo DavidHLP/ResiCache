@@ -14,17 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 使用 actions/setup-java 导入 JDK 和 GPG 私钥
-      - name: Set up JDK 17 with GPG
-        uses: actions/setup-java@v5
+      # 安装 JDK 17（纯手动，不依赖 setup-java 的 GPG 功能）
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          server-id: central
-          server-username: ${{ secrets.OSSRH_USERNAME }} # 直接使用 secrets
-          server-password: ${{ secrets.OSSRH_PASSWORD }} # 直接使用 secrets
-          gpg-private-key: ${{ secrets.GPG_SECRET }} # setup-java 会自动导入
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }} # 私钥密码
+
+      # 导入 GPG 私钥
+      - name: Import GPG key
+        run: |
+          echo "${{ secrets.GPG_SECRET }}" | gpg --batch --import
+          # 确认 key 是否导入成功
+          gpg --list-secret-keys --keyid-format LONG
 
       # 生成自定义 settings.xml
       - name: Create settings.xml
@@ -49,9 +51,9 @@ jobs:
           </settings>
           EOF
 
-      # 直接部署，不再手动导入 GPG 私钥
+      # 部署
       - name: Deploy artifacts
-        run: mvn --batch-mode deploy -s ~/.m2/settings.xml
+        run: mvn --batch-mode deploy -s ~/.m2/settings.xml -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
