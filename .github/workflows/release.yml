@@ -1,77 +1,119 @@
-name: Maven Central & GitHub Release
+name: Publish to Maven Central
 
 on:
   push:
-    branches:
-      - main        # 普通提交 -> SNAPSHOT
     tags:
-      - 'v*'        # 打 tag -> Release
+      - 'v*' # 当推送tag时触发，如v1.0.0
+  workflow_dispatch: # 允许手动触发
 
 jobs:
-  build-and-deploy:
+  publish:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ 检出代码
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-      # 2️⃣ 配置 JDK 17 + Maven + OSSRH + GPG
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
+      - name: 设置Java环境
+        uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11' # 根据您的项目需求调整
           distribution: 'temurin'
-          server-id: ossrh
-          server-username: ${{ secrets.OSSRH_USERNAME }}
-          server-password: ${{ secrets.OSSRH_PASSWORD }}
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
-      # 3️⃣ 缓存 Maven 依赖
-      - name: Cache Maven packages
+      - name: 缓存Maven依赖
         uses: actions/cache@v3
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: 配置Maven settings.xml
+        run: |
+          mkdir -p ~/.m2
+          echo '<settings>
+            <servers>
+              <server>
+                <id>ossrh</id>
+                <username>${{ secrets.OSSRH_USERNAME }}</username>
+                <password>${{ secrets.OSSRH_PASSWORD }}</password>
+              </server>
+            </servers>
+            <profiles>
+              <profile>
+                <id>ossrh</id>
+                <activation>
+                  <activeByDefault>true</activeByDefault>
+                </activation>
+                <properties>
+                  <gpg.executable>gpg</gpg.executable>
+                  <gpg.passphrase>${{ secrets.GPG_PASSPHRASE }}</gpg.passphrase>
+                </properties>
+              </profile>
+            </profiles>
+          </settings>' > ~/.m2/settings.xml
+
+      - name: 导入GPG密钥
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | gpg --batch --import
+
+      - name: 运行测试
+        run: mvn clean test
+
+      - name: 发布到Maven Central
+        run: mvn clean deploy -P release-sign-artifacts --batch-mode
+        env:
+          GPG_TTY: $(tty)
+
+---
+
+# 如果您使用Gradle而不是Maven，可以使用以下配置：
+
+name: Publish to Maven Central (Gradle)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置Java环境
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: 缓存Gradle依赖
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
           restore-keys: |
-            ${{ runner.os }}-maven-
+            ${{ runner.os }}-gradle-
 
-      # 4️⃣ 构建项目
-      - name: Build with Maven
-        run: mvn -B clean install -DskipTests
+      - name: 授予执行权限
+        run: chmod +x ./gradlew
 
-      # 5️⃣ 发布 SNAPSHOT（main 分支）
-      - name: Deploy SNAPSHOT to OSSRH
-        if: github.ref == 'refs/heads/main'
-        run: mvn -B deploy -DskipTests -P snapshot
+      - name: 导入GPG密钥
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | gpg --batch --import
 
-      # 6️⃣ 发布 Release（tag）
-      - name: Deploy Release to OSSRH
-        if: startsWith(github.ref, 'refs/tags/')
-        run: mvn -B deploy -DskipTests gpg:sign
+      - name: 运行测试
+        run: ./gradlew test
 
-      # 7️⃣ 创建 GitHub Release
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        id: create_release
-        uses: actions/create-release@v1
+      - name: 发布到Maven Central
+        run: ./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-
-      # 8️⃣ 上传 JAR 到 GitHub Release
-      - name: Upload JAR to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/CacheGuard-${{ github.ref_name }}.jar
-          asset_name: CacheGuard-${{ github.ref_name }}.jar
-          asset_content_type: application/java-archive
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.GPG_PASSPHRASE }}
