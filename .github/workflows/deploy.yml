@@ -1,35 +1,50 @@
-# 相当于脚本用途的一个声明
-name: Maven Central Repo Deployment
-# 触发脚本的事件  这里为发布release之后触发
+name: Publish package to the Maven Central Repository and GitHub Packages
 on:
   release:
-    types: [released]
-# 定义一个发行任务
+    types: [created]
+
 jobs:
   publish:
-    # 任务运行的环境
     runs-on: ubuntu-latest
-    # 任务的步骤
+    permissions:
+      contents: read
+      packages: write
+
     steps:
-      # 1. 声明 checkout 仓库代码到工作区
-      - name: Checkout Git Repo
-        uses: actions/checkout@v2
-      # 2. 安装Java 环境 这里会用到的参数就是 Git Action secrets中配置的，
-      #    取值要在key前面加  secrets.
-      - name: Set up Maven Central Repo
-        uses: actions/setup-java@v1
-        with:
-          java-version: 1.8
-          server-id: sonatype-nexus-staging
-          server-username: ${{ secrets.OSSRH_USER }}
-          server-password: ${{ secrets.OSSRH_PASSWORD }}
-          gpg-passphrase:  ${{ secrets.GPG_PASSPHRASE }}
-      # 3. 发布到Maven中央仓库
-      - name: Publish to Maven Central Repo
-        # 这里用到了其他人写的action脚本，详细可以去看他的文档。
-        uses: samuelmeuli/action-maven-publish@v1
-        with:
-          gpg_private_key: ${{ secrets.GPG_SECRET }}
-          gpg_passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          nexus_username: ${{ secrets.OSSRH_USER }}
-          nexus_password: ${{ secrets.OSSRH_PASSWORD }}
+      - uses: actions/checkout@v4
+
+      # 生成自定义 settings.xml
+      - name: Create settings.xml
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+            <servers>
+              <server>
+                <id>central</id>
+                <username>${env.MAVEN_USERNAME}</username>
+                <password>${env.MAVEN_PASSWORD}</password>
+              </server>
+              <server>
+                <id>github</id>
+                <username>github</username>
+                <password>${env.GITHUB_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+      # 部署到 Maven Central
+      - name: Publish to Maven Central
+        run: mvn --batch-mode deploy -s ~/.m2/settings.xml
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+
+      # 部署到 GitHub Packages
+      - name: Publish to GitHub Packages
+        run: mvn --batch-mode deploy -s ~/.m2/settings.xml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
