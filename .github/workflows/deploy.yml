@@ -1,4 +1,5 @@
-name: Publish package to the Maven Central Repository and GitHub Packages
+name: Publish package to Maven Central and GitHub Packages
+
 on:
   release:
     types: [created]
@@ -12,6 +13,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # 设置 JDK & 导入 GPG
+      - name: Set up JDK 17 with GPG
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          gpg-private-key: ${{ secrets.GPG_SECRET }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
       # 生成自定义 settings.xml
       - name: Create settings.xml
@@ -36,15 +46,10 @@ jobs:
           </settings>
           EOF
 
-      # 部署到 Maven Central
-      - name: Publish to Maven Central
+      # 一次性部署
+      - name: Deploy artifacts
         run: mvn --batch-mode deploy -s ~/.m2/settings.xml
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-
-      # 部署到 GitHub Packages
-      - name: Publish to GitHub Packages
-        run: mvn --batch-mode deploy -s ~/.m2/settings.xml
-        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
