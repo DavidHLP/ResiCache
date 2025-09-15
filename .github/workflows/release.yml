@@ -1,46 +1,107 @@
-name: Publish package to the Maven Central Repository and GitHub Packages
+name: Publish to Maven Central
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'v*' # 当推送tag时触发，如v1.0.0
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
-      # 1. 获取仓库代码
-      - uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-      # 2. 设置 Java 环境，用于 Maven Central 发布
-      - name: Set up Java for publishing to Maven Central Repository
+      - name: 设置Java环境
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11' # 根据您的项目需求调整
           distribution: 'temurin'
-          server-id: ossrh
-          server-username: MAVEN_USERNAME
-          server-password: MAVEN_PASSWORD
 
-      # 3. 发布到 Maven Central
-      - name: Publish to the Maven Central Repository
-        run: mvn --batch-mode deploy
+      - name: 缓存Maven依赖
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: 配置Maven settings.xml
+        run: |
+          mkdir -p ~/.m2
+          echo '<settings>
+            <servers>
+              <server>
+                <id>ossrh</id>
+                <username>${{ secrets.OSSRH_USERNAME }}</username>
+                <password>${{ secrets.OSSRH_PASSWORD }}</password>
+              </server>
+            </servers>
+          </settings>' > ~/.m2/settings.xml
+
+      - name: 导入GPG密钥
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | gpg --batch --import
+
+      - name: 运行测试
+        run: mvn clean test
+
+      - name: 发布到Maven Central
+        run: mvn clean deploy -P release-sign-artifacts --batch-mode
         env:
-          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          GPG_TTY: $(tty)
 
-      # 4. 设置 Java 环境，用于 GitHub Packages 发布
-      - name: Set up Java for publishing to GitHub Packages
+---
+
+# 如果您使用Gradle而不是Maven，可以使用以下配置：
+
+name: Publish to Maven Central (Gradle)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置Java环境
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'temurin'
 
-      # 5. 发布到 GitHub Packages
-      - name: Publish to GitHub Packages
-        run: mvn --batch-mode deploy
+      - name: 缓存Gradle依赖
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: 授予执行权限
+        run: chmod +x ./gradlew
+
+      - name: 导入GPG密钥
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | gpg --batch --import
+
+      - name: 运行测试
+        run: ./gradlew test
+
+      - name: 发布到Maven Central
+        run: ./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.GPG_PASSPHRASE }}
