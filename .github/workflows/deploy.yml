@@ -18,8 +18,14 @@ jobs:
       - name: Set up JDK 17 with GPG
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
+          server-id: central # 与settings.xml中的服务器ID对应
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_SECRET }} # 直接在action中导入私钥
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }} # 私钥密码
+
 
       # 生成自定义 settings.xml
       - name: Create settings.xml
