@@ -44,12 +44,12 @@ jobs:
       # 5️⃣ 发布 SNAPSHOT（main 分支）
       - name: Deploy SNAPSHOT to OSSRH
         if: github.ref == 'refs/heads/main'
-        run: mvn -B clean deploy -DskipTests
+        run: mvn -B deploy -DskipTests -P snapshot
 
       # 6️⃣ 发布 Release（tag）
       - name: Deploy Release to OSSRH
         if: startsWith(github.ref, 'refs/tags/')
-        run: mvn -B clean deploy -P release -DskipTests
+        run: mvn -B deploy -DskipTests gpg:sign
 
       # 7️⃣ 创建 GitHub Release
       - name: Create GitHub Release
@@ -72,6 +72,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/spring-cache-redis-commons-${{ github.ref_name }}.jar
-          asset_name: spring-cache-redis-commons-${{ github.ref_name }}.jar
+          asset_path: target/CacheGuard-${{ github.ref_name }}.jar
+          asset_name: CacheGuard-${{ github.ref_name }}.jar
           asset_content_type: application/java-archive
