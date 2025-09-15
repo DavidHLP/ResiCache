@@ -46,7 +46,9 @@ jobs:
 
       # 一次性部署
       - name: Deploy artifacts
-        run: mvn --batch-mode deploy -s ~/.m2/settings.xml
+        run: |
+          echo "${{ env.gpg-private-key }}" | gpg --batch --import --passphrase "${{ env.gpg-passphrase }}"
+          mvn --batch-mode deploy -s ~/.m2/settings.xml
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
