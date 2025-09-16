@@ -4,6 +4,7 @@ import com.david.spring.cache.redis.reflect.abstracts.AbstractInvocation;
 import com.david.spring.cache.redis.reflect.support.ContextBeanSupport;
 
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
@@ -16,6 +17,7 @@ import java.lang.reflect.Method;
 @AllArgsConstructor
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = false)
+@Slf4j
 public class CachedInvocation extends AbstractInvocation {
     /* 目标Bean实例 */
     private Object targetBean;
@@ -54,11 +56,23 @@ public class CachedInvocation extends AbstractInvocation {
      * @return KeyGenerator实例，如果解析失败返回null
      */
     public KeyGenerator resolveKeyGenerator() {
-        if (resolvedKeyGenerator != null) return resolvedKeyGenerator;
-        KeyGenerator kg =
-                ContextBeanSupport.resolveKeyGenerator(
-                        null, cachedInvocationContext == null ? null : cachedInvocationContext.keyGenerator());
+        if (resolvedKeyGenerator != null) {
+            log.debug("Using cached KeyGenerator: {}", resolvedKeyGenerator.getClass().getName());
+            return resolvedKeyGenerator;
+        }
+
+        final String kgName =
+                cachedInvocationContext == null ? null : cachedInvocationContext.keyGenerator();
+        log.info("Resolving KeyGenerator from Spring context (name: {})", kgName);
+
+        KeyGenerator kg = ContextBeanSupport.resolveKeyGenerator(null, kgName);
         this.resolvedKeyGenerator = kg;
+
+        if (kg != null) {
+            log.info("Resolved KeyGenerator type: {}", kg.getClass().getName());
+        } else {
+            log.warn("Failed to resolve KeyGenerator (name: {})", kgName);
+        }
         return kg;
     }
 
@@ -68,16 +82,34 @@ public class CachedInvocation extends AbstractInvocation {
      * @return CacheResolver实例，如果解析失败返回null
      */
     public CacheResolver resolveCacheResolver() {
-        if (resolvedCacheResolver != null) return resolvedCacheResolver;
-        CacheResolver cr =
-                ContextBeanSupport.resolveCacheResolver(
-                        null, cachedInvocationContext == null ? null : cachedInvocationContext.cacheResolver());
+        if (resolvedCacheResolver != null) {
+            log.debug("Using cached CacheResolver: {}", resolvedCacheResolver.getClass().getName());
+            return resolvedCacheResolver;
+        }
+
+        final String crName =
+                cachedInvocationContext == null ? null : cachedInvocationContext.cacheResolver();
+        log.info("Resolving CacheResolver from Spring context (name: {})", crName);
+
+        CacheResolver cr = ContextBeanSupport.resolveCacheResolver(null, crName);
         this.resolvedCacheResolver = cr;
+
+        if (cr != null) {
+            log.info("Resolved CacheResolver type: {}", cr.getClass().getName());
+        } else {
+            log.warn("Failed to resolve CacheResolver (name: {})", crName);
+        }
         return cr;
     }
 
     /** 清除已缓存的解析Bean，强制下次调用时重新从上下文解析 */
     public void clearResolved() {
+        final boolean hadKg = this.resolvedKeyGenerator != null;
+        final boolean hadCr = this.resolvedCacheResolver != null;
+        log.info(
+                "Clearing resolved beans -> keyGeneratorPresent: {}, cacheResolverPresent: {}",
+                hadKg,
+                hadCr);
         this.resolvedKeyGenerator = null;
         this.resolvedCacheResolver = null;
     }

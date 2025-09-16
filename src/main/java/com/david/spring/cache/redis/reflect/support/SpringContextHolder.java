@@ -1,6 +1,7 @@
 package com.david.spring.cache.redis.reflect.support;
 
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -32,10 +33,17 @@ public class SpringContextHolder implements ApplicationContextAware {
         }
         try {
             T bean = ctx.getBean(name, requiredType);
-            log.debug("Successfully resolved bean: {} of type: {}", name, requiredType.getSimpleName());
+            log.debug(
+                    "Successfully resolved bean: {} of type: {}",
+                    name,
+                    requiredType.getSimpleName());
             return bean;
         } catch (Exception e) {
-            log.debug("Failed to resolve bean: {} of type: {} - {}", name, requiredType.getSimpleName(), e.getMessage());
+            log.debug(
+                    "Failed to resolve bean: {} of type: {} - {}",
+                    name,
+                    requiredType.getSimpleName(),
+                    e.getMessage());
             return null;
         }
     }
@@ -44,7 +52,9 @@ public class SpringContextHolder implements ApplicationContextAware {
     public static <T> T getBean(Class<T> requiredType) {
         ApplicationContext ctx = context;
         if (ctx == null) {
-            log.debug("Application context not available, cannot resolve bean of type: {}", requiredType.getSimpleName());
+            log.debug(
+                    "Application context not available, cannot resolve bean of type: {}",
+                    requiredType.getSimpleName());
             return null;
         }
         try {
@@ -52,7 +62,10 @@ public class SpringContextHolder implements ApplicationContextAware {
             log.debug("Successfully resolved bean of type: {}", requiredType.getSimpleName());
             return bean;
         } catch (Exception e) {
-            log.debug("Failed to resolve bean of type: {} - {}", requiredType.getSimpleName(), e.getMessage());
+            log.debug(
+                    "Failed to resolve bean of type: {} - {}",
+                    requiredType.getSimpleName(),
+                    e.getMessage());
             return null;
         }
     }

@@ -22,32 +22,62 @@ public class CacheInvocationRegistry {
 
     public void register(String cacheName, Object key, CachedInvocation invocation) {
         if (cacheName == null || key == null || invocation == null) {
+            log.warn(
+                    "Skip registering invocation due to null argument(s): cacheName={}, key={}, invocationIsNull={}",
+                    cacheName,
+                    key,
+                    invocation == null);
             return;
         }
         invocations.put(new Key(cacheName, key), invocation);
+        log.debug("Registered invocation for cacheName={} key={}", cacheName, key);
     }
 
     public Optional<CachedInvocation> get(String cacheName, Object key) {
         if (cacheName == null || key == null) {
+            log.warn(
+                    "Skip getting invocation due to null argument(s): cacheName={}, key={}",
+                    cacheName,
+                    key);
             return Optional.empty();
         }
-        return Optional.ofNullable(invocations.get(new Key(cacheName, key)));
+        CachedInvocation invocation = invocations.get(new Key(cacheName, key));
+        log.debug(
+                "Lookup invocation for cacheName={} key={} -> {}",
+                cacheName,
+                key,
+                invocation != null ? "HIT" : "MISS");
+        return Optional.ofNullable(invocation);
     }
 
     public ReentrantLock obtainLock(String cacheName, Object key) {
-        return keyLocks.computeIfAbsent(new Key(cacheName, key), k -> new ReentrantLock());
+        ReentrantLock lock =
+                keyLocks.computeIfAbsent(new Key(cacheName, key), k -> new ReentrantLock());
+        log.debug("Obtained lock for cacheName={} key={}", cacheName, key);
+        return lock;
     }
 
     public void remove(String cacheName, Object key) {
         Key k = new Key(cacheName, key);
-        invocations.remove(k);
-        keyLocks.remove(k);
+        CachedInvocation removed = invocations.remove(k);
+        ReentrantLock lockRemoved = keyLocks.remove(k);
+        log.debug(
+                "Removed registry entries for cacheName={} key={} (invocationRemoved={}, lockRemoved={})",
+                cacheName,
+                key,
+                removed != null,
+                lockRemoved != null);
     }
 
     /** 按 cacheName 批量清理注册信息与本地锁。 */
     public void removeAll(String cacheName) {
-        if (cacheName == null) return;
+        if (cacheName == null) {
+            log.warn("Skip removeAll due to null cacheName");
+            return;
+        }
+        log.info("Removing all registry entries and locks for cacheName={}", cacheName);
         invocations.keySet().removeIf(k -> cacheName.equals(k.cacheName()));
         keyLocks.keySet().removeIf(k -> cacheName.equals(k.cacheName()));
+        log.debug("Completed removeAll for cacheName={}", cacheName);
     }
 }

@@ -63,6 +63,7 @@ public class RedisProCache extends RedisCache {
 		this.cachePenetration = Objects.requireNonNull(cachePenetration);
 		this.cacheBreakdown = Objects.requireNonNull(cacheBreakdown);
 		this.cacheAvalanche = Objects.requireNonNull(cacheAvalanche);
+		log.info("RedisProCache initialized, name={}", name);
 	}
 
 	@Override
@@ -70,8 +71,11 @@ public class RedisProCache extends RedisCache {
 	public ValueWrapper get(@NonNull Object key) {
 		ValueWrapper valueWrapper = super.get(key);
 		if (valueWrapper == null) {
+			log.debug("Cache miss for key: {}", key);
 			return null;
 		}
+
+		log.debug("Cache hit for key: {}", key);
 
 		try {
 			String cacheKey = createCacheKey(key);
@@ -88,7 +92,7 @@ public class RedisProCache extends RedisCache {
 				executor.execute(
 						() -> {
 							try {
-								// 第一次检查，避免不必要刷新
+								// First check to avoid unnecessary refresh
 								long ttl2 = redisTemplate.getExpire(cacheKey, TimeUnit.SECONDS);
 								long configuredTtl2 = resolveConfiguredTtlSeconds(valueWrapper.get(), key);
 								if (ttl2 < 0 || !shouldPreRefresh(ttl2, configuredTtl2)) {
@@ -118,7 +122,7 @@ public class RedisProCache extends RedisCache {
 										leaseTimeSec,
 										TimeUnit.SECONDS,
 										() -> {
-											// 第二次检查（拿到双锁后再次确认）
+											// Second check (after acquiring both locks)
 											long t3 = redisTemplate.getExpire(
 													cacheKey, TimeUnit.SECONDS);
 											long c3 = resolveConfiguredTtlSeconds(
@@ -169,7 +173,7 @@ public class RedisProCache extends RedisCache {
 		} catch (Exception e) {
 			log.debug("Skip pre-refresh due to error: {}", e.getMessage());
 		}
-		// 由 fromStoreValue 负责解包，直接返回
+		// Unpacking is handled by fromStoreValue, return directly
 		return valueWrapper;
 	}
 
@@ -184,7 +188,7 @@ public class RedisProCache extends RedisCache {
 		try {
 			if (cacheConfiguration != null) {
 				if (value == null)
-					return -1L; // 避免将 @Nullable 传入要求 @NonNull 的 API
+					return -1L; // Avoid passing @Nullable to an API that requires @NonNull
 				Duration d = cacheConfiguration.getTtlFunction().getTimeToLive(value, key);
 				if (!d.isNegative() && !d.isZero()) {
 					return d.getSeconds();
@@ -198,7 +202,7 @@ public class RedisProCache extends RedisCache {
 	private void doRefresh(CachedInvocation invocation, Object key, String cacheKey, long ttl) {
 		try {
 			Object refreshed = invocation.invoke();
-			// 使用包装写回，重置 TTL
+			// Use wrapper to write back and reset TTL
 			this.put(key, refreshed);
 			log.info(
 					"Refreshed cache, name={}, redisKey={}, oldTtlSec={}, refreshedType={}",
@@ -219,7 +223,7 @@ public class RedisProCache extends RedisCache {
 	public void put(@NonNull Object key, @Nullable Object value) {
 		Object toStore = wrapIfMataAbsent(value, key);
 		super.put(key, toStore);
-		// 成功写入后将 key 加入布隆过滤器（值非空时）
+		// Add key to Bloom filter after successful write (if value is not null)
 		try {
 			if (value != null) {
 				String membershipKey = String.valueOf(key);
@@ -227,8 +231,13 @@ public class RedisProCache extends RedisCache {
 			}
 		} catch (Exception ignore) {
 		}
-		// 雪崩保护：统一调用
+		// Avalanche protection: unified call
 		applyLitteredExpire(key, toStore);
+		log.debug(
+				"Put cache entry: name={}, key={}, valueType={}",
+				getName(),
+				key,
+				value == null ? "null" : value.getClass().getSimpleName());
 	}
 
 	@Override
@@ -247,6 +256,11 @@ public class RedisProCache extends RedisCache {
 			}
 			applyLitteredExpire(key, toStore);
 		}
+		log.debug(
+				"PutIfAbsent: name={}, key={}, inserted={}",
+				getName(),
+				key,
+				firstInsert);
 		return previous;
 	}
 
@@ -272,7 +286,7 @@ public class RedisProCache extends RedisCache {
 		String membershipKey = String.valueOf(key);
 		ReentrantLock localLock = registry.obtainLock(getName(), key);
 		String distKey = "cache:load:" + cacheKey;
-		long leaseTimeSec = 30L; // 防御性租期，避免锁永久占用
+		long leaseTimeSec = 30L; // Defensive lease time to prevent permanent lock occupation
 		log.debug(
 				"First-load attempt: name={}, redisKey={}, distKey={}, leaseTimeSec={}",
 				getName(),
@@ -280,7 +294,8 @@ public class RedisProCache extends RedisCache {
 				distKey,
 				leaseTimeSec);
 
-		// Bloom 预检：若启用且断言“不可能存在”，直接抛出 ValueRetrievalException，阻断穿透
+		// Bloom pre-check: if enabled and "definitely does not exist", throw
+		// ValueRetrievalException to block penetration
 		if (cachePenetration.isEnabled(getName())) {
 			boolean mightContain = cachePenetration.mightContain(getName(), membershipKey);
 			if (!mightContain) {
@@ -303,7 +318,7 @@ public class RedisProCache extends RedisCache {
 						if (w != null) {
 							Object v = w.get();
 							if (v != null) {
-								// 命中缓存则补偿加入 Bloom
+								// Compensate by adding to Bloom if cache hit
 								try {
 									cachePenetration.addIfEnabled(getName(), membershipKey);
 								} catch (Exception ignore) {
@@ -346,10 +361,17 @@ public class RedisProCache extends RedisCache {
 					scheduleSecondDeleteForKey(key);
 				});
 		if (!executed) {
-			// 降级：未能加锁也尝试执行，以提升可用性
+			// Fallback: try to execute even if lock acquisition fails to improve
+			// availability
 			doEvictInternal(key);
 			scheduleSecondDeleteForKey(key);
 		}
+		log.info(
+				"Evicted cache key, name={}, redisKey={}, distKey={}, executed={}, secondDeleteScheduled=true",
+				getName(),
+				cacheKey,
+				distKey,
+				executed);
 	}
 
 	@Override
@@ -372,6 +394,7 @@ public class RedisProCache extends RedisCache {
 			doClearInternal();
 			scheduleSecondClear();
 		}
+		log.info("Cleared cache, name={}, secondClearScheduled=true", getName());
 	}
 
 	private byte[] createAndConvertCacheKey(Object key) {
@@ -395,13 +418,14 @@ public class RedisProCache extends RedisCache {
 			}
 		} catch (Exception ignored) {
 		}
-		// 雪崩保护：通过策略类对 TTL 进行抖动（随机缩短）
+		// Avalanche protection: jitter TTL through strategy class (randomly shorten)
 		long effectiveTtl = ttlSecs > 0 ? cacheAvalanche.jitterTtlSeconds(ttlSecs) : ttlSecs;
-		// 不再计算本地过期时间，仅使用元信息中的 TTL，并由 Redis 统一管理过期
+		// No longer calculate local expiration time, only use TTL in metadata, managed
+		// uniformly by Redis
 		return CacheMata.builder().ttl(effectiveTtl).value(value).build();
 	}
 
-	// 解包职责已集中在 fromStoreValue()
+	// Unpacking responsibility is centralized in fromStoreValue()
 
 	@Override
 	protected Object fromStoreValue(@Nullable Object storeValue) {
@@ -412,7 +436,7 @@ public class RedisProCache extends RedisCache {
 		return v;
 	}
 
-	/** 统一设置抖动后的过期时间，避免重复代码。 */
+	/** Unified setting of jittered expiration time to avoid duplicate code. */
 	private void applyLitteredExpire(Object key, Object toStore) {
 		try {
 			if (toStore instanceof CacheMata meta && meta.getTtl() > 0) {
@@ -426,7 +450,10 @@ public class RedisProCache extends RedisCache {
 		}
 	}
 
-	/** 判断 putIfAbsent 前该 key 是否不存在（-2 表示 Redis 中 key 不存在）。 */
+	/**
+	 * Check if the key was absent before putIfAbsent (-2 means the key does not
+	 * exist in Redis).
+	 */
 	private boolean wasKeyAbsentBeforePut(Object key) {
 		try {
 			Long ttl = redisTemplate.getExpire(createCacheKey(key), TimeUnit.SECONDS);
@@ -436,7 +463,7 @@ public class RedisProCache extends RedisCache {
 		}
 	}
 
-	/** 立即删除单键并清理本地注册。 */
+	/** Immediately delete single key and clean up local registry. */
 	private void doEvictInternal(@NonNull Object key) {
 		try {
 			getCacheWriter().remove(getName(), createAndConvertCacheKey(key));
@@ -452,7 +479,10 @@ public class RedisProCache extends RedisCache {
 		}
 	}
 
-	/** 延迟二次删除（单键），并在二次删除时再次尝试加锁以避免竞态。 */
+	/**
+	 * Delayed secondary deletion (single key), and attempt to acquire lock again
+	 * during second deletion to avoid race conditions.
+	 */
 	private void scheduleSecondDeleteForKey(@NonNull Object key) {
 		Executor delayed = CompletableFuture.delayedExecutor(
 				DOUBLE_DELETE_DELAY_MS, TimeUnit.MILLISECONDS, executor);
@@ -461,6 +491,11 @@ public class RedisProCache extends RedisCache {
 					String cacheKey = createCacheKey(key);
 					String distKey = "cache:evict:" + cacheKey;
 					ReentrantLock localLock = evictRegistry.obtainLock(getName(), key);
+					log.debug(
+							"Second-delete attempt: name={}, redisKey={}, distKey={}",
+							getName(),
+							cacheKey,
+							distKey);
 					LockUtils.runWithLocalTryThenDistTry(
 							localLock,
 							distributedLock,
@@ -473,7 +508,7 @@ public class RedisProCache extends RedisCache {
 				delayed);
 	}
 
-	/** 立即全量清理并清理本地注册。 */
+	/** Immediate full cleanup and clean up local registry. */
 	private void doClearInternal() {
 		try {
 			super.clear();
@@ -489,7 +524,10 @@ public class RedisProCache extends RedisCache {
 		}
 	}
 
-	/** 延迟二次全量删除，并在二次删除时再次尝试加锁以避免竞态。 */
+	/**
+	 * Delayed secondary full deletion, and attempt to acquire lock again during
+	 * second deletion to avoid race conditions.
+	 */
 	private void scheduleSecondClear() {
 		Executor delayed = CompletableFuture.delayedExecutor(
 				DOUBLE_DELETE_DELAY_MS, TimeUnit.MILLISECONDS, executor);
@@ -497,6 +535,10 @@ public class RedisProCache extends RedisCache {
 				() -> {
 					String distKey = "cache:evictAll:" + getName();
 					ReentrantLock localLock = evictRegistry.obtainLock(getName(), "*");
+					log.debug(
+							"Second-clear attempt: name={}, distKey={}",
+							getName(),
+							distKey);
 					LockUtils.runWithLocalTryThenDistTry(
 							localLock,
 							distributedLock,

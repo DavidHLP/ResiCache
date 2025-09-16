@@ -18,8 +18,8 @@ import org.springframework.util.StringUtils;
  * 基于 Spring 的 RedissonClient 简易配置。
  *
  * 仅在容器中不存在 RedissonClient 时生效，支持：
- *  - 根据 spring.data.redis.url 直接配置（推荐）
- *  - 或根据 host/port/database/username/password 组装单机地址
+ * - 根据 spring.data.redis.url 直接配置（推荐）
+ * - 或根据 host/port/database/username/password 组装单机地址
  */
 @Slf4j
 @AutoConfiguration(after = RedisAutoConfiguration.class)
@@ -37,6 +37,25 @@ public class RedissonConfig {
                 .setAddress(address)
                 .setDatabase(redisProperties.getDatabase());
 
+        boolean hasUsername = StringUtils.hasText(redisProperties.getUsername());
+        boolean hasPassword = StringUtils.hasText(redisProperties.getPassword());
+        Long timeoutMs = redisProperties.getTimeout() != null ? redisProperties.getTimeout().toMillis() : null;
+        Long connectTimeoutMs = redisProperties.getConnectTimeout() != null
+                ? redisProperties.getConnectTimeout().toMillis()
+                : null;
+        String clientName = StringUtils.hasText(redisProperties.getClientName()) ? redisProperties.getClientName()
+                : null;
+
+        log.info(
+                "Configuring Redisson single server: address={}, database={}, hasUsername={}, hasPassword={}, timeoutMs={}, connectTimeoutMs={}, clientName={}",
+                address,
+                redisProperties.getDatabase(),
+                hasUsername,
+                hasPassword,
+                timeoutMs,
+                connectTimeoutMs,
+                clientName);
+
         if (StringUtils.hasText(redisProperties.getUsername())) {
             single.setUsername(redisProperties.getUsername());
         }
@@ -53,7 +72,9 @@ public class RedissonConfig {
             single.setClientName(redisProperties.getClientName());
         }
 
-        return Redisson.create(config);
+        RedissonClient client = Redisson.create(config);
+        log.info("RedissonClient initialized successfully (single-server mode)");
+        return client;
     }
 
     private String buildAddress(RedisProperties p) {

@@ -37,16 +37,26 @@ public class DistributedLock {
     /** 阻塞加锁，达到 leaseTime 到期后自动释放。 */
     public void lock(String key, long leaseTime, TimeUnit unit) {
         RLock lock = redissonClient.getLock(buildKey(key));
+        log.debug("Locking (blocking): key={}, leaseTime={}, unit={}", buildKey(key), leaseTime, unit);
         lock.lock(leaseTime, unit);
+        log.debug("Lock acquired: key={}", buildKey(key));
     }
 
     /** 在 waitTime 内尝试加锁，成功后在 leaseTime 到期自动释放。 */
     public boolean tryLock(String key, long waitTime, long leaseTime, TimeUnit unit) {
         RLock lock = redissonClient.getLock(buildKey(key));
         try {
-            return lock.tryLock(waitTime, leaseTime, unit);
+            log.debug(
+                    "Trying to acquire lock: key={}, waitTime={}, leaseTime={}, unit={}",
+                    buildKey(key), waitTime, leaseTime, unit);
+            boolean acquired = lock.tryLock(waitTime, leaseTime, unit);
+            log.debug("Try lock result: key={}, acquired={}", buildKey(key), acquired);
+            return acquired;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn(
+                    "Try lock interrupted: key={}, waitTime={}, leaseTime={}, unit={}",
+                    buildKey(key), waitTime, leaseTime, unit);
             return false;
         }
     }
@@ -57,6 +67,9 @@ public class DistributedLock {
         try {
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
+                log.debug("Unlocked: key={}", buildKey(key));
+            } else {
+                log.debug("Unlock skipped, current thread not holder. key={}", buildKey(key));
             }
         } catch (IllegalMonitorStateException ex) {
             log.warn("unlock skipped, current thread not holder. key={}", buildKey(key));
@@ -67,12 +80,15 @@ public class DistributedLock {
     public <T> T withLock(String key, long leaseTime, TimeUnit unit, Supplier<T> supplier) {
         Objects.requireNonNull(supplier, "supplier must not be null");
         RLock lock = redissonClient.getLock(buildKey(key));
+        log.debug("withLock(Supplier) acquiring: key={}, leaseTime={}, unit={}", buildKey(key), leaseTime, unit);
         lock.lock(leaseTime, unit);
+        log.debug("withLock(Supplier) acquired: key={}", buildKey(key));
         try {
             return supplier.get();
         } finally {
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
+                log.debug("withLock(Supplier) released: key={}", buildKey(key));
             }
         }
     }
@@ -81,12 +97,15 @@ public class DistributedLock {
     public void withLock(String key, long leaseTime, TimeUnit unit, Runnable runnable) {
         Objects.requireNonNull(runnable, "runnable must not be null");
         RLock lock = redissonClient.getLock(buildKey(key));
+        log.debug("withLock(Runnable) acquiring: key={}, leaseTime={}, unit={}", buildKey(key), leaseTime, unit);
         lock.lock(leaseTime, unit);
+        log.debug("withLock(Runnable) acquired: key={}", buildKey(key));
         try {
             runnable.run();
         } finally {
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
+                log.debug("withLock(Runnable) released: key={}", buildKey(key));
             }
         }
     }

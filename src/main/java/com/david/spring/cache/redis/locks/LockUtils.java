@@ -26,7 +26,9 @@ public final class LockUtils {
         Objects.requireNonNull(unit, "unit");
         Objects.requireNonNull(task, "task");
 
-        log.debug("Attempting local lock followed by distributed lock for key: {}", distKey);
+        log.debug(
+                "Attempting local lock followed by distributed lock for key: {}, distWaitTime={}, distLeaseTime={}, unit={}",
+                distKey, distWaitTime, distLeaseTime, unit);
         boolean localLocked = false;
         try {
             localLocked = localLock.tryLock();
@@ -42,7 +44,9 @@ public final class LockUtils {
                 log.debug("Failed to acquire distributed lock for key: {}", distKey);
                 return false;
             }
-            log.debug("Distributed lock acquired for key: {}", distKey);
+            log.debug(
+                    "Distributed lock acquired for key: {}, leaseTime={}, unit={}",
+                    distKey, distLeaseTime, unit);
 
             try {
                 task.run();

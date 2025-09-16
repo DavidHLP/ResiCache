@@ -7,8 +7,10 @@ import com.david.spring.cache.redis.aspect.abstracts.AspectAbstract;
 import com.david.spring.cache.redis.aspect.support.RegisterUtil;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -18,80 +20,149 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
+/** Redis缓存切面类，用于处理@RedisCaching注解 该切面优先级高于单个注解的切面，确保复合注解能正确处理 */
 @Slf4j
 @Aspect
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 5) // 优先级高于单个注解的切面
+@Order(Ordered.HIGHEST_PRECEDENCE + 5) // 优先级高于单个注解切面
 public class RedisCachingAspect extends AspectAbstract {
 
-	private final CacheInvocationRegistry cacheRegistry;
-	private final EvictInvocationRegistry evictRegistry;
+    // 缓存调用注册中心，用于注册缓存操作
+    private final CacheInvocationRegistry cacheRegistry;
 
-	public RedisCachingAspect(CacheInvocationRegistry cacheRegistry, EvictInvocationRegistry evictRegistry) {
-		this.cacheRegistry = cacheRegistry;
-		this.evictRegistry = evictRegistry;
-	}
+    // 缓存驱逐调用注册中心，用于注册缓存驱逐操作
+    private final EvictInvocationRegistry evictRegistry;
 
-	@SneakyThrows
-	@Around("@annotation(redisCaching)")
-	public Object around(ProceedingJoinPoint joinPoint, RedisCaching redisCaching) {
-		try {
-			registerCachingInvocations(joinPoint, redisCaching);
-		} catch (Exception e) {
-			handleRegistrationException(e);
-		}
-		return joinPoint.proceed();
-	}
+    /**
+     * 构造函数，注入所需的注册中心
+     *
+     * @param cacheRegistry 缓存调用注册中心
+     * @param evictRegistry 缓存驱逐调用注册中心
+     */
+    public RedisCachingAspect(
+            CacheInvocationRegistry cacheRegistry, EvictInvocationRegistry evictRegistry) {
+        this.cacheRegistry = cacheRegistry;
+        this.evictRegistry = evictRegistry;
+    }
 
-	@Override
-	public void registerInvocation(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
-		// 此方法由带注解参数的 around 方法调用具体实现，这里不直接使用
-		throw new UnsupportedOperationException("请使用带注解参数的 around 方法");
-	}
+    /**
+     * 环绕通知，处理@RedisCaching注解
+     *
+     * @param joinPoint 连接点
+     * @param redisCaching RedisCaching注解实例
+     * @return 方法执行结果
+     * @throws Throwable 异常信息
+     */
+    @SneakyThrows
+    @Around("@annotation(redisCaching)")
+    public Object around(ProceedingJoinPoint joinPoint, RedisCaching redisCaching) {
+        try {
+            // 注册缓存操作
+            registerCachingInvocations(joinPoint, redisCaching);
+        } catch (Exception e) {
+            log.error("Failed to register caching invocations: {}", e.getMessage(), e);
+            // 处理注册异常
+            handleRegistrationException(e);
+        }
+        // 继续执行原方法
+        return joinPoint.proceed();
+    }
 
-	/**
-	 * 处理 RedisCaching 组合注解中的所有缓存操作
-	 */
-	private void registerCachingInvocations(ProceedingJoinPoint joinPoint, RedisCaching redisCaching)
-			throws NoSuchMethodException {
+    /**
+     * 注册调用信息（重写父类方法） 由于本切面使用带注解参数的环绕通知，此方法不会被直接调用
+     *
+     * @param joinPoint 连接点
+     * @throws NoSuchMethodException 方法未找到异常
+     */
+    @Override
+    public void registerInvocation(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
+        // 该方法由带注解参数的环绕通知调用，不在此处直接使用
+        throw new UnsupportedOperationException(
+                "Please use the around method with annotation parameter");
+    }
 
-		Method method = getSpecificMethod(joinPoint);
-		Object targetBean = joinPoint.getTarget();
-		Object[] arguments = joinPoint.getArgs();
+    /**
+     * 处理RedisCaching复合注解中的所有缓存操作
+     *
+     * @param joinPoint 连接点
+     * @param redisCaching RedisCaching注解实例
+     * @throws NoSuchMethodException 方法未找到异常
+     */
+    private void registerCachingInvocations(
+            ProceedingJoinPoint joinPoint, RedisCaching redisCaching) throws NoSuchMethodException {
 
-		// 处理 cacheable 注解数组
-		for (RedisCacheable cacheable : redisCaching.cacheable()) {
-			registerCacheableInvocation(joinPoint, method, targetBean, arguments, cacheable);
-		}
+        // 获取目标方法
+        Method method = getSpecificMethod(joinPoint);
+        // 获取目标对象
+        Object targetBean = joinPoint.getTarget();
+        // 获取方法参数
+        Object[] arguments = joinPoint.getArgs();
 
-		// 处理 evict 注解数组
-		for (RedisCacheEvict evict : redisCaching.evict()) {
-			registerEvictInvocation(joinPoint, method, targetBean, arguments, evict);
-		}
-	}
+        log.debug("Registering cacheable invocations for method: {}", method.getName());
+        // 处理缓存注解数组
+        for (RedisCacheable cacheable : redisCaching.cacheable()) {
+            registerCacheableInvocation(joinPoint, method, targetBean, arguments, cacheable);
+        }
 
-	/**
-	 * 注册 Cacheable 调用信息
-	 */
-	private void registerCacheableInvocation(ProceedingJoinPoint joinPoint, Method method,
-	                                         Object targetBean, Object[] arguments,
-	                                         RedisCacheable redisCacheable) {
-		Object key = resolveCacheKey(targetBean, method, arguments, redisCacheable.keyGenerator());
-		RegisterUtil.registerCachingInvocations(cacheRegistry, joinPoint, method, targetBean, arguments, redisCacheable, key);
-	}
+        log.debug("Registering evict invocations for method: {}", method.getName());
+        // 处理缓存驱逐注解数组
+        for (RedisCacheEvict evict : redisCaching.evict()) {
+            registerEvictInvocation(joinPoint, method, targetBean, arguments, evict);
+        }
+    }
 
-	/**
-	 * 注册 Evict 调用信息
-	 */
-	private void registerEvictInvocation(ProceedingJoinPoint joinPoint, Method method,
-	                                     Object targetBean, Object[] arguments,
-	                                     RedisCacheEvict redisCacheEvict) {
+    /**
+     * 注册缓存操作调用信息
+     *
+     * @param joinPoint 连接点
+     * @param method 目标方法
+     * @param targetBean 目标对象
+     * @param arguments 方法参数
+     * @param redisCacheable RedisCacheable注解实例
+     */
+    private void registerCacheableInvocation(
+            ProceedingJoinPoint joinPoint,
+            Method method,
+            Object targetBean,
+            Object[] arguments,
+            RedisCacheable redisCacheable) {
+        // 解析缓存键
+        Object key = resolveCacheKey(targetBean, method, arguments, redisCacheable.keyGenerator());
+        log.debug("Resolved cache key for @RedisCacheable: {}", key);
+        // 使用工具类注册缓存调用
+        RegisterUtil.registerCachingInvocations(
+                cacheRegistry, joinPoint, method, targetBean, arguments, redisCacheable, key);
+    }
 
-		boolean allEntries = redisCacheEvict.allEntries();
-		Object key = null;
-		if (!allEntries) {
-			key = resolveCacheKey(targetBean, method, arguments, redisCacheEvict.keyGenerator());
-		}
-		RegisterUtil.registerEvictInvocation(evictRegistry, joinPoint, method, targetBean, arguments, redisCacheEvict, key);
-	}
+    /**
+     * 注册缓存驱逐操作调用信息
+     *
+     * @param joinPoint 连接点
+     * @param method 目标方法
+     * @param targetBean 目标对象
+     * @param arguments 方法参数
+     * @param redisCacheEvict RedisCacheEvict注解实例
+     */
+    private void registerEvictInvocation(
+            ProceedingJoinPoint joinPoint,
+            Method method,
+            Object targetBean,
+            Object[] arguments,
+            RedisCacheEvict redisCacheEvict) {
+
+        // 判断是否清除所有条目
+        boolean allEntries = redisCacheEvict.allEntries();
+        Object key = null;
+
+        // 如果不是清除所有条目，则需要解析缓存键
+        if (!allEntries) {
+            key = resolveCacheKey(targetBean, method, arguments, redisCacheEvict.keyGenerator());
+            log.debug("Resolved cache key for @RedisCacheEvict: {}", key);
+        } else {
+            log.debug("Registering evict invocation for all entries");
+        }
+        // 使用工具类注册缓存驱逐调用
+        RegisterUtil.registerEvictInvocation(
+                evictRegistry, joinPoint, method, targetBean, arguments, redisCacheEvict, key);
+    }
 }
