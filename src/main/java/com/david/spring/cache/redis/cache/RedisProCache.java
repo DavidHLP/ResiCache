@@ -7,8 +7,10 @@ import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
+import com.david.spring.cache.redis.reflect.EvictInvocation;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.aspect.support.KeyResolver;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,6 +25,8 @@ import org.springframework.lang.Nullable;
 import java.time.Duration;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -332,25 +336,17 @@ public class RedisProCache extends RedisCache {
 
     @Override
     public void evict(@NonNull Object key) {
-        String cacheKey = createCacheKey(key);
-        ReentrantLock localLock = evictRegistry.obtainLock(getName(), key);
-        String distKey = "cache:evict:" + cacheKey;
-        long leaseTimeSec = 10L;
-        boolean executed = LockUtils.runWithLocalTryThenDistTry(
-                localLock,
-                distributedLock,
-                distKey,
-                0L,
-                leaseTimeSec,
-                TimeUnit.SECONDS,
-                () -> {
-                    doEvictInternal(key);
-                    scheduleSecondDeleteForKey(key);
-                });
-        if (!executed) {
-            // 降级：未能加锁也尝试执行，以提升可用性
-            doEvictInternal(key);
-            scheduleSecondDeleteForKey(key);
+        // 解析额外要驱逐的 keys（基于 EvictInvocation 上下文与 SpEL 表达式）
+        Object[] additionalKeys = resolveAdditionalEvictKeys(key);
+
+        // 先执行当前 key 的驱逐（沿用原有分布式+本地双锁与双删）
+        evictWithLockAndDoubleDelete(key);
+
+        // 再对额外 keys 逐一执行相同的驱逐流程
+        if (additionalKeys.length > 0) {
+            for (Object k : additionalKeys) {
+                evictWithLockAndDoubleDelete(k);
+            }
         }
     }
 
@@ -473,6 +469,65 @@ public class RedisProCache extends RedisCache {
                             () -> doEvictInternal(key));
                 },
                 delayed);
+    }
+
+    /**
+     * 解析 EvictInvocation 上下文中的 keys() 表达式，得到额外需要驱逐的 key 列表。
+     * - 当 condition 评估为 false、allEntries=true 或 keys 为空时，返回空数组。
+     * - 会过滤 null 与与当前 key 相同的条目，去重保持顺序。
+     */
+    private Object[] resolveAdditionalEvictKeys(@NonNull Object currentKey) {
+        try {
+            java.util.Optional<EvictInvocation> opt = evictRegistry.get(getName(), currentKey);
+            if (opt.isEmpty()) return new Object[0];
+            EvictInvocation inv = opt.get();
+            EvictInvocation.EvictInvocationContext ctx = inv.getEvictInvocationContext();
+            if (ctx == null) return new Object[0];
+            if (ctx.allEntries()) return new Object[0];
+            String[] exprs = ctx.keys();
+            if (exprs == null || exprs.length == 0) return new Object[0];
+            boolean pass = KeyResolver.evaluateConditionSpEL(
+                    inv.getTargetBean(), inv.getTargetMethod(), inv.getArguments(), ctx.condition());
+            if (!pass) return new Object[0];
+            Object[] ks = KeyResolver.resolveKeysSpEL(
+                    inv.getTargetBean(), inv.getTargetMethod(), inv.getArguments(), exprs);
+            if (ks == null || ks.length == 0) return new Object[0];
+            Set<Object> out = new LinkedHashSet<>();
+            for (Object k : ks) {
+                if (k == null) continue;
+                if (k.equals(currentKey)) continue;
+                out.add(k);
+            }
+            return out.toArray(Object[]::new);
+        } catch (Exception ignore) {
+            return new Object[0];
+        }
+    }
+
+    /**
+     * 对指定 key 执行一次带分布式锁保护的删除，并安排二次删除。
+     */
+    private void evictWithLockAndDoubleDelete(@NonNull Object k) {
+        String cacheKey = createCacheKey(k);
+        ReentrantLock localLock = evictRegistry.obtainLock(getName(), k);
+        String distKey = "cache:evict:" + cacheKey;
+        long leaseTimeSec = 10L;
+        boolean executed = LockUtils.runWithLocalTryThenDistTry(
+                localLock,
+                distributedLock,
+                distKey,
+                0L,
+                leaseTimeSec,
+                TimeUnit.SECONDS,
+                () -> {
+                    doEvictInternal(k);
+                    scheduleSecondDeleteForKey(k);
+                });
+        if (!executed) {
+            // 降级：未能加锁也尝试执行，以提升可用性
+            doEvictInternal(k);
+            scheduleSecondDeleteForKey(k);
+        }
     }
 
     /** 立即全量清理并清理本地注册。 */

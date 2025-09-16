@@ -15,7 +15,7 @@ public @interface RedisCacheEvict {
     @AliasFor(annotation = CacheEvict.class, attribute = "value")
     String[] value() default {};
 
-    @AliasFor(annotation = CacheEvict.class, attribute = "value")
+    @AliasFor(annotation = CacheEvict.class, attribute = "cacheNames")
     String[] cacheNames() default {};
 
     @AliasFor(annotation = CacheEvict.class)
@@ -40,4 +40,6 @@ public @interface RedisCacheEvict {
     boolean beforeInvocation() default false;
 
     boolean sync() default false;
+
+    String[] keys() default {};
 }

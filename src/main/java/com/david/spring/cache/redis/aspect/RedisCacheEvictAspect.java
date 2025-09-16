@@ -51,30 +51,37 @@ public class RedisCacheEvictAspect {
         boolean allEntries = redisCacheEvict.allEntries();
         Object key = null;
         if (!allEntries) {
-            key = resolveCacheKey(targetBean, method, arguments, redisCacheEvict);
+            // 只注册主 key：若声明了 key()，优先按 SpEL 解析；否则回退到 keyGenerator
+            if (redisCacheEvict.key() != null && !redisCacheEvict.key().isBlank()) {
+                key = KeyResolver.resolveKeySpEL(targetBean, method, arguments, redisCacheEvict.key());
+            }
+            if (key == null) {
+                key = resolveCacheKey(targetBean, method, arguments, redisCacheEvict);
+            }
         }
 
-        EvictInvocation invocation = EvictInvocation.builder()
-                .arguments(arguments)
-                .targetBean(targetBean)
-                .targetMethod(method)
-                .evictInvocationContext(
-                        new EvictInvocation.EvictInvocationContext(
-                                redisCacheEvict.value(),
-                                redisCacheEvict.cacheNames(),
-                                nullToEmpty(redisCacheEvict.key()),
-                                redisCacheEvict.keyGenerator(),
-                                redisCacheEvict.cacheManager(),
-                                redisCacheEvict.cacheResolver(),
-                                nullToEmpty(redisCacheEvict.condition()),
-                                redisCacheEvict.allEntries(),
-                                redisCacheEvict.beforeInvocation(),
-                                redisCacheEvict.sync()))
-                .build();
+        EvictInvocation invocation =
+                EvictInvocation.builder()
+                        .arguments(arguments)
+                        .targetBean(targetBean)
+                        .targetMethod(method)
+                        .evictInvocationContext(
+                                new EvictInvocation.EvictInvocationContext(
+                                        redisCacheEvict.value(),
+                                        redisCacheEvict.cacheNames(),
+                                        nullToEmpty(redisCacheEvict.key()),
+                                        redisCacheEvict.keyGenerator(),
+                                        redisCacheEvict.cacheManager(),
+                                        redisCacheEvict.cacheResolver(),
+                                        nullToEmpty(redisCacheEvict.condition()),
+                                        redisCacheEvict.allEntries(),
+                                        redisCacheEvict.beforeInvocation(),
+                                        redisCacheEvict.sync(),
+                                        redisCacheEvict.keys()))
+                        .build();
 
         for (String cacheName : cacheNames) {
-            if (cacheName == null || cacheName.isBlank())
-                continue;
+            if (cacheName == null || cacheName.isBlank()) continue;
             registry.register(cacheName.trim(), key, invocation);
             log.debug(
                     "Registered EvictInvocation for cache={}, method={}, key={}, allEntries={}, beforeInvocation={}",
@@ -101,7 +108,8 @@ public class RedisCacheEvictAspect {
     private Method getSpecificMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
         Object target = joinPoint.getTarget();
         String methodName = joinPoint.getSignature().getName();
-        Class<?>[] parameterTypes = ((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
+        Class<?>[] parameterTypes =
+                ((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
         return target.getClass().getMethod(methodName, parameterTypes);
     }
 }

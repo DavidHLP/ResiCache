@@ -37,17 +37,17 @@ public class EvictInvocation extends AbstractInvocation {
     private transient CacheResolver resolvedCacheResolver;
 
     @Override
-    protected Object getTargetBean() {
+    public Object getTargetBean() {
         return targetBean;
     }
 
     @Override
-    protected Method getTargetMethod() {
+    public Method getTargetMethod() {
         return targetMethod;
     }
 
     @Override
-    protected Object[] getArguments() {
+    public Object[] getArguments() {
         return arguments;
     }
 
@@ -60,7 +60,10 @@ public class EvictInvocation extends AbstractInvocation {
         if (resolvedKeyGenerator != null) return resolvedKeyGenerator;
         KeyGenerator kg =
                 ContextBeanSupport.resolveKeyGenerator(
-                        null, evictInvocationContext == null ? null : evictInvocationContext.keyGenerator());
+                        null,
+                        evictInvocationContext == null
+                                ? null
+                                : evictInvocationContext.keyGenerator());
         this.resolvedKeyGenerator = kg;
         return kg;
     }
@@ -74,7 +77,10 @@ public class EvictInvocation extends AbstractInvocation {
         if (resolvedCacheResolver != null) return resolvedCacheResolver;
         CacheResolver cr =
                 ContextBeanSupport.resolveCacheResolver(
-                        null, evictInvocationContext == null ? null : evictInvocationContext.cacheResolver());
+                        null,
+                        evictInvocationContext == null
+                                ? null
+                                : evictInvocationContext.cacheResolver());
         this.resolvedCacheResolver = cr;
         return cr;
     }
@@ -107,5 +113,6 @@ public class EvictInvocation extends AbstractInvocation {
             /* 是否在方法调用前执行清除 */
             boolean beforeInvocation,
             /* 是否同步执行 */
-            boolean sync) {}
+            boolean sync,
+            String[] keys) {}
 }
