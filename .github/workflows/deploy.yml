@@ -1,55 +1,30 @@
-name: Publish package to Maven Central and GitHub Packages
-
+name: Maven Central Repo Deployment
 on:
   release:
-    types: [created]
+    types: [ created ]
 
 jobs:
-  publish:
+  publish-central:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-      - uses: actions/checkout@v4
 
-      # 设置 JDK & 导入 GPG
-      - name: Set up JDK 17 with GPG
+      - name: Checkout Git Repo
+        uses: actions/checkout@v4
+
+      - name: Set up Apache Maven Central
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
-          gpg-private-key: ${{ secrets.GPG_SECRET }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          distribution: 'zulu'
+          java-version: '17'      # 一般只需要修改这里，8 17 21 等等
+          server-id: central
+          server-username: SERVER_USERNAME
+          server-password: SERVER_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
 
-      # 生成自定义 settings.xml
-      - name: Create settings.xml
-        run: |
-          mkdir -p ~/.m2
-          cat > ~/.m2/settings.xml <<EOF
-          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
-                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
-            <servers>
-              <server>
-                <id>central</id>
-                <username>${env.MAVEN_USERNAME}</username>
-                <password>${env.MAVEN_PASSWORD}</password>
-              </server>
-              <server>
-                <id>github</id>
-                <username>github</username>
-                <password>${env.GITHUB_TOKEN}</password>
-              </server>
-            </servers>
-          </settings>
-          EOF
-
-      # 一次性部署
-      - name: Deploy artifacts
-        run: mvn --batch-mode deploy -s ~/.m2/settings.xml
+      - name: Publish to Apache Maven Central
+        run: mvn deploy
         env:
-          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          SERVER_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
