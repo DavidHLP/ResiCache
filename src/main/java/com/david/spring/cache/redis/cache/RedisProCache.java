@@ -9,9 +9,7 @@ import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -294,7 +292,7 @@ public class RedisProCache extends RedisCache {
 			}
 		}
 		try {
-			T result = cacheBreakdown.<T>loadWithProtection(
+			T result = cacheBreakdown.loadWithProtection(
 					getName(),
 					distKey,
 					localLock,

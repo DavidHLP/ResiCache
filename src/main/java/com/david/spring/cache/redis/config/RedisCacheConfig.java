@@ -52,11 +52,10 @@ public class RedisCacheConfig {
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
 			CacheAvalanche cacheAvalanche) {
-		RedisCacheWriter cacheWriter =
-				RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
+		RedisCacheWriter cacheWriter = RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
 		// Key 用 String，Value 用 JSON
-		RedisSerializationContext.SerializationPair<String> keyPair =
-				RedisSerializationContext.SerializationPair.fromSerializer(
+		RedisSerializationContext.SerializationPair<String> keyPair = RedisSerializationContext.SerializationPair
+				.fromSerializer(
 						new StringRedisSerializer());
 		// 配置支持 JavaTime 的 ObjectMapper
 		ObjectMapper objectMapper = new ObjectMapper();
@@ -67,17 +66,15 @@ public class RedisCacheConfig {
 				ObjectMapper.DefaultTyping.NON_FINAL,
 				JsonTypeInfo.As.PROPERTY);
 
-		GenericJackson2JsonRedisSerializer jsonSerializer =
-				new GenericJackson2JsonRedisSerializer(objectMapper);
+		GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
 
-		RedisSerializationContext.SerializationPair<Object> valuePair =
-				RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer);
+		RedisSerializationContext.SerializationPair<Object> valuePair = RedisSerializationContext.SerializationPair
+				.fromSerializer(jsonSerializer);
 
-		RedisCacheConfiguration defaultCacheConfig =
-				RedisCacheConfiguration.defaultCacheConfig()
-						.entryTtl(Duration.ofSeconds(60))
-						.serializeKeysWith(keyPair) // 覆盖 key 序列化
-						.serializeValuesWith(valuePair); // 覆盖 value 序列化
+		RedisCacheConfiguration defaultCacheConfig = RedisCacheConfiguration.defaultCacheConfig()
+				.entryTtl(Duration.ofSeconds(60))
+				.serializeKeysWith(keyPair) // 覆盖 key 序列化
+				.serializeValuesWith(valuePair); // 覆盖 value 序列化
 
 		Map<String, RedisCacheConfiguration> initialCacheConfiguration = new HashMap<>();
 
@@ -97,7 +94,6 @@ public class RedisCacheConfig {
 				cacheBreakdown,
 				cacheAvalanche);
 	}
-
 
 	@Bean
 	@ConditionalOnMissingBean(KeyGenerator.class)
@@ -135,8 +131,7 @@ public class RedisCacheConfig {
 				ObjectMapper.DefaultTyping.NON_FINAL,
 				JsonTypeInfo.As.PROPERTY);
 
-		GenericJackson2JsonRedisSerializer jsonSerializer =
-				new GenericJackson2JsonRedisSerializer(objectMapper);
+		GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
 
 		template.setKeySerializer(stringSerializer);
 		template.setValueSerializer(jsonSerializer);

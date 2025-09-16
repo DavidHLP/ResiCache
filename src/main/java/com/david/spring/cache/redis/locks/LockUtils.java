@@ -1,10 +1,12 @@
 package com.david.spring.cache.redis.locks;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** 锁工具：封装“本地锁 + 分布式锁”的组合加锁模式。 */
+@Slf4j
 public final class LockUtils {
 
     private LockUtils() {}
@@ -23,26 +25,40 @@ public final class LockUtils {
         Objects.requireNonNull(distKey, "distKey");
         Objects.requireNonNull(unit, "unit");
         Objects.requireNonNull(task, "task");
+
+        log.debug("Attempting local lock followed by distributed lock for key: {}", distKey);
         boolean localLocked = false;
         try {
             localLocked = localLock.tryLock();
             if (!localLocked) {
+                log.debug("Failed to acquire local lock for key: {}", distKey);
                 return false;
             }
+            log.debug("Local lock acquired for key: {}", distKey);
+
             boolean distLocked =
                     distributedLock.tryLock(distKey, distWaitTime, distLeaseTime, unit);
             if (!distLocked) {
+                log.debug("Failed to acquire distributed lock for key: {}", distKey);
                 return false;
             }
+            log.debug("Distributed lock acquired for key: {}", distKey);
+
             try {
                 task.run();
+                log.debug("Task executed successfully with locks for key: {}", distKey);
                 return true;
             } finally {
                 distributedLock.unlock(distKey);
+                log.debug("Distributed lock released for key: {}", distKey);
             }
+        } catch (Exception e) {
+            log.error("Error during lock execution for key: {} - {}", distKey, e.getMessage(), e);
+            return false;
         } finally {
             if (localLocked) {
                 localLock.unlock();
+                log.debug("Local lock released for key: {}", distKey);
             }
         }
     }
@@ -61,16 +77,27 @@ public final class LockUtils {
         Objects.requireNonNull(distKey, "distKey");
         Objects.requireNonNull(unit, "unit");
         Objects.requireNonNull(supplier, "supplier");
+
+        log.debug("Blocking for local lock then distributed lock for key: {}", distKey);
         localLock.lock();
+        log.debug("Local lock acquired (blocking) for key: {}", distKey);
         try {
             distributedLock.lock(distKey, distLeaseTime, unit);
+            log.debug("Distributed lock acquired (blocking) for key: {}", distKey);
             try {
-                return supplier.get();
+                T result = supplier.get();
+                log.debug("Supplier executed successfully with locks for key: {}", distKey);
+                return result;
             } finally {
                 distributedLock.unlock(distKey);
+                log.debug("Distributed lock released (blocking mode) for key: {}", distKey);
             }
+        } catch (Exception e) {
+            log.error("Error during blocking lock execution for key: {} - {}", distKey, e.getMessage(), e);
+            throw e;
         } finally {
             localLock.unlock();
+            log.debug("Local lock released (blocking mode) for key: {}", distKey);
         }
     }
 

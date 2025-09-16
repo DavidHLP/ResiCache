@@ -11,6 +11,7 @@ import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
 import jakarta.annotation.Nonnull;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -23,6 +24,7 @@ import org.springframework.lang.Nullable;
 import java.util.*;
 import java.util.concurrent.Executor;
 
+@Slf4j
 public class RedisProCacheManager extends RedisCacheManager {
 
     @Getter
@@ -52,6 +54,8 @@ public class RedisProCacheManager extends RedisCacheManager {
             CacheBreakdown cacheBreakdown,
             CacheAvalanche cacheAvalanche) {
         super(cacheWriter, redisCacheConfiguration, initialCacheConfigurations);
+        log.info("Initializing RedisProCacheManager with {} initial cache configurations",
+                initialCacheConfigurations.size());
         this.initialCacheConfigurations = initialCacheConfigurations;
         this.redisTemplate = cacheRedisTemplate;
         this.cacheWriter = cacheWriter;
@@ -63,15 +67,20 @@ public class RedisProCacheManager extends RedisCacheManager {
         this.cachePenetration = cachePenetration;
         this.cacheBreakdown = cacheBreakdown;
         this.cacheAvalanche = cacheAvalanche;
+        log.debug("RedisProCacheManager successfully initialized with protection mechanisms");
     }
 
     @Override
     @Nonnull
     protected Collection<RedisCache> loadCaches() {
+        log.info("Loading Redis caches for {} cache configurations", getInitialCacheConfigurations().size());
         List<RedisCache> caches = new LinkedList<>();
         for (Map.Entry<String, RedisCacheConfiguration> entry : getInitialCacheConfigurations().entrySet()) {
-            caches.add(createRedisCache(entry.getKey(), entry.getValue()));
+            String cacheName = entry.getKey();
+            log.debug("Loading cache: {}", cacheName);
+            caches.add(createRedisCache(cacheName, entry.getValue()));
         }
+        log.info("Successfully loaded {} Redis caches", caches.size());
         return caches;
     }
 
@@ -79,9 +88,10 @@ public class RedisProCacheManager extends RedisCacheManager {
     @Nonnull
     public RedisCache createRedisCache(
             @NonNull String name, @Nullable RedisCacheConfiguration cacheConfig) {
+        log.debug("Creating Redis cache: {}", name);
         RedisCacheConfiguration config = getInitialCacheConfigurations().getOrDefault(name, redisCacheConfiguration);
 
-        return new RedisProCache(
+        RedisProCache cache = new RedisProCache(
                 name,
                 cacheWriter,
                 config,
@@ -93,9 +103,14 @@ public class RedisProCacheManager extends RedisCacheManager {
                 cachePenetration,
                 cacheBreakdown,
                 cacheAvalanche);
+        log.debug("Successfully created Redis cache: {} with TTL: {}", name,
+                config.getTtl() != null ? config.getTtl().getSeconds() + "s" : "default");
+        return cache;
     }
 
     public void initializeCaches() {
-        super.initializeCaches(); // 重新加载 caches
+        log.info("Initializing Redis caches");
+        super.initializeCaches();
+        log.debug("Redis caches initialization completed");
     }
 }

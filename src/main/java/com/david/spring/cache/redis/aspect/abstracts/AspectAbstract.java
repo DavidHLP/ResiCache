@@ -17,9 +17,14 @@ public abstract class AspectAbstract implements AspectInterface {
 
     @Override
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        Method method = getSpecificMethod(joinPoint);
+        log.debug("Processing aspect for method: {}.{}",
+                method.getDeclaringClass().getSimpleName(), method.getName());
         try {
             registerInvocation(joinPoint);
         } catch (Exception e) {
+            log.error("Registration failed for method: {}.{} - {}",
+                    method.getDeclaringClass().getSimpleName(), method.getName(), e.getMessage(), e);
             handleRegistrationException(e);
         }
         return joinPoint.proceed();
@@ -31,7 +36,7 @@ public abstract class AspectAbstract implements AspectInterface {
      * @param e 异常信息
      */
     protected void handleRegistrationException(Exception e) {
-        log.warn("Failed to register invocation: {}", e.getMessage());
+        log.warn("Failed to register cache invocation, cache operations may be affected: {}", e.getMessage());
     }
 
     /**
