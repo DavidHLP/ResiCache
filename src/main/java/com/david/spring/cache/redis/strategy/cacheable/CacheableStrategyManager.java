@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.strategy.cacheable;
 
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
@@ -48,29 +48,11 @@ public class CacheableStrategyManager {
 	 * @return 缓存值包装器
 	 */
 	@Nullable
-	public Cache.ValueWrapper get(@NonNull CacheGetContext<Object> context) {
+	public Cache.ValueWrapper get(@NonNull CacheableContext<Object> context) {
 		log.debug("Executing cache get for key: {} using strategy manager", context.getKey());
 
-		for (CacheableStrategy<Object> strategy : strategies) {
-			if (strategy.supports(context)) {
-				log.debug("Using strategy: {} for key: {}",
-						strategy.getClass().getSimpleName(), context.getKey());
-
-				try {
-					Cache.ValueWrapper result = strategy.get(context);
-					log.debug("Strategy {} completed for key: {}, result: {}",
-							strategy.getClass().getSimpleName(), context.getKey(), result != null ? "hit" : "miss");
-					return result;
-				} catch (Exception e) {
-					log.error("Strategy {} failed for key: {}, trying next strategy",
-							strategy.getClass().getSimpleName(), context.getKey(), e);
-					// 继续尝试下一个策略
-				}
-			}
-		}
-
-		log.warn("No suitable strategy found for key: {}", context.getKey());
-		return null;
+		return executeWithStrategy(context, strategy -> strategy.get(context),
+			() -> null, "cache get");
 	}
 
 	/**
@@ -81,37 +63,72 @@ public class CacheableStrategyManager {
 	 * @return 缓存值
 	 */
 	@Nullable
-	public <V> V get(@NonNull CacheGetContext<Object> context, @NonNull Callable<V> valueLoader) {
+	public <V> V get(@NonNull CacheableContext<Object> context, @NonNull Callable<V> valueLoader) {
 		log.debug("Executing cache get with value loader for key: {} using strategy manager", context.getKey());
+
+		return executeWithStrategy(context, strategy -> strategy.get(context, valueLoader),
+			() -> {
+				try {
+					log.debug("Falling back to direct value loader invocation for key: {}", context.getKey());
+					return valueLoader.call();
+				} catch (Exception e) {
+					log.error("Direct value loader invocation failed for key: {}", context.getKey(), e);
+					throw new Cache.ValueRetrievalException(context.getKey(), valueLoader, e);
+				}
+			}, "cache get with value loader");
+	}
+
+	/**
+	 * 使用策略执行操作的通用方法
+	 */
+	@Nullable
+	private <T> T executeWithStrategy(@NonNull CacheableContext<Object> context,
+									  @NonNull StrategyExecutor<T> executor,
+									  @NonNull FallbackExecutor<T> fallback,
+									  @NonNull String operationType) {
 
 		for (CacheableStrategy<Object> strategy : strategies) {
 			if (strategy.supports(context)) {
-				log.debug("Using strategy: {} for key: {} with value loader",
-						strategy.getClass().getSimpleName(), context.getKey());
+				String strategyName = strategy.getClass().getSimpleName();
+				log.debug("Using strategy: {} for key: {} ({})", strategyName, context.getKey(), operationType);
 
 				try {
-					V result = strategy.get(context, valueLoader);
-					log.debug("Strategy {} completed for key: {} with value loader, result: {}",
-							strategy.getClass().getSimpleName(), context.getKey(), result != null ? "success" : "null");
+					T result = executor.execute(strategy);
+					log.debug("Strategy {} completed for key: {} ({}), result: {}",
+							strategyName, context.getKey(), operationType,
+							result != null ? "success" : "null");
 					return result;
 				} catch (Exception e) {
-					log.error("Strategy {} failed for key: {} with value loader, trying next strategy",
-							strategy.getClass().getSimpleName(), context.getKey(), e);
+					log.error("Strategy {} failed for key: {} ({}), trying next strategy",
+							strategyName, context.getKey(), operationType, e);
 					// 继续尝试下一个策略
 				}
 			}
 		}
 
-		log.warn("No suitable strategy found for key: {} with value loader", context.getKey());
-
-		// 如果所有策略都失败了，尝试直接调用值加载器
+		log.warn("No suitable strategy found for key: {} ({})", context.getKey(), operationType);
 		try {
-			log.debug("Falling back to direct value loader invocation for key: {}", context.getKey());
-			return valueLoader.call();
+			return fallback.execute();
 		} catch (Exception e) {
-			log.error("Direct value loader invocation failed for key: {}", context.getKey(), e);
-			throw new Cache.ValueRetrievalException(context.getKey(), valueLoader, e);
+			log.error("Fallback execution failed for key: {} ({})", context.getKey(), operationType, e);
+			if (e instanceof RuntimeException) {
+				throw (RuntimeException) e;
+			} else {
+				throw new RuntimeException("Fallback execution failed", e);
+			}
 		}
+	}
+
+	@FunctionalInterface
+	private interface StrategyExecutor<T> {
+		@Nullable
+		T execute(CacheableStrategy<Object> strategy) throws Exception;
+	}
+
+	@FunctionalInterface
+	private interface FallbackExecutor<T> {
+		@Nullable
+		T execute() throws Exception;
 	}
 
 	/**
@@ -121,7 +138,7 @@ public class CacheableStrategyManager {
 	 * @return 支持的策略，如果没有找到则返回null
 	 */
 	@Nullable
-	public CacheableStrategy<Object> findSupportedStrategy(@NonNull CacheGetContext<Object> context) {
+	public CacheableStrategy<Object> findSupportedStrategy(@NonNull CacheableContext<Object> context) {
 		return strategies.stream()
 				.filter(strategy -> strategy.supports(context))
 				.findFirst()

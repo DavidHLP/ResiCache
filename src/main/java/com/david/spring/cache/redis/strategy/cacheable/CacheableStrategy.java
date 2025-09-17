@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.strategy.cacheable;
 
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
 import org.springframework.cache.Cache;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
@@ -23,7 +23,7 @@ public interface CacheableStrategy<T> {
 	 * @return 缓存值包装器
 	 */
 	@Nullable
-	Cache.ValueWrapper get(@NonNull CacheGetContext<T> context);
+	Cache.ValueWrapper get(@NonNull CacheableContext<T> context);
 
 	/**
 	 * 带回退函数的缓存获取策略
@@ -33,7 +33,7 @@ public interface CacheableStrategy<T> {
 	 * @return 缓存值
 	 */
 	@Nullable
-	<V> V get(@NonNull CacheGetContext<T> context, @NonNull Callable<V> valueLoader);
+	<V> V get(@NonNull CacheableContext<T> context, @NonNull Callable<V> valueLoader);
 
 	/**
 	 * 判断是否支持当前缓存操作类型
@@ -41,7 +41,7 @@ public interface CacheableStrategy<T> {
 	 * @param context 缓存获取上下文
 	 * @return 是否支持
 	 */
-	boolean supports(@NonNull CacheGetContext<T> context);
+	boolean supports(@NonNull CacheableContext<T> context);
 
 	/**
 	 * 获取策略优先级（数字越小优先级越高）

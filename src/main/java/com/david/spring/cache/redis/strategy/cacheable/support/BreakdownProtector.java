@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.strategy.cacheable.support;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.lang.Nullable;
@@ -27,7 +27,7 @@ public class BreakdownProtector {
 	 * @return 缓存值包装器
 	 */
 	@Nullable
-	public Cache.ValueWrapper handleBreakdown(CacheGetContext<Object> context) {
+	public Cache.ValueWrapper handleBreakdown(CacheableContext<Object> context) {
 		if (!needsBreakdownProtection(context)) {
 			return null;
 		}
@@ -106,7 +106,7 @@ public class BreakdownProtector {
 	 * @return 加载的值
 	 */
 	@Nullable
-	public <V> V loadWithBreakdownProtection(CacheGetContext<Object> context, Callable<V> valueLoader, ValueLoader<V> loader) {
+	public <V> V loadWithBreakdownProtection(CacheableContext<Object> context, Callable<V> valueLoader, ValueLoader<V> loader) {
 		if (!needsBreakdownProtection(context)) {
 			return loader.load(context, valueLoader);
 		}
@@ -180,7 +180,7 @@ public class BreakdownProtector {
 		return null;
 	}
 
-	private boolean needsBreakdownProtection(CacheGetContext<Object> context) {
+	private boolean needsBreakdownProtection(CacheableContext<Object> context) {
 		CachedInvocationContext cic = context.getCachedInvocationContext();
 		if (cic == null || context.getCacheBreakdown() == null) {
 			return false;
@@ -190,7 +190,7 @@ public class BreakdownProtector {
 		return canDist || canLocal;
 	}
 
-	private String resolveDistLockKey(CacheGetContext<Object> context) {
+	private String resolveDistLockKey(CacheableContext<Object> context) {
 		CachedInvocationContext cic = context.getCachedInvocationContext();
 		String prefix = (cic != null && cic.distributedLockName() != null && !cic.distributedLockName().isBlank())
 				? cic.distributedLockName()
@@ -206,6 +206,6 @@ public class BreakdownProtector {
 	@FunctionalInterface
 	public interface ValueLoader<V> {
 		@Nullable
-		V load(CacheGetContext<Object> context, Callable<V> valueLoader);
+		V load(CacheableContext<Object> context, Callable<V> valueLoader);
 	}
 }

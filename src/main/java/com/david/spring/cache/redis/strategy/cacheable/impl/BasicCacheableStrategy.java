@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.strategy.cacheable.impl;
 
-import com.david.spring.cache.redis.cache.RedisProCache;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
+import com.david.spring.cache.redis.strategy.cacheable.support.CacheOperationSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.lang.NonNull;
@@ -18,45 +18,27 @@ import org.springframework.stereotype.Component;
 @Component
 public class BasicCacheableStrategy extends AbstractCacheableStrategy {
 
-	@Override
-	@Nullable
-	public Cache.ValueWrapper get(@NonNull CacheGetContext<Object> context) {
-		log.debug("Executing basic cache get strategy for key: {}", context.getKey());
-
-		try {
-			// 避免循环调用，直接调用 RedisProCache 的父类方法
-			Cache parentCache = context.getParentCache();
-
-			if (parentCache instanceof RedisProCache redisProCache) {
-				Cache.ValueWrapper valueWrapper = redisProCache.getFromParent(context.getKey());
-
-				if (valueWrapper == null) {
-					log.debug("Cache miss for key: {}", context.getKey());
-					return null;
-				}
-
-				log.debug("Cache hit for key: {}", context.getKey());
-				return valueWrapper;
-			}
-
-			// 对于其他类型的缓存，直接调用
-			Cache.ValueWrapper valueWrapper = parentCache.get(context.getKey());
-			if (valueWrapper == null) {
-				log.debug("Cache miss for key: {}", context.getKey());
-				return null;
-			}
-
-			log.debug("Cache hit for key: {}", context.getKey());
-			return valueWrapper;
-
-		} catch (Exception e) {
-			log.error("Error during basic cache get for key: {}", context.getKey(), e);
-			return null;
-		}
+	public BasicCacheableStrategy(CacheOperationSupport cacheOperationSupport) {
+		super(cacheOperationSupport);
 	}
 
 	@Override
-	public boolean supports(@NonNull CacheGetContext<Object> context) {
+	@Nullable
+	public Cache.ValueWrapper get(@NonNull CacheableContext<Object> context) {
+		log.debug("Executing basic cache get strategy for key: {}", context.getKey());
+
+		Cache.ValueWrapper valueWrapper = cacheOperationSupport.safeGet(context);
+		if (valueWrapper != null) {
+			log.debug("Cache hit for key: {}", context.getKey());
+		} else {
+			log.debug("Cache miss for key: {}", context.getKey());
+		}
+
+		return valueWrapper;
+	}
+
+	@Override
+	public boolean supports(@NonNull CacheableContext<Object> context) {
 		// 基础策略支持所有情况（作为兜底策略）
 		return true;
 	}

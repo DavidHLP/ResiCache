@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.strategy.cacheable.support;
 
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +18,7 @@ public class AvalancheProtector {
 	 *
 	 * @param context 缓存获取上下文
 	 */
-	public void onCacheHit(CacheGetContext<Object> context) {
+	public void onCacheHit(CacheableContext<Object> context) {
 		if (context.getCacheAvalanche() != null) {
 			log.debug("Cache avalanche protection: cache hit for key: {}", context.getKey());
 			// CacheAvalanche 主要用于TTL抖动，访问时一般不需要特殊处理
@@ -30,7 +30,7 @@ public class AvalancheProtector {
 	 *
 	 * @param context 缓存获取上下文
 	 */
-	public void onCachePut(CacheGetContext<Object> context) {
+	public void onCachePut(CacheableContext<Object> context) {
 		if (context.getCacheAvalanche() != null) {
 			log.debug("Cache avalanche protection: cache write for key: {}", context.getKey());
 			// CacheAvalanche 的TTL抖动在缓存配置层面处理，这里主要记录

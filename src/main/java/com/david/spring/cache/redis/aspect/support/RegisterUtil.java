@@ -49,26 +49,44 @@ public final class RegisterUtil {
 				.targetBean(targetBean)
 				.targetMethod(method)
 				.cachedInvocationContext(
-						CachedInvocationContext.builder()
-								.value(redisCacheable.value())
-								.cacheNames(redisCacheable.cacheNames())
-								.key(nullToEmpty(redisCacheable.key()))
-								.keyGenerator(redisCacheable.keyGenerator())
-								.cacheManager(redisCacheable.cacheManager())
-								.cacheResolver(redisCacheable.cacheResolver())
-								.condition(nullToEmpty(redisCacheable.condition()))
-								.unless(nullToEmpty(redisCacheable.unless()))
-								.sync(redisCacheable.sync())
-								.ttl(redisCacheable.ttl())
-								.type(redisCacheable.type())
-								.useSecondLevelCache(redisCacheable.useSecondLevelCache())
+					CachedInvocationContext.builder()
+						// 基础配置
+						.value(redisCacheable.value())
+						.cacheNames(redisCacheable.cacheNames())
+						.key(nullToEmpty(redisCacheable.key()))
+						.condition(nullToEmpty(redisCacheable.condition()))
+						.unless(nullToEmpty(redisCacheable.unless()))
+						.sync(redisCacheable.sync())
+
+						// Spring集成配置
+						.keyGenerator(redisCacheable.keyGenerator())
+						.cacheManager(redisCacheable.cacheManager())
+						.cacheResolver(redisCacheable.cacheResolver())
+
+						// 缓存行为配置
+						.ttl(redisCacheable.ttl())
+						.type(redisCacheable.type())
+						.cacheNullValues(redisCacheable.cacheNullValues())
+						.useSecondLevelCache(redisCacheable.useSecondLevelCache())
+
+						// 保护机制配置
+						.protectionConfig(
+							CachedInvocationContext.ProtectionConfig.builder()
+								.distributedLock(redisCacheable.distributedLock())
 								.internalLock(redisCacheable.internalLock())
 								.useBloomFilter(redisCacheable.useBloomFilter())
-								.cacheNullValues(redisCacheable.cacheNullValues())
-								.distributedLock(redisCacheable.distributedLock())
+								.build()
+						)
+
+						// TTL配置
+						.ttlConfig(
+							CachedInvocationContext.TtlConfig.builder()
 								.randomTtl(redisCacheable.randomTtl())
 								.variance(redisCacheable.variance())
-								.build())
+								.build()
+						)
+						.build()
+				)
 				.build();
 
 		for (String cacheName : cacheNames) {

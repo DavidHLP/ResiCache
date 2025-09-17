@@ -6,59 +6,75 @@ import org.springframework.lang.Nullable;
 
 /**
  * 缓存调用上下文实现类
- * 主人，这个类实现了通用的缓存上下文接口喵~
+ * 使用分组设计提高可读性和可维护性
+ *
+ * @author David
  */
 @Builder
 public record CachedInvocationContext(
-		/* 缓存名称数组 */
-		String[] cacheNames,
-
-		/* 缓存键表达式 */
-		String key,
-
-		/* 缓存条件表达式 */
-		String condition,
-
-		/* 是否同步执行 */
+		// 基础配置
+		@Nullable String[] cacheNames,
+		@Nullable String[] value,
+		@Nullable String key,
+		@Nullable String condition,
+		@Nullable String unless,
 		boolean sync,
 
-		/* 缓存值表达式 */
-		String[] value,
+		// Spring集成配置
+		@Nullable String keyGenerator,
+		@Nullable String cacheManager,
+		@Nullable String cacheResolver,
 
-		/* KeyGenerator Bean名称 */
-		String keyGenerator,
-
-		/* CacheManager Bean名称 */
-		String cacheManager,
-
-		/* CacheResolver Bean名称 */
-		String cacheResolver,
-
-		/* 不缓存的条件表达式 */
-		String unless,
-
-		/* 缓存过期时间（毫秒） */
+		// 缓存行为配置
 		long ttl,
-
-		/* 目标类型 */
-		Class<?> type,
-
+		@Nullable Class<?> type,
+		boolean cacheNullValues,
 		boolean useSecondLevelCache,
 
-		boolean distributedLock,
+		// 保护机制配置
+		ProtectionConfig protectionConfig,
 
-		String distributedLockName,
+		// TTL配置
+		TtlConfig ttlConfig
+) implements InvocationContext {
 
-		boolean internalLock,
+	/**
+	 * 保护机制配置
+	 */
+	@Builder
+	public record ProtectionConfig(
+			boolean distributedLock,
+			@Nullable String distributedLockName,
+			boolean internalLock,
+			boolean useBloomFilter
+	) {
+		public static ProtectionConfig defaultConfig() {
+			return ProtectionConfig.builder().build();
+		}
 
-		boolean cacheNullValues,
+		public boolean hasLockProtection() {
+			return distributedLock || internalLock;
+		}
+	}
 
-		boolean useBloomFilter,
+	/**
+	 * TTL配置
+	 */
+	@Builder
+	public record TtlConfig(
+			boolean randomTtl,
+			float variance
+	) {
+		public static TtlConfig defaultConfig() {
+			return TtlConfig.builder().variance(0.1f).build();
+		}
 
-		boolean randomTtl,
+		public boolean isValid() {
+			return variance >= 0.0f && variance <= 1.0f;
+		}
+	}
 
-		float variance) implements InvocationContext {
-
+	// InvocationContext接口实现
 	@Override
 	public String[] getCacheNames() {
 		return cacheNames != null ? cacheNames : (value != null ? value : new String[0]);
@@ -104,32 +120,63 @@ public record CachedInvocationContext(
 		return "CachedInvocation";
 	}
 
-	/**
-	 * 获取不缓存的条件表达式（Cached特有）
-	 *
-	 * @return 不缓存的条件表达式
-	 */
-	@Nullable
-	public String getUnless() {
-		return unless;
+	// 便利方法，提供简洁的API访问
+	public boolean distributedLock() {
+		return protectionConfig != null && protectionConfig.distributedLock();
+	}
+
+	public String distributedLockName() {
+		return protectionConfig != null ? protectionConfig.distributedLockName() : null;
+	}
+
+	public boolean internalLock() {
+		return protectionConfig != null && protectionConfig.internalLock();
+	}
+
+	public boolean useBloomFilter() {
+		return protectionConfig != null && protectionConfig.useBloomFilter();
+	}
+
+	public boolean randomTtl() {
+		return ttlConfig != null && ttlConfig.randomTtl();
+	}
+
+	public float variance() {
+		return ttlConfig != null ? ttlConfig.variance() : 0.0f;
 	}
 
 	/**
-	 * 获取缓存过期时间（Cached特有）
+	 * 检查是否需要保护机制
 	 *
-	 * @return 缓存过期时间（毫秒）
+	 * @return 如果需要任何保护机制则返回true
 	 */
-	public long getTtl() {
-		return ttl;
+	public boolean needsProtection() {
+		return protectionConfig != null && (
+			protectionConfig.distributedLock() ||
+			protectionConfig.internalLock() ||
+			protectionConfig.useBloomFilter()
+		);
 	}
 
 	/**
-	 * 获取目标类型（Cached特有）
+	 * 检查TTL配置是否有效
 	 *
-	 * @return 目标类型
+	 * @return 如果TTL配置有效则返回true
 	 */
-	@Nullable
-	public Class<?> getType() {
-		return type;
+	public boolean isValidTtlConfig() {
+		return ttlConfig == null || ttlConfig.isValid();
 	}
+
+	/**
+	 * 获取默认的上下文实例
+	 *
+	 * @return 带有默认配置的上下文
+	 */
+	public static CachedInvocationContext defaultContext() {
+		return CachedInvocationContext.builder()
+			.protectionConfig(ProtectionConfig.defaultConfig())
+			.ttlConfig(TtlConfig.defaultConfig())
+			.build();
+	}
+
 }

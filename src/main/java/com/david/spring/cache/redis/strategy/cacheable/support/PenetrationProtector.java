@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.strategy.cacheable.support;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +20,7 @@ public class PenetrationProtector {
 	 * @param context 缓存获取上下文
 	 * @return 如果允许，返回 true；如果被穿透保护拦截，返回 false
 	 */
-	public boolean isAllowed(CacheGetContext<Object> context) {
+	public boolean isAllowed(CacheableContext<Object> context) {
 		CachedInvocationContext cic = context.getCachedInvocationContext();
 		if (cic != null && cic.useBloomFilter() && context.getCachePenetration() != null) {
 			String keyStr = String.valueOf(context.getKey());

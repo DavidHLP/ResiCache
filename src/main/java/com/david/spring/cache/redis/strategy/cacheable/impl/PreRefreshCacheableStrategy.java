@@ -1,8 +1,8 @@
 package com.david.spring.cache.redis.strategy.cacheable.impl;
 
-import com.david.spring.cache.redis.cache.RedisProCache;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
+import com.david.spring.cache.redis.strategy.cacheable.support.CacheOperationSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.lang.NonNull;
@@ -26,18 +26,17 @@ public class PreRefreshCacheableStrategy extends AbstractCacheableStrategy {
 	/** 预刷新阈值比例 */
 	private static final double PRE_REFRESH_THRESHOLD = 0.2;
 
+	public PreRefreshCacheableStrategy(CacheOperationSupport cacheOperationSupport) {
+		super(cacheOperationSupport);
+	}
+
 	@Override
 	@Nullable
-	public Cache.ValueWrapper get(@NonNull CacheGetContext<Object> context) {
+	public Cache.ValueWrapper get(@NonNull CacheableContext<Object> context) {
 		log.debug("Executing pre-refresh cache get strategy for key: {}", context.getKey());
 
 		// 先获取基础缓存值（避免策略递归）
-		Cache.ValueWrapper valueWrapper;
-		if (context.getParentCache() instanceof RedisProCache rpc) {
-			valueWrapper = rpc.getFromParent(context.getKey());
-		} else {
-			valueWrapper = context.getParentCache().get(context.getKey());
-		}
+		Cache.ValueWrapper valueWrapper = cacheOperationSupport.safeGet(context);
 		if (valueWrapper == null) {
 			log.debug("Cache miss for key: {}", context.getKey());
 			return null;
@@ -52,7 +51,7 @@ public class PreRefreshCacheableStrategy extends AbstractCacheableStrategy {
 	}
 
 	@Override
-	public boolean supports(@NonNull CacheGetContext<Object> context) {
+	public boolean supports(@NonNull CacheableContext<Object> context) {
 		// 只有当支持预刷新且有缓存调用信息时才支持
 		return context.supportsPreRefresh();
 	}
@@ -69,7 +68,7 @@ public class PreRefreshCacheableStrategy extends AbstractCacheableStrategy {
 	 * @param context      缓存上下文
 	 * @param valueWrapper 当前缓存值
 	 */
-	private void checkAndTriggerPreRefresh(CacheGetContext<Object> context, Cache.ValueWrapper valueWrapper) {
+	private void checkAndTriggerPreRefresh(CacheableContext<Object> context, Cache.ValueWrapper valueWrapper) {
 		try {
 			String cacheKey = context.createCacheKey();
 			long ttl = context.getRedisTemplate().getExpire(cacheKey, TimeUnit.SECONDS);
@@ -106,7 +105,7 @@ public class PreRefreshCacheableStrategy extends AbstractCacheableStrategy {
 	 * @param context  缓存上下文
 	 * @param cacheKey 缓存键
 	 */
-	private void triggerAsyncRefresh(CacheGetContext<Object> context, String cacheKey) {
+	private void triggerAsyncRefresh(CacheableContext<Object> context, String cacheKey) {
 		ReentrantLock lock = context.getRegistry().obtainLock(context.getCacheName(), context.getKey());
 
 		context.getExecutor().execute(() -> {
@@ -126,19 +125,7 @@ public class PreRefreshCacheableStrategy extends AbstractCacheableStrategy {
 				CachedInvocation cachedInvocation = context.getCachedInvocation();
 				if (cachedInvocation != null) {
 					try {
-						Object refreshed = cachedInvocation.invoke();
-						boolean shouldCacheNull = false;
-						if (cachedInvocation.getCachedInvocationContext() != null) {
-							shouldCacheNull = cachedInvocation.getCachedInvocationContext().cacheNullValues();
-						}
-						if (refreshed != null || shouldCacheNull) {
-							context.getParentCache().put(context.getKey(), refreshed);
-							log.debug("Pre-refresh put new value for key: {} (nullCached={})", context.getKey(),
-									refreshed == null);
-						} else {
-							log.debug("Pre-refresh result is null and null caching disabled for key: {}",
-									context.getKey());
-						}
+						cacheOperationSupport.loadAndCache(context, cachedInvocation::invoke);
 						log.debug("Pre-refresh completed for key: {}", context.getKey());
 					} catch (Exception e) {
 						log.warn("Pre-refresh invocation failed for key: {}", context.getKey(), e);
@@ -160,7 +147,7 @@ public class PreRefreshCacheableStrategy extends AbstractCacheableStrategy {
 	 * @param value   缓存值
 	 * @return TTL秒数
 	 */
-	private long resolveConfiguredTtlSeconds(CacheGetContext<Object> context, Object value) {
+	private long resolveConfiguredTtlSeconds(CacheableContext<Object> context, Object value) {
 		try {
 			CachedInvocation cachedInvocation = context.getCachedInvocation();
 			if (cachedInvocation != null && cachedInvocation.getCachedInvocationContext() != null) {

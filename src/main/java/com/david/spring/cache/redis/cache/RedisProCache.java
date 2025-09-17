@@ -11,7 +11,10 @@ import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.impl.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
 import com.david.spring.cache.redis.strategy.cacheable.CacheableStrategyManager;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.ProtectionContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.ExecutionContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -78,7 +81,7 @@ public class RedisProCache extends RedisCache {
 		log.debug("Getting cache value using strategy manager for key: {}", key);
 
 		// 创建缓存获取上下文
-		CacheGetContext<Object> context = createCacheGetContext(key);
+		CacheableContext<Object> context = createCacheGetContext(key);
 
 		// 使用策略管理器执行缓存获取
 		return strategyManager.get(context);
@@ -100,19 +103,35 @@ public class RedisProCache extends RedisCache {
 	 * @param key 缓存键
 	 * @return 缓存获取上下文
 	 */
-	private CacheGetContext<Object> createCacheGetContext(Object key) {
-		return CacheGetContext.builder()
+	private CacheableContext<Object> createCacheGetContext(Object key) {
+		// 构建核心缓存上下文
+		CacheContext cacheContext = CacheContext.builder()
 				.key(key)
 				.cacheName(getName())
 				.parentCache(this)
 				.redisTemplate(redisTemplate)
 				.cacheConfiguration(cacheConfiguration)
-				.registry(registry)
-				.executor(executor)
+				.build();
+
+		// 构建保护机制上下文
+		ProtectionContext protectionContext = ProtectionContext.builder()
 				.distributedLock(distributedLock)
 				.cachePenetration(cachePenetration)
 				.cacheBreakdown(cacheBreakdown)
 				.cacheAvalanche(cacheAvalanche)
+				.build();
+
+		// 构建执行上下文
+		ExecutionContext executionContext = ExecutionContext.builder()
+				.executor(executor)
+				.registry(registry)
+				.build();
+
+		// 组合所有上下文
+		return CacheableContext.builder()
+				.cacheContext(cacheContext)
+				.protectionContext(protectionContext)
+				.executionContext(executionContext)
 				.build();
 	}
 
@@ -191,7 +210,7 @@ public class RedisProCache extends RedisCache {
 		log.debug("Getting cache value with value loader using strategy manager for key: {}", key);
 
 		// 创建缓存获取上下文
-		CacheGetContext<Object> context = createCacheGetContext(key);
+		CacheableContext<Object> context = createCacheGetContext(key);
 
 		// 使用策略管理器执行带值加载器的缓存获取
 		return Objects.requireNonNull(strategyManager.get(context, valueLoader));
