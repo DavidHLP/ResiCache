@@ -13,9 +13,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-@Component
 @Slf4j
 @Data
+@Component
 public class CacheUtil {
 	private final RedisProCacheManager cacheManager;
 	private final Map<String, Long> cacheTtlSeconds = new ConcurrentHashMap<>();

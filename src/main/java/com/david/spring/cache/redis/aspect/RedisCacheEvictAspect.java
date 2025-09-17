@@ -2,8 +2,9 @@ package com.david.spring.cache.redis.aspect;
 
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.aspect.abstracts.AspectAbstract;
+import com.david.spring.cache.redis.aspect.constants.AspectConstants;
 import com.david.spring.cache.redis.aspect.support.RegisterUtil;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -17,7 +18,7 @@ import java.lang.reflect.Method;
 @Slf4j
 @Aspect
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 10)
+@Order(Ordered.HIGHEST_PRECEDENCE + AspectConstants.Order.SINGLE_ASPECT_ORDER)
 public class RedisCacheEvictAspect extends AspectAbstract {
 
 	private final EvictInvocationRegistry registry;
@@ -29,13 +30,15 @@ public class RedisCacheEvictAspect extends AspectAbstract {
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheEvict)")
 	public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
 		Method method = getSpecificMethod(joinPoint);
-		log.debug("Processing @RedisCacheEvict annotation for method: {}.{}",
-				method.getDeclaringClass().getSimpleName(), method.getName());
+		log.debug(AspectConstants.LogMessages.PROCESSING_METHOD,
+				"@RedisCacheEvict", method.getDeclaringClass().getSimpleName(), method.getName());
 		try {
-			return super.around(joinPoint);
+			Object result = super.around(joinPoint);
+			logProcessingSuccess(method);
+			return result;
 		} catch (Exception e) {
-			log.error("Failed to process cache evict for method: {}.{} - {}",
-					method.getDeclaringClass().getSimpleName(), method.getName(), e.getMessage(), e);
+			log.error(AspectConstants.LogMessages.REGISTRATION_FAILED,
+					getAspectType(), method.getDeclaringClass().getSimpleName(), method.getName(), e.getMessage(), e);
 			throw e;
 		}
 	}
@@ -45,12 +48,10 @@ public class RedisCacheEvictAspect extends AspectAbstract {
 		Method method = getSpecificMethod(joinPoint);
 		RedisCacheEvict redisCacheEvict = method.getAnnotation(RedisCacheEvict.class);
 		if (redisCacheEvict == null) {
-			log.warn("RedisCacheEvict annotation not found on method: {}.{}",
-					method.getDeclaringClass().getSimpleName(), method.getName());
+			log.warn(AspectConstants.LogMessages.ANNOTATION_NOT_FOUND,
+					"RedisCacheEvict", method.getDeclaringClass().getSimpleName(), method.getName());
 			return;
 		}
-		log.debug("Registering cache eviction for method: {}.{}",
-				method.getDeclaringClass().getSimpleName(), method.getName());
 
 		Object targetBean = joinPoint.getTarget();
 		Object[] arguments = joinPoint.getArgs();
@@ -59,8 +60,16 @@ public class RedisCacheEvictAspect extends AspectAbstract {
 		Object key = null;
 		if (!allEntries) {
 			key = resolveCacheKey(targetBean, method, arguments, redisCacheEvict.keyGenerator());
+			logResolvedCacheKey("@RedisCacheEvict", key);
+		} else {
+			log.debug("Registering evict invocation for all entries");
 		}
-		RegisterUtil.registerEvictInvocation(registry, joinPoint, method, targetBean, arguments, redisCacheEvict, key);
+		RegisterUtil.registerEvictInvocation(registry, method, targetBean, arguments, redisCacheEvict, key);
+	}
+
+	@Override
+	protected String getAspectType() {
+		return "RedisCacheEvictAspect";
 	}
 
 }

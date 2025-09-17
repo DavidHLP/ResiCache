@@ -5,8 +5,9 @@ import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CacheAvalanche;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
+import com.david.spring.cache.redis.strategy.cacheable.CacheableStrategyManager;
 
 import jakarta.annotation.Nonnull;
 
@@ -40,6 +41,7 @@ public class RedisProCacheManager extends RedisCacheManager {
     private final CachePenetration cachePenetration;
     private final CacheBreakdown cacheBreakdown;
     private final CacheAvalanche cacheAvalanche;
+    private final CacheableStrategyManager strategyManager;
 
     public RedisProCacheManager(
             RedisCacheWriter cacheWriter,
@@ -52,7 +54,8 @@ public class RedisProCacheManager extends RedisCacheManager {
             DistributedLock distributedLock,
             CachePenetration cachePenetration,
             CacheBreakdown cacheBreakdown,
-            CacheAvalanche cacheAvalanche) {
+            CacheAvalanche cacheAvalanche,
+            CacheableStrategyManager strategyManager) {
         super(cacheWriter, redisCacheConfiguration, initialCacheConfigurations);
         log.info("Initializing RedisProCacheManager with {} initial cache configurations",
                 initialCacheConfigurations.size());
@@ -67,7 +70,8 @@ public class RedisProCacheManager extends RedisCacheManager {
         this.cachePenetration = cachePenetration;
         this.cacheBreakdown = cacheBreakdown;
         this.cacheAvalanche = cacheAvalanche;
-        log.debug("RedisProCacheManager successfully initialized with protection mechanisms");
+        this.strategyManager = strategyManager;
+        log.debug("RedisProCacheManager successfully initialized with protection mechanisms and strategy manager");
     }
 
     @Override
@@ -102,7 +106,8 @@ public class RedisProCacheManager extends RedisCacheManager {
                 distributedLock,
                 cachePenetration,
                 cacheBreakdown,
-                cacheAvalanche);
+                cacheAvalanche,
+                strategyManager);
         log.debug("Successfully created Redis cache: {} with TTL: {}", name,
                 config.getTtl() != null ? config.getTtl().getSeconds() + "s" : "default");
         return cache;

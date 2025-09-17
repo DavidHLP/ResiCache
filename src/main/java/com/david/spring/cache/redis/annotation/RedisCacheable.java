@@ -47,8 +47,6 @@ public @interface RedisCacheable {
 
 	boolean distributedLock() default false;
 
-	String distributedLockName() default "";
-
 	boolean internalLock() default false;
 
 	boolean cacheNullValues() default false;

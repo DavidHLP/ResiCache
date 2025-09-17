@@ -18,46 +18,46 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public final class CacheAvalanche {
 
-    /** 最小随机缩减比例（例如 0.05 表示 5%） */
-    @Getter
-    @Setter
-    private double minJitterRatio = 0.05d;
+	/** 最小随机缩减比例（例如 0.05 表示 5%） */
+	@Getter
+	@Setter
+	private double minJitterRatio = 0.05d;
 
-    /** 最大随机缩减比例（例如 0.20 表示 20%） */
-    @Getter
-    @Setter
-    private double maxJitterRatio = 0.20d;
+	/** 最大随机缩减比例（例如 0.20 表示 20%） */
+	@Getter
+	@Setter
+	private double maxJitterRatio = 0.20d;
 
-    /** TTL 的最小下限（秒） */
-    @Getter
-    @Setter
-    private long minSeconds = 1L;
+	/** TTL 的最小下限（秒） */
+	@Getter
+	@Setter
+	private long minSeconds = 1L;
 
-    /**
-     * 基于比例的 TTL 抖动：在 [minJitterRatio, maxJitterRatio) 之间取随机值，按该比例缩短 TTL。
-     *
-     * @param baseSeconds 原始 TTL（秒）
-     * @return 随机化后的 TTL（秒）
-     */
-    public long jitterTtlSeconds(long baseSeconds) {
-        if (baseSeconds <= minSeconds) {
-            log.debug(
-                    "TTL jitter skipped: baseSeconds={} <= minSeconds={}",
-                    baseSeconds, minSeconds);
-            return baseSeconds;
-        }
-        double low = Math.max(0.0d, Math.min(minJitterRatio, 0.99d));
-        double high = Math.max(low, Math.min(maxJitterRatio, 0.99d));
-        double ratio = (high > low) ? ThreadLocalRandom.current().nextDouble(low, high) : low;
-        long jittered = (long) Math.floor(baseSeconds * (1.0d - ratio));
-        long result = Math.max(minSeconds, jittered);
-        log.debug(
-                "TTL jitter applied: baseSeconds={}, ratioRange=[{}, {}), chosenRatio={}, resultSeconds={}",
-                baseSeconds,
-                String.format("%.4f", low),
-                String.format("%.4f", high),
-                String.format("%.4f", ratio),
-                result);
-        return result;
-    }
+	/**
+	 * 基于比例的 TTL 抖动：在 [minJitterRatio, maxJitterRatio) 之间取随机值，按该比例缩短 TTL。
+	 *
+	 * @param baseSeconds 原始 TTL（秒）
+	 * @return 随机化后的 TTL（秒）
+	 */
+	public long jitterTtlSeconds(long baseSeconds) {
+		if (baseSeconds <= minSeconds) {
+			log.debug(
+					"TTL jitter skipped: baseSeconds={} <= minSeconds={}",
+					baseSeconds, minSeconds);
+			return baseSeconds;
+		}
+		double low = Math.max(0.0d, Math.min(minJitterRatio, 0.99d));
+		double high = Math.max(low, Math.min(maxJitterRatio, 0.99d));
+		double ratio = (high > low) ? ThreadLocalRandom.current().nextDouble(low, high) : low;
+		long jittered = (long) Math.floor(baseSeconds * (1.0d - ratio));
+		long result = Math.max(minSeconds, jittered);
+		log.debug(
+				"TTL jitter applied: baseSeconds={}, ratioRange=[{}, {}), chosenRatio={}, resultSeconds={}",
+				baseSeconds,
+				String.format("%.4f", low),
+				String.format("%.4f", high),
+				String.format("%.4f", ratio),
+				result);
+		return result;
+	}
 }

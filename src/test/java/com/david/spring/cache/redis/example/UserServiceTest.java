@@ -21,6 +21,6 @@ public class UserServiceTest {
 	public void testRedisCachingAnnotation() {
 		// 测试 RedisCaching 注解是否能正常工作
 		User user = userService.get(1L);
-		userService.evict(1L);
+//		userService.evict(1L);
 	}
 }

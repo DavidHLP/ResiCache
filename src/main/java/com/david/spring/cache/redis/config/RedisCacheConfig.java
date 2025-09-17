@@ -5,8 +5,9 @@ import com.david.spring.cache.redis.locks.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
+import com.david.spring.cache.redis.strategy.cacheable.CacheableStrategyManager;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -51,7 +52,8 @@ public class RedisCacheConfig {
             DistributedLock distributedLock,
             CachePenetration cachePenetration,
             CacheBreakdown cacheBreakdown,
-            CacheAvalanche cacheAvalanche) {
+            CacheAvalanche cacheAvalanche,
+            CacheableStrategyManager strategyManager) {
         log.info("Initializing RedisProCacheManager with custom serializers and defaults");
         RedisCacheWriter cacheWriter = RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
         // Key 用 String，Value 用 JSON
@@ -100,7 +102,8 @@ public class RedisCacheConfig {
                 distributedLock,
                 cachePenetration,
                 cacheBreakdown,
-                cacheAvalanche);
+                cacheAvalanche,
+                strategyManager);
         log.info(
                 "RedisProCacheManager initialized: defaultTtlSec={}, initialCaches={}, hasExecutor={}, hasDistLock={}",
                 defaultTtl.getSeconds(),

@@ -7,10 +7,12 @@ import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
+import com.david.spring.cache.redis.registry.impl.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
+import com.david.spring.cache.redis.strategy.cacheable.CacheableStrategyManager;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheGetContext;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
@@ -19,13 +21,13 @@ import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
 import java.time.Duration;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 public class RedisProCache extends RedisCache {
@@ -40,6 +42,8 @@ public class RedisProCache extends RedisCache {
 	private final CachePenetration cachePenetration;
 	private final CacheBreakdown cacheBreakdown;
 	private final CacheAvalanche cacheAvalanche;
+	/** 缓存获取策略管理器 */
+	private final CacheableStrategyManager strategyManager;
 
 	public RedisProCache(
 			String name,
@@ -52,7 +56,8 @@ public class RedisProCache extends RedisCache {
 			DistributedLock distributedLock,
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
-			CacheAvalanche cacheAvalanche) {
+			CacheAvalanche cacheAvalanche,
+			CacheableStrategyManager strategyManager) {
 		super(name, cacheWriter, cacheConfiguration);
 		this.redisTemplate = Objects.requireNonNull(redisTemplate);
 		this.registry = Objects.requireNonNull(registry);
@@ -63,165 +68,61 @@ public class RedisProCache extends RedisCache {
 		this.cachePenetration = Objects.requireNonNull(cachePenetration);
 		this.cacheBreakdown = Objects.requireNonNull(cacheBreakdown);
 		this.cacheAvalanche = Objects.requireNonNull(cacheAvalanche);
-		log.info("RedisProCache initialized, name={}", name);
+		this.strategyManager = Objects.requireNonNull(strategyManager);
+		log.info("RedisProCache initialized with strategy manager, name={}", name);
 	}
 
 	@Override
 	@Nullable
 	public ValueWrapper get(@NonNull Object key) {
-		ValueWrapper valueWrapper = super.get(key);
-		if (valueWrapper == null) {
-			log.debug("Cache miss for key: {}", key);
-			return null;
-		}
+		log.debug("Getting cache value using strategy manager for key: {}", key);
 
-		log.debug("Cache hit for key: {}", key);
+		// 创建缓存获取上下文
+		CacheGetContext<Object> context = createCacheGetContext(key);
 
-		try {
-			String cacheKey = createCacheKey(key);
-			long ttl = redisTemplate.getExpire(cacheKey, TimeUnit.SECONDS);
-			long configuredTtl = resolveConfiguredTtlSeconds(valueWrapper.get(), key);
-			log.debug(
-					"Pre-refresh check: name={}, redisKey={}, ttlSec={}, configuredTtlSec={}",
-					getName(),
-					cacheKey,
-					ttl,
-					configuredTtl);
-			if (ttl >= 0 && shouldPreRefresh(ttl, configuredTtl)) {
-				ReentrantLock lock = registry.obtainLock(getName(), key);
-				executor.execute(
-						() -> {
-							try {
-								// First check to avoid unnecessary refresh
-								long ttl2 = redisTemplate.getExpire(cacheKey, TimeUnit.SECONDS);
-								long configuredTtl2 = resolveConfiguredTtlSeconds(valueWrapper.get(), key);
-								if (ttl2 < 0 || !shouldPreRefresh(ttl2, configuredTtl2)) {
-									log.debug(
-											"Pre-refresh skipped after first-check: name={}, redisKey={}, ttl2Sec={}, configuredTtl2Sec={}",
-											getName(),
-											cacheKey,
-											ttl2,
-											configuredTtl2);
-									return;
-								}
-
-								String distKey = "cache:refresh:" + cacheKey;
-								long leaseTimeSec = Math.max(5L, Math.min(30L, ttl2));
-								log.debug(
-										"Pre-refresh attempt: name={}, redisKey={}, distKey={}, leaseTimeSec={}",
-										getName(),
-										cacheKey,
-										distKey,
-										leaseTimeSec);
-
-								boolean executed = LockUtils.runWithLocalTryThenDistTry(
-										lock,
-										distributedLock,
-										distKey,
-										0L,
-										leaseTimeSec,
-										TimeUnit.SECONDS,
-										() -> {
-											// Second check (after acquiring both locks)
-											long t3 = redisTemplate.getExpire(
-													cacheKey, TimeUnit.SECONDS);
-											long c3 = resolveConfiguredTtlSeconds(
-													valueWrapper.get(), key);
-											if (t3 < 0 || !shouldPreRefresh(t3, c3)) {
-
-												log.debug(
-														"Pre-refresh skipped after second-check: name={}, redisKey={}, t3Sec={}, c3Sec={}",
-														getName(),
-														cacheKey,
-														t3,
-														c3);
-
-												return;
-											}
-
-											log.debug(
-													"Pre-refresh acquired locks, start refresh: name={}, redisKey={}",
-													getName(),
-													cacheKey);
-
-											registry.get(getName(), key)
-													.ifPresent(
-															invocation -> doRefresh(
-																	invocation,
-																	key,
-																	cacheKey,
-																	t3));
-										});
-
-								log.debug(
-										"Pre-refresh executed={} name={}, redisKey={}, distKey={}, leaseTimeSec={}",
-										executed,
-										getName(),
-										cacheKey,
-										distKey,
-										leaseTimeSec);
-
-							} catch (Exception ex) {
-								log.warn(
-										"Cache pre-refresh error, name={}, key={}, err= {}",
-										getName(),
-										cacheKey,
-										ex.getMessage());
-							}
-						});
-			}
-		} catch (Exception e) {
-			log.debug("Skip pre-refresh due to error: {}", e.getMessage());
-		}
-		// Unpacking is handled by fromStoreValue, return directly
-		return valueWrapper;
+		// 使用策略管理器执行缓存获取
+		return strategyManager.get(context);
 	}
 
-	private boolean shouldPreRefresh(long remainingTtlSec, long configuredTtlSec) {
-		if (remainingTtlSec <= 0 || configuredTtlSec <= 0)
-			return false;
-		long threshold = Math.max(1L, (long) Math.floor(configuredTtlSec * 0.20d));
-		return remainingTtlSec <= threshold;
+	/**
+	 * 直接调用父类的 get 方法，避免策略循环调用
+	 *
+	 * @param key 缓存键
+	 * @return 缓存值包装器
+	 */
+	public ValueWrapper getFromParent(@NonNull Object key) {
+		return super.get(key);
 	}
 
-	private long resolveConfiguredTtlSeconds(@Nullable Object value, @NonNull Object key) {
-		try {
-			if (cacheConfiguration != null) {
-				if (value == null)
-					return -1L; // Avoid passing @Nullable to an API that requires @NonNull
-				Duration d = cacheConfiguration.getTtlFunction().getTimeToLive(value, key);
-				if (!d.isNegative() && !d.isZero()) {
-					return d.getSeconds();
-				}
-			}
-		} catch (Exception ignore) {
-		}
-		return -1L;
-	}
-
-	private void doRefresh(CachedInvocation invocation, Object key, String cacheKey, long ttl) {
-		try {
-			Object refreshed = invocation.invoke();
-			// Use wrapper to write back and reset TTL
-			this.put(key, refreshed);
-			log.info(
-					"Refreshed cache, name={}, redisKey={}, oldTtlSec={}, refreshedType={}",
-					getName(),
-					cacheKey,
-					ttl,
-					refreshed == null ? "null" : refreshed.getClass().getSimpleName());
-		} catch (Throwable ex) {
-			log.warn(
-					"Failed to refresh cache, name={}, redisKey={}, err={}",
-					getName(),
-					cacheKey,
-					ex.getMessage());
-		}
+	/**
+	 * 创建缓存获取上下文
+	 *
+	 * @param key 缓存键
+	 * @return 缓存获取上下文
+	 */
+	private CacheGetContext<Object> createCacheGetContext(Object key) {
+		return CacheGetContext.builder()
+				.key(key)
+				.cacheName(getName())
+				.parentCache(this)
+				.redisTemplate(redisTemplate)
+				.cacheConfiguration(cacheConfiguration)
+				.registry(registry)
+				.executor(executor)
+				.distributedLock(distributedLock)
+				.cachePenetration(cachePenetration)
+				.cacheBreakdown(cacheBreakdown)
+				.cacheAvalanche(cacheAvalanche)
+				.build();
 	}
 
 	@Override
 	public void put(@NonNull Object key, @Nullable Object value) {
 		Object toStore = wrapIfMataAbsent(value, key);
+		if (toStore == null) {
+			log.debug("Skipping cache put for key: {} due to null policy", key);
+			return;
+		}
 		super.put(key, toStore);
 		// Add key to Bloom filter after successful write (if value is not null)
 		try {
@@ -244,6 +145,11 @@ public class RedisProCache extends RedisCache {
 	@NonNull
 	public ValueWrapper putIfAbsent(@NonNull Object key, @Nullable Object value) {
 		Object toStore = wrapIfMataAbsent(value, key);
+		if (toStore == null) {
+			log.debug("Skipping cache putIfAbsent for key: {} due to null policy", key);
+			// do not put; return existing value if any
+			return super.get(key);
+		}
 		boolean firstInsert = wasKeyAbsentBeforePut(key);
 		ValueWrapper previous = super.putIfAbsent(key, toStore);
 		if (firstInsert) {
@@ -282,65 +188,13 @@ public class RedisProCache extends RedisCache {
 	@Override
 	@NonNull
 	public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
-		String cacheKey = createCacheKey(key);
-		String membershipKey = String.valueOf(key);
-		ReentrantLock localLock = registry.obtainLock(getName(), key);
-		String distKey = "cache:load:" + cacheKey;
-		long leaseTimeSec = 30L; // Defensive lease time to prevent permanent lock occupation
-		log.debug(
-				"First-load attempt: name={}, redisKey={}, distKey={}, leaseTimeSec={}",
-				getName(),
-				cacheKey,
-				distKey,
-				leaseTimeSec);
+		log.debug("Getting cache value with value loader using strategy manager for key: {}", key);
 
-		// Bloom pre-check: if enabled and "definitely does not exist", throw
-		// ValueRetrievalException to block penetration
-		if (cachePenetration.isEnabled(getName())) {
-			boolean mightContain = cachePenetration.mightContain(getName(), membershipKey);
-			if (!mightContain) {
-				log.debug("Bloom blocked load: name={}, bloomKey={}", getName(), membershipKey);
-				throw new Cache.ValueRetrievalException(
-						key,
-						valueLoader,
-						new NoSuchElementException("Blocked by Bloom filter: " + membershipKey));
-			}
-		}
-		try {
-			T result = cacheBreakdown.loadWithProtection(
-					getName(),
-					distKey,
-					localLock,
-					leaseTimeSec,
-					TimeUnit.SECONDS,
-					() -> {
-						ValueWrapper w = super.get(key);
-						if (w != null) {
-							Object v = w.get();
-							if (v != null) {
-								// Compensate by adding to Bloom if cache hit
-								try {
-									cachePenetration.addIfEnabled(getName(), membershipKey);
-								} catch (Exception ignore) {
-								}
-								@SuppressWarnings("unchecked")
-								T casted = (T) v;
-								return casted;
-							}
-						}
-						return null;
-					},
-					valueLoader::call,
-					(val) -> this.put(key, val));
-			log.debug(
-					"First-load finished: name={}, redisKey={}, distKey={}",
-					getName(),
-					cacheKey,
-					distKey);
-			return result;
-		} catch (Exception ex) {
-			throw new Cache.ValueRetrievalException(key, valueLoader, ex);
-		}
+		// 创建缓存获取上下文
+		CacheGetContext<Object> context = createCacheGetContext(key);
+
+		// 使用策略管理器执行带值加载器的缓存获取
+		return Objects.requireNonNull(strategyManager.get(context, valueLoader));
 	}
 
 	@Override
@@ -402,28 +256,74 @@ public class RedisProCache extends RedisCache {
 	}
 
 	private Object wrapIfMataAbsent(@Nullable Object value, @NonNull Object key) {
-		if (value == null)
-			return null;
-		if (value instanceof CacheMata)
-			return value;
-		long ttlSecs = -1L;
-		try {
-			if (cacheConfiguration != null) {
-				{
-					Duration d = cacheConfiguration.getTtlFunction().getTimeToLive(value, key);
-					if (!d.isNegative() && !d.isZero()) {
-						ttlSecs = d.getSeconds();
-					}
-				}
-			}
-		} catch (Exception ignored) {
-		}
-		// Avalanche protection: jitter TTL through strategy class (randomly shorten)
-		long effectiveTtl = ttlSecs > 0 ? cacheAvalanche.jitterTtlSeconds(ttlSecs) : ttlSecs;
-		// No longer calculate local expiration time, only use TTL in metadata, managed
-		// uniformly by Redis
-		return CacheMata.builder().ttl(effectiveTtl).value(value).build();
-	}
+        // Allow passing through existing metadata
+        if (value instanceof CacheMata) {
+            return value;
+        }
+
+        // Resolve per-invocation context if available
+        CachedInvocationContext cic = null;
+        try {
+            CachedInvocation invocation = registry.get(getName(), key).orElse(null);
+            cic = (invocation != null) ? invocation.getCachedInvocationContext() : null;
+        } catch (Exception ignore) {
+        }
+
+        // Determine base TTL in seconds
+        long baseTtlSecs = -1L;
+        try {
+            if (cic != null && cic.ttl() > 0) {
+                baseTtlSecs = Math.max(0L, cic.ttl() / 1000);
+            } else if (cacheConfiguration != null) {
+                if (value != null) {
+                    Duration d = cacheConfiguration.getTtlFunction().getTimeToLive(value, key);
+                    if (d != null && !d.isNegative() && !d.isZero()) {
+                        baseTtlSecs = d.getSeconds();
+                    }
+                } else {
+                    // null value: fall back to default TTL
+                    Duration d = cacheConfiguration.getTtl();
+                    if (d != null && !d.isNegative() && !d.isZero()) {
+                        baseTtlSecs = d.getSeconds();
+                    }
+                }
+            }
+        } catch (Exception ignore) {
+        }
+
+        // Compute effective TTL considering jitter settings
+        long effectiveTtlSecs = baseTtlSecs;
+        if (baseTtlSecs > 0) {
+            if (cic != null) {
+                if (!cic.randomTtl()) {
+                    // disable jitter per invocation
+                    effectiveTtlSecs = baseTtlSecs;
+                } else if (cic.variance() > 0.0f) {
+                    double var = Math.min(0.99d, Math.max(0.0d, cic.variance()));
+                    double ratio = (var > 0.0d) ? ThreadLocalRandom.current().nextDouble(0.0d, var) : 0.0d;
+                    long jittered = (long) Math.floor(baseTtlSecs * (1.0d - ratio));
+                    effectiveTtlSecs = Math.max(1L, jittered);
+                } else {
+                    // fallback to global avalanche jitter
+                    effectiveTtlSecs = cacheAvalanche.jitterTtlSeconds(baseTtlSecs);
+                }
+            } else {
+                // no per-invocation context; use global jitter
+                effectiveTtlSecs = cacheAvalanche.jitterTtlSeconds(baseTtlSecs);
+            }
+        }
+
+        // Handle null value caching per invocation
+        if (value == null) {
+            if (cic != null && cic.cacheNullValues()) {
+                return CacheMata.builder().ttl(effectiveTtlSecs).value(null).build();
+            }
+            return null;
+        }
+
+        // Wrap non-null value with metadata including TTL
+        return CacheMata.builder().ttl(effectiveTtlSecs).value(value).build();
+    }
 
 	// Unpacking responsibility is centralized in fromStoreValue()
 
