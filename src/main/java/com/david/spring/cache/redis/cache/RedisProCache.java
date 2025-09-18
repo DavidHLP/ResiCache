@@ -11,10 +11,10 @@ import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.impl.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
 import com.david.spring.cache.redis.strategy.cacheable.CacheableStrategyManager;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
 import com.david.spring.cache.redis.strategy.cacheable.context.CacheContext;
-import com.david.spring.cache.redis.strategy.cacheable.context.ProtectionContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
 import com.david.spring.cache.redis.strategy.cacheable.context.ExecutionContext;
+import com.david.spring.cache.redis.strategy.cacheable.context.ProtectionContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -23,14 +23,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
-import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 public class RedisProCache extends RedisCache {
@@ -104,13 +99,23 @@ public class RedisProCache extends RedisCache {
 	 * @return 缓存获取上下文
 	 */
 	private CacheableContext<Object> createCacheGetContext(Object key) {
-		// 构建核心缓存上下文
+		// 尝试获取调用上下文以提供更详细的配置信息
+		CachedInvocationContext invocationContext = null;
+		try {
+			CachedInvocation invocation = registry.get(getName(), key).orElse(null);
+			invocationContext = (invocation != null) ? invocation.getCachedInvocationContext() : null;
+		} catch (Exception ignored) {
+			// 忽略异常，使用默认配置
+		}
+
+		// 构建增强的核心缓存上下文
 		CacheContext cacheContext = CacheContext.builder()
 				.key(key)
 				.cacheName(getName())
 				.parentCache(this)
 				.redisTemplate(redisTemplate)
 				.cacheConfiguration(cacheConfiguration)
+				.invocationContext(invocationContext)
 				.build();
 
 		// 构建保护机制上下文
@@ -275,74 +280,59 @@ public class RedisProCache extends RedisCache {
 	}
 
 	private Object wrapIfMataAbsent(@Nullable Object value, @NonNull Object key) {
-        // Allow passing through existing metadata
-        if (value instanceof CacheMata) {
-            return value;
-        }
+		// Allow passing through existing metadata
+		if (value instanceof CacheMata) {
+			return value;
+		}
 
-        // Resolve per-invocation context if available
-        CachedInvocationContext cic = null;
-        try {
-            CachedInvocation invocation = registry.get(getName(), key).orElse(null);
-            cic = (invocation != null) ? invocation.getCachedInvocationContext() : null;
-        } catch (Exception ignore) {
-        }
+		// 创建临时缓存上下文来获取配置信息
+		CachedInvocationContext invocationContext = null;
+		try {
+			CachedInvocation invocation = registry.get(getName(), key).orElse(null);
+			invocationContext = (invocation != null) ? invocation.getCachedInvocationContext() : null;
+		} catch (Exception ignored) {
+			// 忽略异常
+		}
 
-        // Determine base TTL in seconds
-        long baseTtlSecs = -1L;
-        try {
-            if (cic != null && cic.ttl() > 0) {
-                baseTtlSecs = Math.max(0L, cic.ttl() / 1000);
-            } else if (cacheConfiguration != null) {
-                if (value != null) {
-                    Duration d = cacheConfiguration.getTtlFunction().getTimeToLive(value, key);
-                    if (d != null && !d.isNegative() && !d.isZero()) {
-                        baseTtlSecs = d.getSeconds();
-                    }
-                } else {
-                    // null value: fall back to default TTL
-                    Duration d = cacheConfiguration.getTtl();
-                    if (d != null && !d.isNegative() && !d.isZero()) {
-                        baseTtlSecs = d.getSeconds();
-                    }
-                }
-            }
-        } catch (Exception ignore) {
-        }
+		CacheContext cacheContext = CacheContext.builder()
+				.key(key)
+				.cacheName(getName())
+				.parentCache(this)
+				.redisTemplate(redisTemplate)
+				.cacheConfiguration(cacheConfiguration)
+				.invocationContext(invocationContext)
+				.build();
 
-        // Compute effective TTL considering jitter settings
-        long effectiveTtlSecs = baseTtlSecs;
-        if (baseTtlSecs > 0) {
-            if (cic != null) {
-                if (!cic.randomTtl()) {
-                    // disable jitter per invocation
-                    effectiveTtlSecs = baseTtlSecs;
-                } else if (cic.variance() > 0.0f) {
-                    double var = Math.min(0.99d, Math.max(0.0d, cic.variance()));
-                    double ratio = (var > 0.0d) ? ThreadLocalRandom.current().nextDouble(0.0d, var) : 0.0d;
-                    long jittered = (long) Math.floor(baseTtlSecs * (1.0d - ratio));
-                    effectiveTtlSecs = Math.max(1L, jittered);
-                } else {
-                    // fallback to global avalanche jitter
-                    effectiveTtlSecs = cacheAvalanche.jitterTtlSeconds(baseTtlSecs);
-                }
-            } else {
-                // no per-invocation context; use global jitter
-                effectiveTtlSecs = cacheAvalanche.jitterTtlSeconds(baseTtlSecs);
-            }
-        }
+		// 获取有效TTL
+		long effectiveTtlSecs;
+		if (value != null) {
+			// 优先使用动态TTL计算
+			effectiveTtlSecs = cacheContext.getDynamicTtlSeconds(value);
+			if (effectiveTtlSecs <= 0) {
+				// 回退到带抖动的TTL
+				effectiveTtlSecs = cacheContext.getEffectiveTtlSeconds();
+			}
+		} else {
+			effectiveTtlSecs = cacheContext.getEffectiveTtlSeconds();
+		}
 
-        // Handle null value caching per invocation
-        if (value == null) {
-            if (cic != null && cic.cacheNullValues()) {
-                return CacheMata.builder().ttl(effectiveTtlSecs).value(null).build();
-            }
-            return null;
-        }
+		// 如果没有配置TTL抖动，使用全局雪崩保护
+		if (effectiveTtlSecs > 0 &&
+			(invocationContext == null || !invocationContext.randomTtl())) {
+			effectiveTtlSecs = cacheAvalanche.jitterTtlSeconds(effectiveTtlSecs);
+		}
 
-        // Wrap non-null value with metadata including TTL
-        return CacheMata.builder().ttl(effectiveTtlSecs).value(value).build();
-    }
+		// 处理null值缓存
+		if (value == null) {
+			if (cacheContext.shouldCacheNullValues()) {
+				return CacheMata.builder().ttl(effectiveTtlSecs).value(null).build();
+			}
+			return null;
+		}
+
+		// 包装非null值
+		return CacheMata.builder().ttl(effectiveTtlSecs).value(value).build();
+	}
 
 	// Unpacking responsibility is centralized in fromStoreValue()
 

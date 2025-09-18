@@ -38,42 +38,6 @@ public record CachedInvocationContext(
 		TtlConfig ttlConfig
 ) implements InvocationContext {
 
-	/**
-	 * 保护机制配置
-	 */
-	@Builder
-	public record ProtectionConfig(
-			boolean distributedLock,
-			@Nullable String distributedLockName,
-			boolean internalLock,
-			boolean useBloomFilter
-	) {
-		public static ProtectionConfig defaultConfig() {
-			return ProtectionConfig.builder().build();
-		}
-
-		public boolean hasLockProtection() {
-			return distributedLock || internalLock;
-		}
-	}
-
-	/**
-	 * TTL配置
-	 */
-	@Builder
-	public record TtlConfig(
-			boolean randomTtl,
-			float variance
-	) {
-		public static TtlConfig defaultConfig() {
-			return TtlConfig.builder().variance(0.1f).build();
-		}
-
-		public boolean isValid() {
-			return variance >= 0.0f && variance <= 1.0f;
-		}
-	}
-
 	// InvocationContext接口实现
 	@Override
 	public String[] getCacheNames() {
@@ -152,9 +116,9 @@ public record CachedInvocationContext(
 	 */
 	public boolean needsProtection() {
 		return protectionConfig != null && (
-			protectionConfig.distributedLock() ||
-			protectionConfig.internalLock() ||
-			protectionConfig.useBloomFilter()
+				protectionConfig.distributedLock() ||
+						protectionConfig.internalLock() ||
+						protectionConfig.useBloomFilter()
 		);
 	}
 
@@ -168,15 +132,39 @@ public record CachedInvocationContext(
 	}
 
 	/**
-	 * 获取默认的上下文实例
-	 *
-	 * @return 带有默认配置的上下文
+	 * 保护机制配置
 	 */
-	public static CachedInvocationContext defaultContext() {
-		return CachedInvocationContext.builder()
-			.protectionConfig(ProtectionConfig.defaultConfig())
-			.ttlConfig(TtlConfig.defaultConfig())
-			.build();
+	@Builder
+	public record ProtectionConfig(
+			boolean distributedLock,
+			@Nullable String distributedLockName,
+			boolean internalLock,
+			boolean useBloomFilter
+	) {
+		public static ProtectionConfig defaultConfig() {
+			return ProtectionConfig.builder().build();
+		}
+
+		public boolean hasLockProtection() {
+			return distributedLock || internalLock;
+		}
+	}
+
+	/**
+	 * TTL配置
+	 */
+	@Builder
+	public record TtlConfig(
+			boolean randomTtl,
+			float variance
+	) {
+		public static TtlConfig defaultConfig() {
+			return TtlConfig.builder().variance(0.1f).build();
+		}
+
+		public boolean isValid() {
+			return variance >= 0.0f && variance <= 1.0f;
+		}
 	}
 
 }

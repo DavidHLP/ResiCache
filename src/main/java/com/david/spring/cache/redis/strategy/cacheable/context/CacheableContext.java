@@ -30,7 +30,6 @@ public class CacheableContext<T> {
 	@Nullable
 	private final ExecutionContext executionContext;
 
-	// === 委托方法：CacheContext ===
 
 	public Object getKey() {
 		return cacheContext.getKey();
