@@ -10,8 +10,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class CacheMata {
-    private long ttl;
-    private Object value;
-    private Class<?> type;
-    private Long visitTimes;
+	private long ttl;
+	private Object value;
+	private Class<?> type;
+	private Long visitTimes;
 }

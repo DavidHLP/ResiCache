@@ -1,15 +1,12 @@
 package com.david.spring.cache.redis.aspect;
 
-import static cn.hutool.core.text.CharSequenceUtil.nullToEmpty;
-
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.aspect.support.KeyResolver;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
+import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -20,82 +17,92 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
+import static cn.hutool.core.text.CharSequenceUtil.nullToEmpty;
+
 @Slf4j
 @Aspect
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class RedisCacheableAspect {
 
-    private final CacheInvocationRegistry registry;
+	private final CacheInvocationRegistry registry;
 
 
-    public RedisCacheableAspect(CacheInvocationRegistry registry) {
-        this.registry = registry;
-    }
-    @SneakyThrows
-    @Around("@annotation(redisCacheable)")
-    public Object around(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) {
-        try {
-            registerInvocation(joinPoint, redisCacheable);
-        } catch (Exception e) {
-            log.warn("Failed to register cached invocation: {}", e.getMessage());
-        }
-        return joinPoint.proceed();
-    }
+	public RedisCacheableAspect(CacheInvocationRegistry registry) {
+		this.registry = registry;
+	}
 
-    private void registerInvocation(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable)
-            throws NoSuchMethodException {
+	@SneakyThrows
+	@Around("@annotation(redisCacheable)")
+	public Object around(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) {
+		try {
+			registerInvocation(joinPoint, redisCacheable);
+		} catch (Exception e) {
+			log.warn("Failed to register cached invocation: {}", e.getMessage());
+		}
+		return joinPoint.proceed();
+	}
 
-        Method method = getSpecificMethod(joinPoint);
-        Object targetBean = joinPoint.getTarget();
-        Object[] arguments = joinPoint.getArgs();
-        String[] cacheNames =
-                KeyResolver.getCacheNames(redisCacheable.value(), redisCacheable.cacheNames());
+	private void registerInvocation(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable)
+			throws NoSuchMethodException {
 
-        Object key = resolveCacheKey(targetBean, method, arguments, redisCacheable);
+		Method method = getSpecificMethod(joinPoint);
+		Object targetBean = joinPoint.getTarget();
+		Object[] arguments = joinPoint.getArgs();
+		String[] cacheNames =
+				KeyResolver.getCacheNames(redisCacheable.value(), redisCacheable.cacheNames());
 
-        CachedInvocation cachedInvocation =
-                CachedInvocation.builder()
-                        .arguments(arguments)
-                        .targetBean(targetBean)
-                        .targetMethod(method)
-                        .cachedInvocationContext(
-                                CachedInvocation.CachedInvocationContext.builder()
-                                        .value(redisCacheable.value())
-                                        .cacheNames(redisCacheable.cacheNames())
-                                        .key(nullToEmpty(redisCacheable.key()))
-                                        .keyGenerator(redisCacheable.keyGenerator())
-                                        .cacheManager(redisCacheable.cacheManager())
-                                        .cacheResolver(redisCacheable.cacheResolver())
-                                        .condition(nullToEmpty(redisCacheable.condition()))
-                                        .unless(nullToEmpty(redisCacheable.unless()))
-                                        .sync(redisCacheable.sync())
-                                        .ttl(redisCacheable.ttl())
-                                        .type(redisCacheable.type())
-                                        .build())
-                        .build();
+		Object key = resolveCacheKey(targetBean, method, arguments, redisCacheable);
 
-        for (String cacheName : cacheNames) {
-            if (cacheName == null || cacheName.isBlank()) continue;
-            registry.register(cacheName.trim(), key, cachedInvocation);
-            log.debug(
-                    "Registered CachedInvocation for cache={}, method={}, key={}",
-                    cacheName,
-                    method.getName(),
-                    key);
-        }
-    }
+		CachedInvocation cachedInvocation =
+				CachedInvocation.builder()
+						.arguments(arguments)
+						.targetBean(targetBean)
+						.targetMethod(method)
+						.cachedInvocationContext(
+								CachedInvocationContext.builder()
+										.value(redisCacheable.value())
+										.cacheNames(redisCacheable.cacheNames())
+										.key(nullToEmpty(redisCacheable.key()))
+										.keyGenerator(redisCacheable.keyGenerator())
+										.cacheManager(redisCacheable.cacheManager())
+										.cacheResolver(redisCacheable.cacheResolver())
+										.condition(nullToEmpty(redisCacheable.condition()))
+										.unless(nullToEmpty(redisCacheable.unless()))
+										.sync(redisCacheable.sync())
+										.ttl(redisCacheable.ttl())
+										.type(redisCacheable.type())
+										.useBloomFilter(redisCacheable.useBloomFilter())
+										.randomTtl(redisCacheable.randomTtl())
+										.variance(redisCacheable.variance())
+										.cacheNullValues(redisCacheable.cacheNullValues())
+										.distributedLock(redisCacheable.distributedLock())
+										.internalLock(redisCacheable.internalLock())
+										.useSecondLevelCache(redisCacheable.useSecondLevelCache())
+										.build())
+						.build();
 
-    private Object resolveCacheKey(
-            Object targetBean, Method method, Object[] arguments, RedisCacheable redisCacheable) {
-        return KeyResolver.resolveKey(targetBean, method, arguments, redisCacheable.keyGenerator());
-    }
+		for (String cacheName : cacheNames) {
+			if (cacheName == null || cacheName.isBlank()) continue;
+			registry.register(cacheName.trim(), key, cachedInvocation);
+			log.debug(
+					"Registered CachedInvocation for cache={}, method={}, key={}",
+					cacheName,
+					method.getName(),
+					key);
+		}
+	}
 
-    private Method getSpecificMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
-        Object target = joinPoint.getTarget();
-        String methodName = joinPoint.getSignature().getName();
-        Class<?>[] parameterTypes =
-                ((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
-        return target.getClass().getMethod(methodName, parameterTypes);
-    }
+	private Object resolveCacheKey(
+			Object targetBean, Method method, Object[] arguments, RedisCacheable redisCacheable) {
+		return KeyResolver.resolveKey(targetBean, method, arguments, redisCacheable.keyGenerator());
+	}
+
+	private Method getSpecificMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
+		Object target = joinPoint.getTarget();
+		String methodName = joinPoint.getSignature().getName();
+		Class<?>[] parameterTypes =
+				((MethodSignature) joinPoint.getSignature()).getMethod().getParameterTypes();
+		return target.getClass().getMethod(methodName, parameterTypes);
+	}
 }

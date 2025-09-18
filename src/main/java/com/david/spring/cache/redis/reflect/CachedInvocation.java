@@ -1,10 +1,8 @@
 package com.david.spring.cache.redis.reflect;
 
 import com.david.spring.cache.redis.reflect.abstracts.AbstractInvocation;
-import com.david.spring.cache.redis.reflect.support.ContextBeanSupport;
-
+import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import lombok.*;
-
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
 
@@ -17,104 +15,35 @@ import java.lang.reflect.Method;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 public class CachedInvocation extends AbstractInvocation {
-    /* 目标Bean实例 */
-    private Object targetBean;
+	/* 目标Bean实例 */
+	private Object targetBean;
 
-    /* 目标方法 */
-    private Method targetMethod;
+	/* 目标方法 */
+	private Method targetMethod;
 
-    /* 方法参数数组 */
-    private Object[] arguments;
+	/* 方法参数数组 */
+	private Object[] arguments;
 
-    /* 缓存调用上下文信息 */
-    private CachedInvocationContext cachedInvocationContext;
+	/* 缓存调用上下文信息 */
+	private CachedInvocationContext cachedInvocationContext;
 
-    // 懒加载解析的Bean（不参与序列化）
-    private transient KeyGenerator resolvedKeyGenerator;
-    private transient CacheResolver resolvedCacheResolver;
+	// 懒加载解析的Bean（不参与序列化）
+	private KeyGenerator resolvedKeyGenerator;
+	private CacheResolver resolvedCacheResolver;
 
-    @Override
-    protected Object getTargetBean() {
-        return targetBean;
-    }
+	@Override
+	protected Object getTargetBean() {
+		return targetBean;
+	}
 
-    @Override
-    protected Method getTargetMethod() {
-        return targetMethod;
-    }
+	@Override
+	protected Method getTargetMethod() {
+		return targetMethod;
+	}
 
-    @Override
-    protected Object[] getArguments() {
-        return arguments;
-    }
+	@Override
+	protected Object[] getArguments() {
+		return arguments;
+	}
 
-    /**
-     * 懒加载解析KeyGenerator Bean，优先按名称解析，失败则按类型解析 仅在需要时解析，解析结果会缓存在内存中
-     *
-     * @return KeyGenerator实例，如果解析失败返回null
-     */
-    public KeyGenerator resolveKeyGenerator() {
-        if (resolvedKeyGenerator != null) return resolvedKeyGenerator;
-        KeyGenerator kg =
-                ContextBeanSupport.resolveKeyGenerator(
-                        null, cachedInvocationContext == null ? null : cachedInvocationContext.keyGenerator());
-        this.resolvedKeyGenerator = kg;
-        return kg;
-    }
-
-    /**
-     * 懒加载解析CacheResolver Bean，优先按名称解析，失败则按类型解析 仅在需要时解析，解析结果会缓存在内存中
-     *
-     * @return CacheResolver实例，如果解析失败返回null
-     */
-    public CacheResolver resolveCacheResolver() {
-        if (resolvedCacheResolver != null) return resolvedCacheResolver;
-        CacheResolver cr =
-                ContextBeanSupport.resolveCacheResolver(
-                        null, cachedInvocationContext == null ? null : cachedInvocationContext.cacheResolver());
-        this.resolvedCacheResolver = cr;
-        return cr;
-    }
-
-    /** 清除已缓存的解析Bean，强制下次调用时重新从上下文解析 */
-    public void clearResolved() {
-        this.resolvedKeyGenerator = null;
-        this.resolvedCacheResolver = null;
-    }
-
-    /** 缓存调用上下文记录类 */
-    @Builder
-    public record CachedInvocationContext(
-            /* 缓存名称数组 */
-            String[] cacheNames,
-
-            /* 缓存键表达式 */
-            String key,
-
-            /* 缓存条件表达式 */
-            String condition,
-
-            /* 是否同步执行 */
-            boolean sync,
-
-            /* 缓存值表达式 */
-            String[] value,
-
-            /* KeyGenerator Bean名称 */
-            String keyGenerator,
-
-            /* CacheManager Bean名称 */
-            String cacheManager,
-
-            /* CacheResolver Bean名称 */
-            String cacheResolver,
-
-            /* 不缓存的条件表达式 */
-            String unless,
-
-            /* 缓存过期时间（毫秒） */
-            long ttl,
-
-            /* 目标类型 */
-            Class<?> type) {}
 }
