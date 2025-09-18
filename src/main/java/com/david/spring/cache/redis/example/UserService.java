@@ -37,8 +37,8 @@ public class UserService {
 	}
 
 	@RedisCaching(cacheable = {
-			@RedisCacheable(value = "user1", key = "#id", ttl = 3600),
-			@RedisCacheable(value = "user2", key = "#id", ttl = 3600),
+			@RedisCacheable(value = "user1", key = "#id", ttl = 300),
+//			@RedisCacheable(value = "user2", key = "#id", ttl = 300),
 	})
 	public User get(Long id) {
 		log.info("Fetching user with id: {}", id);

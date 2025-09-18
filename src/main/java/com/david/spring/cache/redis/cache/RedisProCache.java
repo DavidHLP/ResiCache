@@ -1,85 +1,67 @@
 package com.david.spring.cache.redis.cache;
 
-import com.david.spring.cache.redis.locks.DistributedLock;
-import com.david.spring.cache.redis.locks.LockUtils;
 import com.david.spring.cache.redis.meta.CacheMata;
-import com.david.spring.cache.redis.protection.CacheAvalanche;
-import com.david.spring.cache.redis.protection.CacheBreakdown;
-import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
-import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.impl.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
+import com.david.spring.cache.redis.strategy.cacheable.CacheableStrategy;
 import com.david.spring.cache.redis.strategy.cacheable.CacheableStrategyManager;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheContext;
-import com.david.spring.cache.redis.strategy.cacheable.context.CacheableContext;
-import com.david.spring.cache.redis.strategy.cacheable.context.ExecutionContext;
-import com.david.spring.cache.redis.strategy.cacheable.context.ProtectionContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
-import java.util.Objects;
-import java.util.concurrent.*;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.Callable;
 
 @Slf4j
 public class RedisProCache extends RedisCache {
 
-	private static final long DOUBLE_DELETE_DELAY_MS = 300L;
-	private final RedisTemplate<String, Object> redisTemplate;
-	private final CacheInvocationRegistry registry;
-	private final EvictInvocationRegistry evictRegistry;
-	private final Executor executor;
-	private final RedisCacheConfiguration cacheConfiguration;
-	private final DistributedLock distributedLock;
-	private final CachePenetration cachePenetration;
-	private final CacheBreakdown cacheBreakdown;
-	private final CacheAvalanche cacheAvalanche;
-	/** 缓存获取策略管理器 */
+	/**
+	 * ThreadLocal 用于在 toStoreValue 方法中获取当前的 key
+	 */
+	private static final ThreadLocal<Object> CURRENT_KEY = new ThreadLocal<>();
 	private final CacheableStrategyManager strategyManager;
+	private final CacheInvocationRegistry invocationRegistry;
 
 	public RedisProCache(
 			String name,
 			RedisCacheWriter cacheWriter,
 			RedisCacheConfiguration cacheConfiguration,
-			RedisTemplate<String, Object> redisTemplate,
-			CacheInvocationRegistry registry,
-			EvictInvocationRegistry evictRegistry,
-			Executor executor,
-			DistributedLock distributedLock,
-			CachePenetration cachePenetration,
-			CacheBreakdown cacheBreakdown,
-			CacheAvalanche cacheAvalanche,
-			CacheableStrategyManager strategyManager) {
+			CacheableStrategyManager strategyManager,
+			CacheInvocationRegistry invocationRegistry) {
 		super(name, cacheWriter, cacheConfiguration);
-		this.redisTemplate = Objects.requireNonNull(redisTemplate);
-		this.registry = Objects.requireNonNull(registry);
-		this.evictRegistry = Objects.requireNonNull(evictRegistry);
-		this.executor = Objects.requireNonNull(executor);
-		this.cacheConfiguration = Objects.requireNonNull(cacheConfiguration);
-		this.distributedLock = Objects.requireNonNull(distributedLock);
-		this.cachePenetration = Objects.requireNonNull(cachePenetration);
-		this.cacheBreakdown = Objects.requireNonNull(cacheBreakdown);
-		this.cacheAvalanche = Objects.requireNonNull(cacheAvalanche);
-		this.strategyManager = Objects.requireNonNull(strategyManager);
-		log.info("RedisProCache initialized with strategy manager, name={}", name);
+		this.strategyManager = strategyManager;
+		this.invocationRegistry = invocationRegistry;
+		log.info("RedisProCache initialized with strategy manager and processor manager, name={}", name);
+	}
+
+	/**
+	 * 执行策略操作的通用方法
+	 */
+	private <T> T executeWithStrategy(Object key, StrategyOperation<T> operation, ParentOperation<T> fallback) {
+		CachedInvocation cachedInvocation = getCachedInvocation(key);
+		if (cachedInvocation != null) {
+			CacheableStrategy<T> strategy = strategyManager.selectStrategy(cachedInvocation);
+			if (strategy != null) {
+				log.debug("Using strategy: {} for cache operation", strategy.getStrategyName());
+				return operation.execute(strategy, cachedInvocation);
+			}
+		}
+		log.debug("Using default parent method for key: {}", key);
+		return fallback.execute();
 	}
 
 	@Override
 	@Nullable
 	public ValueWrapper get(@NonNull Object key) {
-		log.debug("Getting cache value using strategy manager for key: {}", key);
+		log.debug("Getting cache value for key: {}", key);
+		ValueWrapper result = executeWithStrategy(key,
+				(strategy, cachedInvocation) -> strategy.get(this, key, cachedInvocation),
+				() -> super.get(key));
 
-		// 创建缓存获取上下文
-		CacheableContext<Object> context = createCacheGetContext(key);
-
-		// 使用策略管理器执行缓存获取
-		return strategyManager.get(context);
+		// 包装结果以支持 CacheMata 自动解包
+		return result != null ? new CacheMatAwareValueWrapper(result) : null;
 	}
 
 	/**
@@ -89,109 +71,113 @@ public class RedisProCache extends RedisCache {
 	 * @return 缓存值包装器
 	 */
 	public ValueWrapper getFromParent(@NonNull Object key) {
-		return super.get(key);
+		ValueWrapper result = super.get(key);
+		return result != null ? new CacheMatAwareValueWrapper(result) : null;
 	}
 
 	/**
-	 * 创建缓存获取上下文
+	 * 直接调用父类的 put 方法，避免策略循环调用
+	 * 注意：这里仍然会调用我们重写的 toStoreValue 方法进行包装
+	 *
+	 * @param key   缓存键
+	 * @param value 缓存值
+	 */
+	public void putFromParent(@NonNull Object key, @Nullable Object value) {
+		log.debug("putFromParent called: key={}, value={}, valueType={}",
+				key, value, value != null ? value.getClass().getSimpleName() : "null");
+
+		// 直接包装为 CacheMata 而不依赖 toStoreValue
+		Object wrappedValue = wrapValueAsCacheMata(value, key);
+		log.info("Wrapped value as CacheMata in putFromParent: wrappedType={}",
+				wrappedValue != null ? wrappedValue.getClass().getSimpleName() : "null");
+
+		try {
+			// 设置当前 key 到 ThreadLocal
+			CURRENT_KEY.set(key);
+			// 调用父类的 put 方法，传入包装后的 CacheMata
+			super.put(key, wrappedValue);
+			log.debug("putFromParent completed for key: {}", key);
+		} finally {
+			// 清理 ThreadLocal
+			CURRENT_KEY.remove();
+		}
+	}
+
+	/**
+	 * 直接调用父类的 putIfAbsent 方法，避免策略循环调用
+	 *
+	 * @param key   缓存键
+	 * @param value 缓存值
+	 * @return 缓存值包装器
+	 */
+	@NonNull
+	public ValueWrapper putIfAbsentFromParent(@NonNull Object key, @Nullable Object value) {
+		// 直接包装为 CacheMata
+		Object wrappedValue = wrapValueAsCacheMata(value, key);
+		log.info("Wrapped value as CacheMata in putIfAbsentFromParent: wrappedType={}",
+				wrappedValue != null ? wrappedValue.getClass().getSimpleName() : "null");
+
+		ValueWrapper result = super.putIfAbsent(key, wrappedValue);
+		return new CacheMatAwareValueWrapper(result);
+	}
+
+	/**
+	 * 直接调用父类的 evict 方法，避免策略循环调用
 	 *
 	 * @param key 缓存键
-	 * @return 缓存获取上下文
 	 */
-	private CacheableContext<Object> createCacheGetContext(Object key) {
-		// 尝试获取调用上下文以提供更详细的配置信息
-		CachedInvocationContext invocationContext = null;
-		try {
-			CachedInvocation invocation = registry.get(getName(), key).orElse(null);
-			invocationContext = (invocation != null) ? invocation.getCachedInvocationContext() : null;
-		} catch (Exception ignored) {
-			// 忽略异常，使用默认配置
-		}
-
-		// 构建增强的核心缓存上下文
-		CacheContext cacheContext = CacheContext.builder()
-				.key(key)
-				.cacheName(getName())
-				.parentCache(this)
-				.redisTemplate(redisTemplate)
-				.cacheConfiguration(cacheConfiguration)
-				.invocationContext(invocationContext)
-				.build();
-
-		// 构建保护机制上下文
-		ProtectionContext protectionContext = ProtectionContext.builder()
-				.distributedLock(distributedLock)
-				.cachePenetration(cachePenetration)
-				.cacheBreakdown(cacheBreakdown)
-				.cacheAvalanche(cacheAvalanche)
-				.build();
-
-		// 构建执行上下文
-		ExecutionContext executionContext = ExecutionContext.builder()
-				.executor(executor)
-				.registry(registry)
-				.build();
-
-		// 组合所有上下文
-		return CacheableContext.builder()
-				.cacheContext(cacheContext)
-				.protectionContext(protectionContext)
-				.executionContext(executionContext)
-				.build();
+	public void evictFromParent(@NonNull Object key) {
+		super.evict(key);
 	}
 
 	@Override
 	public void put(@NonNull Object key, @Nullable Object value) {
-		Object toStore = wrapIfMataAbsent(value, key);
-		if (toStore == null) {
-			log.debug("Skipping cache put for key: {} due to null policy", key);
-			return;
-		}
-		super.put(key, toStore);
-		// Add key to Bloom filter after successful write (if value is not null)
+		log.debug("Putting cache value for key: {}", key);
+
+		// 直接包装为 CacheMata
+		Object wrappedValue = wrapValueAsCacheMata(value, key);
+		log.info("Wrapped value as CacheMata in put: wrappedType={}",
+				wrappedValue != null ? wrappedValue.getClass().getSimpleName() : "null");
+
 		try {
-			if (value != null) {
-				String membershipKey = String.valueOf(key);
-				cachePenetration.addIfEnabled(getName(), membershipKey);
-			}
-		} catch (Exception ignore) {
+			// 设置当前 key 到 ThreadLocal
+			CURRENT_KEY.set(key);
+			executeWithStrategy(key,
+					(strategy, cachedInvocation) -> {
+						strategy.put(this, key, wrappedValue, cachedInvocation);
+						return null;
+					},
+					() -> {
+						super.put(key, wrappedValue);
+						return null;
+					});
+		} finally {
+			// 清理 ThreadLocal
+			CURRENT_KEY.remove();
 		}
-		// Avalanche protection: unified call
-		applyLitteredExpire(key, toStore);
-		log.debug(
-				"Put cache entry: name={}, key={}, valueType={}",
-				getName(),
-				key,
-				value == null ? "null" : value.getClass().getSimpleName());
 	}
 
 	@Override
 	@NonNull
 	public ValueWrapper putIfAbsent(@NonNull Object key, @Nullable Object value) {
-		Object toStore = wrapIfMataAbsent(value, key);
-		if (toStore == null) {
-			log.debug("Skipping cache putIfAbsent for key: {} due to null policy", key);
-			// do not put; return existing value if any
-			return super.get(key);
+		log.debug("Putting cache value if absent for key: {}", key);
+
+		// 直接包装为 CacheMata
+		Object wrappedValue = wrapValueAsCacheMata(value, key);
+		log.info("Wrapped value as CacheMata in putIfAbsent: wrappedType={}",
+				wrappedValue != null ? wrappedValue.getClass().getSimpleName() : "null");
+
+		try {
+			// 设置当前 key 到 ThreadLocal
+			CURRENT_KEY.set(key);
+			ValueWrapper result = executeWithStrategy(key,
+					(strategy, cachedInvocation) -> strategy.putIfAbsent(this, key, wrappedValue, cachedInvocation),
+					() -> super.putIfAbsent(key, wrappedValue));
+			return new CacheMatAwareValueWrapper(result);
+		} finally {
+			// 清理 ThreadLocal
+			CURRENT_KEY.remove();
 		}
-		boolean firstInsert = wasKeyAbsentBeforePut(key);
-		ValueWrapper previous = super.putIfAbsent(key, toStore);
-		if (firstInsert) {
-			try {
-				if (value != null) {
-					String membershipKey = String.valueOf(key);
-					cachePenetration.addIfEnabled(getName(), membershipKey);
-				}
-			} catch (Exception ignore) {
-			}
-			applyLitteredExpire(key, toStore);
-		}
-		log.debug(
-				"PutIfAbsent: name={}, key={}, inserted={}",
-				getName(),
-				key,
-				firstInsert);
-		return previous;
 	}
 
 	@Override
@@ -201,6 +187,12 @@ public class RedisProCache extends RedisCache {
 		if (wrapper == null)
 			return null;
 		Object val = wrapper.get();
+
+		// 如果是 CacheMata，提取原始值
+		if (val instanceof CacheMata cacheMata) {
+			val = cacheMata.getValue();
+		}
+
 		if (type == null || type == Object.class) {
 			@SuppressWarnings("unchecked")
 			T casted = (T) val;
@@ -212,251 +204,272 @@ public class RedisProCache extends RedisCache {
 	@Override
 	@NonNull
 	public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
-		log.debug("Getting cache value with value loader using strategy manager for key: {}", key);
-
-		// 创建缓存获取上下文
-		CacheableContext<Object> context = createCacheGetContext(key);
-
-		// 使用策略管理器执行带值加载器的缓存获取
-		return Objects.requireNonNull(strategyManager.get(context, valueLoader));
+		log.debug("Getting cache value with loader for key: {}", key);
+		return executeWithStrategy(key,
+				(strategy, cachedInvocation) -> strategy.get(this, key, valueLoader, cachedInvocation),
+				() -> super.get(key, valueLoader));
 	}
 
 	@Override
 	public void evict(@NonNull Object key) {
-		String cacheKey = createCacheKey(key);
-		ReentrantLock localLock = evictRegistry.obtainLock(getName(), key);
-		String distKey = "cache:evict:" + cacheKey;
-		long leaseTimeSec = 10L;
-		boolean executed = LockUtils.runWithLocalTryThenDistTry(
-				localLock,
-				distributedLock,
-				distKey,
-				0L,
-				leaseTimeSec,
-				TimeUnit.SECONDS,
+		log.debug("Evicting cache value for key: {}", key);
+		executeWithStrategy(key,
+				(strategy, cachedInvocation) -> {
+					strategy.evict(this, key, cachedInvocation);
+					return null;
+				},
 				() -> {
-					doEvictInternal(key);
-					scheduleSecondDeleteForKey(key);
+					super.evict(key);
+					return null;
 				});
-		if (!executed) {
-			// Fallback: try to execute even if lock acquisition fails to improve
-			// availability
-			doEvictInternal(key);
-			scheduleSecondDeleteForKey(key);
-		}
-		log.info(
-				"Evicted cache key, name={}, redisKey={}, distKey={}, executed={}, secondDeleteScheduled=true",
-				getName(),
-				cacheKey,
-				distKey,
-				executed);
 	}
 
 	@Override
 	public void clear() {
-		String distKey = "cache:evictAll:" + getName();
-		ReentrantLock localLock = evictRegistry.obtainLock(getName(), "*");
-		long leaseTimeSec = 15L;
-		boolean executed = LockUtils.runWithLocalTryThenDistTry(
-				localLock,
-				distributedLock,
-				distKey,
-				0L,
-				leaseTimeSec,
-				TimeUnit.SECONDS,
-				() -> {
-					doClearInternal();
-					scheduleSecondClear();
-				});
-		if (!executed) {
-			doClearInternal();
-			scheduleSecondClear();
-		}
-		log.info("Cleared cache, name={}, secondClearScheduled=true", getName());
+		log.debug("Clearing cache: {}", getName());
+		super.clear();
 	}
-
-	private byte[] createAndConvertCacheKey(Object key) {
-		return serializeCacheKey(createCacheKey(key));
-	}
-
-	private Object wrapIfMataAbsent(@Nullable Object value, @NonNull Object key) {
-		// Allow passing through existing metadata
-		if (value instanceof CacheMata) {
-			return value;
-		}
-
-		// 创建临时缓存上下文来获取配置信息
-		CachedInvocationContext invocationContext = null;
-		try {
-			CachedInvocation invocation = registry.get(getName(), key).orElse(null);
-			invocationContext = (invocation != null) ? invocation.getCachedInvocationContext() : null;
-		} catch (Exception ignored) {
-			// 忽略异常
-		}
-
-		CacheContext cacheContext = CacheContext.builder()
-				.key(key)
-				.cacheName(getName())
-				.parentCache(this)
-				.redisTemplate(redisTemplate)
-				.cacheConfiguration(cacheConfiguration)
-				.invocationContext(invocationContext)
-				.build();
-
-		// 获取有效TTL
-		long effectiveTtlSecs;
-		if (value != null) {
-			// 优先使用动态TTL计算
-			effectiveTtlSecs = cacheContext.getDynamicTtlSeconds(value);
-			if (effectiveTtlSecs <= 0) {
-				// 回退到带抖动的TTL
-				effectiveTtlSecs = cacheContext.getEffectiveTtlSeconds();
-			}
-		} else {
-			effectiveTtlSecs = cacheContext.getEffectiveTtlSeconds();
-		}
-
-		// 如果没有配置TTL抖动，使用全局雪崩保护
-		if (effectiveTtlSecs > 0 &&
-			(invocationContext == null || !invocationContext.randomTtl())) {
-			effectiveTtlSecs = cacheAvalanche.jitterTtlSeconds(effectiveTtlSecs);
-		}
-
-		// 处理null值缓存
-		if (value == null) {
-			if (cacheContext.shouldCacheNullValues()) {
-				return CacheMata.builder().ttl(effectiveTtlSecs).value(null).build();
-			}
-			return null;
-		}
-
-		// 包装非null值
-		return CacheMata.builder().ttl(effectiveTtlSecs).value(value).build();
-	}
-
-	// Unpacking responsibility is centralized in fromStoreValue()
 
 	@Override
 	protected Object fromStoreValue(@Nullable Object storeValue) {
 		Object v = super.fromStoreValue(storeValue);
-		if (v instanceof CacheMata) {
-			return ((CacheMata) v).getValue();
+		if (v instanceof CacheMata cacheMata) {
+			// 过期检查
+			if (cacheMata.isExpired()) {
+				log.debug("Cache metadata expired for store value, returning null");
+				return null;
+			}
+
+			// 访问统计处理
+			cacheMata.incrementVisitTimes();
+
+			// 返回 CacheMata 对象而不是原始值
+			return cacheMata;
 		}
 		return v;
 	}
 
-	/** Unified setting of jittered expiration time to avoid duplicate code. */
-	private void applyLitteredExpire(Object key, Object toStore) {
-		try {
-			if (toStore instanceof CacheMata meta && meta.getTtl() > 0) {
-				String cacheKey = createCacheKey(key);
-				long seconds = meta.getTtl();
-				if (seconds > 0) {
-					redisTemplate.expire(cacheKey, seconds, TimeUnit.SECONDS);
-				}
+	/**
+	 * 带 key 信息的 fromStoreValue 方法，提供完整的上下文
+	 */
+	protected Object fromStoreValueWithKey(@Nullable Object storeValue, @NonNull Object key) {
+		Object v = super.fromStoreValue(storeValue);
+		if (v instanceof CacheMata cacheMata) {
+			String cacheName = getName();
+
+			// 过期检查
+			if (cacheMata.isExpired()) {
+				log.debug("Cache metadata expired for key: {}, returning null", key);
+				return null;
 			}
-		} catch (Exception ignore) {
+
+			// 访问统计处理
+			cacheMata.incrementVisitTimes();
+
+			// 返回 CacheMata 对象而不是原始值
+			return cacheMata;
 		}
+		return v;
 	}
 
 	/**
-	 * Check if the key was absent before putIfAbsent (-2 means the key does not
-	 * exist in Redis).
+	 * 将值包装为 CacheMata 对象用于存储
+	 *
+	 * @param value 原始值
+	 * @return 包装后的 CacheMata 对象
 	 */
-	private boolean wasKeyAbsentBeforePut(Object key) {
-		try {
-			Long ttl = redisTemplate.getExpire(createCacheKey(key), TimeUnit.SECONDS);
-			return ttl == -2L;
-		} catch (Exception ignore) {
-			return false;
+	@NonNull
+	@Override
+	protected Object toStoreValue(@Nullable Object value) {
+		// 从 ThreadLocal 获取当前的 key，如果没有则使用 "unknown"
+		Object currentKey = CURRENT_KEY.get();
+		if (currentKey == null) {
+			currentKey = "unknown";
 		}
+		log.info("toStoreValue called: key={}, value={}, valueType={}",
+				currentKey, value, value != null ? value.getClass().getSimpleName() : "null");
+		Object result = toStoreValueWithKey(value, currentKey);
+		log.info("toStoreValue result: resultType={}", result != null ? result.getClass().getSimpleName() : "null");
+		return result != null ? result : super.toStoreValue(null);
 	}
 
-	/** Immediately delete single key and clean up local registry. */
-	private void doEvictInternal(@NonNull Object key) {
+	/**
+	 * 带 key 信息的 toStoreValue 方法，提供完整的上下文
+	 *
+	 * @param value 原始值
+	 * @param key   缓存键
+	 * @return 包装后的 CacheMata 对象
+	 */
+	protected Object toStoreValueWithKey(@Nullable Object value, @NonNull Object key) {
+		log.info("toStoreValueWithKey called: key={}, value={}, valueType={}",
+				key, value, value != null ? value.getClass().getSimpleName() : "null");
+		if (value == null) {
+			log.info("Value is null, calling super.toStoreValue(null)");
+			return super.toStoreValue(null);
+		}
+
+		// 如果已经是 CacheMata，直接使用
+		if (value instanceof CacheMata cacheMata) {
+			log.info("Value is already CacheMata, storing directly");
+			return super.toStoreValue(cacheMata);
+		}
+
+		// 包装为 CacheMata 对象
+		CacheMata cacheMata = CacheMata.of(value);
+		log.info("Wrapped value as CacheMata: {}", cacheMata);
+
+		return super.toStoreValue(cacheMata);
+	}
+
+	/**
+	 * 存储带 TTL 的缓存值
+	 *
+	 * @param key   缓存键
+	 * @param value 缓存值
+	 * @param ttl   生存时间（秒）
+	 */
+	public void put(@NonNull Object key, @Nullable Object value, long ttl) {
+		log.debug("Putting cache value with TTL for key: {}, ttl: {}", key, ttl);
+		if (value == null) {
+			super.put(key, null);
+			return;
+		}
+
+		CacheMata cacheMata;
+		if (value instanceof CacheMata existingMata) {
+			cacheMata = existingMata;
+			// 更新 TTL
+			cacheMata.setTtl(ttl);
+		} else {
+			cacheMata = CacheMata.of(value, ttl);
+		}
+
+		log.info("Wrapped value as CacheMata in put(ttl): wrappedType={}",
+				cacheMata.getClass().getSimpleName());
+
 		try {
-			getCacheWriter().remove(getName(), createAndConvertCacheKey(key));
+			// 设置当前 key 到 ThreadLocal
+			CURRENT_KEY.set(key);
+			super.put(key, cacheMata);
 		} finally {
-			try {
-				registry.remove(getName(), key);
-			} catch (Exception ignore) {
-			}
-			try {
-				evictRegistry.remove(getName(), key);
-			} catch (Exception ignore) {
-			}
+			// 清理 ThreadLocal
+			CURRENT_KEY.remove();
 		}
 	}
 
 	/**
-	 * Delayed secondary deletion (single key), and attempt to acquire lock again
-	 * during second deletion to avoid race conditions.
+	 * 根据缓存键获取对应的缓存调用信息
+	 *
+	 * @param key 缓存键
+	 * @return 缓存调用信息，如果未找到则返回null
 	 */
-	private void scheduleSecondDeleteForKey(@NonNull Object key) {
-		Executor delayed = CompletableFuture.delayedExecutor(
-				DOUBLE_DELETE_DELAY_MS, TimeUnit.MILLISECONDS, executor);
-		CompletableFuture.runAsync(
-				() -> {
-					String cacheKey = createCacheKey(key);
-					String distKey = "cache:evict:" + cacheKey;
-					ReentrantLock localLock = evictRegistry.obtainLock(getName(), key);
-					log.debug(
-							"Second-delete attempt: name={}, redisKey={}, distKey={}",
-							getName(),
-							cacheKey,
-							distKey);
-					LockUtils.runWithLocalTryThenDistTry(
-							localLock,
-							distributedLock,
-							distKey,
-							0L,
-							5L,
-							TimeUnit.SECONDS,
-							() -> doEvictInternal(key));
-				},
-				delayed);
-	}
-
-	/** Immediate full cleanup and clean up local registry. */
-	private void doClearInternal() {
+	@Nullable
+	private CachedInvocation getCachedInvocation(@NonNull Object key) {
 		try {
-			super.clear();
-		} finally {
-			try {
-				registry.removeAll(getName());
-			} catch (Exception ignore) {
-			}
-			try {
-				evictRegistry.removeAll(getName());
-			} catch (Exception ignore) {
-			}
+			return invocationRegistry.get(getName(), key).orElse(null);
+		} catch (Exception e) {
+			log.warn("Failed to get cached invocation for cache: {}, key: {}, error: {}",
+					getName(), key, e.getMessage());
+			return null;
 		}
 	}
 
 	/**
-	 * Delayed secondary full deletion, and attempt to acquire lock again during
-	 * second deletion to avoid race conditions.
+	 * 获取策略管理器（用于测试或扩展）
+	 *
+	 * @return 策略管理器
 	 */
-	private void scheduleSecondClear() {
-		Executor delayed = CompletableFuture.delayedExecutor(
-				DOUBLE_DELETE_DELAY_MS, TimeUnit.MILLISECONDS, executor);
-		CompletableFuture.runAsync(
-				() -> {
-					String distKey = "cache:evictAll:" + getName();
-					ReentrantLock localLock = evictRegistry.obtainLock(getName(), "*");
-					log.debug(
-							"Second-clear attempt: name={}, distKey={}",
-							getName(),
-							distKey);
-					LockUtils.runWithLocalTryThenDistTry(
-							localLock,
-							distributedLock,
-							distKey,
-							0L,
-							5L,
-							TimeUnit.SECONDS,
-							this::doClearInternal);
-				},
-				delayed);
+	@NonNull
+	public CacheableStrategyManager getStrategyManager() {
+		return strategyManager;
+	}
+
+	/**
+	 * 获取调用注册表（用于测试或扩展）
+	 *
+	 * @return 调用注册表
+	 */
+	@NonNull
+	public CacheInvocationRegistry getInvocationRegistry() {
+		return invocationRegistry;
+	}
+
+	/**
+	 * 公共访问的 toStoreValue 方法，用于测试
+	 */
+	public Object testToStoreValue(@Nullable Object value) {
+		return this.toStoreValue(value);
+	}
+
+	/**
+	 * 公共访问的 fromStoreValue 方法，用于测试
+	 */
+	public Object testFromStoreValue(@Nullable Object storeValue) {
+		return this.fromStoreValue(storeValue);
+	}
+
+	/**
+	 * 将值包装为 CacheMata 对象的辅助方法
+	 *
+	 * @param value 原始值
+	 * @param key   缓存键
+	 * @return 包装后的 CacheMata 对象
+	 */
+	private Object wrapValueAsCacheMata(@Nullable Object value, @NonNull Object key) {
+		if (value == null) {
+			return null;
+		}
+
+		// 如果已经是 CacheMata，直接使用
+		if (value instanceof CacheMata) {
+			return value;
+		}
+
+		// 尝试从缓存调用信息中获取TTL
+		long ttl = -1; // 默认永不过期
+		try {
+			CachedInvocation cachedInvocation = getCachedInvocation(key);
+			if (cachedInvocation != null && cachedInvocation.getCachedInvocationContext() != null) {
+				ttl = cachedInvocation.getCachedInvocationContext().ttl();
+				log.debug("Found TTL from CachedInvocation: {} for key: {}", ttl, key);
+			}
+		} catch (Exception e) {
+			log.debug("Failed to get TTL from CachedInvocation for key: {}, using default", key);
+		}
+
+		// 包装为 CacheMata 对象
+		return CacheMata.of(value, ttl);
+	}
+
+	/**
+	 * 策略操作接口
+	 */
+	@FunctionalInterface
+	private interface StrategyOperation<T> {
+		T execute(CacheableStrategy<T> strategy, CachedInvocation cachedInvocation);
+	}
+
+	/**
+	 * 父类操作接口
+	 */
+	@FunctionalInterface
+	private interface ParentOperation<T> {
+		T execute();
+	}
+
+	/**
+	 * 支持 CacheMata 自动解包的 ValueWrapper 实现
+	 */
+	private record CacheMatAwareValueWrapper(ValueWrapper delegate) implements ValueWrapper {
+
+		@Override
+		public Object get() {
+			Object value = delegate.get();
+			// 如果是 CacheMata，自动解包到原始值
+			if (value instanceof CacheMata cacheMata) {
+				return cacheMata.getValue();
+			}
+			return value;
+		}
 	}
 }
