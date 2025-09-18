@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.locks;
+package com.david.spring.cache.redis.lock;
 
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;

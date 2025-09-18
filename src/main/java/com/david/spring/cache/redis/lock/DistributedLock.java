@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.locks;
+package com.david.spring.cache.redis.lock;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

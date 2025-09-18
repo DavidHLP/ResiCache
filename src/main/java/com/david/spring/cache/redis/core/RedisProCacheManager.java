@@ -1,7 +1,9 @@
 package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.cache.RedisProCache;
-import com.david.spring.cache.redis.locks.DistributedLock;
+import com.david.spring.cache.redis.lock.DistributedLock;
+import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.strategy.CacheOperationService;
 import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
@@ -37,7 +39,8 @@ public class RedisProCacheManager extends RedisCacheManager {
 	private final DistributedLock distributedLock;
 	private final CachePenetration cachePenetration;
 	private final CacheBreakdown cacheBreakdown;
-	private final CacheAvalanche cacheAvalanche;
+	private final CacheFetchStrategyManager strategyManager;
+	private final CacheOperationService cacheOperationService;
 
 	public RedisProCacheManager(
 			RedisCacheWriter cacheWriter,
@@ -50,7 +53,8 @@ public class RedisProCacheManager extends RedisCacheManager {
 			DistributedLock distributedLock,
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
-			CacheAvalanche cacheAvalanche) {
+			CacheFetchStrategyManager strategyManager,
+			CacheOperationService cacheOperationService) {
 		super(cacheWriter, redisCacheConfiguration, initialCacheConfigurations);
 		this.initialCacheConfigurations = initialCacheConfigurations;
 		this.redisTemplate = cacheRedisTemplate;
@@ -62,7 +66,8 @@ public class RedisProCacheManager extends RedisCacheManager {
 		this.distributedLock = distributedLock;
 		this.cachePenetration = cachePenetration;
 		this.cacheBreakdown = cacheBreakdown;
-		this.cacheAvalanche = cacheAvalanche;
+		this.strategyManager = strategyManager;
+		this.cacheOperationService = cacheOperationService;
 	}
 
 	@Override
@@ -94,7 +99,8 @@ public class RedisProCacheManager extends RedisCacheManager {
 				distributedLock,
 				cachePenetration,
 				cacheBreakdown,
-				cacheAvalanche);
+				strategyManager,
+				cacheOperationService);
 	}
 
 	public void initializeCaches() {

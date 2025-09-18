@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.protection;
 
-import com.david.spring.cache.redis.locks.DistributedLock;
-import com.david.spring.cache.redis.locks.LockUtils;
+import com.david.spring.cache.redis.lock.DistributedLock;
+import com.david.spring.cache.redis.lock.LockUtils;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
