@@ -13,6 +13,6 @@ public class CacheInvocationRegistry extends AbstractInvocationRegistry<CachedIn
     @Override
     protected boolean isValidForRegistration(String cacheName, Object key, CachedInvocation invocation) {
         // 缓存调用要求 key 不能为空
-        return super.isValidForRegistration(cacheName, key, invocation) || key == null;
+        return super.isValidForRegistration(cacheName, key, invocation) && key != null;
     }
 }

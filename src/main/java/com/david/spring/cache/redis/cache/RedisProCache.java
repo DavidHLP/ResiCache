@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.cache;
 
+import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.support.CacheExceptionHandler;
 import com.david.spring.cache.redis.lock.LockUtils;
@@ -34,7 +35,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class RedisProCache extends RedisCache {
 
-	private static final long DOUBLE_DELETE_DELAY_MS = 300L;
+	private final CacheGuardProperties properties;
 	private final RedisTemplate<String, Object> redisTemplate;
 	private final CacheInvocationRegistry registry;
 	private final EvictInvocationRegistry evictRegistry;
@@ -58,7 +59,8 @@ public class RedisProCache extends RedisCache {
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
 			CacheFetchStrategyManager strategyManager,
-			CacheOperationService cacheOperationService) {
+			CacheOperationService cacheOperationService,
+			CacheGuardProperties properties) {
 		super(name, cacheWriter, cacheConfiguration);
 		this.redisTemplate = Objects.requireNonNull(redisTemplate);
 		this.registry = Objects.requireNonNull(registry);
@@ -70,6 +72,7 @@ public class RedisProCache extends RedisCache {
 		this.cacheBreakdown = Objects.requireNonNull(cacheBreakdown);
 		this.strategyManager = Objects.requireNonNull(strategyManager);
 		this.cacheOperationService = Objects.requireNonNull(cacheOperationService);
+		this.properties = Objects.requireNonNull(properties);
 
 		// 验证策略集成
 		validateStrategyIntegration();
@@ -332,7 +335,8 @@ public class RedisProCache extends RedisCache {
 					String membershipKey = String.valueOf(key);
 					cachePenetration.addIfEnabled(getName(), membershipKey);
 				}
-			} catch (Exception ignore) {
+			} catch (Exception e) {
+				log.debug("Failed to add key to bloom filter: cache={}, key={}", getName(), key, e);
 			}
 			cacheOperationService.applyLitteredExpire(key, toStore, cacheKey, redisTemplate);
 		}
@@ -395,7 +399,8 @@ public class RedisProCache extends RedisCache {
 								// 命中缓存则补偿加入 Bloom
 								try {
 									cachePenetration.addIfEnabled(getName(), membershipKey);
-								} catch (Exception ignore) {
+								} catch (Exception e) {
+									log.debug("Failed to add key to bloom filter during cache hit: cache={}, key={}", getName(), key, e);
 								}
 								@SuppressWarnings("unchecked")
 								T casted = (T) v;
@@ -847,11 +852,13 @@ public class RedisProCache extends RedisCache {
 		} finally {
 			try {
 				registry.remove(getName(), key);
-			} catch (Exception ignore) {
+			} catch (Exception e) {
+				log.debug("Failed to remove key from cache registry: cache={}, key={}", getName(), key, e);
 			}
 			try {
 				evictRegistry.remove(getName(), key);
-			} catch (Exception ignore) {
+			} catch (Exception e) {
+				log.debug("Failed to remove key from evict registry: cache={}, key={}", getName(), key, e);
 			}
 		}
 	}
@@ -859,7 +866,7 @@ public class RedisProCache extends RedisCache {
 	/** 延迟二次删除（单键），并在二次删除时再次尝试加锁以避免竞态。 */
 	private void scheduleSecondDeleteForKey(@NonNull Object key) {
 		Executor delayed = CompletableFuture.delayedExecutor(
-				DOUBLE_DELETE_DELAY_MS, TimeUnit.MILLISECONDS, executor);
+				properties.getDoubleDeleteDelayMs(), TimeUnit.MILLISECONDS, executor);
 		CompletableFuture.runAsync(
 				() -> {
 					String cacheKey = createCacheKey(key);
@@ -884,11 +891,13 @@ public class RedisProCache extends RedisCache {
 		} finally {
 			try {
 				registry.removeAll(getName());
-			} catch (Exception ignore) {
+			} catch (Exception e) {
+				log.debug("Failed to clear cache registry: cache={}", getName(), e);
 			}
 			try {
 				evictRegistry.removeAll(getName());
-			} catch (Exception ignore) {
+			} catch (Exception e) {
+				log.debug("Failed to clear evict registry: cache={}", getName(), e);
 			}
 		}
 	}
@@ -896,7 +905,7 @@ public class RedisProCache extends RedisCache {
 	/** 延迟二次全量删除，并在二次删除时再次尝试加锁以避免竞态。 */
 	private void scheduleSecondClear() {
 		Executor delayed = CompletableFuture.delayedExecutor(
-				DOUBLE_DELETE_DELAY_MS, TimeUnit.MILLISECONDS, executor);
+				properties.getDoubleDeleteDelayMs(), TimeUnit.MILLISECONDS, executor);
 		CompletableFuture.runAsync(
 				() -> {
 					String distKey = "cache:evictAll:" + getName();

@@ -1,14 +1,14 @@
 package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.cache.RedisProCache;
+import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.lock.DistributedLock;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
-import com.david.spring.cache.redis.strategy.CacheOperationService;
-import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.strategy.CacheOperationService;
 import jakarta.annotation.Nonnull;
 import lombok.Getter;
 import org.springframework.data.redis.cache.RedisCache;
@@ -28,7 +28,7 @@ import java.util.concurrent.Executor;
 public class RedisProCacheManager extends RedisCacheManager {
 
 	@Getter
-	private final Map<String, RedisCacheConfiguration> initialCacheConfigurations;
+	private final Map<String, RedisCacheConfiguration> redisCacheConfigurationMap;
 	private final RedisTemplate<String, Object> redisTemplate;
 	private final RedisCacheWriter cacheWriter;
 	private final CacheInvocationRegistry registry;
@@ -41,10 +41,11 @@ public class RedisProCacheManager extends RedisCacheManager {
 	private final CacheBreakdown cacheBreakdown;
 	private final CacheFetchStrategyManager strategyManager;
 	private final CacheOperationService cacheOperationService;
+	private final CacheGuardProperties properties;
 
 	public RedisProCacheManager(
 			RedisCacheWriter cacheWriter,
-			Map<String, RedisCacheConfiguration> initialCacheConfigurations,
+			Map<String, RedisCacheConfiguration> redisCacheConfigurationMap,
 			RedisTemplate<String, Object> cacheRedisTemplate,
 			RedisCacheConfiguration redisCacheConfiguration,
 			CacheInvocationRegistry registry,
@@ -54,9 +55,9 @@ public class RedisProCacheManager extends RedisCacheManager {
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
 			CacheFetchStrategyManager strategyManager,
-			CacheOperationService cacheOperationService) {
-		super(cacheWriter, redisCacheConfiguration, initialCacheConfigurations);
-		this.initialCacheConfigurations = initialCacheConfigurations;
+			CacheOperationService cacheOperationService, CacheGuardProperties properties) {
+		super(cacheWriter, redisCacheConfiguration, redisCacheConfigurationMap);
+		this.redisCacheConfigurationMap = redisCacheConfigurationMap;
 		this.redisTemplate = cacheRedisTemplate;
 		this.cacheWriter = cacheWriter;
 		this.redisCacheConfiguration = redisCacheConfiguration;
@@ -68,6 +69,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 		this.cacheBreakdown = cacheBreakdown;
 		this.strategyManager = strategyManager;
 		this.cacheOperationService = cacheOperationService;
+		this.properties = properties;
 	}
 
 	@Override
@@ -75,7 +77,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 	protected Collection<RedisCache> loadCaches() {
 		List<RedisCache> caches = new LinkedList<>();
 		for (Map.Entry<String, RedisCacheConfiguration> entry :
-				getInitialCacheConfigurations().entrySet()) {
+				getRedisCacheConfigurationMap().entrySet()) {
 			caches.add(createRedisCache(entry.getKey(), entry.getValue()));
 		}
 		return caches;
@@ -86,7 +88,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 	public RedisCache createRedisCache(
 			@NonNull String name, @Nullable RedisCacheConfiguration cacheConfig) {
 		RedisCacheConfiguration config =
-				getInitialCacheConfigurations().getOrDefault(name, redisCacheConfiguration);
+				getRedisCacheConfigurationMap().getOrDefault(name, redisCacheConfiguration);
 
 		return new RedisProCache(
 				name,
@@ -100,7 +102,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 				cachePenetration,
 				cacheBreakdown,
 				strategyManager,
-				cacheOperationService);
+				cacheOperationService, properties);
 	}
 
 	public void initializeCaches() {

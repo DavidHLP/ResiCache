@@ -1,7 +1,9 @@
 package com.david.spring.cache.redis.registry;
 
+import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.registry.records.Key;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,8 +17,17 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public abstract class AbstractInvocationRegistry<T> {
 
-	protected final ConcurrentMap<Key, T> invocations = new ConcurrentHashMap<>();
-	protected final ConcurrentMap<Key, ReentrantLock> keyLocks = new ConcurrentHashMap<>();
+	@Autowired
+	private CacheGuardProperties properties;
+
+	protected final ConcurrentMap<Key, T> invocations;
+	protected final ConcurrentMap<Key, ReentrantLock> keyLocks;
+
+	public AbstractInvocationRegistry() {
+		// 使用默认配置初始化，实际配置会在Spring初始化后注入
+		this.invocations = new ConcurrentHashMap<>(256, 0.75f, 16);
+		this.keyLocks = new ConcurrentHashMap<>(256, 0.75f, 16);
+	}
 
 	/**
 	 * 标准化键值（子类可以重写以处理特殊逻辑）

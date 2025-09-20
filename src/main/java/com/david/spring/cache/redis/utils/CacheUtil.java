@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 @Data
 public class CacheUtil {
 	private final RedisProCacheManager cacheManager;
-	private final Map<String, Long> cacheTtlSeconds = new ConcurrentHashMap<>();
+	private final Map<String, Long> cacheTtlSeconds = new ConcurrentHashMap<>(32, 0.75f, 4);
 
 	public CacheUtil(RedisProCacheManager cacheManager) {
 		this.cacheManager = cacheManager;
@@ -42,7 +42,7 @@ public class CacheUtil {
 		cacheTtlSeconds.forEach(
 				(name, seconds) ->
 						cacheManager
-								.getInitialCacheConfigurations()
+								.getRedisCacheConfigurationMap()
 								.put(
 										name,
 										// 复用全局 RedisCacheConfiguration，确保序列化配置一致（JSON），仅覆盖 TTL

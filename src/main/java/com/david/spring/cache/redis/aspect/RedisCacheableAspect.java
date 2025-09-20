@@ -5,7 +5,6 @@ import com.david.spring.cache.redis.aspect.support.KeyResolver;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -32,13 +31,12 @@ public class RedisCacheableAspect {
 		this.registry = registry;
 	}
 
-	@SneakyThrows
 	@Around("@annotation(redisCacheable)")
-	public Object around(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) {
+	public Object around(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) throws Throwable {
 		try {
 			registerInvocation(joinPoint, redisCacheable);
 		} catch (Exception e) {
-			log.warn("Failed to register cached invocation: {}", e.getMessage());
+			log.warn("Failed to register cached invocation", e);
 		}
 		return joinPoint.proceed();
 	}

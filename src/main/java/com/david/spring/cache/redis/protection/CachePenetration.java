@@ -32,10 +32,10 @@ public class CachePenetration {
     private final RedissonClient redissonClient;
 
     /** 本地缓存：cacheName -> RBloomFilter 句柄（与 Redis 对象同名、同生命周期） */
-    private final ConcurrentMap<String, RBloomFilter<String>> filters = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, RBloomFilter<String>> filters = new ConcurrentHashMap<>(64, 0.75f, 8);
 
     /** 被启用 Bloom 判定的 cache 集合（只有启用后才会生效） */
-    private final Set<String> enabledCaches = ConcurrentHashMap.newKeySet();
+    private final Set<String> enabledCaches = ConcurrentHashMap.newKeySet(64);
 
     /** 计算 Bloom 对象名称（Redis Key） */
     public String bloomName(String cacheName) {

@@ -2,7 +2,6 @@ package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.core.RedisProCacheManager;
 import com.david.spring.cache.redis.lock.DistributedLock;
-import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
@@ -54,7 +53,7 @@ public class RedisCacheConfig {
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
 			CacheFetchStrategyManager strategyManager,
-			CacheOperationService cacheOperationService) {
+			CacheOperationService cacheOperationService, CacheGuardProperties properties) {
 		RedisCacheWriter cacheWriter =
 				RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
 		// Key 用 String，Value 用 JSON
@@ -99,7 +98,7 @@ public class RedisCacheConfig {
 				cachePenetration,
 				cacheBreakdown,
 				strategyManager,
-				cacheOperationService);
+				cacheOperationService, properties);
 	}
 
 
