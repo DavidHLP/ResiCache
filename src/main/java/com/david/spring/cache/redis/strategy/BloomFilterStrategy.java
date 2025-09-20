@@ -30,7 +30,7 @@ public class BloomFilterStrategy extends AbstractCacheFetchStrategy {
 
 	@Override
 	public ValueWrapper fetch(CacheFetchContext context) {
-		if (!isContextValid(context) || !context.invocationContext().useBloomFilter()) {
+		if (!isValidContext(context) || !context.invocationContext().useBloomFilter()) {
 			return context.valueWrapper();
 		}
 

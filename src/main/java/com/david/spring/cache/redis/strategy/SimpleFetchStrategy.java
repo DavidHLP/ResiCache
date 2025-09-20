@@ -24,7 +24,7 @@ public class SimpleFetchStrategy extends AbstractCacheFetchStrategy {
 
 	@Override
 	public ValueWrapper fetch(CacheFetchContext context) {
-		if (!isContextValid(context)) {
+		if (!isValidContext(context)) {
 			return null;
 		}
 

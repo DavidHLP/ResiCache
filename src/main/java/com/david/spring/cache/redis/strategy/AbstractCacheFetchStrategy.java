@@ -36,46 +36,11 @@ public abstract class AbstractCacheFetchStrategy implements CacheFetchStrategy {
 
 	protected void logDebug(String message, Object... args) {
 		if (log.isDebugEnabled()) {
-			log.debug("[{}] {}", this.getClass().getSimpleName(), String.format(message, args));
+			log.debug("[{}] {}", getClass().getSimpleName(), String.format(message, args));
 		}
 	}
 
-	protected void logInfo(String message, Object... args) {
-		log.info("[{}] {}", this.getClass().getSimpleName(), String.format(message, args));
-	}
-
-	protected void logWarn(String message, Object... args) {
-		log.warn("[{}] {}", this.getClass().getSimpleName(), String.format(message, args));
-	}
-
-	protected void logError(String message, Exception e, Object... args) {
-		log.error("[{}] {}", this.getClass().getSimpleName(), String.format(message, args), e);
-	}
-
-	protected boolean isContextValid(CacheFetchContext context) {
-		return context != null
-				&& context.cacheName() != null
-				&& context.key() != null
-				&& context.redisTemplate() != null;
-	}
-
-	protected <T> T executeWithTiming(String operation, CacheFetchContext context, java.util.function.Supplier<T> supplier) {
-		long startTime = System.currentTimeMillis();
-		try {
-			T result = supplier.get();
-			long duration = System.currentTimeMillis() - startTime;
-			if (duration > 100) {
-				log.warn("[{}] Slow {} operation: cache={}, key={}, duration={}ms",
-						this.getClass().getSimpleName(), operation, context.cacheName(), context.key(), duration);
-			}
-			return result;
-		} catch (Exception e) {
-			long duration = System.currentTimeMillis() - startTime;
-			log.error("[{}] {} failed: cache={}, key={}, duration={}ms",
-					this.getClass().getSimpleName(), operation, context.cacheName(), context.key(), duration, e);
-			throw e;
-		}
-	}
+	// 移除重复的验证方法，使用接口中的默认实现
 
 	/**
 	 * 判断是否需要预刷新
@@ -115,7 +80,7 @@ public abstract class AbstractCacheFetchStrategy implements CacheFetchStrategy {
 	 * 根据上下文信息决定是否应该执行策略
 	 */
 	protected boolean shouldExecuteStrategy(CacheFetchContext context) {
-		if (!isContextValid(context)) {
+		if (!isValidContext(context)) {
 			return false;
 		}
 

@@ -1,6 +1,7 @@
 package com.david.spring.cache.redis.cache;
 
 import com.david.spring.cache.redis.lock.DistributedLock;
+import com.david.spring.cache.redis.support.CacheExceptionHandler;
 import com.david.spring.cache.redis.lock.LockUtils;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
@@ -304,12 +305,13 @@ public class RedisProCache extends RedisCache {
 		Object toStore = cacheOperationService.wrapIfMataAbsent(value, key, cacheConfiguration, invocationContext);
 		super.put(key, toStore);
 		// 成功写入后将 key 加入布隆过滤器（值非空时）
-		try {
-			if (value != null) {
-				String membershipKey = String.valueOf(key);
-				cachePenetration.addIfEnabled(getName(), membershipKey);
-			}
-		} catch (Exception ignore) {
+		if (value != null) {
+			String membershipKey = String.valueOf(key);
+			CacheExceptionHandler.safeExecute(
+					() -> cachePenetration.addIfEnabled(getName(), membershipKey),
+					"addToBloomFilter",
+					"cache=" + getName(), "key=" + key
+			);
 		}
 		// 雪崩保护：统一调用
 		String cacheKey = createCacheKey(key);
@@ -613,28 +615,7 @@ public class RedisProCache extends RedisCache {
 	 * 判断是否为严重错误
 	 */
 	private boolean isCriticalError(Exception e) {
-		// 检查错误原因是否为严重的Error类型
-		Throwable cause = e.getCause();
-		if (cause instanceof OutOfMemoryError || cause instanceof StackOverflowError) {
-			return true;
-		}
-
-		// 检查错误消息中的关键字
-		String message = e.getMessage();
-		if (message != null) {
-			String lowerMessage = message.toLowerCase();
-			return lowerMessage.contains("redis connection")
-					|| lowerMessage.contains("timeout")
-					|| lowerMessage.contains("connection refused")
-					|| lowerMessage.contains("pool exhausted")
-					|| lowerMessage.contains("out of memory")
-					|| lowerMessage.contains("too many connections");
-		}
-
-		// 检查特定异常类型
-		return e instanceof java.util.concurrent.TimeoutException
-				|| e instanceof java.net.ConnectException
-				|| e instanceof java.io.IOException;
+		return CacheExceptionHandler.isCriticalException(e);
 	}
 
 	/**
@@ -696,13 +677,15 @@ public class RedisProCache extends RedisCache {
 	 * 获取调用上下文信息（用于TTL处理优化）
 	 */
 	private CachedInvocationContext getInvocationContext(Object key) {
-		try {
-			CachedInvocation invocation = registry.get(getName(), key).orElse(null);
-			return invocation != null ? invocation.getCachedInvocationContext() : null;
-		} catch (Exception e) {
-			log.debug("Failed to get invocation context for key: {}, error: {}", key, e.getMessage());
-			return null;
-		}
+		return CacheExceptionHandler.safeExecute(
+				() -> {
+					CachedInvocation invocation = registry.get(getName(), key).orElse(null);
+					return invocation != null ? invocation.getCachedInvocationContext() : null;
+				},
+				null,
+				"getInvocationContext",
+				"cache=" + getName(), "key=" + key
+		);
 	}
 
 	private String generateOperationId(Object key) {

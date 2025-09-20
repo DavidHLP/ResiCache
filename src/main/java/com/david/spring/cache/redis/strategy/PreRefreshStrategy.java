@@ -33,7 +33,7 @@ public class PreRefreshStrategy extends AbstractCacheFetchStrategy {
 
 	@Override
 	public ValueWrapper fetch(CacheFetchContext context) {
-		if (!isContextValid(context) || context.valueWrapper() == null) {
+		if (!isValidContext(context) || context.valueWrapper() == null) {
 			return context.valueWrapper();
 		}
 

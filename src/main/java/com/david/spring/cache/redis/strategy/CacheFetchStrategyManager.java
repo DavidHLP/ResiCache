@@ -81,7 +81,7 @@ public class CacheFetchStrategyManager {
 				long duration = System.currentTimeMillis() - startTime;
 
 				// 记录策略执行结果
-				logStrategyResult(strategy, strategyResult, duration, context);
+				logStrategyExecution(strategy, duration, context, strategyResult, null);
 
 				// 更新结果
 				if (strategyResult != null) {
@@ -97,7 +97,7 @@ public class CacheFetchStrategyManager {
 
 			} catch (Exception e) {
 				long duration = System.currentTimeMillis() - startTime;
-				handleStrategyException(strategy, e, duration, context);
+				logStrategyExecution(strategy, duration, context, null, e);
 
 				if (strategy.shouldStopOnException()) {
 					log.warn("Stopping strategy execution after exception in {}", strategy.getName());
@@ -332,38 +332,20 @@ public class CacheFetchStrategyManager {
 	}
 
 	/**
-	 * 记录策略执行结果
+	 * 记录策略执行结果和处理异常
 	 */
-	private void logStrategyResult(CacheFetchStrategy strategy, ValueWrapper result,
-	                               long duration, CacheFetchStrategy.CacheFetchContext context) {
-		if (log.isDebugEnabled()) {
-			String resultStatus = result != null ? "success" : "null";
-			if (duration > 50) { // 记录较慢的操作
-				log.debug("Strategy {} execution: result={}, duration={}ms, cache={}, key={}",
-						strategy.getName(), resultStatus, duration, context.cacheName(), context.key());
-			}
-		}
-
-		// 记录慢策略警告
-		if (duration > 200) {
+	private void logStrategyExecution(CacheFetchStrategy strategy, long duration,
+	                                  CacheFetchStrategy.CacheFetchContext context,
+	                                  ValueWrapper result, Exception exception) {
+		if (exception != null) {
+			log.error("Strategy {} failed after {}ms for cache={}, key={}: {}",
+					strategy.getName(), duration, context.cacheName(), context.key(), exception.getMessage());
+		} else if (duration > 200) {
 			log.warn("Slow strategy execution: {} took {}ms for cache={}, key={}",
 					strategy.getName(), duration, context.cacheName(), context.key());
-		}
-	}
-
-	/**
-	 * 处理策略异常
-	 */
-	private void handleStrategyException(CacheFetchStrategy strategy, Exception e,
-	                                     long duration, CacheFetchStrategy.CacheFetchContext context) {
-		log.error("Strategy {} failed after {}ms for cache={}, key={}: {}",
-				strategy.getName(), duration, context.cacheName(), context.key(), e.getMessage());
-
-		// 对于特定类型的异常，提供更详细的日志
-		if (e instanceof IllegalStateException) {
-			log.debug("Strategy configuration issue in {}: {}", strategy.getName(), e.getMessage());
-		} else if (e instanceof RuntimeException) {
-			log.debug("Runtime error in strategy {}", strategy.getName(), e);
+		} else if (log.isDebugEnabled() && duration > 50) {
+			log.debug("Strategy {} execution: result={}, duration={}ms, cache={}, key={}",
+					strategy.getName(), result != null ? "success" : "null", duration, context.cacheName(), context.key());
 		}
 	}
 
