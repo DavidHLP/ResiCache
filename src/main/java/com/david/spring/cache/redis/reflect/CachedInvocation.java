@@ -1,10 +1,11 @@
 package com.david.spring.cache.redis.reflect;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
+import com.david.spring.cache.redis.reflect.execution.InvocationExecutorManager;
+import com.david.spring.cache.redis.reflect.support.SpringContextHolder;
 import lombok.*;
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.util.MethodInvoker;
 
 import java.lang.reflect.Method;
 
@@ -40,13 +41,39 @@ public class CachedInvocation {
 
 	/**
 	 * 执行方法调用
+	 * 使用策略模式委托给执行器管理器
 	 */
 	public Object invoke() throws Exception {
-		MethodInvoker invoker = new MethodInvoker();
-		invoker.setTargetObject(targetBean);
-		invoker.setArguments(arguments);
-		invoker.setTargetMethod(targetMethod.getName());
-		invoker.prepare();
-		return invoker.invoke();
+		InvocationExecutorManager executorManager = getExecutorManager();
+		return executorManager.execute(targetBean, targetMethod, arguments);
+	}
+
+	/**
+	 * 获取执行器管理器实例
+	 */
+	private InvocationExecutorManager getExecutorManager() {
+		return SpringContextHolder.getBean(InvocationExecutorManager.class);
+	}
+
+	/**
+	 * 验证调用信息的有效性
+	 */
+	public boolean isValid() {
+		return targetBean != null
+			&& targetMethod != null
+			&& cachedInvocationContext != null;
+	}
+
+	/**
+	 * 获取方法签名的字符串表示
+	 */
+	public String getMethodSignature() {
+		if (targetMethod == null) {
+			return "unknown";
+		}
+
+		return String.format("%s#%s",
+			targetBean != null ? targetBean.getClass().getSimpleName() : "unknown",
+			targetMethod.getName());
 	}
 }

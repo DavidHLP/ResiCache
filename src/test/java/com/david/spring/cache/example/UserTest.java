@@ -6,7 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest(classes = SpringCacheRedis.class)
+@SpringBootTest(classes = SpringCacheRedis.class, properties = {
+		"logging.level.com.david.spring.cache.redis=DEBUG",
+		"logging.level.org.springframework.data.redis=DEBUG"
+})
 public class UserTest {
 	@Autowired
 	private UserService userService;

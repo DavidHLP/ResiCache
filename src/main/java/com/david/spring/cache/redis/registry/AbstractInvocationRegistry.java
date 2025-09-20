@@ -1,6 +1,9 @@
 package com.david.spring.cache.redis.registry;
 
 import com.david.spring.cache.redis.config.CacheGuardProperties;
+import com.david.spring.cache.redis.registry.interfaces.CacheEntryCleaner;
+import com.david.spring.cache.redis.registry.interfaces.InvocationRegistrar;
+import com.david.spring.cache.redis.registry.interfaces.LockProvider;
 import com.david.spring.cache.redis.registry.records.Key;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +18,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * 提供通用的注册、获取、锁管理功能
  */
 @Slf4j
-public abstract class AbstractInvocationRegistry<T> {
+public abstract class AbstractInvocationRegistry<T>
+    implements InvocationRegistrar<T>, LockProvider, CacheEntryCleaner {
 
 	@Autowired
 	private CacheGuardProperties properties;
@@ -105,5 +109,14 @@ public abstract class AbstractInvocationRegistry<T> {
 	public void clear() {
 		invocations.clear();
 		keyLocks.clear();
+	}
+
+	/**
+	 * 清理所有缓存条目 - 实现CacheEntryCleaner接口
+	 */
+	@Override
+	public void clearAll() {
+		log.info("Clearing all entries from registry: {}", getClass().getSimpleName());
+		clear();
 	}
 }

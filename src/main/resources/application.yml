@@ -1,10 +1,57 @@
-server:
-  port: 10010
-
 spring:
-  profiles:
-    active: redis
+  data:
+    redis: # 基础 Redis 连接配置
+      host: 192.168.1.106
+      port: 6379
+      database: 0
+      timeout: 1800000 # 使用毫秒格式，兼容 Redis Lettuce
+      password: Alone117
+      lettuce:
+        pool:
+          max-active: 20 # 最大连接数
+          max-idle: 5 # 最大空闲连接数
+          min-idle: 2 # 最小空闲连接数
 
-logging:
-  level:
-    com.david.spring.cache.redis: DEBUG
+# CacheGuard 配置示例
+cache:
+  guard:
+    # 双删延迟时间（毫秒）
+    double-delete-delay-ms: 300
+
+    # 注册表配置
+    registry:
+      # ConcurrentHashMap初始容量
+      initial-capacity: 256
+      # 负载因子
+      load-factor: 0.75
+      # 并发级别
+      concurrency-level: 16
+
+    # 布隆过滤器配置
+    bloom-filter:
+      # 过滤器Map初始容量
+      filter-map-initial-capacity: 64
+      # 启用缓存Set初始容量
+      enabled-cache-set-initial-capacity: 64
+      # 布隆过滤器前缀
+      bloom-prefix: "bf:cache:"
+
+    # 缓存清理配置
+    cleanup:
+      # 是否启用自动清理
+      enabled: true
+      # 清理间隔（毫秒，1小时）
+      interval-ms: 3600000
+      # 锁最大空闲时间（毫秒，30分钟）
+      lock-max-idle-time-ms: 1800000
+      # 调用信息最大空闲时间（毫秒，30分钟）
+      invocation-max-idle-time-ms: 1800000
+
+    # 监控配置
+    metrics:
+      # 是否启用指标监控
+      enabled: true
+      # 指标前缀
+      prefix: "cache.guard"
+      # 是否记录详细指标（包含缓存名称标签）
+      detailed: true
