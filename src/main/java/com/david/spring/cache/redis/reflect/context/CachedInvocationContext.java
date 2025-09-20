@@ -43,7 +43,6 @@ public record CachedInvocationContext(
 
 		/* 是否使用分布式锁 */
 		boolean distributedLock,
-
 		/* 分布式锁名称 */
 		String distributedLockName,
 

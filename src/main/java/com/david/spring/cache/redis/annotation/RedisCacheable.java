@@ -56,5 +56,30 @@ public @interface RedisCacheable {
 	boolean randomTtl() default false;
 
 	float variance() default 0.2f;
+
+	/**
+	 * 缓存获取策略类型
+	 */
+	String fetchStrategy() default "SIMPLE";
+
+	/**
+	 * 是否启用预刷新
+	 */
+	boolean enablePreRefresh() default false;
+
+	/**
+	 * 预刷新阈值百分比（当剩余TTL低于总TTL的此百分比时触发）
+	 */
+	double preRefreshThreshold() default 0.3;
+
+	/**
+	 * 分布式锁名称
+	 */
+	String distributedLockName() default "";
+
+	/**
+	 * 自定义策略类名
+	 */
+	String customStrategyClass() default "";
 }
 

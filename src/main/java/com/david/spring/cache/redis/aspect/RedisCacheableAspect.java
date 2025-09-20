@@ -77,8 +77,13 @@ public class RedisCacheableAspect {
 										.variance(redisCacheable.variance())
 										.cacheNullValues(redisCacheable.cacheNullValues())
 										.distributedLock(redisCacheable.distributedLock())
+										.distributedLockName(nullToEmpty(redisCacheable.distributedLockName()))
 										.internalLock(redisCacheable.internalLock())
 										.useSecondLevelCache(redisCacheable.useSecondLevelCache())
+										.fetchStrategy(parseFetchStrategyType(redisCacheable.fetchStrategy()))
+										.enablePreRefresh(redisCacheable.enablePreRefresh())
+										.preRefreshThreshold(redisCacheable.preRefreshThreshold())
+										.customStrategyClass(nullToEmpty(redisCacheable.customStrategyClass()))
 										.build())
 						.build();
 
@@ -96,6 +101,19 @@ public class RedisCacheableAspect {
 	private Object resolveCacheKey(
 			Object targetBean, Method method, Object[] arguments, RedisCacheable redisCacheable) {
 		return KeyResolver.resolveKey(targetBean, method, arguments, redisCacheable.keyGenerator());
+	}
+
+	private CachedInvocationContext.FetchStrategyType parseFetchStrategyType(String strategyType) {
+		if (strategyType == null || strategyType.trim().isEmpty()) {
+			return CachedInvocationContext.FetchStrategyType.AUTO;
+		}
+
+		try {
+			return CachedInvocationContext.FetchStrategyType.valueOf(strategyType.trim().toUpperCase());
+		} catch (IllegalArgumentException e) {
+			log.warn("Invalid fetch strategy type: {}, defaulting to AUTO", strategyType);
+			return CachedInvocationContext.FetchStrategyType.AUTO;
+		}
 	}
 
 	private Method getSpecificMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {

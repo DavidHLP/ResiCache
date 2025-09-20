@@ -1,8 +1,10 @@
 package com.david.spring.cache.redis.strategy;
 
+import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.Cache.ValueWrapper;
 import org.springframework.stereotype.Component;
 
@@ -16,52 +18,104 @@ import java.util.concurrent.Executor;
 @Component
 public class BloomFilterStrategy extends AbstractCacheFetchStrategy {
 
-    public BloomFilterStrategy(CacheInvocationRegistry registry, Executor executor,
-                              CacheOperationService cacheOperationService) {
-        super(registry, executor, cacheOperationService);
-    }
+	private final CachePenetration cachePenetration;
 
-    @Override
-    public ValueWrapper fetch(CacheFetchContext context) {
-        if (!context.invocationContext().useBloomFilter()) {
-            return context.valueWrapper();
-        }
+	public BloomFilterStrategy(CacheInvocationRegistry registry,
+	                           @Qualifier("cacheRefreshExecutor") Executor executor,
+	                           CacheOperationService cacheOperationService,
+	                           CachePenetration cachePenetration) {
+		super(registry, executor, cacheOperationService);
+		this.cachePenetration = cachePenetration;
+	}
 
-        // 如果启用了布隆过滤器，先检查布隆过滤器
-        if (context.valueWrapper() == null) {
-            boolean mightExist = checkBloomFilter(context);
-            if (!mightExist) {
-                logDebug("Bloom filter indicates key does not exist: cache={}, key={}",
-                        context.cacheName(), context.key());
-                // 返回null，避免查询数据库
-                return null;
-            }
-        } else {
-            // 如果缓存存在，更新布隆过滤器
-            updateBloomFilter(context);
-        }
+	@Override
+	public ValueWrapper fetch(CacheFetchContext context) {
+		if (!isContextValid(context) || !context.invocationContext().useBloomFilter()) {
+			return context.valueWrapper();
+		}
 
-        return context.valueWrapper();
-    }
+		CachedInvocationContext invocationContext = context.invocationContext();
 
-    @Override
-    public boolean supports(CachedInvocationContext invocationContext) {
-        return invocationContext.useBloomFilter();
-    }
+		if (context.valueWrapper() == null) {
+			if (!checkBloomFilter(context)) {
+				logDebug("Bloom filter blocked key: cache=%s, key=%s", context.cacheName(), context.key());
 
-    @Override
-    public int getOrder() {
-        return 5; // 在预刷新之前执行
-    }
+				// 如果配置了缓存空值，仍然阻止查询
+				if (invocationContext.cacheNullValues()) {
+					logDebug("Bloom filter blocking despite cacheNullValues=true: cache=%s, key=%s",
+							context.cacheName(), context.key());
+				}
 
-    private boolean checkBloomFilter(CacheFetchContext context) {
-        // TODO: 实现布隆过滤器检查逻辑
-        // 这里需要集成实际的布隆过滤器实现
-        return true;
-    }
+				return null;
+			}
+		} else {
+			// 只有在值非空时才更新布隆过滤器
+			if (context.valueWrapper().get() != null || invocationContext.cacheNullValues()) {
+				updateBloomFilter(context);
+			}
+		}
 
-    private void updateBloomFilter(CacheFetchContext context) {
-        // TODO: 实现布隆过滤器更新逻辑
-        // 将key添加到布隆过滤器中
-    }
+		return context.valueWrapper();
+	}
+
+	@Override
+	public boolean supports(CachedInvocationContext invocationContext) {
+		// 支持布隆过滤器功能或明确指定为BLOOM_FILTER策略
+		return invocationContext.useBloomFilter()
+				|| invocationContext.fetchStrategy() == CachedInvocationContext.FetchStrategyType.BLOOM_FILTER;
+	}
+
+	@Override
+	public int getOrder() {
+		return 5; // 在预刷新之前执行
+	}
+
+	@Override
+	public boolean shouldStopOnNull() {
+		return true; // 布隆过滤器返回null时应该停止后续策略
+	}
+
+	@Override
+	public boolean isStrategyTypeCompatible(CachedInvocationContext.FetchStrategyType strategyType) {
+		return strategyType == CachedInvocationContext.FetchStrategyType.AUTO
+			|| strategyType == CachedInvocationContext.FetchStrategyType.BLOOM_FILTER;
+	}
+
+	@Override
+	public boolean validateContextRequirements(CachedInvocationContext context) {
+		// 布隆过滤器特定验证
+		if (!super.validateContextRequirements(context)) {
+			return false;
+		}
+
+		// 布隆过滤器应该启用
+		if (!context.useBloomFilter() && context.fetchStrategy() == CachedInvocationContext.FetchStrategyType.BLOOM_FILTER) {
+			return false;
+		}
+
+		return true;
+	}
+
+	private boolean checkBloomFilter(CacheFetchContext context) {
+		String membershipKey = String.valueOf(context.key());
+		boolean mightExist = cachePenetration.mightContain(context.cacheName(), membershipKey);
+
+		logDebug("Bloom filter check: cache={}, key={}, mightExist={}",
+				context.cacheName(), membershipKey, mightExist);
+
+		return mightExist;
+	}
+
+	private void updateBloomFilter(CacheFetchContext context) {
+		try {
+			String membershipKey = String.valueOf(context.key());
+			cachePenetration.addIfEnabled(context.cacheName(), membershipKey);
+
+			logDebug("Added key to bloom filter: cache={}, key={}",
+					context.cacheName(), membershipKey);
+		} catch (Exception e) {
+			logDebug("Failed to update bloom filter: cache={}, key={}, error={}",
+					context.cacheName(), context.key(), e.getMessage());
+		}
+	}
 }

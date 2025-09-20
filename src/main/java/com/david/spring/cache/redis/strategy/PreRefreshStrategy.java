@@ -33,23 +33,25 @@ public class PreRefreshStrategy extends AbstractCacheFetchStrategy {
 
 	@Override
 	public ValueWrapper fetch(CacheFetchContext context) {
-		if (context.valueWrapper() == null) {
-			return null;
+		if (!isContextValid(context) || context.valueWrapper() == null) {
+			return context.valueWrapper();
 		}
 
 		try {
 			long ttl = getCacheTtl(context);
+			if (ttl <= 0) {
+				return context.valueWrapper();
+			}
+
 			long configuredTtl = context.callback()
 					.resolveConfiguredTtlSeconds(context.valueWrapper().get(), context.key());
-
-			logDebug("Pre-refresh check: name={}, key={}, ttl={}, configuredTtl={}",
-					context.cacheName(), context.cacheKey(), ttl, configuredTtl);
 
 			if (shouldTriggerRefresh(ttl, configuredTtl, context)) {
 				triggerAsyncRefresh(context, ttl, configuredTtl);
 			}
 		} catch (Exception e) {
-			log.debug("Skip pre-refresh due to error: {}", e.getMessage());
+			log.warn("Pre-refresh failed: cache={}, key={}, error={}",
+					context.cacheName(), context.key(), e.getMessage());
 		}
 
 		return context.valueWrapper();
@@ -57,14 +59,41 @@ public class PreRefreshStrategy extends AbstractCacheFetchStrategy {
 
 	@Override
 	public boolean supports(CachedInvocationContext invocationContext) {
-		// 支持有TTL配置且启用了锁机制的场景
-		return invocationContext.ttl() > 0
-				&& (invocationContext.distributedLock() || invocationContext.internalLock());
+		// 支持预刷新功能或有TTL配置且启用了锁机制的场景
+		return invocationContext.enablePreRefresh()
+				|| (invocationContext.ttl() > 0
+					&& (invocationContext.distributedLock() || invocationContext.internalLock()));
 	}
 
 	@Override
 	public int getOrder() {
 		return 10; // 高优先级
+	}
+
+	@Override
+	public boolean isStrategyTypeCompatible(CachedInvocationContext.FetchStrategyType strategyType) {
+		return strategyType == CachedInvocationContext.FetchStrategyType.AUTO
+			|| strategyType == CachedInvocationContext.FetchStrategyType.PRE_REFRESH;
+	}
+
+	@Override
+	public boolean validateContextRequirements(CachedInvocationContext context) {
+		// 预刷新特定验证
+		if (!super.validateContextRequirements(context)) {
+			return false;
+		}
+
+		// 预刷新需要有效的TTL或启用预刷新功能
+		if (context.enablePreRefresh() && context.ttl() <= 0) {
+			return false;
+		}
+
+		// 如果启用预刷新，需要有锁机制
+		if (context.enablePreRefresh() && !context.distributedLock() && !context.internalLock()) {
+			return false;
+		}
+
+		return true;
 	}
 
 	private boolean shouldTriggerRefresh(long ttl, long configuredTtl, CacheFetchContext context) {
@@ -77,13 +106,12 @@ public class PreRefreshStrategy extends AbstractCacheFetchStrategy {
 
 	private void triggerAsyncRefresh(CacheFetchContext context, long ttl, long configuredTtl) {
 		ReentrantLock lock = obtainLocalLock(context);
-
 		executor.execute(() -> {
 			try {
 				executeRefreshWithLocks(context, lock, ttl, configuredTtl);
 			} catch (Exception ex) {
-				log.warn("Cache pre-refresh error, name={}, key={}, err={}",
-						context.cacheName(), context.cacheKey(), ex.getMessage());
+				log.warn("Async refresh failed: cache={}, key={}, error={}",
+						context.cacheName(), context.key(), ex.getMessage());
 			}
 		});
 	}
