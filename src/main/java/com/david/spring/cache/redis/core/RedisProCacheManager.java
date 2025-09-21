@@ -5,8 +5,7 @@ import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
 import com.david.spring.cache.redis.strategy.CacheOperationService;
 import jakarta.annotation.Nonnull;
@@ -31,8 +30,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 	private final Map<String, RedisCacheConfiguration> redisCacheConfigurationMap;
 	private final RedisTemplate<String, Object> redisTemplate;
 	private final RedisCacheWriter cacheWriter;
-	private final CacheInvocationRegistry registry;
-	private final EvictInvocationRegistry evictRegistry;
+	private final RegistryFactory registryFactory;
 	private final Executor executor;
 	@Getter
 	private final RedisCacheConfiguration redisCacheConfiguration;
@@ -48,8 +46,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 			Map<String, RedisCacheConfiguration> redisCacheConfigurationMap,
 			RedisTemplate<String, Object> cacheRedisTemplate,
 			RedisCacheConfiguration redisCacheConfiguration,
-			CacheInvocationRegistry registry,
-			EvictInvocationRegistry evictRegistry,
+			RegistryFactory registryFactory,
 			Executor executor,
 			DistributedLock distributedLock,
 			CachePenetration cachePenetration,
@@ -61,8 +58,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 		this.redisTemplate = cacheRedisTemplate;
 		this.cacheWriter = cacheWriter;
 		this.redisCacheConfiguration = redisCacheConfiguration;
-		this.registry = registry;
-		this.evictRegistry = evictRegistry;
+		this.registryFactory = registryFactory;
 		this.executor = executor;
 		this.distributedLock = distributedLock;
 		this.cachePenetration = cachePenetration;
@@ -95,8 +91,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 				cacheWriter,
 				config,
 				redisTemplate,
-				registry,
-				evictRegistry,
+				registryFactory,
 				executor,
 				distributedLock,
 				cachePenetration,

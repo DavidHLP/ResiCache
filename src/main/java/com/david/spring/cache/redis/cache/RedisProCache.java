@@ -7,8 +7,7 @@ import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.CacheFetchStrategy;
 import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
 import com.david.spring.cache.redis.strategy.CacheOperationService;
@@ -37,8 +36,7 @@ public class RedisProCache extends RedisCache {
 
 	private final CacheGuardProperties properties;
 	private final RedisTemplate<String, Object> redisTemplate;
-	private final CacheInvocationRegistry registry;
-	private final EvictInvocationRegistry evictRegistry;
+	private final RegistryFactory registryFactory;
 	private final Executor executor;
 	private final RedisCacheConfiguration cacheConfiguration;
 	private final DistributedLock distributedLock;
@@ -49,7 +47,6 @@ public class RedisProCache extends RedisCache {
 
 	// 新增的工具类
 	private final CacheContextValidator validator;
-	private final CacheMonitor monitor;
 	private final CacheExecutionHandler executionHandler;
 
 	public RedisProCache(
@@ -57,8 +54,7 @@ public class RedisProCache extends RedisCache {
 			RedisCacheWriter cacheWriter,
 			RedisCacheConfiguration cacheConfiguration,
 			RedisTemplate<String, Object> redisTemplate,
-			CacheInvocationRegistry registry,
-			EvictInvocationRegistry evictRegistry,
+			RegistryFactory registryFactory,
 			Executor executor,
 			DistributedLock distributedLock,
 			CachePenetration cachePenetration,
@@ -68,8 +64,7 @@ public class RedisProCache extends RedisCache {
 			CacheGuardProperties properties) {
 		super(name, cacheWriter, cacheConfiguration);
 		this.redisTemplate = Objects.requireNonNull(redisTemplate);
-		this.registry = Objects.requireNonNull(registry);
-		this.evictRegistry = Objects.requireNonNull(evictRegistry);
+		this.registryFactory = Objects.requireNonNull(registryFactory);
 		this.executor = Objects.requireNonNull(executor);
 		this.cacheConfiguration = Objects.requireNonNull(cacheConfiguration);
 		this.distributedLock = Objects.requireNonNull(distributedLock);
@@ -81,8 +76,6 @@ public class RedisProCache extends RedisCache {
 
 		// 初始化工具类
 		this.validator = new CacheContextValidator(strategyManager);
-		this.monitor = new CacheMonitor(name, cacheConfiguration, redisTemplate,
-				registry, evictRegistry, strategyManager, validator);
 		this.executionHandler = new CacheExecutionHandler(name, strategyManager,
 				cacheOperationService, validator);
 
@@ -125,7 +118,7 @@ public class RedisProCache extends RedisCache {
 	public ValueWrapper get(@NonNull Object key) {
 		ValueWrapper baseValue = super.get(key);
 
-		CachedInvocation invocation = registry.get(getName(), key).orElse(null);
+		CachedInvocation invocation = registryFactory.getCacheInvocationRegistry().get(getName(), key).orElse(null);
 		if (invocation == null || invocation.getCachedInvocationContext() == null) {
 			log.debug("No invocation context found for cache: {}, key: {}, returning value as-is",
 					getName(), key);
@@ -220,7 +213,7 @@ public class RedisProCache extends RedisCache {
 	public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
 		String cacheKey = createCacheKey(key);
 		String membershipKey = String.valueOf(key);
-		ReentrantLock localLock = registry.obtainLock(getName(), key);
+		ReentrantLock localLock = registryFactory.getCacheInvocationRegistry().obtainLock(getName(), key);
 		String distKey = "cache:load:" + cacheKey;
 		long leaseTimeSec = 30L; // 防御性租期，避免锁永久占用
 		log.debug(
@@ -282,7 +275,7 @@ public class RedisProCache extends RedisCache {
 	@Override
 	public void evict(@NonNull Object key) {
 		String cacheKey = createCacheKey(key);
-		ReentrantLock localLock = evictRegistry.obtainLock(getName(), key);
+		ReentrantLock localLock = registryFactory.getEvictInvocationRegistry().obtainLock(getName(), key);
 		String distKey = "cache:evict:" + cacheKey;
 		long leaseTimeSec = 10L;
 		boolean executed = LockUtils.runWithLocalTryThenDistTry(
@@ -306,7 +299,7 @@ public class RedisProCache extends RedisCache {
 	@Override
 	public void clear() {
 		String distKey = "cache:evictAll:" + getName();
-		ReentrantLock localLock = evictRegistry.obtainLock(getName(), "*");
+		ReentrantLock localLock = registryFactory.getEvictInvocationRegistry().obtainLock(getName(), "*");
 		long leaseTimeSec = 15L;
 		boolean executed = LockUtils.runWithLocalTryThenDistTry(
 				localLock,
@@ -336,7 +329,7 @@ public class RedisProCache extends RedisCache {
 	private CachedInvocationContext getInvocationContext(Object key) {
 		return CacheExceptionHandler.safeExecute(
 				() -> {
-					CachedInvocation invocation = registry.get(getName(), key).orElse(null);
+					CachedInvocation invocation = registryFactory.getCacheInvocationRegistry().get(getName(), key).orElse(null);
 					return invocation != null ? invocation.getCachedInvocationContext() : null;
 				},
 				null,
@@ -345,21 +338,6 @@ public class RedisProCache extends RedisCache {
 		);
 	}
 
-	public String getStrategyStatus() {
-		return monitor.getStrategyStatus();
-	}
-
-	public String getCacheMonitoringInfo() {
-		return monitor.getCacheMonitoringInfo();
-	}
-
-	public String getContextUsageStats() {
-		return monitor.getContextUsageStats();
-	}
-
-	public boolean isHealthy() {
-		return monitor.isHealthy();
-	}
 
 	@Override
 	protected Object fromStoreValue(@Nullable Object storeValue) {
@@ -375,12 +353,12 @@ public class RedisProCache extends RedisCache {
 			getCacheWriter().remove(getName(), createAndConvertCacheKey(key));
 		} finally {
 			try {
-				registry.remove(getName(), key);
+				registryFactory.getCacheInvocationRegistry().remove(getName(), key);
 			} catch (Exception e) {
 				log.debug("Failed to remove key from cache registry: cache={}, key={}", getName(), key, e);
 			}
 			try {
-				evictRegistry.remove(getName(), key);
+				registryFactory.getEvictInvocationRegistry().remove(getName(), key);
 			} catch (Exception e) {
 				log.debug("Failed to remove key from evict registry: cache={}, key={}", getName(), key, e);
 			}
@@ -395,7 +373,7 @@ public class RedisProCache extends RedisCache {
 				() -> {
 					String cacheKey = createCacheKey(key);
 					String distKey = "cache:evict:" + cacheKey;
-					ReentrantLock localLock = evictRegistry.obtainLock(getName(), key);
+					ReentrantLock localLock = registryFactory.getEvictInvocationRegistry().obtainLock(getName(), key);
 					LockUtils.runWithLocalTryThenDistTry(
 							localLock,
 							distributedLock,
@@ -414,12 +392,12 @@ public class RedisProCache extends RedisCache {
 			super.clear();
 		} finally {
 			try {
-				registry.removeAll(getName());
+				registryFactory.getCacheInvocationRegistry().removeAll(getName());
 			} catch (Exception e) {
 				log.debug("Failed to clear cache registry: cache={}", getName(), e);
 			}
 			try {
-				evictRegistry.removeAll(getName());
+				registryFactory.getEvictInvocationRegistry().removeAll(getName());
 			} catch (Exception e) {
 				log.debug("Failed to clear evict registry: cache={}", getName(), e);
 			}
@@ -433,7 +411,7 @@ public class RedisProCache extends RedisCache {
 		CompletableFuture.runAsync(
 				() -> {
 					String distKey = "cache:evictAll:" + getName();
-					ReentrantLock localLock = evictRegistry.obtainLock(getName(), "*");
+					ReentrantLock localLock = registryFactory.getEvictInvocationRegistry().obtainLock(getName(), "*");
 					LockUtils.runWithLocalTryThenDistTry(
 							localLock,
 							distributedLock,
@@ -445,4 +423,270 @@ public class RedisProCache extends RedisCache {
 				},
 				delayed);
 	}
+
+	/**
+	 * 缓存上下文验证器内部类
+	 */
+		private record CacheContextValidator(CacheFetchStrategyManager strategyManager) {
+
+		public boolean isValidInvocationContext(CachedInvocationContext context) {
+				if (context == null) {
+					return false;
+				}
+
+				if (!validateBasicProperties(context)) {
+					return false;
+				}
+
+				if (!validateNumericRanges(context)) {
+					return false;
+				}
+
+				if (!validateLogicalConsistency(context)) {
+					return false;
+				}
+
+				validateLockConfiguration(context);
+
+				return true;
+			}
+
+			public boolean isValidFetchContext(CacheFetchStrategy.CacheFetchContext context) {
+				return context != null
+						&& context.cacheName() != null
+						&& context.key() != null
+						&& context.cacheKey() != null
+						&& context.redisTemplate() != null
+						&& context.callback() != null;
+			}
+
+			public boolean shouldExecuteStrategies(CachedInvocationContext invocationContext,
+			                                       ValueWrapper baseValue) {
+				if (invocationContext.fetchStrategy() == CachedInvocationContext.FetchStrategyType.SIMPLE) {
+					return baseValue == null || invocationContext.cacheNullValues();
+				}
+
+				if (invocationContext.useBloomFilter()) {
+					return true;
+				}
+
+				if (invocationContext.enablePreRefresh() && baseValue != null) {
+					return true;
+				}
+
+				if (baseValue == null) {
+					return true;
+				}
+
+				return invocationContext.distributedLock() || invocationContext.internalLock();
+			}
+
+			private boolean validateBasicProperties(CachedInvocationContext context) {
+				if (context.cacheNames() == null || context.cacheNames().length == 0) {
+					log.debug("Invalid context: missing cache names");
+					return false;
+				}
+
+				if (context.fetchStrategy() == null) {
+					log.debug("Invalid context: missing fetch strategy");
+					return false;
+				}
+				return true;
+			}
+
+			private boolean validateNumericRanges(CachedInvocationContext context) {
+				if (context.variance() < 0 || context.variance() > 1) {
+					log.debug("Invalid context: variance {} out of range [0,1]", context.variance());
+					return false;
+				}
+
+				if (context.preRefreshThreshold() < 0 || context.preRefreshThreshold() > 1) {
+					log.debug("Invalid context: preRefreshThreshold {} out of range [0,1]", context.preRefreshThreshold());
+					return false;
+				}
+				return true;
+			}
+
+			private boolean validateLogicalConsistency(CachedInvocationContext context) {
+				if (context.enablePreRefresh() && context.ttl() <= 0) {
+					log.debug("Invalid context: preRefresh enabled but TTL <= 0");
+					return false;
+				}
+
+				if (context.randomTtl() && context.variance() <= 0) {
+					log.debug("Invalid context: randomTtl enabled but variance <= 0");
+					return false;
+				}
+				return true;
+			}
+
+			private void validateLockConfiguration(CachedInvocationContext context) {
+				if (context.distributedLock() &&
+						(context.distributedLockName() == null || context.distributedLockName().trim().isEmpty())) {
+					log.debug("Invalid context: distributedLock enabled but no lock name specified");
+				}
+			}
+		}
+
+	/**
+	 * 缓存执行处理器内部类
+	 */
+		private record CacheExecutionHandler(String cacheName, CacheFetchStrategyManager strategyManager,
+		                                     CacheOperationService cacheOperationService, CacheContextValidator validator) {
+
+		public CacheFetchStrategy.CacheFetchCallback createFetchCallback(Cache cache) {
+				return new CacheFetchStrategy.CacheFetchCallback() {
+					@Override
+					public ValueWrapper getBaseValue(Object key) {
+						return cache.get(key);
+					}
+
+					@Override
+					public void refresh(CachedInvocation invocation, Object key, String cacheKey, long ttl) {
+						try {
+							CacheOperationService.CacheRefreshCallback refreshCallback = new CacheOperationService.CacheRefreshCallback() {
+								@Override
+								public void putCache(Object key, Object value) {
+									cache.put(key, value);
+								}
+
+								@Override
+								public String getCacheName() {
+									return cacheName;
+								}
+							};
+							cacheOperationService.doRefresh(invocation, key, cacheKey, ttl, refreshCallback);
+						} catch (Exception e) {
+							log.error("Cache refresh failed for cache: {}, key: {}, error: {}",
+									cacheName, key, e.getMessage(), e);
+						}
+					}
+
+					@Override
+					public long resolveConfiguredTtlSeconds(Object value, Object key) {
+						try {
+							return cacheOperationService.resolveConfiguredTtlSeconds(value, key, null);
+						} catch (Exception e) {
+							log.warn("Failed to resolve TTL for cache: {}, key: {}, using default", cacheName, key);
+							return -1L;
+						}
+					}
+
+					@Override
+					public boolean shouldPreRefresh(long ttl, long configuredTtl) {
+						try {
+							return cacheOperationService.shouldPreRefresh(ttl, configuredTtl);
+						} catch (Exception e) {
+							log.debug("Pre-refresh check failed for cache: {}, defaulting to false", cacheName);
+							return false;
+						}
+					}
+				};
+			}
+
+			public CacheFetchStrategy.CacheFetchContext createFetchContext(Object key,
+			                                                               String cacheKey,
+			                                                               ValueWrapper valueWrapper,
+			                                                               CachedInvocation invocation,
+			                                                               RedisTemplate<String, Object> redisTemplate,
+			                                                               CacheFetchStrategy.CacheFetchCallback callback) {
+				return new CacheFetchStrategy.CacheFetchContext(
+						cacheName,
+						key,
+						cacheKey,
+						valueWrapper,
+						invocation,
+						invocation.getCachedInvocationContext(),
+						redisTemplate,
+						callback
+				);
+			}
+
+			public ValueWrapper executeStrategiesWithFallback(CacheFetchStrategy.CacheFetchContext context,
+			                                                  ValueWrapper fallbackValue,
+			                                                  Object key) {
+				long startTime = System.currentTimeMillis();
+				String operationId = generateOperationId(key);
+
+				try {
+					log.debug("[{}] Starting strategy execution for cache: {}, key: {}", operationId, cacheName, key);
+
+					if (strategyManager == null) {
+						log.error("[{}] Strategy manager is null, using fallback", operationId);
+						return fallbackValue;
+					}
+
+					ValueWrapper result = strategyManager.fetch(context);
+					long duration = System.currentTimeMillis() - startTime;
+
+					if (result != null) {
+						log.debug("[{}] Strategy execution successful in {}ms for cache: {}, key: {}",
+								operationId, duration, cacheName, key);
+						return result;
+					} else {
+						log.debug("[{}] Strategy execution returned null in {}ms for cache: {}, key: {}, using fallback",
+								operationId, duration, cacheName, key);
+						return handleNullResult(context, fallbackValue, operationId);
+					}
+
+				} catch (IllegalStateException e) {
+					long duration = System.currentTimeMillis() - startTime;
+					log.warn("[{}] Strategy configuration error in {}ms for cache: {}, key: {}: {}, using fallback",
+							operationId, duration, cacheName, key, e.getMessage());
+					return fallbackValue;
+
+				} catch (SecurityException e) {
+					long duration = System.currentTimeMillis() - startTime;
+					log.error("[{}] Security error in {}ms for cache: {}, key: {}: {}, using fallback",
+							operationId, duration, cacheName, key, e.getMessage());
+					return fallbackValue;
+
+				} catch (Exception e) {
+					long duration = System.currentTimeMillis() - startTime;
+					log.error("[{}] Strategy execution failed in {}ms for cache: {}, key: {}: {}, using fallback",
+							operationId, duration, cacheName, key, e.getMessage(), e);
+
+					if (isCriticalError(e)) {
+						handleCriticalError(context, e, operationId);
+					}
+
+					return fallbackValue;
+				}
+			}
+
+			private ValueWrapper handleNullResult(CacheFetchStrategy.CacheFetchContext context,
+			                                      ValueWrapper fallbackValue,
+			                                      String operationId) {
+				CachedInvocationContext invocationContext = context.invocationContext();
+
+				if (invocationContext.cacheNullValues()) {
+					log.debug("[{}] Null result accepted due to cacheNullValues=true", operationId);
+					return null;
+				}
+
+				return fallbackValue;
+			}
+
+			private boolean isCriticalError(Exception e) {
+				return CacheExceptionHandler.isCriticalException(e);
+			}
+
+			private void handleCriticalError(CacheFetchStrategy.CacheFetchContext context,
+			                                 Exception e,
+			                                 String operationId) {
+				log.error("[{}] Critical error detected in cache strategy execution: {}", operationId, e.getMessage());
+
+				try {
+					if (context.redisTemplate() != null) {
+						// 可以添加连接池状态检查等
+					}
+				} catch (Exception cleanupError) {
+					log.error("[{}] Error during critical error cleanup: {}", operationId, cleanupError.getMessage());
+				}
+			}
+
+			private String generateOperationId(Object key) {
+				return String.format("%s-%d", String.valueOf(key).hashCode(), System.currentTimeMillis() % 10000);
+			}
+		}
 }

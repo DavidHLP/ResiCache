@@ -4,8 +4,7 @@ import com.david.spring.cache.redis.core.RedisProCacheManager;
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
 import com.david.spring.cache.redis.strategy.CacheOperationService;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -46,8 +45,7 @@ public class RedisCacheConfig {
 	@ConditionalOnMissingBean(RedisProCacheManager.class)
 	public RedisProCacheManager cacheManager(
 			RedisConnectionFactory connectionFactory,
-			CacheInvocationRegistry registry,
-			EvictInvocationRegistry evictRegistry,
+			RegistryFactory registryFactory,
 			Executor cacheRefreshExecutor,
 			DistributedLock distributedLock,
 			CachePenetration cachePenetration,
@@ -91,8 +89,7 @@ public class RedisCacheConfig {
 				initialCacheConfiguration,
 				redisTemplate,
 				defaultCacheConfig,
-				registry,
-				evictRegistry,
+				registryFactory,
 				cacheRefreshExecutor,
 				distributedLock,
 				cachePenetration,

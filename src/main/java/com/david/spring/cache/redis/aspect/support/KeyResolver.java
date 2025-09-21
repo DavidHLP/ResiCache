@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.aspect.support;
 
-import com.david.spring.cache.redis.reflect.support.ContextBeanSupport;
+import com.david.spring.cache.redis.reflect.support.SpringContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
@@ -35,8 +35,7 @@ public final class KeyResolver {
 		}
 
 		try {
-			KeyGenerator generator =
-					ContextBeanSupport.resolveKeyGenerator(null, keyGeneratorBeanName);
+			KeyGenerator generator = resolveKeyGenerator(keyGeneratorBeanName);
 			if (generator != null) {
 				return generator.generate(targetBean, method, arguments);
 			}
@@ -122,5 +121,33 @@ public final class KeyResolver {
 			}
 		}
 		return ctx;
+	}
+
+	/**
+	 * 解析KeyGenerator Bean，优先按名称解析，失败则按类型解析
+	 *
+	 * @param name KeyGenerator Bean名称
+	 * @return KeyGenerator实例，如果解析失败返回null
+	 */
+	private static KeyGenerator resolveKeyGenerator(String name) {
+		log.debug("Resolving KeyGenerator with name: {}", name);
+		if (name != null && !name.isBlank()) {
+			KeyGenerator bean = SpringContextHolder.getBean(name, KeyGenerator.class);
+			if (bean != null) {
+				log.debug("Successfully resolved KeyGenerator by name: {}", name);
+				return bean;
+			} else {
+				log.debug("KeyGenerator not found by name: {}, trying by type", name);
+			}
+		}
+
+		KeyGenerator byType = SpringContextHolder.getBean(KeyGenerator.class);
+		if (byType != null) {
+			log.debug("Successfully resolved KeyGenerator by type");
+			return byType;
+		} else {
+			log.warn("No KeyGenerator found by name or type");
+		}
+		return null;
 	}
 }

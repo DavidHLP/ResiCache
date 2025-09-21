@@ -2,7 +2,7 @@ package com.david.spring.cache.redis.strategy;
 
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.Cache.ValueWrapper;
@@ -20,11 +20,11 @@ public class BloomFilterStrategy extends AbstractCacheFetchStrategy {
 
 	private final CachePenetration cachePenetration;
 
-	public BloomFilterStrategy(CacheInvocationRegistry registry,
+	public BloomFilterStrategy(RegistryFactory registryFactory,
 	                           @Qualifier("cacheRefreshExecutor") Executor executor,
 	                           CacheOperationService cacheOperationService,
 	                           CachePenetration cachePenetration) {
-		super(registry, executor, cacheOperationService);
+		super(registryFactory, executor, cacheOperationService);
 		this.cachePenetration = cachePenetration;
 	}
 

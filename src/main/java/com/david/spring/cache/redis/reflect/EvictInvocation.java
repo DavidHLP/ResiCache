@@ -2,6 +2,7 @@ package com.david.spring.cache.redis.reflect;
 
 import com.david.spring.cache.redis.reflect.context.EvictInvocationContext;
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.util.MethodInvoker;
@@ -13,6 +14,7 @@ import java.lang.reflect.Method;
  * 封装缓存驱逐方法调用的上下文信息
  * 仅用于记录与注册，实际驱逐由 Spring Cache @CacheEvict 机制执行
  */
+@Slf4j
 @Getter
 @Builder
 @AllArgsConstructor
@@ -43,11 +45,49 @@ public class EvictInvocation {
 	 * 执行方法调用
 	 */
 	public Object invoke() throws Exception {
-		MethodInvoker invoker = new MethodInvoker();
-		invoker.setTargetObject(targetBean);
-		invoker.setArguments(arguments);
-		invoker.setTargetMethod(targetMethod.getName());
-		invoker.prepare();
-		return invoker.invoke();
+		long startTime = System.currentTimeMillis();
+
+		try {
+			MethodInvoker invoker = new MethodInvoker();
+			invoker.setTargetObject(targetBean);
+			invoker.setArguments(arguments);
+			invoker.setTargetMethod(targetMethod.getName());
+			invoker.prepare();
+
+			Object result = invoker.invoke();
+
+			long duration = System.currentTimeMillis() - startTime;
+			log.trace("Evict method execution completed: {}#{} in {}ms",
+				targetBean.getClass().getSimpleName(), targetMethod.getName(), duration);
+
+			return result;
+		} catch (Exception e) {
+			long duration = System.currentTimeMillis() - startTime;
+			log.debug("Evict method execution failed: {}#{} after {}ms, error: {}",
+				targetBean.getClass().getSimpleName(), targetMethod.getName(), duration, e.getMessage());
+			throw e;
+		}
+	}
+
+	/**
+	 * 验证调用信息的有效性
+	 */
+	public boolean isValid() {
+		return targetBean != null
+			&& targetMethod != null
+			&& evictInvocationContext != null;
+	}
+
+	/**
+	 * 获取方法签名的字符串表示
+	 */
+	public String getMethodSignature() {
+		if (targetMethod == null) {
+			return "unknown";
+		}
+
+		return String.format("%s#%s",
+			targetBean != null ? targetBean.getClass().getSimpleName() : "unknown",
+			targetMethod.getName());
 	}
 }

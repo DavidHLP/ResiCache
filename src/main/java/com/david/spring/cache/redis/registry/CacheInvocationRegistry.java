@@ -10,9 +10,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class CacheInvocationRegistry extends AbstractInvocationRegistry<CachedInvocation> {
 
-    @Override
-    protected boolean isValidForRegistration(String cacheName, Object key, CachedInvocation invocation) {
-        // 缓存调用要求 key 不能为空
-        return super.isValidForRegistration(cacheName, key, invocation) && key != null;
-    }
+	@Override
+	protected boolean isValidForRegistration(String cacheName, Object key, CachedInvocation invocation) {
+		// 缓存调用要求 key 不能为空
+		return super.isValidForRegistration(cacheName, key, invocation) && key != null;
+	}
 }

@@ -11,9 +11,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class EvictInvocationRegistry extends AbstractInvocationRegistry<EvictInvocation> {
 
-    @Override
-    protected Object normalizeKey(Object key) {
-        // 允许 key 为空（例如 allEntries=true 的场景，以通配符表示）
-        return key == null ? "*" : key;
-    }
+	@Override
+	protected Object normalizeKey(Object key) {
+		// 允许 key 为空（例如 allEntries=true 的场景，以通配符表示）
+		return key == null ? "*" : key;
+	}
 }

@@ -270,7 +270,7 @@ public class CacheFetchStrategyManager {
 
 		// 如果上下文指定了分布式锁，对支持锁的策略提高优先级
 		if ((context.distributedLock() || context.internalLock()) &&
-			strategy instanceof PreRefreshStrategy) {
+				strategy instanceof PreRefreshStrategy) {
 			priority -= 2;
 		}
 

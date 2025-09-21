@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.strategy;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -16,7 +16,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @RequiredArgsConstructor
 public abstract class AbstractCacheFetchStrategy implements CacheFetchStrategy {
 
-	protected final CacheInvocationRegistry registry;
+	protected final RegistryFactory registryFactory;
 	protected final Executor executor;
 	protected final CacheOperationService cacheOperationService;
 
@@ -31,7 +31,7 @@ public abstract class AbstractCacheFetchStrategy implements CacheFetchStrategy {
 	 * 获取本地锁
 	 */
 	protected ReentrantLock obtainLocalLock(CacheFetchContext context) {
-		return registry.obtainLock(context.cacheName(), context.key());
+		return registryFactory.getCacheInvocationRegistry().obtainLock(context.cacheName(), context.key());
 	}
 
 	protected void logDebug(String message, Object... args) {

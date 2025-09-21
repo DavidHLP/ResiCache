@@ -50,9 +50,9 @@ public interface CacheFetchStrategy {
 
 	default boolean isValidContext(CacheFetchContext context) {
 		return context != null
-			&& context.cacheName() != null
-			&& context.key() != null
-			&& context.invocationContext() != null;
+				&& context.cacheName() != null
+				&& context.key() != null
+				&& context.invocationContext() != null;
 	}
 
 	default boolean isContextCompatible(CacheFetchContext context) {
@@ -64,7 +64,7 @@ public interface CacheFetchStrategy {
 
 		// 验证策略类型兼容性
 		if (invocationContext.fetchStrategy() != CachedInvocationContext.FetchStrategyType.AUTO
-			&& !isStrategyTypeCompatible(invocationContext.fetchStrategy())) {
+				&& !isStrategyTypeCompatible(invocationContext.fetchStrategy())) {
 			return false;
 		}
 
@@ -75,7 +75,7 @@ public interface CacheFetchStrategy {
 	default boolean isStrategyTypeCompatible(CachedInvocationContext.FetchStrategyType strategyType) {
 		// 默认所有策略都兼容AUTO和SIMPLE类型
 		return strategyType == CachedInvocationContext.FetchStrategyType.AUTO
-			|| strategyType == CachedInvocationContext.FetchStrategyType.SIMPLE;
+				|| strategyType == CachedInvocationContext.FetchStrategyType.SIMPLE;
 	}
 
 	default boolean validateContextRequirements(CachedInvocationContext context) {
@@ -88,11 +88,7 @@ public interface CacheFetchStrategy {
 			return false; // 方差必须在0-1之间
 		}
 
-		if (context.preRefreshThreshold() < 0 || context.preRefreshThreshold() > 1) {
-			return false; // 预刷新阈值必须在0-1之间
-		}
-
-		return true;
+		return !(context.preRefreshThreshold() < 0) && !(context.preRefreshThreshold() > 1); // 预刷新阈值必须在0-1之间
 	}
 
 	/**

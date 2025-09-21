@@ -2,8 +2,7 @@ package com.david.spring.cache.redis.support;
 
 import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.registry.AbstractInvocationRegistry;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.registry.records.Key;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,15 +23,12 @@ import java.util.concurrent.locks.ReentrantLock;
 public class CacheCleanupService {
 
 	private final CacheGuardProperties properties;
-	private final CacheInvocationRegistry cacheRegistry;
-	private final EvictInvocationRegistry evictRegistry;
+	private final RegistryFactory registryFactory;
 
 	public CacheCleanupService(CacheGuardProperties properties,
-	                           CacheInvocationRegistry cacheRegistry,
-	                           EvictInvocationRegistry evictRegistry) {
+	                           RegistryFactory registryFactory) {
 		this.properties = properties;
-		this.cacheRegistry = cacheRegistry;
-		this.evictRegistry = evictRegistry;
+		this.registryFactory = registryFactory;
 	}
 
 	/**
@@ -48,8 +44,8 @@ public class CacheCleanupService {
 		log.debug("Starting cache cleanup task");
 
 		try {
-			int cleanedCache = cleanupRegistry(cacheRegistry, "CacheInvocation");
-			int cleanedEvict = cleanupRegistry(evictRegistry, "EvictInvocation");
+			int cleanedCache = cleanupRegistry(registryFactory.getCacheInvocationRegistry(), "CacheInvocation");
+			int cleanedEvict = cleanupRegistry(registryFactory.getEvictInvocationRegistry(), "EvictInvocation");
 
 			long duration = System.currentTimeMillis() - startTime;
 			log.info("Cache cleanup completed: cleaned {} cache entries, {} evict entries in {}ms",
@@ -156,14 +152,14 @@ public class CacheCleanupService {
 			keyLocksField.setAccessible(true);
 
 			@SuppressWarnings("unchecked")
-			ConcurrentMap<Key, ?> cacheInvocations = (ConcurrentMap<Key, ?>) invocationsField.get(cacheRegistry);
+			ConcurrentMap<Key, ?> cacheInvocations = (ConcurrentMap<Key, ?>) invocationsField.get(registryFactory.getCacheInvocationRegistry());
 			@SuppressWarnings("unchecked")
-			ConcurrentMap<Key, ReentrantLock> cacheLocks = (ConcurrentMap<Key, ReentrantLock>) keyLocksField.get(cacheRegistry);
+			ConcurrentMap<Key, ReentrantLock> cacheLocks = (ConcurrentMap<Key, ReentrantLock>) keyLocksField.get(registryFactory.getCacheInvocationRegistry());
 
 			@SuppressWarnings("unchecked")
-			ConcurrentMap<Key, ?> evictInvocations = (ConcurrentMap<Key, ?>) invocationsField.get(evictRegistry);
+			ConcurrentMap<Key, ?> evictInvocations = (ConcurrentMap<Key, ?>) invocationsField.get(registryFactory.getEvictInvocationRegistry());
 			@SuppressWarnings("unchecked")
-			ConcurrentMap<Key, ReentrantLock> evictLocks = (ConcurrentMap<Key, ReentrantLock>) keyLocksField.get(evictRegistry);
+			ConcurrentMap<Key, ReentrantLock> evictLocks = (ConcurrentMap<Key, ReentrantLock>) keyLocksField.get(registryFactory.getEvictInvocationRegistry());
 
 			return new CleanupStats(
 					cacheInvocations.size(),

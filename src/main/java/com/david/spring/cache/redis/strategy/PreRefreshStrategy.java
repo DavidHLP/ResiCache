@@ -3,7 +3,7 @@ package com.david.spring.cache.redis.strategy;
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.lock.LockUtils;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.Cache.ValueWrapper;
@@ -23,11 +23,11 @@ public class PreRefreshStrategy extends AbstractCacheFetchStrategy {
 
 	private final DistributedLock distributedLock;
 
-	public PreRefreshStrategy(CacheInvocationRegistry registry,
+	public PreRefreshStrategy(RegistryFactory registryFactory,
 	                          @Qualifier("cacheRefreshExecutor") Executor executor,
 	                          DistributedLock distributedLock,
 	                          CacheOperationService cacheOperationService) {
-		super(registry, executor, cacheOperationService);
+		super(registryFactory, executor, cacheOperationService);
 		this.distributedLock = distributedLock;
 	}
 

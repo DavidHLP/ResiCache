@@ -1,7 +1,6 @@
 package com.david.spring.cache.redis.aspect;
 
 import com.david.spring.cache.redis.aspect.support.AspectUtils;
-import com.david.spring.cache.redis.aspect.support.CacheNameUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.springframework.core.Ordered;
@@ -18,21 +17,18 @@ import java.lang.reflect.Method;
 public abstract class AbstractCacheAspect {
 
 	/**
-	 * 通用的环绕通知处理模板
+	 * 通用的注册操作模板
 	 *
 	 * @param joinPoint     切入点
 	 * @param operationType 操作类型描述（cache/evict）
-	 * @return 方法执行结果
-	 * @throws Throwable 方法执行异常
 	 */
-	protected Object executeAroundAdvice(ProceedingJoinPoint joinPoint, String operationType) throws Throwable {
+	protected void registerInvocation(ProceedingJoinPoint joinPoint, String operationType) {
 		try {
 			processInvocation(joinPoint);
 		} catch (Exception e) {
 			log.warn("Failed to register {} invocation for method {}: {}",
 					operationType, joinPoint.getSignature().getName(), e.getMessage(), e);
 		}
-		return joinPoint.proceed();
 	}
 
 	/**
@@ -59,7 +55,7 @@ public abstract class AbstractCacheAspect {
 	 * @param registrar  具体地注册逻辑
 	 */
 	protected void registerForCaches(String[] cacheNames, Object key, Method method, CacheRegistrar registrar) {
-		CacheNameUtils.processValidCacheNames(cacheNames, key, method, cacheName ->
+		AspectUtils.processValidCacheNames(cacheNames, key, method, cacheName ->
 				registrar.register(cacheName, key)
 		);
 	}

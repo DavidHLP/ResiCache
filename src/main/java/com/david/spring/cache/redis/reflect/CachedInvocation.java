@@ -1,11 +1,12 @@
 package com.david.spring.cache.redis.reflect;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.reflect.execution.InvocationExecutorManager;
 import com.david.spring.cache.redis.reflect.support.SpringContextHolder;
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
+import org.springframework.util.MethodInvoker;
 
 import java.lang.reflect.Method;
 
@@ -13,6 +14,7 @@ import java.lang.reflect.Method;
  * 缓存调用封装类
  * 包装缓存相关的方法调用信息
  */
+@Slf4j
 @Getter
 @Builder
 @AllArgsConstructor
@@ -25,7 +27,6 @@ public class CachedInvocation {
 
 	/** 目标方法 */
 	private Method targetMethod;
-
 	/** 方法参数数组 */
 	private Object[] arguments;
 
@@ -41,18 +42,30 @@ public class CachedInvocation {
 
 	/**
 	 * 执行方法调用
-	 * 使用策略模式委托给执行器管理器
 	 */
 	public Object invoke() throws Exception {
-		InvocationExecutorManager executorManager = getExecutorManager();
-		return executorManager.execute(targetBean, targetMethod, arguments);
-	}
+		long startTime = System.currentTimeMillis();
 
-	/**
-	 * 获取执行器管理器实例
-	 */
-	private InvocationExecutorManager getExecutorManager() {
-		return SpringContextHolder.getBean(InvocationExecutorManager.class);
+		try {
+			MethodInvoker invoker = new MethodInvoker();
+			invoker.setTargetObject(targetBean);
+			invoker.setArguments(arguments);
+			invoker.setTargetMethod(targetMethod.getName());
+			invoker.prepare();
+
+			Object result = invoker.invoke();
+
+			long duration = System.currentTimeMillis() - startTime;
+			log.trace("Method execution completed: {}#{} in {}ms",
+				targetBean.getClass().getSimpleName(), targetMethod.getName(), duration);
+
+			return result;
+		} catch (Exception e) {
+			long duration = System.currentTimeMillis() - startTime;
+			log.debug("Method execution failed: {}#{} after {}ms, error: {}",
+				targetBean.getClass().getSimpleName(), targetMethod.getName(), duration, e.getMessage());
+			throw e;
+		}
 	}
 
 	/**

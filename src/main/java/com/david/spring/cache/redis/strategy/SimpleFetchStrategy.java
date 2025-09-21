@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.strategy;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.Cache.ValueWrapper;
@@ -17,9 +17,9 @@ import java.util.concurrent.Executor;
 @Component
 public class SimpleFetchStrategy extends AbstractCacheFetchStrategy {
 
-	public SimpleFetchStrategy(CacheInvocationRegistry registry, @Qualifier("cacheRefreshExecutor") Executor executor,
+	public SimpleFetchStrategy(RegistryFactory registryFactory, @Qualifier("cacheRefreshExecutor") Executor executor,
 	                           CacheOperationService cacheOperationService) {
-		super(registry, executor, cacheOperationService);
+		super(registryFactory, executor, cacheOperationService);
 	}
 
 	@Override

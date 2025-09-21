@@ -4,7 +4,6 @@ import com.david.spring.cache.redis.meta.CacheMata;
 import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
