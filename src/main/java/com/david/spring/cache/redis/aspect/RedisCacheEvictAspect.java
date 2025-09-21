@@ -47,16 +47,9 @@ public class RedisCacheEvictAspect extends AbstractCacheAspect {
 
 		Object cacheKey = null;
 		if (!currentAnnotation.allEntries()) {
-			// 优先使用SpEL表达式
-			if (currentAnnotation.key() != null && !currentAnnotation.key().isBlank()) {
-				cacheKey = KeyResolver.resolveKeySpEL(context.targetBean(), context.method(),
-						context.arguments(), currentAnnotation.key());
-			}
-			// 回退到keyGenerator
-			if (cacheKey == null) {
-				cacheKey = KeyResolver.resolveKey(context.targetBean(), context.method(),
-						context.arguments(), currentAnnotation.keyGenerator());
-			}
+			// 只使用keyGenerator生成缓存key
+			cacheKey = KeyResolver.resolveKey(context.targetBean(), context.method(),
+					context.arguments(), currentAnnotation.keyGenerator());
 		}
 
 		boolean allEntries = currentAnnotation.allEntries();

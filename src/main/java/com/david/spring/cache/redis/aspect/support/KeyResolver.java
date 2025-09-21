@@ -1,153 +1,97 @@
 package com.david.spring.cache.redis.aspect.support;
 
-import com.david.spring.cache.redis.reflect.support.SpringContextHolder;
+import com.david.spring.cache.redis.support.BeanResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.cache.interceptor.SimpleKeyGenerator;
-import org.springframework.core.DefaultParameterNameDiscoverer;
-import org.springframework.expression.Expression;
-import org.springframework.expression.ExpressionParser;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
 
 import java.lang.reflect.Method;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
+/**
+ * Key解析器
+ * 专门负责通过Bean容器获取KeyGenerator并生成缓存Key
+ * 所有操作必须通过Bean容器，不提供任何保底策略
+ */
 @Slf4j
 public final class KeyResolver {
 
-	private static final ExpressionParser PARSER = new SpelExpressionParser();
+	private KeyResolver() {
+		// 工具类禁止实例化
+	}
 
+	/**
+	 * 通过指定的KeyGenerator Bean生成缓存Key
+	 *
+	 * @param targetBean           目标Bean实例
+	 * @param method               目标方法
+	 * @param arguments            方法参数
+	 * @param keyGeneratorBeanName KeyGenerator Bean名称
+	 * @return 生成的缓存Key
+	 * @throws IllegalArgumentException 参数无效时抛出
+	 * @throws IllegalStateException    KeyGenerator Bean获取失败时抛出
+	 */
+	public static Object resolveKey(Object targetBean, Method method, Object[] arguments,
+	                                String keyGeneratorBeanName) {
+		validateArguments(targetBean, method, keyGeneratorBeanName);
 
-	private KeyResolver() {}
+		if (arguments == null) {
+			arguments = new Object[0];
+		}
 
-	public static Object resolveKey(
-			Object targetBean, Method method, Object[] arguments, String keyGeneratorBeanName) {
+		KeyGenerator generator = getKeyGeneratorBean(keyGeneratorBeanName, method);
+
+		try {
+			Object key = generator.generate(targetBean, method, arguments);
+			log.debug("Generated key using KeyGenerator '{}' for method {}: {}",
+					keyGeneratorBeanName, method.getName(), key);
+			return key;
+		} catch (Exception e) {
+			log.error("KeyGenerator '{}' failed to generate key for method {}: {}",
+					keyGeneratorBeanName, method.getName(), e.getMessage(), e);
+			throw new RuntimeException("Key generation failed for method " + method.getName() +
+					" using KeyGenerator '" + keyGeneratorBeanName + "'", e);
+		}
+	}
+
+	/**
+	 * 验证参数有效性
+	 */
+	private static void validateArguments(Object targetBean, Method method, String keyGeneratorBeanName) {
 		if (targetBean == null) {
 			throw new IllegalArgumentException("Target bean cannot be null");
 		}
 		if (method == null) {
 			throw new IllegalArgumentException("Method cannot be null");
 		}
-		if (arguments == null) {
-			arguments = new Object[0]; // 使用空数组替代null
+		if (keyGeneratorBeanName == null || keyGeneratorBeanName.isBlank()) {
+			throw new IllegalArgumentException("KeyGenerator bean name cannot be null or blank");
 		}
-
-		try {
-			KeyGenerator generator = resolveKeyGenerator(keyGeneratorBeanName);
-			if (generator != null) {
-				return generator.generate(targetBean, method, arguments);
-			}
-		} catch (Exception e) {
-			log.debug("Failed to resolve key generator '{}' for method {}, falling back to SimpleKeyGenerator: {}",
-					keyGeneratorBeanName, method.getName(), e.getMessage());
-		}
-
-		return SimpleKeyGenerator.generateKey(arguments);
-	}
-
-
-	public static String[] getCacheNames(String[] values, String[] cacheNames) {
-		Set<String> list = new LinkedHashSet<>();
-
-		if (values != null) {
-			for (String v : values) {
-				if (v != null && !v.isBlank()) {
-					list.add(v.trim());
-				}
-			}
-		}
-
-		if (cacheNames != null) {
-			for (String v : cacheNames) {
-				if (v != null && !v.isBlank()) {
-					list.add(v.trim());
-				}
-			}
-		}
-
-		return list.toArray(String[]::new);
 	}
 
 	/**
-	 * 解析单个 SpEL 表达式为一个 key 值；当表达式为空返回 null；解析失败时按字面量返回。
+	 * 获取缓存名称数组
+	 * 优先使用value，如果为空则使用cacheNames
 	 */
-	public static Object resolveKeySpEL(
-			Object targetBean, Method method, Object[] arguments, String expression) {
-		if (expression == null || expression.isBlank()) {
-			return null;
+	public static String[] getCacheNames(String[] value, String[] cacheNames) {
+		if (value != null && value.length > 0) {
+			return value;
 		}
-
-		if (targetBean == null) {
-			throw new IllegalArgumentException("Target bean cannot be null for SpEL evaluation");
+		if (cacheNames != null && cacheNames.length > 0) {
+			return cacheNames;
 		}
-		if (method == null) {
-			throw new IllegalArgumentException("Method cannot be null for SpEL evaluation");
-		}
-		if (arguments == null) {
-			arguments = new Object[0]; // 使用空数组替代null
-		}
-
-		try {
-			StandardEvaluationContext ctx = buildContext(targetBean, method, arguments);
-			Expression e = PARSER.parseExpression(expression);
-			return e.getValue(ctx);
-		} catch (Exception e) {
-			log.debug("Failed to evaluate SpEL expression '{}' for method {}, using literal value: {}",
-					expression, method.getName(), e.getMessage());
-			return expression;
-		}
-	}
-
-	private static StandardEvaluationContext buildContext(
-			Object targetBean, Method method, Object[] arguments) {
-		StandardEvaluationContext ctx = new StandardEvaluationContext(targetBean);
-		ctx.setVariable("target", targetBean);
-		ctx.setVariable("method", method);
-		ctx.setVariable("args", arguments);
-		for (int i = 0; i < arguments.length; i++) {
-			ctx.setVariable("p" + i, arguments[i]);
-			ctx.setVariable("a" + i, arguments[i]);
-		}
-		DefaultParameterNameDiscoverer discoverer = new DefaultParameterNameDiscoverer();
-		String[] names = discoverer.getParameterNames(method);
-		if (names != null) {
-			for (int i = 0; i < names.length && i < arguments.length; i++) {
-				String name = names[i];
-				if (name != null && !name.isBlank()) {
-					ctx.setVariable(name, arguments[i]);
-				}
-			}
-		}
-		return ctx;
+		throw new IllegalArgumentException("Neither value nor cacheNames is specified");
 	}
 
 	/**
-	 * 解析KeyGenerator Bean，优先按名称解析，失败则按类型解析
-	 *
-	 * @param name KeyGenerator Bean名称
-	 * @return KeyGenerator实例，如果解析失败返回null
+	 * 获取KeyGenerator Bean实例
 	 */
-	private static KeyGenerator resolveKeyGenerator(String name) {
-		log.debug("Resolving KeyGenerator with name: {}", name);
-		if (name != null && !name.isBlank()) {
-			KeyGenerator bean = SpringContextHolder.getBean(name, KeyGenerator.class);
-			if (bean != null) {
-				log.debug("Successfully resolved KeyGenerator by name: {}", name);
-				return bean;
-			} else {
-				log.debug("KeyGenerator not found by name: {}, trying by type", name);
-			}
+	private static KeyGenerator getKeyGeneratorBean(String keyGeneratorBeanName, Method method) {
+		KeyGenerator generator = BeanResolver.resolveKeyGenerator(keyGeneratorBeanName, null);
+		if (generator == null) {
+			log.error("Critical error: KeyGenerator '{}' not found for method {}",
+					keyGeneratorBeanName, method.getName());
+			throw new IllegalStateException("KeyGenerator '" + keyGeneratorBeanName +
+					"' not found for method " + method.getName());
 		}
-
-		KeyGenerator byType = SpringContextHolder.getBean(KeyGenerator.class);
-		if (byType != null) {
-			log.debug("Successfully resolved KeyGenerator by type");
-			return byType;
-		} else {
-			log.warn("No KeyGenerator found by name or type");
-		}
-		return null;
+		return generator;
 	}
 }

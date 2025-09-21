@@ -12,7 +12,6 @@ import com.david.spring.cache.redis.strategy.CacheFetchStrategy;
 import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
 import com.david.spring.cache.redis.strategy.CacheOperationService;
 import com.david.spring.cache.redis.strategy.SimpleFetchStrategy;
-import com.david.spring.cache.redis.support.CacheExceptionHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
@@ -160,11 +159,12 @@ public class RedisProCache extends RedisCache {
 		// 成功写入后将 key 加入布隆过滤器（值非空时）
 		if (value != null) {
 			String membershipKey = String.valueOf(key);
-			CacheExceptionHandler.safeExecute(
-					() -> cachePenetration.addIfEnabled(getName(), membershipKey),
-					"addToBloomFilter",
-					"cache=" + getName(), "key=" + key
-			);
+			try {
+				cachePenetration.addIfEnabled(getName(), membershipKey);
+			} catch (Exception e) {
+				log.error("Failed to add key to bloom filter: cache={}, key={}, error={}",
+						getName(), key, e.getMessage(), e);
+			}
 		}
 		// 雪崩保护：统一调用
 		String cacheKey = createCacheKey(key);
@@ -327,15 +327,14 @@ public class RedisProCache extends RedisCache {
 	 * 获取调用上下文信息（用于TTL处理优化）
 	 */
 	private CachedInvocationContext getInvocationContext(Object key) {
-		return CacheExceptionHandler.safeExecute(
-				() -> {
-					CachedInvocation invocation = registryFactory.getCacheInvocationRegistry().get(getName(), key).orElse(null);
-					return invocation != null ? invocation.getCachedInvocationContext() : null;
-				},
-				null,
-				"getInvocationContext",
-				"cache=" + getName(), "key=" + key
-		);
+		try {
+			CachedInvocation invocation = registryFactory.getCacheInvocationRegistry().get(getName(), key).orElse(null);
+			return invocation != null ? invocation.getCachedInvocationContext() : null;
+		} catch (Exception e) {
+			log.error("Failed to get invocation context: cache={}, key={}, error={}",
+					getName(), key, e.getMessage(), e);
+			return null;
+		}
 	}
 
 
@@ -668,7 +667,29 @@ public class RedisProCache extends RedisCache {
 			}
 
 			private boolean isCriticalError(Exception e) {
-				return CacheExceptionHandler.isCriticalException(e);
+				// 检查严重异常类型
+				Throwable cause = e.getCause();
+				if (cause instanceof OutOfMemoryError || cause instanceof StackOverflowError) {
+					return true;
+				}
+
+				// 检查特定异常类型
+				if (e instanceof java.util.concurrent.TimeoutException
+						|| e instanceof java.io.IOException) {
+					return true;
+				}
+
+				// 检查连接异常
+				String message = e.getMessage();
+				if (message != null) {
+					String lowerMessage = message.toLowerCase();
+					return lowerMessage.contains("connection")
+							|| lowerMessage.contains("timeout")
+							|| lowerMessage.contains("pool exhausted")
+							|| lowerMessage.contains("refused");
+				}
+
+				return false;
 			}
 
 			private void handleCriticalError(CacheFetchStrategy.CacheFetchContext context,

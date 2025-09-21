@@ -1,11 +1,12 @@
 package com.david.spring.cache.redis.reflect;
 
 import com.david.spring.cache.redis.reflect.context.EvictInvocationContext;
+import com.david.spring.cache.redis.support.BeanResolver;
+import com.david.spring.cache.redis.reflect.support.InvocationUtils;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.util.MethodInvoker;
 
 import java.lang.reflect.Method;
 
@@ -45,49 +46,46 @@ public class EvictInvocation {
 	 * 执行方法调用
 	 */
 	public Object invoke() throws Exception {
-		long startTime = System.currentTimeMillis();
-
-		try {
-			MethodInvoker invoker = new MethodInvoker();
-			invoker.setTargetObject(targetBean);
-			invoker.setArguments(arguments);
-			invoker.setTargetMethod(targetMethod.getName());
-			invoker.prepare();
-
-			Object result = invoker.invoke();
-
-			long duration = System.currentTimeMillis() - startTime;
-			log.trace("Evict method execution completed: {}#{} in {}ms",
-				targetBean.getClass().getSimpleName(), targetMethod.getName(), duration);
-
-			return result;
-		} catch (Exception e) {
-			long duration = System.currentTimeMillis() - startTime;
-			log.debug("Evict method execution failed: {}#{} after {}ms, error: {}",
-				targetBean.getClass().getSimpleName(), targetMethod.getName(), duration, e.getMessage());
-			throw e;
-		}
+		return InvocationUtils.invokeMethod(targetBean, targetMethod, arguments, "Evict");
 	}
 
 	/**
 	 * 验证调用信息的有效性
 	 */
 	public boolean isValid() {
-		return targetBean != null
-			&& targetMethod != null
-			&& evictInvocationContext != null;
+		return InvocationUtils.isValidInvocation(targetBean, targetMethod, evictInvocationContext);
 	}
 
 	/**
 	 * 获取方法签名的字符串表示
 	 */
 	public String getMethodSignature() {
-		if (targetMethod == null) {
-			return "unknown";
+		return InvocationUtils.getMethodSignature(targetBean, targetMethod);
+	}
+
+	/**
+	 * 获取KeyGenerator实例，优先使用缓存的实例，否则从Context中解析
+	 */
+	public KeyGenerator getKeyGenerator() {
+		if (evictInvocationContext == null) {
+			return resolvedKeyGenerator;
 		}
 
-		return String.format("%s#%s",
-			targetBean != null ? targetBean.getClass().getSimpleName() : "unknown",
-			targetMethod.getName());
+		resolvedKeyGenerator = BeanResolver.resolveKeyGenerator(
+			evictInvocationContext.keyGenerator(), resolvedKeyGenerator);
+		return resolvedKeyGenerator;
+	}
+
+	/**
+	 * 获取CacheResolver实例，优先使用缓存的实例，否则从Context中解析
+	 */
+	public CacheResolver getCacheResolver() {
+		if (evictInvocationContext == null) {
+			return resolvedCacheResolver;
+		}
+
+		resolvedCacheResolver = BeanResolver.resolveCacheResolver(
+			evictInvocationContext.cacheResolver(), resolvedCacheResolver);
+		return resolvedCacheResolver;
 	}
 }

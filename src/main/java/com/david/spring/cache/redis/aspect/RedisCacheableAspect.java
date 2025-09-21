@@ -44,17 +44,10 @@ public class RedisCacheableAspect extends AbstractCacheAspect {
 
 		String[] cacheNames = KeyResolver.getCacheNames(
 				currentAnnotation.value(), currentAnnotation.cacheNames());
+
+		// 只使用keyGenerator生成缓存key
 		Object cacheKey = KeyResolver.resolveKey(context.targetBean(), context.method(),
 				context.arguments(), currentAnnotation.keyGenerator());
-
-		// 如果有SpEL表达式，优先使用
-		if (currentAnnotation.key() != null && !currentAnnotation.key().isBlank()) {
-			Object spelKey = KeyResolver.resolveKeySpEL(context.targetBean(), context.method(),
-					context.arguments(), currentAnnotation.key());
-			if (spelKey != null) {
-				cacheKey = spelKey;
-			}
-		}
 
 		CachedInvocation cachedInvocation = buildCachedInvocation(context, currentAnnotation);
 

@@ -30,17 +30,9 @@ public class CacheOperationExecutor {
 	                               AbstractCacheAspect.AspectExecutionContext context) throws Throwable {
 		String[] cacheNames = KeyResolver.getCacheNames(annotation.value(), annotation.cacheNames());
 
+		// 只使用keyGenerator生成缓存key
 		Object key = KeyResolver.resolveKey(context.targetBean(), context.method(),
 				context.arguments(), annotation.keyGenerator());
-
-		// 优先使用SpEL表达式
-		if (annotation.key() != null && !annotation.key().isBlank()) {
-			Object spelKey = KeyResolver.resolveKeySpEL(context.targetBean(), context.method(),
-					context.arguments(), annotation.key());
-			if (spelKey != null) {
-				key = spelKey;
-			}
-		}
 
 		// 简单的缓存查找逻辑
 		for (String cacheName : cacheNames) {
@@ -105,7 +97,7 @@ public class CacheOperationExecutor {
 	 * 执行缓存清除操作
 	 */
 	private void performEviction(String[] cacheNames, AbstractCacheAspect.AspectExecutionContext context,
-	                            RedisCacheEvict annotation) {
+	                             RedisCacheEvict annotation) {
 		for (String cacheName : cacheNames) {
 			Cache cache = cacheManager.getCache(cacheName);
 			if (cache != null) {
@@ -113,21 +105,11 @@ public class CacheOperationExecutor {
 					cache.clear();
 					log.debug("Cleared all entries in cache={}", cacheName);
 				} else {
-					Object key = null;
-					// 优先使用SpEL表达式
-					if (annotation.key() != null && !annotation.key().isBlank()) {
-						key = KeyResolver.resolveKeySpEL(context.targetBean(), context.method(),
-								context.arguments(), annotation.key());
-					}
-					// 回退到keyGenerator
-					if (key == null) {
-						key = KeyResolver.resolveKey(context.targetBean(), context.method(),
-								context.arguments(), annotation.keyGenerator());
-					}
-					if (key != null) {
-						cache.evict(key);
-						log.debug("Evicted key={} from cache={}", key, cacheName);
-					}
+					// 只使用keyGenerator生成缓存key
+					Object key = KeyResolver.resolveKey(context.targetBean(), context.method(),
+							context.arguments(), annotation.keyGenerator());
+					cache.evict(key);
+					log.debug("Evicted key={} from cache={}", key, cacheName);
 				}
 			}
 		}

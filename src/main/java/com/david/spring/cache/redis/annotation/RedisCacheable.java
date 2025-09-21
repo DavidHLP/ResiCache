@@ -14,7 +14,7 @@ public @interface RedisCacheable {
 
 	String key() default "";
 
-	String keyGenerator() default "";
+	String keyGenerator() default "keyGenerator";
 
 	String cacheManager() default "redisProCacheManager";
 
