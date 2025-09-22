@@ -15,11 +15,11 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-public class CacheOperationExecutor {
+public class CacheHandler {
 
 	private final CacheManager cacheManager;
 
-	public CacheOperationExecutor(CacheManager cacheManager) {
+	public CacheHandler(CacheManager cacheManager) {
 		this.cacheManager = cacheManager;
 	}
 

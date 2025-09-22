@@ -6,8 +6,10 @@ import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
-import com.david.spring.cache.redis.strategy.CacheOperationService;
+import com.david.spring.cache.redis.strategy.impl.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.strategy.support.CacheOperationService;
+import com.david.spring.cache.redis.strategy.support.CacheContextValidator;
+import com.david.spring.cache.redis.strategy.support.CacheStrategyExecutor;
 import jakarta.annotation.Nonnull;
 import lombok.Getter;
 import org.springframework.data.redis.cache.RedisCache;
@@ -39,6 +41,8 @@ public class RedisProCacheManager extends RedisCacheManager {
 	private final CacheBreakdown cacheBreakdown;
 	private final CacheFetchStrategyManager strategyManager;
 	private final CacheOperationService cacheOperationService;
+	private final CacheContextValidator contextValidator;
+	private final CacheStrategyExecutor strategyExecutor;
 	private final CacheGuardProperties properties;
 
 	public RedisProCacheManager(
@@ -52,7 +56,10 @@ public class RedisProCacheManager extends RedisCacheManager {
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
 			CacheFetchStrategyManager strategyManager,
-			CacheOperationService cacheOperationService, CacheGuardProperties properties) {
+			CacheOperationService cacheOperationService,
+			CacheContextValidator contextValidator,
+			CacheStrategyExecutor strategyExecutor,
+			CacheGuardProperties properties) {
 		super(cacheWriter, redisCacheConfiguration, redisCacheConfigurationMap);
 		this.redisCacheConfigurationMap = redisCacheConfigurationMap;
 		this.redisTemplate = cacheRedisTemplate;
@@ -65,6 +72,8 @@ public class RedisProCacheManager extends RedisCacheManager {
 		this.cacheBreakdown = cacheBreakdown;
 		this.strategyManager = strategyManager;
 		this.cacheOperationService = cacheOperationService;
+		this.contextValidator = contextValidator;
+		this.strategyExecutor = strategyExecutor;
 		this.properties = properties;
 	}
 
@@ -97,7 +106,10 @@ public class RedisProCacheManager extends RedisCacheManager {
 				cachePenetration,
 				cacheBreakdown,
 				strategyManager,
-				cacheOperationService, properties);
+				cacheOperationService,
+				contextValidator,
+				strategyExecutor,
+				properties);
 	}
 
 	public void initializeCaches() {

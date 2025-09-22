@@ -9,9 +9,11 @@ import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.CacheFetchStrategy;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
-import com.david.spring.cache.redis.strategy.CacheOperationService;
-import com.david.spring.cache.redis.strategy.SimpleFetchStrategy;
+import com.david.spring.cache.redis.strategy.impl.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.strategy.support.CacheOperationService;
+import com.david.spring.cache.redis.strategy.impl.SimpleFetchStrategy;
+import com.david.spring.cache.redis.strategy.support.CacheContextValidator;
+import com.david.spring.cache.redis.strategy.support.CacheStrategyExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
@@ -43,10 +45,9 @@ public class RedisProCache extends RedisCache {
 	private final CacheBreakdown cacheBreakdown;
 	private final CacheFetchStrategyManager strategyManager;
 	private final CacheOperationService cacheOperationService;
+	private final CacheContextValidator contextValidator;
+	private final CacheStrategyExecutor strategyExecutor;
 
-	// 新增的工具类
-	private final CacheContextValidator validator;
-	private final CacheExecutionHandler executionHandler;
 
 	public RedisProCache(
 			String name,
@@ -60,6 +61,8 @@ public class RedisProCache extends RedisCache {
 			CacheBreakdown cacheBreakdown,
 			CacheFetchStrategyManager strategyManager,
 			CacheOperationService cacheOperationService,
+			CacheContextValidator contextValidator,
+			CacheStrategyExecutor strategyExecutor,
 			CacheGuardProperties properties) {
 		super(name, cacheWriter, cacheConfiguration);
 		this.redisTemplate = Objects.requireNonNull(redisTemplate);
@@ -71,12 +74,10 @@ public class RedisProCache extends RedisCache {
 		this.cacheBreakdown = Objects.requireNonNull(cacheBreakdown);
 		this.strategyManager = Objects.requireNonNull(strategyManager);
 		this.cacheOperationService = Objects.requireNonNull(cacheOperationService);
+		this.contextValidator = Objects.requireNonNull(contextValidator);
+		this.strategyExecutor = Objects.requireNonNull(strategyExecutor);
 		this.properties = Objects.requireNonNull(properties);
 
-		// 初始化工具类
-		this.validator = new CacheContextValidator(strategyManager);
-		this.executionHandler = new CacheExecutionHandler(name, strategyManager,
-				cacheOperationService, validator);
 
 		// 验证策略集成
 		validateStrategyIntegration();
@@ -125,27 +126,27 @@ public class RedisProCache extends RedisCache {
 		}
 
 		CachedInvocationContext invocationContext = invocation.getCachedInvocationContext();
-		if (!validator.isValidInvocationContext(invocationContext)) {
+		if (!contextValidator.isValidInvocationContext(invocationContext)) {
 			log.warn("Invalid invocation context for cache: {}, key: {}, returning base value", getName(), key);
 			return baseValue;
 		}
 
-		if (!validator.shouldExecuteStrategies(invocationContext, baseValue)) {
+		if (!contextValidator.shouldExecuteStrategies(invocationContext, baseValue)) {
 			log.debug("Skipping strategy execution for cache: {}, key: {}", getName(), key);
 			return baseValue;
 		}
 
 		String cacheKey = createCacheKey(key);
-		CacheFetchStrategy.CacheFetchCallback callback = executionHandler.createFetchCallback(this);
-		CacheFetchStrategy.CacheFetchContext context = executionHandler.createFetchContext(
-				key, cacheKey, baseValue, invocation, redisTemplate, callback);
+		CacheFetchStrategy.CacheFetchCallback callback = strategyExecutor.createFetchCallback(getName(), this, cacheOperationService);
+		CacheFetchStrategy.CacheFetchContext context = strategyExecutor.createFetchContext(
+				getName(), key, cacheKey, baseValue, invocation, redisTemplate, callback);
 
-		if (!validator.isValidFetchContext(context)) {
+		if (!contextValidator.isValidFetchContext(context)) {
 			log.warn("Invalid fetch context for cache: {}, key: {}, returning base value", getName(), key);
 			return baseValue;
 		}
 
-		return executionHandler.executeStrategiesWithFallback(context, baseValue, key);
+		return strategyExecutor.executeStrategiesWithFallback(strategyManager, context, baseValue, key, getName());
 	}
 
 	// TTL、刷新、包装等方法已下沉到 CacheOperationService
@@ -423,291 +424,4 @@ public class RedisProCache extends RedisCache {
 				delayed);
 	}
 
-	/**
-	 * 缓存上下文验证器内部类
-	 */
-		private record CacheContextValidator(CacheFetchStrategyManager strategyManager) {
-
-		public boolean isValidInvocationContext(CachedInvocationContext context) {
-				if (context == null) {
-					return false;
-				}
-
-				if (!validateBasicProperties(context)) {
-					return false;
-				}
-
-				if (!validateNumericRanges(context)) {
-					return false;
-				}
-
-				if (!validateLogicalConsistency(context)) {
-					return false;
-				}
-
-				validateLockConfiguration(context);
-
-				return true;
-			}
-
-			public boolean isValidFetchContext(CacheFetchStrategy.CacheFetchContext context) {
-				return context != null
-						&& context.cacheName() != null
-						&& context.key() != null
-						&& context.cacheKey() != null
-						&& context.redisTemplate() != null
-						&& context.callback() != null;
-			}
-
-			public boolean shouldExecuteStrategies(CachedInvocationContext invocationContext,
-			                                       ValueWrapper baseValue) {
-				if (invocationContext.fetchStrategy() == CachedInvocationContext.FetchStrategyType.SIMPLE) {
-					return baseValue == null || invocationContext.cacheNullValues();
-				}
-
-				if (invocationContext.useBloomFilter()) {
-					return true;
-				}
-
-				if (invocationContext.enablePreRefresh() && baseValue != null) {
-					return true;
-				}
-
-				if (baseValue == null) {
-					return true;
-				}
-
-				return invocationContext.distributedLock() || invocationContext.internalLock();
-			}
-
-			private boolean validateBasicProperties(CachedInvocationContext context) {
-				if (context.cacheNames() == null || context.cacheNames().length == 0) {
-					log.debug("Invalid context: missing cache names");
-					return false;
-				}
-
-				if (context.fetchStrategy() == null) {
-					log.debug("Invalid context: missing fetch strategy");
-					return false;
-				}
-				return true;
-			}
-
-			private boolean validateNumericRanges(CachedInvocationContext context) {
-				if (context.variance() < 0 || context.variance() > 1) {
-					log.debug("Invalid context: variance {} out of range [0,1]", context.variance());
-					return false;
-				}
-
-				if (context.preRefreshThreshold() < 0 || context.preRefreshThreshold() > 1) {
-					log.debug("Invalid context: preRefreshThreshold {} out of range [0,1]", context.preRefreshThreshold());
-					return false;
-				}
-				return true;
-			}
-
-			private boolean validateLogicalConsistency(CachedInvocationContext context) {
-				if (context.enablePreRefresh() && context.ttl() <= 0) {
-					log.debug("Invalid context: preRefresh enabled but TTL <= 0");
-					return false;
-				}
-
-				if (context.randomTtl() && context.variance() <= 0) {
-					log.debug("Invalid context: randomTtl enabled but variance <= 0");
-					return false;
-				}
-				return true;
-			}
-
-			private void validateLockConfiguration(CachedInvocationContext context) {
-				if (context.distributedLock() &&
-						(context.distributedLockName() == null || context.distributedLockName().trim().isEmpty())) {
-					log.debug("Invalid context: distributedLock enabled but no lock name specified");
-				}
-			}
-		}
-
-	/**
-	 * 缓存执行处理器内部类
-	 */
-		private record CacheExecutionHandler(String cacheName, CacheFetchStrategyManager strategyManager,
-		                                     CacheOperationService cacheOperationService, CacheContextValidator validator) {
-
-		public CacheFetchStrategy.CacheFetchCallback createFetchCallback(Cache cache) {
-				return new CacheFetchStrategy.CacheFetchCallback() {
-					@Override
-					public ValueWrapper getBaseValue(Object key) {
-						return cache.get(key);
-					}
-
-					@Override
-					public void refresh(CachedInvocation invocation, Object key, String cacheKey, long ttl) {
-						try {
-							CacheOperationService.CacheRefreshCallback refreshCallback = new CacheOperationService.CacheRefreshCallback() {
-								@Override
-								public void putCache(Object key, Object value) {
-									cache.put(key, value);
-								}
-
-								@Override
-								public String getCacheName() {
-									return cacheName;
-								}
-							};
-							cacheOperationService.doRefresh(invocation, key, cacheKey, ttl, refreshCallback);
-						} catch (Exception e) {
-							log.error("Cache refresh failed for cache: {}, key: {}, error: {}",
-									cacheName, key, e.getMessage(), e);
-						}
-					}
-
-					@Override
-					public long resolveConfiguredTtlSeconds(Object value, Object key) {
-						try {
-							return cacheOperationService.resolveConfiguredTtlSeconds(value, key, null);
-						} catch (Exception e) {
-							log.warn("Failed to resolve TTL for cache: {}, key: {}, using default", cacheName, key);
-							return -1L;
-						}
-					}
-
-					@Override
-					public boolean shouldPreRefresh(long ttl, long configuredTtl) {
-						try {
-							return cacheOperationService.shouldPreRefresh(ttl, configuredTtl);
-						} catch (Exception e) {
-							log.debug("Pre-refresh check failed for cache: {}, defaulting to false", cacheName);
-							return false;
-						}
-					}
-				};
-			}
-
-			public CacheFetchStrategy.CacheFetchContext createFetchContext(Object key,
-			                                                               String cacheKey,
-			                                                               ValueWrapper valueWrapper,
-			                                                               CachedInvocation invocation,
-			                                                               RedisTemplate<String, Object> redisTemplate,
-			                                                               CacheFetchStrategy.CacheFetchCallback callback) {
-				return new CacheFetchStrategy.CacheFetchContext(
-						cacheName,
-						key,
-						cacheKey,
-						valueWrapper,
-						invocation,
-						invocation.getCachedInvocationContext(),
-						redisTemplate,
-						callback
-				);
-			}
-
-			public ValueWrapper executeStrategiesWithFallback(CacheFetchStrategy.CacheFetchContext context,
-			                                                  ValueWrapper fallbackValue,
-			                                                  Object key) {
-				long startTime = System.currentTimeMillis();
-				String operationId = generateOperationId(key);
-
-				try {
-					log.debug("[{}] Starting strategy execution for cache: {}, key: {}", operationId, cacheName, key);
-
-					if (strategyManager == null) {
-						log.error("[{}] Strategy manager is null, using fallback", operationId);
-						return fallbackValue;
-					}
-
-					ValueWrapper result = strategyManager.fetch(context);
-					long duration = System.currentTimeMillis() - startTime;
-
-					if (result != null) {
-						log.debug("[{}] Strategy execution successful in {}ms for cache: {}, key: {}",
-								operationId, duration, cacheName, key);
-						return result;
-					} else {
-						log.debug("[{}] Strategy execution returned null in {}ms for cache: {}, key: {}, using fallback",
-								operationId, duration, cacheName, key);
-						return handleNullResult(context, fallbackValue, operationId);
-					}
-
-				} catch (IllegalStateException e) {
-					long duration = System.currentTimeMillis() - startTime;
-					log.warn("[{}] Strategy configuration error in {}ms for cache: {}, key: {}: {}, using fallback",
-							operationId, duration, cacheName, key, e.getMessage());
-					return fallbackValue;
-
-				} catch (SecurityException e) {
-					long duration = System.currentTimeMillis() - startTime;
-					log.error("[{}] Security error in {}ms for cache: {}, key: {}: {}, using fallback",
-							operationId, duration, cacheName, key, e.getMessage());
-					return fallbackValue;
-
-				} catch (Exception e) {
-					long duration = System.currentTimeMillis() - startTime;
-					log.error("[{}] Strategy execution failed in {}ms for cache: {}, key: {}: {}, using fallback",
-							operationId, duration, cacheName, key, e.getMessage(), e);
-
-					if (isCriticalError(e)) {
-						handleCriticalError(context, e, operationId);
-					}
-
-					return fallbackValue;
-				}
-			}
-
-			private ValueWrapper handleNullResult(CacheFetchStrategy.CacheFetchContext context,
-			                                      ValueWrapper fallbackValue,
-			                                      String operationId) {
-				CachedInvocationContext invocationContext = context.invocationContext();
-
-				if (invocationContext.cacheNullValues()) {
-					log.debug("[{}] Null result accepted due to cacheNullValues=true", operationId);
-					return null;
-				}
-
-				return fallbackValue;
-			}
-
-			private boolean isCriticalError(Exception e) {
-				// 检查严重异常类型
-				Throwable cause = e.getCause();
-				if (cause instanceof OutOfMemoryError || cause instanceof StackOverflowError) {
-					return true;
-				}
-
-				// 检查特定异常类型
-				if (e instanceof java.util.concurrent.TimeoutException
-						|| e instanceof java.io.IOException) {
-					return true;
-				}
-
-				// 检查连接异常
-				String message = e.getMessage();
-				if (message != null) {
-					String lowerMessage = message.toLowerCase();
-					return lowerMessage.contains("connection")
-							|| lowerMessage.contains("timeout")
-							|| lowerMessage.contains("pool exhausted")
-							|| lowerMessage.contains("refused");
-				}
-
-				return false;
-			}
-
-			private void handleCriticalError(CacheFetchStrategy.CacheFetchContext context,
-			                                 Exception e,
-			                                 String operationId) {
-				log.error("[{}] Critical error detected in cache strategy execution: {}", operationId, e.getMessage());
-
-				try {
-					if (context.redisTemplate() != null) {
-						// 可以添加连接池状态检查等
-					}
-				} catch (Exception cleanupError) {
-					log.error("[{}] Error during critical error cleanup: {}", operationId, cleanupError.getMessage());
-				}
-			}
-
-			private String generateOperationId(Object key) {
-				return String.format("%s-%d", String.valueOf(key).hashCode(), System.currentTimeMillis() % 10000);
-			}
-		}
 }

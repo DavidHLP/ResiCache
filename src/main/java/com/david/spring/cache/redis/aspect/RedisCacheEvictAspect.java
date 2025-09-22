@@ -1,10 +1,10 @@
 package com.david.spring.cache.redis.aspect;
 
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
-import com.david.spring.cache.redis.aspect.support.CacheOperationExecutor;
-import com.david.spring.cache.redis.reflect.context.EvictInvocationContext;
+import com.david.spring.cache.redis.aspect.support.CacheHandler;
 import com.david.spring.cache.redis.aspect.support.KeyResolver;
 import com.david.spring.cache.redis.reflect.EvictInvocation;
+import com.david.spring.cache.redis.reflect.context.EvictInvocationContext;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -18,10 +18,10 @@ import org.springframework.stereotype.Component;
 public class RedisCacheEvictAspect extends AbstractCacheAspect {
 
 	private final RegistryFactory registryFactory;
-	private final CacheOperationExecutor cacheOperationExecutor;
+	private final CacheHandler cacheOperationExecutor;
 	private RedisCacheEvict currentAnnotation;
 
-	public RedisCacheEvictAspect(RegistryFactory registryFactory, CacheOperationExecutor cacheOperationExecutor) {
+	public RedisCacheEvictAspect(RegistryFactory registryFactory, CacheHandler cacheOperationExecutor) {
 		this.registryFactory = registryFactory;
 		this.cacheOperationExecutor = cacheOperationExecutor;
 	}
@@ -89,9 +89,5 @@ public class RedisCacheEvictAspect extends AbstractCacheAspect {
 				.beforeInvocation(annotation.beforeInvocation())
 				.sync(annotation.sync())
 				.build();
-	}
-
-	private String safeString(String value) {
-		return value == null ? "" : value;
 	}
 }

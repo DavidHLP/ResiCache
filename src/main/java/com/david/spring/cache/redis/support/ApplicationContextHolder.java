@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-public class SpringContextHolder implements ApplicationContextAware {
+public class ApplicationContextHolder implements ApplicationContextAware {
 
 	private static volatile ApplicationContext context;
 
@@ -64,7 +64,7 @@ public class SpringContextHolder implements ApplicationContextAware {
 	public void setApplicationContext(@NonNull ApplicationContext applicationContext)
 			throws BeansException {
 		log.info("Setting Spring application context for CacheGuard components");
-		SpringContextHolder.context = applicationContext;
+		ApplicationContextHolder.context = applicationContext;
 		log.debug("Spring application context successfully set");
 	}
 }

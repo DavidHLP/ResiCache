@@ -2,132 +2,190 @@ package com.david.spring.cache.redis.strategy;
 
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
+import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.springframework.cache.Cache.ValueWrapper;
 import org.springframework.data.redis.core.RedisTemplate;
 
 /**
- * 缓存获取策略接口
- * 定义不同的缓存获取行为
+ * 缓存获取策略接口。
+ * <p>
+ * 定义不同的缓存获取行为，支持责任链模式执行多个策略，每个策略可独立处理特定场景。
+ * </p>
+ *
+ * @author CacheGuard
+ * @since 1.0.0
  */
 public interface CacheFetchStrategy {
 
-	/**
-	 * 执行缓存获取策略
-	 *
-	 * @param context 策略上下文
-	 * @return 缓存值包装器，如果缓存不存在则返回null
-	 */
-	ValueWrapper fetch(CacheFetchContext context);
+	/** 默认策略优先级 */
+	int DEFAULT_ORDER = 100;
+
+	/** 高优先级策略 */
+	int HIGH_PRIORITY = 10;
+
+	/** 最高优先级策略 */
+	int HIGHEST_PRIORITY = 1;
 
 	/**
-	 * 判断是否支持该策略
+	 * 执行缓存获取策略。
+	 * <p>
+	 * 这是策略的核心方法，实现具体的缓存获取逻辑。
+	 * </p>
 	 *
-	 * @param invocationContext 调用上下文
-	 * @return true表示支持，false表示不支持
+	 * @param context 策略执行上下文
+	 * @return 缓存值包装器，null表示未命中或策略不适用
 	 */
-	boolean supports(CachedInvocationContext invocationContext);
+	@Nullable
+	ValueWrapper fetch(@Nonnull CacheFetchContext context);
 
 	/**
-	 * 获取策略优先级，数字越小优先级越高
+	 * 判断策略是否支持给定的调用上下文。
+	 * <p>
+	 * 用于快速过滤不适用的策略，提高执行效率。
+	 * </p>
 	 *
-	 * @return 优先级值
+	 * @param invocationContext 缓存调用上下文
+	 * @return true表示支持
+	 */
+	boolean supports(@Nonnull CachedInvocationContext invocationContext);
+
+	/**
+	 * 获取策略优先级。数字越小优先级越高。
+	 *
+	 * @return 优先级数值
 	 */
 	default int getOrder() {
-		return 0;
+		return DEFAULT_ORDER;
 	}
 
+	/**
+	 * 获取策略名称。
+	 *
+	 * @return 策略名称
+	 */
+	@Nonnull
 	default String getName() {
 		return this.getClass().getSimpleName();
 	}
 
+	/**
+	 * 当策略返回null时是否停止后续策略执行。
+	 *
+	 * @return true表示停止执行
+	 */
 	default boolean shouldStopOnNull() {
 		return false;
 	}
 
+	/**
+	 * 当策略抛出异常时是否停止后续策略执行。
+	 *
+	 * @return true表示停止执行
+	 */
 	default boolean shouldStopOnException() {
 		return false;
 	}
 
-	default boolean isValidContext(CacheFetchContext context) {
+	/**
+	 * 快速验证上下文的基本有效性。
+	 *
+	 * @param context 策略执行上下文
+	 * @return true表示上下文有效
+	 */
+	default boolean isValidContext(@Nullable CacheFetchContext context) {
 		return context != null
 				&& context.cacheName() != null
 				&& context.key() != null
 				&& context.invocationContext() != null;
 	}
 
-	default boolean isContextCompatible(CacheFetchContext context) {
-		if (!isValidContext(context)) {
-			return false;
-		}
-
-		CachedInvocationContext invocationContext = context.invocationContext();
-
-		// 验证策略类型兼容性
-		if (invocationContext.fetchStrategy() != CachedInvocationContext.FetchStrategyType.AUTO
-				&& !isStrategyTypeCompatible(invocationContext.fetchStrategy())) {
-			return false;
-		}
-
-		// 验证必要的依赖项
-		return validateContextRequirements(invocationContext);
-	}
-
-	default boolean isStrategyTypeCompatible(CachedInvocationContext.FetchStrategyType strategyType) {
-		// 默认所有策略都兼容AUTO和SIMPLE类型
-		return strategyType == CachedInvocationContext.FetchStrategyType.AUTO
-				|| strategyType == CachedInvocationContext.FetchStrategyType.SIMPLE;
-	}
-
-	default boolean validateContextRequirements(CachedInvocationContext context) {
-		// 基本验证：检查关键配置的一致性
-		if (context.ttl() < 0 && context.enablePreRefresh()) {
-			return false; // 预刷新需要有效的TTL
-		}
-
-		if (context.variance() < 0 || context.variance() > 1) {
-			return false; // 方差必须在0-1之间
-		}
-
-		return !(context.preRefreshThreshold() < 0) && !(context.preRefreshThreshold() > 1); // 预刷新阈值必须在0-1之间
-	}
-
 	/**
-	 * 缓存获取回调接口
+	 * 缓存获取回调接口。
+	 * <p>
+	 * 提供策略与缓存系统交互的标准接口。
+	 * </p>
 	 */
 	interface CacheFetchCallback {
-		/**
-		 * 获取基础缓存值
-		 */
-		ValueWrapper getBaseValue(Object key);
 
 		/**
-		 * 刷新缓存
+		 * 获取基础缓存值。
+		 *
+		 * @param key 缓存键
+		 * @return 缓存值包装器
 		 */
-		void refresh(CachedInvocation invocation, Object key, String cacheKey, long ttl);
+		@Nullable
+		ValueWrapper getBaseValue(@Nonnull Object key);
 
 		/**
-		 * 解析配置的TTL时间
+		 * 异步刷新缓存。
+		 *
+		 * @param invocation 缓存调用信息
+		 * @param key 缓存键
+		 * @param cacheKey Redis缓存键
+		 * @param ttl 当前TTL值
 		 */
-		long resolveConfiguredTtlSeconds(Object value, Object key);
+		void refresh(@Nonnull CachedInvocation invocation,
+		             @Nonnull Object key,
+		             @Nonnull String cacheKey,
+		             long ttl);
 
 		/**
-		 * 判断是否需要预刷新
+		 * 解析配置的 TTL 时间（秒）。
+		 *
+		 * @param value 缓存值
+		 * @param key 缓存键
+		 * @return TTL 秒数，-1表示无法解析或永不过期
 		 */
-		boolean shouldPreRefresh(long ttl, long configuredTtl);
+		long resolveConfiguredTtlSeconds(@Nullable Object value, @Nonnull Object key);
+
+		/**
+		 * 判断是否需要预刷新。
+		 *
+		 * @param currentTtl 当前剩余TTL（秒）
+		 * @param configuredTtl 配置的TTL（秒）
+		 * @return true表示需要预刷新
+		 */
+		boolean shouldPreRefresh(long currentTtl, long configuredTtl);
 	}
 
 	/**
-	 * 策略执行上下文
+	 * 策略执行上下文。
+	 *
+	 * @param cacheName 缓存名称
+	 * @param key 业务缓存键
+	 * @param cacheKey Redis存储键
+	 * @param valueWrapper 当前缓存值包装器
+	 * @param invocation 缓存调用信息
+	 * @param invocationContext 调用上下文，包含注解配置
+	 * @param redisTemplate Redis操作模板
+	 * @param callback 回调接口
 	 */
 	record CacheFetchContext(
-			String cacheName,
-			Object key,
-			String cacheKey,
-			ValueWrapper valueWrapper,
-			CachedInvocation invocation,
-			CachedInvocationContext invocationContext,
-			RedisTemplate<String, Object> redisTemplate,
-			CacheFetchCallback callback
+			@Nonnull String cacheName,
+			@Nonnull Object key,
+			@Nonnull String cacheKey,
+			@Nullable ValueWrapper valueWrapper,
+			@Nonnull CachedInvocation invocation,
+			@Nonnull CachedInvocationContext invocationContext,
+			@Nonnull RedisTemplate<String, Object> redisTemplate,
+			@Nonnull CacheFetchCallback callback
 	) {
+
+		/**
+		 * 检查当前是否有缓存值。
+		 */
+		public boolean hasValue() {
+			return valueWrapper != null && valueWrapper.get() != null;
+		}
+
+		/**
+		 * 安全地获取缓存值。
+		 */
+		@Nullable
+		public Object getValue() {
+			return valueWrapper != null ? valueWrapper.get() : null;
+		}
+
 	}
 }

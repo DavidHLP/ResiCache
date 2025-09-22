@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.strategy;
+package com.david.spring.cache.redis.strategy.support;
 
 import com.david.spring.cache.redis.meta.CacheMata;
 import com.david.spring.cache.redis.protection.CacheAvalanche;
@@ -120,8 +120,8 @@ public class CacheOperationService {
 
 		// 检查是否需要应用雪崩保护（只有在用户没有明确配置randomTtl时才应用）
 		long effectiveTtl = shouldApplyAvalancheProtection(invocationContext, ttlSecs)
-			? cacheAvalanche.jitterTtlSeconds(ttlSecs)
-			: ttlSecs;
+				? cacheAvalanche.jitterTtlSeconds(ttlSecs)
+				: ttlSecs;
 
 		// 不再计算本地过期时间，仅使用元信息中的 TTL，并由 Redis 统一管理过期
 		return CacheMata.builder().ttl(effectiveTtl).value(value).build();
@@ -150,17 +150,17 @@ public class CacheOperationService {
 
 		// 如果用户明确配置了 fetchStrategy 为某些特定类型，可能有特殊的 TTL 处理需求
 		if (context.fetchStrategy() != null) {
-			switch (context.fetchStrategy()) {
-				case SIMPLE:
+			return switch (context.fetchStrategy()) {
+				case SIMPLE ->
 					// SIMPLE 策略通常不需要系统级别的随机化
-					return false;
-				case CUSTOM:
+						false;
+				case CUSTOM ->
 					// 自定义策略可能有自己的 TTL 处理逻辑
-					return false;
-				default:
+						false;
+				default ->
 					// 其他策略默认应用雪崩保护
-					return true;
-			}
+						true;
+			};
 		}
 
 		// 默认情况下应用雪崩保护
@@ -180,14 +180,12 @@ public class CacheOperationService {
 	/**
 	 * 应用抖动后的过期时间
 	 */
-	public void applyLitteredExpire(Object key, Object toStore, String cacheKey,
+	public void applyLitteredExpire(Object ignoredKey, Object toStore, String cacheKey,
 	                                RedisTemplate<String, Object> redisTemplate) {
 		try {
 			if (toStore instanceof CacheMata meta && meta.getTtl() > 0) {
 				long seconds = meta.getTtl();
-				if (seconds > 0) {
-					redisTemplate.expire(cacheKey, seconds, TimeUnit.SECONDS);
-				}
+				redisTemplate.expire(cacheKey, seconds, TimeUnit.SECONDS);
 			}
 		} catch (Exception ignore) {
 			// 忽略异常
@@ -205,6 +203,7 @@ public class CacheOperationService {
 			return false;
 		}
 	}
+
 
 	/**
 	 * 缓存刷新回调接口

@@ -5,8 +5,10 @@ import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
-import com.david.spring.cache.redis.strategy.CacheOperationService;
+import com.david.spring.cache.redis.strategy.impl.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.strategy.support.CacheOperationService;
+import com.david.spring.cache.redis.strategy.support.CacheContextValidator;
+import com.david.spring.cache.redis.strategy.support.CacheStrategyExecutor;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -51,7 +53,10 @@ public class RedisCacheConfig {
 			CachePenetration cachePenetration,
 			CacheBreakdown cacheBreakdown,
 			CacheFetchStrategyManager strategyManager,
-			CacheOperationService cacheOperationService, CacheGuardProperties properties) {
+			CacheOperationService cacheOperationService,
+			CacheContextValidator contextValidator,
+			CacheStrategyExecutor strategyExecutor,
+			CacheGuardProperties properties) {
 		RedisCacheWriter cacheWriter =
 				RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
 		// Key 用 String，Value 用 JSON
@@ -95,7 +100,10 @@ public class RedisCacheConfig {
 				cachePenetration,
 				cacheBreakdown,
 				strategyManager,
-				cacheOperationService, properties);
+				cacheOperationService,
+				contextValidator,
+				strategyExecutor,
+				properties);
 	}
 
 

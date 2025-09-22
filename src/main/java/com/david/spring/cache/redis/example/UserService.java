@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class UserService {
 
-	@RedisCacheable(value = "users", key = "#id", ttl = 1000)
+	@RedisCacheable(value = "users", key = "#id", ttl = 100, fetchStrategy = "AUTO")
 	public User getUser(Long id) {
 		return User.builder().id(1L).name("David").build();
 	}

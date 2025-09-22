@@ -85,13 +85,6 @@ public final class KeyResolver {
 	 * 获取KeyGenerator Bean实例
 	 */
 	private static KeyGenerator getKeyGeneratorBean(String keyGeneratorBeanName, Method method) {
-		KeyGenerator generator = BeanResolver.resolveKeyGenerator(keyGeneratorBeanName, null);
-		if (generator == null) {
-			log.error("Critical error: KeyGenerator '{}' not found for method {}",
-					keyGeneratorBeanName, method.getName());
-			throw new IllegalStateException("KeyGenerator '" + keyGeneratorBeanName +
-					"' not found for method " + method.getName());
-		}
-		return generator;
+		return BeanResolver.resolveKeyGenerator(keyGeneratorBeanName, null);
 	}
 }

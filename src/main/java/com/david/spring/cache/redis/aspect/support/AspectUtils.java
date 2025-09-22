@@ -51,16 +51,6 @@ public final class AspectUtils {
 	}
 
 	/**
-	 * 安全地将字符串转换为非null值
-	 *
-	 * @param value 输入字符串
-	 * @return 非null的字符串，null转换为空字符串
-	 */
-	public static String safeString(String value) {
-		return value == null ? "" : value;
-	}
-
-	/**
 	 * 检查字符串是否为空或空白
 	 *
 	 * @param value 待检查的字符串

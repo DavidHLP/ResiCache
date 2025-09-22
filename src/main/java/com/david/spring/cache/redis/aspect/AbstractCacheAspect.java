@@ -68,6 +68,10 @@ public abstract class AbstractCacheAspect {
 	 */
 	protected abstract void processInvocation(ProceedingJoinPoint joinPoint) throws Exception;
 
+	protected String safeString(String value) {
+		return value == null ? "" : value;
+	}
+
 	/**
 	 * 缓存注册器函数式接口
 	 */

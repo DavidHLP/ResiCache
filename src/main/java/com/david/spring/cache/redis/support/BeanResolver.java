@@ -34,7 +34,7 @@ public final class BeanResolver {
 		}
 
 		// 只按名称解析，不提供任何降级策略
-		KeyGenerator generator = SpringContextHolder.getBean(keyGeneratorName, KeyGenerator.class);
+		KeyGenerator generator = ApplicationContextHolder.getBean(keyGeneratorName, KeyGenerator.class);
 		if (generator != null) {
 			log.debug("Successfully resolved KeyGenerator by name: {}", keyGeneratorName);
 			return generator;
@@ -62,14 +62,14 @@ public final class BeanResolver {
 		}
 
 		// 优先按名称解析
-		CacheResolver resolver = SpringContextHolder.getBean(cacheResolverName, CacheResolver.class);
+		CacheResolver resolver = ApplicationContextHolder.getBean(cacheResolverName, CacheResolver.class);
 		if (resolver != null) {
 			log.debug("Successfully resolved CacheResolver by name: {}", cacheResolverName);
 			return resolver;
 		}
 
 		// 回退到按类型解析
-		resolver = SpringContextHolder.getBean(CacheResolver.class);
+		resolver = ApplicationContextHolder.getBean(CacheResolver.class);
 		if (resolver != null) {
 			log.debug("Successfully resolved CacheResolver by type");
 		} else {
@@ -96,14 +96,14 @@ public final class BeanResolver {
 		}
 
 		// 优先按名称解析
-		ExpressionParser parser = SpringContextHolder.getBean(expressionParserName, ExpressionParser.class);
+		ExpressionParser parser = ApplicationContextHolder.getBean(expressionParserName, ExpressionParser.class);
 		if (parser != null) {
 			log.debug("Successfully resolved ExpressionParser by name: {}", expressionParserName);
 			return parser;
 		}
 
 		// 回退到按类型解析
-		parser = SpringContextHolder.getBean(ExpressionParser.class);
+		parser = ApplicationContextHolder.getBean(ExpressionParser.class);
 		if (parser != null) {
 			log.debug("Successfully resolved ExpressionParser by type");
 		} else {
