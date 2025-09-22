@@ -1,8 +1,8 @@
 package com.david.spring.cache.redis.aspect;
 
-import com.david.spring.cache.redis.aspect.support.AspectUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 
@@ -10,82 +10,48 @@ import java.lang.reflect.Method;
 
 /**
  * 缓存切面抽象基类
- * 提供通用的切面处理逻辑和模板方法
+ * 提供基础的切面处理逻辑
  */
 @Slf4j
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public abstract class AbstractCacheAspect {
 
 	/**
-	 * 通用的注册操作模板
-	 *
-	 * @param joinPoint     切入点
-	 * @param operationType 操作类型描述（cache/evict）
+	 * 提取目标方法
 	 */
-	protected void registerInvocation(ProceedingJoinPoint joinPoint, String operationType) {
-		try {
-			processInvocation(joinPoint);
-		} catch (Exception e) {
-			log.warn("Failed to register {} invocation for method {}: {}",
-					operationType, joinPoint.getSignature().getName(), e.getMessage(), e);
+	protected Method extractTargetMethod(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
+		if (joinPoint == null) {
+			throw new IllegalArgumentException("JoinPoint不能为空");
 		}
+
+		Object target = joinPoint.getTarget();
+		if (target == null) {
+			throw new IllegalArgumentException("目标对象不能为空");
+		}
+
+		String methodName = joinPoint.getSignature().getName();
+		if (isBlankString(methodName)) {
+			throw new IllegalArgumentException("方法名不能为空");
+		}
+
+		Class<?>[] parameterTypes = ((MethodSignature) joinPoint.getSignature())
+				.getMethod()
+				.getParameterTypes();
+
+		return target.getClass().getMethod(methodName, parameterTypes);
 	}
 
 	/**
-	 * 提取切面基础信息的通用方法
-	 *
-	 * @param joinPoint 切入点
-	 * @return 切面执行上下文
-	 * @throws NoSuchMethodException 方法不存在异常
+	 * 检查字符串是否为空
 	 */
-	protected AspectExecutionContext extractExecutionContext(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
-		Method method = AspectUtils.extractTargetMethod(joinPoint);
-		Object targetBean = joinPoint.getTarget();
-		Object[] arguments = joinPoint.getArgs();
-
-		return new AspectExecutionContext(method, targetBean, arguments);
+	protected boolean isBlankString(String value) {
+		return value == null || value.trim().isEmpty();
 	}
 
 	/**
-	 * 注册调用的通用模板方法
-	 *
-	 * @param cacheNames 缓存名称数组
-	 * @param key        缓存键
-	 * @param method     目标方法
-	 * @param registrar  具体地注册逻辑
+	 * 安全字符串处理
 	 */
-	protected void registerForCaches(String[] cacheNames, Object key, Method method, CacheRegistrar registrar) {
-		AspectUtils.processValidCacheNames(cacheNames, key, method, cacheName ->
-				registrar.register(cacheName, key)
-		);
-	}
-
-	/**
-	 * 子类需要实现的具体调用处理逻辑
-	 *
-	 * @param joinPoint 切入点
-	 * @throws Exception 处理异常
-	 */
-	protected abstract void processInvocation(ProceedingJoinPoint joinPoint) throws Exception;
-
 	protected String safeString(String value) {
 		return value == null ? "" : value;
 	}
-
-	/**
-	 * 缓存注册器函数式接口
-	 */
-	@FunctionalInterface
-	protected interface CacheRegistrar {
-		void register(String cacheName, Object key);
-	}
-
-	/**
-	 * 切面执行上下文封装类
-	 */
-	public record AspectExecutionContext(
-			Method method,
-			Object targetBean,
-			Object[] arguments
-	) {}
 }

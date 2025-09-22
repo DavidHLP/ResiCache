@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.meta;
+package com.david.spring.cache.redis.core.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class CacheMata {
+public class CachedValue {
 	private long ttl;
 	private Object value;
 	private Class<?> type;

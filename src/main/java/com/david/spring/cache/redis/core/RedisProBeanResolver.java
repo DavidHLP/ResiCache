@@ -1,19 +1,25 @@
-package com.david.spring.cache.redis.support;
+package com.david.spring.cache.redis.core;
 
+import com.david.spring.cache.redis.core.holder.ApplicationContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.expression.ExpressionParser;
+import org.springframework.stereotype.Component;
 
 /**
  * Bean解析工具类
  * 提供统一的KeyGenerator、CacheResolver和ExpressionParser解析逻辑
  */
 @Slf4j
-public final class BeanResolver {
+@Component
+public class RedisProBeanResolver {
 
-	private BeanResolver() {
-		// 工具类禁止实例化
+	/**
+	 * 获取Bean实例的静态方法（用于非Spring管理的类调用）
+	 */
+	public static RedisProBeanResolver getInstance() {
+		return ApplicationContextHolder.getBean(RedisProBeanResolver.class);
 	}
 
 	/**
@@ -24,7 +30,7 @@ public final class BeanResolver {
 	 * @return 解析的KeyGenerator实例
 	 * @throws IllegalStateException 如果无法解析KeyGenerator Bean
 	 */
-	public static KeyGenerator resolveKeyGenerator(String keyGeneratorName, KeyGenerator cached) {
+	public KeyGenerator resolveKeyGenerator(String keyGeneratorName, KeyGenerator cached) {
 		if (cached != null) {
 			return cached;
 		}
@@ -52,7 +58,7 @@ public final class BeanResolver {
 	 * @param cached            已缓存的实例
 	 * @return 解析的CacheResolver实例
 	 */
-	public static CacheResolver resolveCacheResolver(String cacheResolverName, CacheResolver cached) {
+	public CacheResolver resolveCacheResolver(String cacheResolverName, CacheResolver cached) {
 		if (cached != null) {
 			return cached;
 		}
@@ -86,7 +92,7 @@ public final class BeanResolver {
 	 * @param cached               已缓存的实例
 	 * @return 解析的ExpressionParser实例
 	 */
-	public static ExpressionParser resolveExpressionParser(String expressionParserName, ExpressionParser cached) {
+	public ExpressionParser resolveExpressionParser(String expressionParserName, ExpressionParser cached) {
 		if (cached != null) {
 			return cached;
 		}

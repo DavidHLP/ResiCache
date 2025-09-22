@@ -1,21 +1,23 @@
-package com.david.spring.cache.redis.aspect.support;
+package com.david.spring.cache.redis.core;
 
-import com.david.spring.cache.redis.support.BeanResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.KeyGenerator;
+import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
 /**
- * Key解析器
- * 专门负责通过Bean容器获取KeyGenerator并生成缓存Key
- * 所有操作必须通过Bean容器，不提供任何保底策略
+ * Redis Pro缓存Key管理器
+ * 统一管理所有与缓存Key相关的操作
  */
 @Slf4j
-public final class KeyResolver {
+@Component
+public class RedisProKeyManager {
 
-	private KeyResolver() {
-		// 工具类禁止实例化
+	private final RedisProBeanResolver beanResolver;
+
+	public RedisProKeyManager(RedisProBeanResolver beanResolver) {
+		this.beanResolver = beanResolver;
 	}
 
 	/**
@@ -29,8 +31,8 @@ public final class KeyResolver {
 	 * @throws IllegalArgumentException 参数无效时抛出
 	 * @throws IllegalStateException    KeyGenerator Bean获取失败时抛出
 	 */
-	public static Object resolveKey(Object targetBean, Method method, Object[] arguments,
-	                                String keyGeneratorBeanName) {
+	public Object resolveKey(Object targetBean, Method method, Object[] arguments,
+	                         String keyGeneratorBeanName) {
 		validateArguments(targetBean, method, keyGeneratorBeanName);
 
 		if (arguments == null) {
@@ -53,9 +55,23 @@ public final class KeyResolver {
 	}
 
 	/**
+	 * 获取缓存名称数组
+	 * 优先使用value，如果为空则使用cacheNames
+	 */
+	public String[] getCacheNames(String[] value, String[] cacheNames) {
+		if (value != null && value.length > 0) {
+			return value;
+		}
+		if (cacheNames != null && cacheNames.length > 0) {
+			return cacheNames;
+		}
+		throw new IllegalArgumentException("Neither value nor cacheNames is specified");
+	}
+
+	/**
 	 * 验证参数有效性
 	 */
-	private static void validateArguments(Object targetBean, Method method, String keyGeneratorBeanName) {
+	private void validateArguments(Object targetBean, Method method, String keyGeneratorBeanName) {
 		if (targetBean == null) {
 			throw new IllegalArgumentException("Target bean cannot be null");
 		}
@@ -68,23 +84,9 @@ public final class KeyResolver {
 	}
 
 	/**
-	 * 获取缓存名称数组
-	 * 优先使用value，如果为空则使用cacheNames
-	 */
-	public static String[] getCacheNames(String[] value, String[] cacheNames) {
-		if (value != null && value.length > 0) {
-			return value;
-		}
-		if (cacheNames != null && cacheNames.length > 0) {
-			return cacheNames;
-		}
-		throw new IllegalArgumentException("Neither value nor cacheNames is specified");
-	}
-
-	/**
 	 * 获取KeyGenerator Bean实例
 	 */
-	private static KeyGenerator getKeyGeneratorBean(String keyGeneratorBeanName, Method method) {
-		return BeanResolver.resolveKeyGenerator(keyGeneratorBeanName, null);
+	private KeyGenerator getKeyGeneratorBean(String keyGeneratorBeanName, Method method) {
+		return beanResolver.resolveKeyGenerator(keyGeneratorBeanName, null);
 	}
 }

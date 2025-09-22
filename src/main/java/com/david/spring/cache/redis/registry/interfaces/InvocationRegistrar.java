@@ -3,8 +3,8 @@ package com.david.spring.cache.redis.registry.interfaces;
 import java.util.Optional;
 
 /**
- * 调用信息注册器接口 - 接口分离原则（ISP）
- * 只包含注册相关的操作
+ * 调用信息注册器接口
+ * 遵循接口分离原则，仅包含注册相关操作
  */
 public interface InvocationRegistrar<T> {
 

@@ -1,30 +1,24 @@
-package com.david.spring.cache.redis.registry.factory;
+package com.david.spring.cache.redis.registry;
 
-import com.david.spring.cache.redis.registry.AbstractInvocationRegistry;
-import com.david.spring.cache.redis.registry.CacheInvocationRegistry;
-import com.david.spring.cache.redis.registry.EvictInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.CacheInvocationRegistry;
+import com.david.spring.cache.redis.registry.impl.EvictInvocationRegistry;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 注册表工厂类 - 实现开放封闭原则（OCP）
- * 对扩展开放，对修改封闭
+ * 注册表工厂类
+ * 遵循开放封闭原则，支持扩展而不修改现有代码
  */
 @Getter
 @Slf4j
 @Component
 public class RegistryFactory {
 
-	/**
-	 * -- GETTER --
-	 * 获取缓存调用注册表
-	 */
+	/** 缓存调用注册表 */
 	private final CacheInvocationRegistry cacheInvocationRegistry;
-	/**
-	 * -- GETTER --
-	 * 获取驱逐调用注册表
-	 */
+
+	/** 驱逐调用注册表 */
 	private final EvictInvocationRegistry evictInvocationRegistry;
 
 	public RegistryFactory(CacheInvocationRegistry cacheInvocationRegistry,
@@ -34,7 +28,7 @@ public class RegistryFactory {
 	}
 
 	/**
-	 * 根据类型获取注册表
+	 * 根据类型获取对应的注册表
 	 */
 	@SuppressWarnings("unchecked")
 	public <T> AbstractInvocationRegistry<T> getRegistry(RegistryType type) {
@@ -45,7 +39,7 @@ public class RegistryFactory {
 	}
 
 	/**
-	 * 获取所有注册表统计信息
+	 * 获取所有注册表的统计信息
 	 */
 	public RegistryStats getAllRegistryStats() {
 		return new RegistryStats(
@@ -63,7 +57,7 @@ public class RegistryFactory {
 	}
 
 	/**
-	 * 注册表统计信息
+	 * 注册表统计信息记录类
 	 */
 	public record RegistryStats(
 			int cacheInvocations,

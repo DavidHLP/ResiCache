@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.support;
+package com.david.spring.cache.redis.core.holder;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;

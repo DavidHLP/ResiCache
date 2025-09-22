@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.cache.support;
 
-import com.david.spring.cache.redis.meta.CacheMata;
+import com.david.spring.cache.redis.core.entity.CachedValue;
 import com.david.spring.cache.redis.protection.CacheAvalanche;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
@@ -112,7 +112,7 @@ public class CacheOperationService {
 		if (value == null) {
 			return null;
 		}
-		if (value instanceof CacheMata) {
+		if (value instanceof CachedValue) {
 			return value;
 		}
 
@@ -124,7 +124,7 @@ public class CacheOperationService {
 				: ttlSecs;
 
 		// 不再计算本地过期时间，仅使用元信息中的 TTL，并由 Redis 统一管理过期
-		return CacheMata.builder().ttl(effectiveTtl).value(value).build();
+		return CachedValue.builder().ttl(effectiveTtl).value(value).build();
 	}
 
 	/**
@@ -171,8 +171,8 @@ public class CacheOperationService {
 	 * 从存储值中解包缓存值
 	 */
 	public Object fromStoreValue(@Nullable Object storeValue) {
-		if (storeValue instanceof CacheMata) {
-			return ((CacheMata) storeValue).getValue();
+		if (storeValue instanceof CachedValue) {
+			return ((CachedValue) storeValue).getValue();
 		}
 		return storeValue;
 	}
@@ -183,7 +183,7 @@ public class CacheOperationService {
 	public void applyLitteredExpire(Object ignoredKey, Object toStore, String cacheKey,
 	                                RedisTemplate<String, Object> redisTemplate) {
 		try {
-			if (toStore instanceof CacheMata meta && meta.getTtl() > 0) {
+			if (toStore instanceof CachedValue meta && meta.getTtl() > 0) {
 				long seconds = meta.getTtl();
 				redisTemplate.expire(cacheKey, seconds, TimeUnit.SECONDS);
 			}

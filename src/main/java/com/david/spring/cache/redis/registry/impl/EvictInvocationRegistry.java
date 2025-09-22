@@ -1,6 +1,7 @@
-package com.david.spring.cache.redis.registry;
+package com.david.spring.cache.redis.registry.impl;
 
 import com.david.spring.cache.redis.reflect.EvictInvocation;
+import com.david.spring.cache.redis.registry.AbstractInvocationRegistry;
 import org.springframework.stereotype.Component;
 
 /**

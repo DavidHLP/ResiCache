@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.reflect;
 
 import com.david.spring.cache.redis.reflect.context.EvictInvocationContext;
-import com.david.spring.cache.redis.support.BeanResolver;
+import com.david.spring.cache.redis.core.RedisProBeanResolver;
 import com.david.spring.cache.redis.reflect.support.InvocationUtils;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -71,7 +71,7 @@ public class EvictInvocation {
 			return resolvedKeyGenerator;
 		}
 
-		resolvedKeyGenerator = BeanResolver.resolveKeyGenerator(
+		resolvedKeyGenerator = RedisProBeanResolver.getInstance().resolveKeyGenerator(
 			evictInvocationContext.keyGenerator(), resolvedKeyGenerator);
 		return resolvedKeyGenerator;
 	}
@@ -84,7 +84,7 @@ public class EvictInvocation {
 			return resolvedCacheResolver;
 		}
 
-		resolvedCacheResolver = BeanResolver.resolveCacheResolver(
+		resolvedCacheResolver = RedisProBeanResolver.getInstance().resolveCacheResolver(
 			evictInvocationContext.cacheResolver(), resolvedCacheResolver);
 		return resolvedCacheResolver;
 	}

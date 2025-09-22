@@ -7,17 +7,17 @@ import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.factory.RegistryFactory;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategy;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.registry.RegistryFactory;
+import com.david.spring.cache.redis.chain.CacheFetchStrategy;
+import com.david.spring.cache.redis.chain.CacheFetchStrategyManager;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
-import com.david.spring.cache.redis.strategy.impl.SimpleFetchStrategy;
 import com.david.spring.cache.redis.cache.support.CacheContextValidator;
 import com.david.spring.cache.redis.cache.support.CacheStrategyExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
+
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.NonNull;
@@ -100,7 +100,7 @@ public class RedisProCache extends RedisCache {
 		}
 
 		if (!contextValidator.shouldExecuteStrategies(invocationContext, baseValue)) {
-			log.debug("Skipping strategy execution for cache: {}, key: {}", getName(), key);
+			log.debug("Skipping chain execution for cache: {}, key: {}", getName(), key);
 			return baseValue;
 		}
 
@@ -394,7 +394,7 @@ public class RedisProCache extends RedisCache {
 
 	private void validateStrategyIntegration() {
 		try {
-			List<CacheFetchStrategy> strategies = strategyManager.getAllStrategies();
+			List<String> strategies = strategyManager.getAvailableStrategies();
 			if (strategies.isEmpty()) {
 				log.warn("No strategies registered in cache: {}", getName());
 				return;
@@ -404,11 +404,10 @@ public class RedisProCache extends RedisCache {
 					getName(), strategies.size());
 
 			// 验证是否有默认策略
-			boolean hasDefaultStrategy = strategies.stream()
-					.anyMatch(s -> s instanceof SimpleFetchStrategy);
+			boolean hasDefaultStrategy = strategies.contains("Simple");
 
 			if (!hasDefaultStrategy) {
-				log.warn("No default SimpleFetchStrategy found for cache: {}", getName());
+				log.warn("No default Simple chain found for cache: {}", getName());
 			}
 
 			// 输出策略信息

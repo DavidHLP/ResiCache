@@ -4,8 +4,8 @@ import com.david.spring.cache.redis.core.RedisProCacheManager;
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
-import com.david.spring.cache.redis.registry.factory.RegistryFactory;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.registry.RegistryFactory;
+import com.david.spring.cache.redis.chain.CacheFetchStrategyManager;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import com.david.spring.cache.redis.cache.support.CacheContextValidator;
 import com.david.spring.cache.redis.cache.support.CacheStrategyExecutor;
@@ -13,7 +13,6 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -65,7 +64,6 @@ public class RedisCacheConfig {
 						new StringRedisSerializer());
 		// 配置支持 JavaTime 的 ObjectMapper
 		ObjectMapper objectMapper = new ObjectMapper();
-		objectMapper.registerModule(new JavaTimeModule());
 		objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 		objectMapper.activateDefaultTyping(
 				LaissezFaireSubTypeValidator.instance,
@@ -136,7 +134,6 @@ public class RedisCacheConfig {
 		StringRedisSerializer stringSerializer = new StringRedisSerializer();
 		// 为 RedisTemplate 创建一个支持 JavaTime 的 ObjectMapper
 		ObjectMapper objectMapper = new ObjectMapper();
-		objectMapper.registerModule(new JavaTimeModule());
 		objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 		objectMapper.activateDefaultTyping(
 				LaissezFaireSubTypeValidator.instance,

@@ -2,7 +2,7 @@ package com.david.spring.cache.redis.reflect;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.reflect.support.InvocationUtils;
-import com.david.spring.cache.redis.support.BeanResolver;
+import com.david.spring.cache.redis.core.RedisProBeanResolver;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheResolver;
@@ -69,7 +69,7 @@ public class CachedInvocation {
 			return resolvedKeyGenerator;
 		}
 
-		resolvedKeyGenerator = BeanResolver.resolveKeyGenerator(
+		resolvedKeyGenerator = RedisProBeanResolver.getInstance().resolveKeyGenerator(
 				cachedInvocationContext.keyGenerator(), resolvedKeyGenerator);
 		return resolvedKeyGenerator;
 	}
@@ -82,7 +82,7 @@ public class CachedInvocation {
 			return resolvedCacheResolver;
 		}
 
-		resolvedCacheResolver = BeanResolver.resolveCacheResolver(
+		resolvedCacheResolver = RedisProBeanResolver.getInstance().resolveCacheResolver(
 				cachedInvocationContext.cacheResolver(), resolvedCacheResolver);
 		return resolvedCacheResolver;
 	}

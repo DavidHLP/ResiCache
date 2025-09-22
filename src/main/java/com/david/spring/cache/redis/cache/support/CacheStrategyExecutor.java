@@ -2,8 +2,8 @@ package com.david.spring.cache.redis.cache.support;
 
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategy;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.chain.CacheFetchStrategy;
+import com.david.spring.cache.redis.chain.CacheFetchStrategyManager;
 import jakarta.annotation.Nonnull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -110,7 +110,7 @@ public class CacheStrategyExecutor {
 		String operationId = generateOperationId(key);
 
 		try {
-			log.debug("[{}] Starting strategy execution: cache={}, key={}", operationId, cacheName, key);
+			log.debug("[{}] Starting chain execution: cache={}, key={}", operationId, cacheName, key);
 
 			if (strategyManager == null) {
 				log.error("[{}] Strategy manager is null, using fallback: cache={}, key={}",
@@ -165,7 +165,7 @@ public class CacheStrategyExecutor {
 	                                    String cacheName, Object key,
 	                                    Cache.ValueWrapper result) {
 		if (duration > 100) {
-			log.warn("[{}] Slow strategy execution in {}ms: cache={}, key={}, hasValue={}",
+			log.warn("[{}] Slow chain execution in {}ms: cache={}, key={}, hasValue={}",
 					operationId, duration, cacheName, key, result.get() != null);
 		} else {
 			log.debug("[{}] Strategy execution successful in {}ms: cache={}, key={}, hasValue={}",

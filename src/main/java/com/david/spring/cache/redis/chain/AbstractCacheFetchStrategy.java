@@ -1,13 +1,15 @@
-package com.david.spring.cache.redis.strategy;
+package com.david.spring.cache.redis.chain;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.registry.factory.RegistryFactory;
+import com.david.spring.cache.redis.registry.RegistryFactory;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
-import com.david.spring.cache.redis.strategy.support.StrategyValidationUtils;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -97,10 +99,26 @@ public abstract class AbstractCacheFetchStrategy implements CacheFetchStrategy {
 
 	/**
 	 * 验证策略类型兼容性。
+	 * <p>
+	 * 检查指定策略类型是否与支持的类型兼容。`AUTO` 类型总是兼容的。
+	 * </p>
+	 *
+	 * @param strategyType   要验证的策略类型
+	 * @param supportedTypes 支持的策略类型列表
+	 * @return true表示兼容
+	 * @throws IllegalArgumentException 如果 `supportedTypes` 为 null
 	 */
-	protected boolean isStrategyTypeCompatible(CachedInvocationContext.FetchStrategyType strategyType,
-	                                           CachedInvocationContext.FetchStrategyType... supportedTypes) {
-		return StrategyValidationUtils.isStrategyTypeCompatible(strategyType, supportedTypes);
+	protected boolean isStrategyTypeCompatible(
+			@Nullable CachedInvocationContext.FetchStrategyType strategyType,
+			@Nonnull CachedInvocationContext.FetchStrategyType... supportedTypes) {
+		Objects.requireNonNull(supportedTypes, "Supported types cannot be null");
+		if (strategyType == null) {
+			return false;
+		}
+		if (strategyType == CachedInvocationContext.FetchStrategyType.AUTO) {
+			return true;
+		}
+		return Arrays.asList(supportedTypes).contains(strategyType);
 	}
 
 	/**
@@ -181,4 +199,5 @@ public abstract class AbstractCacheFetchStrategy implements CacheFetchStrategy {
 			throw e;
 		}
 	}
+
 }
