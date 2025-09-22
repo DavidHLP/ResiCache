@@ -24,9 +24,6 @@ public interface CacheFetchStrategy {
 	/** 高优先级策略 */
 	int HIGH_PRIORITY = 10;
 
-	/** 最高优先级策略 */
-	int HIGHEST_PRIORITY = 1;
-
 	/**
 	 * 执行缓存获取策略。
 	 * <p>
@@ -94,10 +91,7 @@ public interface CacheFetchStrategy {
 	 * @return true表示上下文有效
 	 */
 	default boolean isValidContext(@Nullable CacheFetchContext context) {
-		return context != null
-				&& context.cacheName() != null
-				&& context.key() != null
-				&& context.invocationContext() != null;
+		return context == null;
 	}
 
 	/**
@@ -121,9 +115,9 @@ public interface CacheFetchStrategy {
 		 * 异步刷新缓存。
 		 *
 		 * @param invocation 缓存调用信息
-		 * @param key 缓存键
-		 * @param cacheKey Redis缓存键
-		 * @param ttl 当前TTL值
+		 * @param key        缓存键
+		 * @param cacheKey   Redis缓存键
+		 * @param ttl        当前TTL值
 		 */
 		void refresh(@Nonnull CachedInvocation invocation,
 		             @Nonnull Object key,
@@ -134,7 +128,7 @@ public interface CacheFetchStrategy {
 		 * 解析配置的 TTL 时间（秒）。
 		 *
 		 * @param value 缓存值
-		 * @param key 缓存键
+		 * @param key   缓存键
 		 * @return TTL 秒数，-1表示无法解析或永不过期
 		 */
 		long resolveConfiguredTtlSeconds(@Nullable Object value, @Nonnull Object key);
@@ -142,7 +136,7 @@ public interface CacheFetchStrategy {
 		/**
 		 * 判断是否需要预刷新。
 		 *
-		 * @param currentTtl 当前剩余TTL（秒）
+		 * @param currentTtl    当前剩余TTL（秒）
 		 * @param configuredTtl 配置的TTL（秒）
 		 * @return true表示需要预刷新
 		 */
@@ -152,14 +146,14 @@ public interface CacheFetchStrategy {
 	/**
 	 * 策略执行上下文。
 	 *
-	 * @param cacheName 缓存名称
-	 * @param key 业务缓存键
-	 * @param cacheKey Redis存储键
-	 * @param valueWrapper 当前缓存值包装器
-	 * @param invocation 缓存调用信息
+	 * @param cacheName         缓存名称
+	 * @param key               业务缓存键
+	 * @param cacheKey          Redis存储键
+	 * @param valueWrapper      当前缓存值包装器
+	 * @param invocation        缓存调用信息
 	 * @param invocationContext 调用上下文，包含注解配置
-	 * @param redisTemplate Redis操作模板
-	 * @param callback 回调接口
+	 * @param redisTemplate     Redis操作模板
+	 * @param callback          回调接口
 	 */
 	record CacheFetchContext(
 			@Nonnull String cacheName,

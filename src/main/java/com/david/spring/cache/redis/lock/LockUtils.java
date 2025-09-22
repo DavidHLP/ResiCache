@@ -1,45 +1,66 @@
 package com.david.spring.cache.redis.lock;
 
+import jakarta.annotation.Nonnull;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** 锁工具：封装“本地锁 + 分布式锁”的组合加锁模式。 */
+/**
+ * 锁工具类：提供各种锁操作的便利方法
+ * 支持本地锁、分布式锁以及它们的组合使用
+ */
+@Slf4j
 public final class LockUtils {
 
-	private LockUtils() {}
+	private LockUtils() {
+		throw new UnsupportedOperationException("Utility class cannot be instantiated");
+	}
 
-	/** 先尝试获取本地锁，再尝试获取分布式锁，任意一步失败则不执行任务。 返回是否成功执行了任务。 */
+	/**
+	 * 先尝试获取本地锁，再尝试获取分布式锁，任意一步失败则不执行任务
+	 *
+	 * @return 是否成功执行了任务
+	 */
 	public static boolean runWithLocalTryThenDistTry(
-			ReentrantLock localLock,
-			DistributedLock distributedLock,
-			String distKey,
+			@Nonnull ReentrantLock localLock,
+			@Nonnull DistributedLock distributedLock,
+			@Nonnull String distKey,
 			long distWaitTime,
 			long distLeaseTime,
-			TimeUnit unit,
-			Runnable task) {
-		Objects.requireNonNull(localLock, "localLock");
-		Objects.requireNonNull(distributedLock, "distributedLock");
-		Objects.requireNonNull(distKey, "distKey");
-		Objects.requireNonNull(unit, "unit");
-		Objects.requireNonNull(task, "task");
+			@Nonnull TimeUnit unit,
+			@Nonnull Runnable task) {
+		Objects.requireNonNull(localLock, "localLock cannot be null");
+		Objects.requireNonNull(distributedLock, "distributedLock cannot be null");
+		Objects.requireNonNull(distKey, "distKey cannot be null");
+		Objects.requireNonNull(unit, "unit cannot be null");
+		Objects.requireNonNull(task, "task cannot be null");
+
 		boolean localLocked = false;
 		try {
 			localLocked = localLock.tryLock();
 			if (!localLocked) {
+				log.debug("Failed to acquire local lock");
 				return false;
 			}
-			boolean distLocked =
-					distributedLock.tryLock(distKey, distWaitTime, distLeaseTime, unit);
+
+			boolean distLocked = distributedLock.tryLock(distKey, distWaitTime, distLeaseTime, unit);
 			if (!distLocked) {
+				log.debug("Failed to acquire distributed lock: {}", distKey);
 				return false;
 			}
+
 			try {
 				task.run();
+				log.debug("Successfully executed task with dual locks");
 				return true;
 			} finally {
 				distributedLock.unlock(distKey);
 			}
+		} catch (Exception e) {
+			log.error("Error executing task with dual locks: {}", e.getMessage(), e);
+			return false;
 		} finally {
 			if (localLocked) {
 				localLock.unlock();
@@ -47,9 +68,12 @@ public final class LockUtils {
 		}
 	}
 
-	/** 可抛异常版本的 Supplier。 */
+	/**
+	 * 可抛异常版本的 Supplier
+	 */
 	@FunctionalInterface
 	public interface ThrowingSupplier<T> {
 		T get() throws Exception;
 	}
+
 }

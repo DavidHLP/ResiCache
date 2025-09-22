@@ -5,7 +5,7 @@ import com.david.spring.cache.redis.lock.LockUtils;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.AbstractCacheFetchStrategy;
-import com.david.spring.cache.redis.strategy.support.CacheOperationService;
+import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +47,7 @@ public class PreRefreshStrategy extends AbstractCacheFetchStrategy {
 	@Nullable
 	public ValueWrapper fetch(@Nonnull CacheFetchContext context) {
 		// 早期验证和快速路径
-		if (!isValidContext(context) || !context.hasValue()) {
+		if (isValidContext(context) || !context.hasValue()) {
 			logDebug("Invalid context or no value, skipping pre-refresh");
 			return context.valueWrapper();
 		}

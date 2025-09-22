@@ -17,5 +17,6 @@ public class UserTest {
 	@Test
 	public void test() {
 		UserService.User user = userService.getUser(1L);
+		userService.deleteUser(1L);
 	}
 }

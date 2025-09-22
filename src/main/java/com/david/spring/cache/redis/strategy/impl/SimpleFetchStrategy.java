@@ -3,7 +3,7 @@ package com.david.spring.cache.redis.strategy.impl;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.AbstractCacheFetchStrategy;
-import com.david.spring.cache.redis.strategy.support.CacheOperationService;
+import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +33,7 @@ public class SimpleFetchStrategy extends AbstractCacheFetchStrategy {
 	@Override
 	@Nullable
 	public ValueWrapper fetch(@Nonnull CacheFetchContext context) {
-		if (!isValidContext(context)) {
+		if (isValidContext(context)) {
 			logDebug("Invalid context provided, returning null");
 			return null;
 		}

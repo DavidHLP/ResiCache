@@ -1,7 +1,9 @@
-package com.david.spring.cache.redis.strategy.impl;
+package com.david.spring.cache.redis.strategy;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.strategy.CacheFetchStrategy;
+import com.david.spring.cache.redis.strategy.impl.BloomFilterStrategy;
+import com.david.spring.cache.redis.strategy.impl.PreRefreshStrategy;
+import com.david.spring.cache.redis.strategy.impl.SimpleFetchStrategy;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
@@ -70,7 +72,7 @@ public class CacheFetchStrategyManager {
 
 		for (CacheFetchStrategy strategy : applicableStrategies) {
 			try {
-				if (!strategy.isValidContext(context)) {
+				if (strategy.isValidContext(context)) {
 					continue;
 				}
 

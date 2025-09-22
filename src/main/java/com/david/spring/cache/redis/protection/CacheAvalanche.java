@@ -1,42 +1,79 @@
 package com.david.spring.cache.redis.protection;
 
-import lombok.Getter;
-import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 缓存雪崩防护：统一的“过期时间随机化（TTL 抖动）”策略。
- *
- * <p>核心思路：在基础 TTL 的基础上，按比例随机缩短有效期，常见区间为 5% ~ 20%， 以此打散大量 key 的同时失效时间，降低同一时间点的回源洪峰风险。
+ * 缓存雪崩防护：TTL 抖动策略。
+ * <p>
+ * 通过随机化TTL时间来避免大量缓存同时过期导致的缓存雪崩问题。
+ * 默认在基础TTL的基础上随机减少5%-20%的时间。
+ * </p>
  */
+@Slf4j
 @Component
 public final class CacheAvalanche {
 
-    /** 最小随机缩减比例（例如 0.05 表示 5%） */
-    @Getter @Setter private double minJitterRatio = 0.05d;
+	/** 默认最小随机缩减比例 */
+	private static final double DEFAULT_MIN_JITTER_RATIO = 0.05d;
 
-    /** 最大随机缩减比例（例如 0.20 表示 20%） */
-    @Getter @Setter private double maxJitterRatio = 0.20d;
+	/** 默认最大随机缩减比例 */
+	private static final double DEFAULT_MAX_JITTER_RATIO = 0.20d;
 
-    /** TTL 的最小下限（秒） */
-    @Getter @Setter private long minSeconds = 1L;
+	/** TTL 的最小下限（秒） */
+	private static final long MIN_TTL_SECONDS = 1L;
 
-    /**
-     * 基于比例的 TTL 抖动：在 [minJitterRatio, maxJitterRatio) 之间取随机值，按该比例缩短 TTL。
-     *
-     * @param baseSeconds 原始 TTL（秒）
-     * @return 随机化后的 TTL（秒）
-     */
-    public long jitterTtlSeconds(long baseSeconds) {
-        if (baseSeconds <= minSeconds) {
-            return baseSeconds;
-        }
-        double low = Math.max(0.0d, Math.min(minJitterRatio, 0.99d));
-        double high = Math.max(low, Math.min(maxJitterRatio, 0.99d));
-        double ratio = (high > low) ? ThreadLocalRandom.current().nextDouble(low, high) : low;
-        long jittered = (long) Math.floor(baseSeconds * (1.0d - ratio));
-        return Math.max(minSeconds, jittered);
-    }
+	/**
+	 * 使用默认参数进行 TTL 抖动
+	 *
+	 * @param baseSeconds 原始 TTL（秒）
+	 * @return 随机化后的 TTL（秒）
+	 */
+	public long jitterTtlSeconds(long baseSeconds) {
+		return jitterTtlSeconds(baseSeconds, DEFAULT_MIN_JITTER_RATIO, DEFAULT_MAX_JITTER_RATIO);
+	}
+
+	/**
+	 * 自定义参数进行 TTL 抖动
+	 *
+	 * @param baseSeconds    原始 TTL（秒）
+	 * @param minJitterRatio 最小随机缩减比例（0-1之间）
+	 * @param maxJitterRatio 最大随机缩减比例（0-1之间）
+	 * @return 随机化后的 TTL（秒）
+	 */
+	public long jitterTtlSeconds(long baseSeconds, double minJitterRatio, double maxJitterRatio) {
+		if (baseSeconds <= MIN_TTL_SECONDS) {
+			return baseSeconds;
+		}
+
+		// 参数验证和范围调整
+		double low = Math.max(0.0d, Math.min(minJitterRatio, 0.99d));
+		double high = Math.max(low, Math.min(maxJitterRatio, 0.99d));
+
+		// 计算随机缩减比例
+		double ratio = (high > low) ? ThreadLocalRandom.current().nextDouble(low, high) : low;
+
+		// 计算抖动后的 TTL
+		long jitteredTtl = (long) Math.floor(baseSeconds * (1.0d - ratio));
+		long result = Math.max(MIN_TTL_SECONDS, jitteredTtl);
+
+		if (log.isDebugEnabled()) {
+			log.debug("TTL jitter applied: original={}s, ratio={}, result={}s",
+					baseSeconds, ratio, result);
+		}
+
+		return result;
+	}
+
+	/**
+	 * 检查 TTL 是否需要抖动
+	 *
+	 * @param ttlSeconds TTL（秒）
+	 * @return true 表示需要抖动，false 表示不需要
+	 */
+	public boolean shouldJitter(long ttlSeconds) {
+		return ttlSeconds > MIN_TTL_SECONDS;
+	}
 }

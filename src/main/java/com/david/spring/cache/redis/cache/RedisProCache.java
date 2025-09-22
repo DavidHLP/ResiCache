@@ -9,11 +9,11 @@ import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.CacheFetchStrategy;
-import com.david.spring.cache.redis.strategy.impl.CacheFetchStrategyManager;
-import com.david.spring.cache.redis.strategy.support.CacheOperationService;
+import com.david.spring.cache.redis.strategy.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import com.david.spring.cache.redis.strategy.impl.SimpleFetchStrategy;
-import com.david.spring.cache.redis.strategy.support.CacheContextValidator;
-import com.david.spring.cache.redis.strategy.support.CacheStrategyExecutor;
+import com.david.spring.cache.redis.cache.support.CacheContextValidator;
+import com.david.spring.cache.redis.cache.support.CacheStrategyExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
@@ -77,40 +77,8 @@ public class RedisProCache extends RedisCache {
 		this.contextValidator = Objects.requireNonNull(contextValidator);
 		this.strategyExecutor = Objects.requireNonNull(strategyExecutor);
 		this.properties = Objects.requireNonNull(properties);
-
-
 		// 验证策略集成
 		validateStrategyIntegration();
-	}
-
-
-	private void validateStrategyIntegration() {
-		try {
-			List<CacheFetchStrategy> strategies = strategyManager.getAllStrategies();
-			if (strategies.isEmpty()) {
-				log.warn("No strategies registered in cache: {}", getName());
-				return;
-			}
-
-			log.info("Strategy integration validation for cache: {} - {} strategies registered",
-					getName(), strategies.size());
-
-			// 验证是否有默认策略
-			boolean hasDefaultStrategy = strategies.stream()
-					.anyMatch(s -> s instanceof SimpleFetchStrategy);
-
-			if (!hasDefaultStrategy) {
-				log.warn("No default SimpleFetchStrategy found for cache: {}", getName());
-			}
-
-			// 输出策略信息
-			if (log.isDebugEnabled()) {
-				log.debug("Strategy configuration for cache {}:\n{}", getName(), strategyManager.getStrategyInfo());
-			}
-
-		} catch (Exception e) {
-			log.error("Strategy integration validation failed for cache: {}, error: {}", getName(), e.getMessage(), e);
-		}
 	}
 
 	@Override
@@ -422,6 +390,35 @@ public class RedisProCache extends RedisCache {
 							this::doClearInternal);
 				},
 				delayed);
+	}
+
+	private void validateStrategyIntegration() {
+		try {
+			List<CacheFetchStrategy> strategies = strategyManager.getAllStrategies();
+			if (strategies.isEmpty()) {
+				log.warn("No strategies registered in cache: {}", getName());
+				return;
+			}
+
+			log.info("Strategy integration validation for cache: {} - {} strategies registered",
+					getName(), strategies.size());
+
+			// 验证是否有默认策略
+			boolean hasDefaultStrategy = strategies.stream()
+					.anyMatch(s -> s instanceof SimpleFetchStrategy);
+
+			if (!hasDefaultStrategy) {
+				log.warn("No default SimpleFetchStrategy found for cache: {}", getName());
+			}
+
+			// 输出策略信息
+			if (log.isDebugEnabled()) {
+				log.debug("Strategy configuration for cache {}:\n{}", getName(), strategyManager.getStrategyInfo());
+			}
+
+		} catch (Exception e) {
+			log.error("Strategy integration validation failed for cache: {}, error: {}", getName(), e.getMessage(), e);
+		}
 	}
 
 }

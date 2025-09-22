@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.example;
 
+import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,6 +14,10 @@ public class UserService {
 	@RedisCacheable(value = "users", key = "#id", ttl = 100, fetchStrategy = "AUTO")
 	public User getUser(Long id) {
 		return User.builder().id(1L).name("David").build();
+	}
+
+	@RedisCacheEvict(value = "users", key = "#id")
+	public void deleteUser(Long id) {
 	}
 
 	@Data

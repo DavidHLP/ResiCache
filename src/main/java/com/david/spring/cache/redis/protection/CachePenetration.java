@@ -1,133 +1,115 @@
 package com.david.spring.cache.redis.protection;
 
+import jakarta.annotation.Nonnull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
 
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * 基于 Redisson 的布隆过滤器辅助类，用于防护缓存穿透。
- *
- * <p>使用方式： 1) 应用启动或定时任务中，通过 {@link #enableForCache(String, long, double)} 启用并初始化指定 cacheName
- * 的布隆过滤器， 并预热（把“合法的业务 Key”批量 add 进入 Bloom）。 2) 在 {@code RedisProCache#get(Object,
- * java.util.concurrent.Callable)} 中会在 Bloom 启用后进行判定： - 若 Bloom 断言“不可能存在”，直接返回 null，避免回源查询，阻断穿透； -
- * 若成功加载到数据，会自动将对应 key 加入 Bloom。
- *
- * <p>注意： - 只有显式启用后的 cache 才会应用 Bloom 判定，避免未预热导致的“误伤”正常请求。
+ * 缓存穿透防护：基于布隆过滤器的穿透保护。
+ * <p>
+ * 通过布隆过滤器快速判断key是否可能存在，避免对不存在数据的无效查询。
+ * 支持动态启用/禁用，批量操作等功能。
+ * </p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class CachePenetration {
+public final class CachePenetration {
 
-    private static final String DEFAULT_BLOOM_PREFIX = "bf:cache:";
+	/** 布隆过滤器键名前缀 */
+	private static final String BLOOM_PREFIX = "bf:cache:";
 
-    private final RedissonClient redissonClient;
+	private final RedissonClient redissonClient;
 
-    /** 本地缓存：cacheName -> RBloomFilter 句柄（与 Redis 对象同名、同生命周期） */
-    private final ConcurrentMap<String, RBloomFilter<String>> filters = new ConcurrentHashMap<>(64, 0.75f, 8);
+	/** 本地缓存：cacheName -> RBloomFilter 句柄 */
+	private final ConcurrentMap<String, RBloomFilter<String>> filters = new ConcurrentHashMap<>();
 
-    /** 被启用 Bloom 判定的 cache 集合（只有启用后才会生效） */
-    private final Set<String> enabledCaches = ConcurrentHashMap.newKeySet(64);
+	/** 已启用布隆过滤器的缓存集合 */
+	private final Set<String> enabledCaches = ConcurrentHashMap.newKeySet();
 
-    /** 计算 Bloom 对象名称（Redis Key） */
-    public String bloomName(String cacheName) {
-        Objects.requireNonNull(cacheName, "cacheName");
-        return DEFAULT_BLOOM_PREFIX + cacheName;
-    }
+	/**
+	 * 判断键是否可能存在
+	 *
+	 * @param cacheName 缓存名称
+	 * @param key       键名
+	 * @return true表示可能存在，false表示一定不存在
+	 */
+	public boolean mightContain(@Nonnull String cacheName, @Nonnull String key) {
+		if (!isEnabled(cacheName)) {
+			return true; // 未启用则不拦截
+		}
 
-    /**
-     * 启用并初始化（tryInit）某个缓存对应的 Bloom。通常在启动时或预热任务中调用一次。
-     *
-     * @param cacheName 缓存名称（与 Spring Cache 的 cacheName 对应）
-     * @param expectedInsertions 预估写入数量
-     * @param falsePositiveRate 期望误判率（如 0.01 表示 1%）
-     */
-    public synchronized void enableForCache(
-            String cacheName, long expectedInsertions, double falsePositiveRate) {
-        Objects.requireNonNull(cacheName, "cacheName");
-        if (expectedInsertions <= 0) {
-            throw new IllegalArgumentException("expectedInsertions must be > 0");
-        }
-        if (falsePositiveRate <= 0 || falsePositiveRate >= 1) {
-            throw new IllegalArgumentException("falsePositiveRate must be in (0,1)");
-        }
+		try {
+			boolean result = getFilter(cacheName).contains(key);
+			log.debug("Bloom filter check: cache={}, key={}, mightContain={}", cacheName, key, result);
+			return result;
+		} catch (Exception e) {
+			log.warn("Bloom filter check failed, allowing request: cache={}, key={}, error={}",
+					cacheName, key, e.getMessage());
+			return true; // 出错时放行
+		}
+	}
 
-        String name = bloomName(cacheName);
-        RBloomFilter<String> bloom = redissonClient.getBloomFilter(name);
-        try {
-            boolean inited = bloom.tryInit(expectedInsertions, falsePositiveRate);
-            if (!inited) {
-                // 已存在（可能是其他节点已初始化），忽略即可
-                log.info(
-                        "Bloom already exists, use existing. cacheName={}, bloomKey={}",
-                        cacheName,
-                        name);
-            } else {
-                log.info(
-                        "Bloom initialized. cacheName={}, bloomKey={}, expectedInsertions={}, fpp={}",
-                        cacheName,
-                        name,
-                        expectedInsertions,
-                        falsePositiveRate);
-            }
-        } catch (Exception e) {
-            log.warn(
-                    "Bloom tryInit error, cacheName={}, bloomKey={}, err={}",
-                    cacheName,
-                    name,
-                    e.getMessage());
-        }
-        filters.put(cacheName, bloom);
-        enabledCaches.add(cacheName);
-    }
+	/**
+	 * 添加键到布隆过滤器
+	 *
+	 * @param cacheName 缓存名称
+	 * @param key       键名
+	 */
+	public void addIfEnabled(@Nonnull String cacheName, @Nonnull String key) {
+		if (!isEnabled(cacheName)) {
+			return;
+		}
 
-    /** 判断某个 cache 是否启用了 Bloom 判定 */
-    public boolean isEnabled(String cacheName) {
-        return enabledCaches.contains(cacheName);
-    }
+		try {
+			getFilter(cacheName).add(key);
+			log.debug("Added key to bloom filter: cache={}, key={}", cacheName, key);
+		} catch (Exception e) {
+			log.warn("Failed to add key to bloom filter: cache={}, key={}, error={}",
+					cacheName, key, e.getMessage());
+		}
+	}
 
-    private RBloomFilter<String> filter(String cacheName) {
-        return filters.computeIfAbsent(
-                cacheName, cn -> redissonClient.getBloomFilter(bloomName(cn)));
-    }
+	/**
+	 * 判断缓存是否启用了布隆过滤器
+	 *
+	 * @param cacheName 缓存名称
+	 * @return true表示已启用
+	 */
+	public boolean isEnabled(@Nonnull String cacheName) {
+		return enabledCaches.contains(cacheName);
+	}
 
-    /**
-     * Bloom 判定：当 cache 未启用 Bloom 时，返回 true（放行）；启用后返回 contains 结果。 返回 true 表示“可能存在或不确定”，返回 false
-     * 表示“几乎不可能存在（直接拦截）”。
-     */
-    public boolean mightContain(String cacheName, String key) {
-        if (!isEnabled(cacheName)) return true; // 未启用则不拦截
-        try {
-            return filter(cacheName).contains(key);
-        } catch (Exception e) {
-            log.warn(
-                    "Bloom contains error, ignore and allow. cacheName={}, key={}, err={}",
-                    cacheName,
-                    key,
-                    e.getMessage());
-            return true;
-        }
-    }
+	/**
+	 * 获取已启用布隆过滤器的缓存名称集合
+	 *
+	 * @return 缓存名称集合
+	 */
+	@Nonnull
+	public Set<String> getEnabledCaches() {
+		return Set.copyOf(enabledCaches);
+	}
 
-    /** 若已启用 Bloom，则将 key 加入过滤器（幂等） */
-    public void addIfEnabled(String cacheName, String key) {
-        if (!isEnabled(cacheName)) return;
-        try {
-            filter(cacheName).add(key);
-        } catch (Exception e) {
-            log.warn(
-                    "Bloom add error ignored. cacheName={}, key={}, err={}",
-                    cacheName,
-                    key,
-                    e.getMessage());
-        }
-    }
+	/**
+	 * 构建布隆过滤器键名
+	 */
+	private String buildBloomKey(@Nonnull String cacheName) {
+		return BLOOM_PREFIX + cacheName;
+	}
+
+	/**
+	 * 获取布隆过滤器实例
+	 */
+	private RBloomFilter<String> getFilter(@Nonnull String cacheName) {
+		return filters.computeIfAbsent(cacheName,
+				cn -> redissonClient.getBloomFilter(buildBloomKey(cn)));
+	}
+
 }

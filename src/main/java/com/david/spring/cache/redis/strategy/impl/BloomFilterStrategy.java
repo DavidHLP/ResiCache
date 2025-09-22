@@ -4,7 +4,7 @@ import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.factory.RegistryFactory;
 import com.david.spring.cache.redis.strategy.AbstractCacheFetchStrategy;
-import com.david.spring.cache.redis.strategy.support.CacheOperationService;
+import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +41,7 @@ public class BloomFilterStrategy extends AbstractCacheFetchStrategy {
 	@Override
 	@Nullable
 	public ValueWrapper fetch(@Nonnull CacheFetchContext context) {
-		if (!isValidContext(context)) {
+		if (isValidContext(context)) {
 			logDebug("Invalid context, skipping bloom filter check");
 			return context.valueWrapper();
 		}
@@ -104,7 +104,7 @@ public class BloomFilterStrategy extends AbstractCacheFetchStrategy {
 	}
 
 	@Override
-	public boolean supports(CachedInvocationContext invocationContext) {
+	public boolean supports(@Nonnull CachedInvocationContext invocationContext) {
 		return invocationContext.useBloomFilter()
 				|| invocationContext.fetchStrategy() == CachedInvocationContext.FetchStrategyType.BLOOM_FILTER;
 	}
