@@ -62,6 +62,11 @@ public class CacheLoadHandler extends AbstractCacheHandler {
         };
     }
 
+    /**
+     * 处理缓存加载逻辑
+     *
+     * 使用双重检查锁模式防止缓存击穿，并在必要时加载数据。
+     */
     @Override
     @Nonnull
     protected HandlerResult doHandle(@Nonnull CacheHandlerContext context) {
@@ -69,57 +74,78 @@ public class CacheLoadHandler extends AbstractCacheHandler {
                 context.cacheName(), context.key());
 
         try {
-            ValueWrapper result = executeWithLocks(context, () -> {
-                // 再次检查缓存（双重检查锁模式）
-                ValueWrapper cachedValue = context.callback().getBaseValue(context.key());
-                if (cachedValue != null) {
-                    logDebug("锁内发现缓存值: cache={}, key={}",
-                            context.cacheName(), context.key());
-                    return cachedValue;
-                }
-
-                // 如果仍然没有缓存值，尝试调用原方法加载数据
-                try {
-                    Object loadedValue = context.invocation().invoke();
-                    if (loadedValue != null) {
-                        logDebug("成功加载数据: cache={}, key={}",
-                                context.cacheName(), context.key());
-
-                        // 创建ValueWrapper返回
-                        return new SimpleValueWrapper(loadedValue);
-                    } else {
-                        logDebug("加载的数据为null: cache={}, key={}",
-                                context.cacheName(), context.key());
-
-                        // 根据配置决定是否缓存null值
-                        if (context.invocationContext().cacheNullValues()) {
-                            return new SimpleValueWrapper(null);
-                        }
-                    }
-                } catch (Exception e) {
-                    logError("数据加载失败: cache={}, key={}, error={}", e,
-                            context.cacheName(), context.key(), e.getMessage());
-                }
-
-                return null;
-            });
-
-            if (result != null) {
-                // 更新上下文并继续处理链
-                CacheHandlerContext updatedContext = context.withResult(result);
-                return proceedToNext(updatedContext);
-            }
-
-            logDebug("缓存加载完成，无有效结果: cache={}, key={}",
-                    context.cacheName(), context.key());
-
-            return HandlerResult.CONTINUE;
-
+            ValueWrapper result = executeWithLocks(context, () -> loadDataWithDoubleCheck(context));
+            return handleLoadResult(context, result);
         } catch (Exception e) {
             logError("缓存加载处理失败: cache={}, key={}, error={}", e,
                     context.cacheName(), context.key(), e.getMessage());
             return HandlerResult.CONTINUE;
         }
+    }
+
+    /**
+     * 使用双重检查锁模式加载数据
+     */
+    private ValueWrapper loadDataWithDoubleCheck(@Nonnull CacheHandlerContext context) {
+        // 再次检查缓存（双重检查锁模式）
+        ValueWrapper cachedValue = context.callback().getBaseValue(context.key());
+        if (cachedValue != null) {
+            logDebug("锁内发现缓存值: cache={}, key={}",
+                    context.cacheName(), context.key());
+            return cachedValue;
+        }
+
+        // 如果仍然没有缓存值，尝试调用原方法加载数据
+        return loadDataFromSource(context);
+    }
+
+    /**
+     * 从数据源加载数据
+     */
+    private ValueWrapper loadDataFromSource(@Nonnull CacheHandlerContext context) {
+        try {
+            Object loadedValue = context.invocation().invoke();
+            return handleLoadedValue(context, loadedValue);
+        } catch (Exception e) {
+            logError("数据加载失败: cache={}, key={}, error={}", e,
+                    context.cacheName(), context.key(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 处理加载的数据值
+     */
+    private ValueWrapper handleLoadedValue(@Nonnull CacheHandlerContext context, Object loadedValue) {
+        if (loadedValue != null) {
+            logDebug("成功加载数据: cache={}, key={}",
+                    context.cacheName(), context.key());
+            return new SimpleValueWrapper(loadedValue);
+        } else {
+            logDebug("加载的数据为null: cache={}, key={}",
+                    context.cacheName(), context.key());
+
+            // 根据配置决定是否缓存null值
+            if (context.invocationContext().cacheNullValues()) {
+                return new SimpleValueWrapper(null);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * 处理加载结果
+     */
+    private HandlerResult handleLoadResult(@Nonnull CacheHandlerContext context, ValueWrapper result) {
+        if (result != null) {
+            // 更新上下文并继续处理链
+            CacheHandlerContext updatedContext = context.withResult(result);
+            return proceedToNext(updatedContext);
+        }
+
+        logDebug("缓存加载完成，无有效结果: cache={}, key={}",
+                context.cacheName(), context.key());
+        return HandlerResult.CONTINUE;
     }
 
     /**

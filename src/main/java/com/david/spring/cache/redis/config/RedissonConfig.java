@@ -15,11 +15,19 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.util.StringUtils;
 
 /**
- * 基于 Spring 的 RedissonClient 简易配置。
+ * Redisson客户端自动配置类
  *
- * 仅在容器中不存在 RedissonClient 时生效，支持：
- *  - 根据 spring.data.redis.url 直接配置（推荐）
- *  - 或根据 host/port/database/username/password 组装单机地址
+ * 用于自动配置RedissonClient，仅在容器中不存在RedissonClient时生效。
+ *
+ * 支持的配置方式：
+ * - 根据spring.data.redis.url直接配置（推荐）
+ * - 根据host/port/database/username/password组装单机地址
+ *
+ * 主要功能：
+ * - 自动创建RedissonClient Bean
+ * - 支持单机Redis连接配置
+ * - 支持身份验证和超时配置
+ * - 提供地址构建工具方法
  */
 @Slf4j
 @AutoConfiguration(after = RedisAutoConfiguration.class)
@@ -27,6 +35,15 @@ import org.springframework.util.StringUtils;
 @ConditionalOnClass(RedissonClient.class)
 public class RedissonConfig {
 
+    /**
+     * 创建RedissonClient Bean
+     *
+     * 仅在容器中不存在RedissonClient时才会创建。
+     * 支持根据Spring Boot的Redis配置属性自动配置连接参数。
+     *
+     * @param redisProperties Spring Boot Redis配置属性
+     * @return 配置好的RedissonClient实例
+     */
     @Bean(destroyMethod = "shutdown")
     @ConditionalOnMissingBean(RedissonClient.class)
     public RedissonClient redissonClient(RedisProperties redisProperties) {
@@ -56,6 +73,15 @@ public class RedissonConfig {
         return Redisson.create(config);
     }
 
+    /**
+     * 构建Redis连接地址
+     *
+     * 优先使用url配置，如果没有则使用host和port组合。
+     * 自动添加redis://协议前缀（如果需要）。
+     *
+     * @param p Redis配置属性
+     * @return 格式化的Redis连接地址
+     */
     private String buildAddress(RedisProperties p) {
         if (StringUtils.hasText(p.getUrl())) {
             String url = p.getUrl().trim();

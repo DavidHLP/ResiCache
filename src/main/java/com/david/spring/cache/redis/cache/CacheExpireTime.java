@@ -22,19 +22,44 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+/**
+ * 缓存过期时间配置管理器
+ *
+ * 负责在Spring容器启动时扫描所有带有@RedisCacheable注解的方法，
+ * 收集缓存TTL配置信息并初始化缓存管理器中的缓存配置。
+ *
+ * 主要功能：
+ * - 监听Spring容器刷新事件
+ * - 扫描Bean中的缓存注解
+ * - 收集和合并缓存TTL配置
+ * - 初始化缓存配置
+ */
 @Component
 @Slf4j
 @Data
 public class CacheExpireTime implements ApplicationListener<ContextRefreshedEvent> {
 	private final RedisProCacheManager cacheManager;
+	/** 缓存名称到TTL秒数的映射 */
 	private final Map<String, Long> cacheTtlSeconds = new ConcurrentHashMap<>(32, 0.75f, 4);
+	/** 已处理的Bean数量 */
 	private final AtomicInteger processedBeans = new AtomicInteger(0);
+	/** 已处理的方法数量 */
 	private final AtomicInteger processedMethods = new AtomicInteger(0);
 
+	/**
+	 * 构造缓存过期时间管理器
+	 *
+	 * @param cacheManager Redis缓存管理器
+	 */
 	public CacheExpireTime(RedisProCacheManager cacheManager) {
 		this.cacheManager = cacheManager;
 	}
 
+	/**
+	 * 处理Spring容器刷新事件，扫描并初始化缓存配置
+	 *
+	 * @param event 容器刷新事件
+	 */
 	@Override
 	public void onApplicationEvent(@NonNull ContextRefreshedEvent event) {
 		log.debug("Starting cache expiration time initialization");
@@ -55,6 +80,11 @@ public class CacheExpireTime implements ApplicationListener<ContextRefreshedEven
 				duration, processedBeans.get(), processedMethods.get());
 	}
 
+	/**
+	 * 处理单个Bean，扫描其中的缓存注解
+	 *
+	 * @param bean 待处理的Bean实例
+	 */
 	private void processBean(Object bean) {
 		try {
 			Class<?> targetClass = AopUtils.getTargetClass(bean);
@@ -68,6 +98,12 @@ public class CacheExpireTime implements ApplicationListener<ContextRefreshedEven
 		}
 	}
 
+	/**
+	 * 处理单个方法，提取缓存注解信息
+	 *
+	 * @param method 待处理的方法
+	 * @param targetClass 目标类
+	 */
 	private void processMethod(Method method, Class<?> targetClass) {
 		try {
 			Method specificMethod = ClassUtils.getMostSpecificMethod(method, targetClass);
@@ -86,6 +122,11 @@ public class CacheExpireTime implements ApplicationListener<ContextRefreshedEven
 		}
 	}
 
+	/**
+	 * 初始化缓存过期时间配置
+	 *
+	 * @param redisCacheable Redis缓存注解
+	 */
 	public void initExpireTime(RedisCacheable redisCacheable) {
 		if (redisCacheable == null) return;
 		String[] names = merge(redisCacheable.value(), redisCacheable.cacheNames());
@@ -100,6 +141,9 @@ public class CacheExpireTime implements ApplicationListener<ContextRefreshedEven
 		}
 	}
 
+	/**
+	 * 初始化缓存配置，将收集到的TTL配置应用到缓存管理器
+	 */
 	public void initializeCaches() {
 		cacheTtlSeconds.forEach(
 				(name, seconds) ->
@@ -114,6 +158,13 @@ public class CacheExpireTime implements ApplicationListener<ContextRefreshedEven
 		cacheManager.initializeCaches();
 	}
 
+	/**
+	 * 合并两个字符串数组
+	 *
+	 * @param a 数组A
+	 * @param b 数组B
+	 * @return 合并后的数组
+	 */
 	private String[] merge(String[] a, String[] b) {
 		return Stream.concat(
 						Arrays.stream(Optional.ofNullable(a).orElse(new String[0])),
