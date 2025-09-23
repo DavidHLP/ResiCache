@@ -1,13 +1,12 @@
 package com.david.spring.cache.redis.cache;
 
-import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.chain.CacheHandlerContext;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import com.david.spring.cache.redis.cache.support.CacheHandlerService;
 import com.david.spring.cache.redis.cache.support.CacheRegistryService;
-import com.david.spring.cache.redis.cache.support.CacheAsyncOperationService;
+import com.david.spring.cache.redis.cache.support.CacheAsyncService;
 import com.david.spring.cache.redis.cache.support.CacheHandlerExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
@@ -30,7 +29,7 @@ public class RedisProCache extends RedisCache {
 	private final CacheOperationService cacheOperationService;
 	private final CacheHandlerService handlerService;
 	private final CacheRegistryService registryService;
-	private final CacheAsyncOperationService asyncOperationService;
+	private final CacheAsyncService asyncOperationService;
 	private final CacheHandlerExecutor handlerExecutor;
 
 
@@ -42,7 +41,7 @@ public class RedisProCache extends RedisCache {
 			CacheOperationService cacheOperationService,
 			CacheHandlerService handlerService,
 			CacheRegistryService registryService,
-			CacheAsyncOperationService asyncOperationService,
+			CacheAsyncService asyncOperationService,
 			CacheHandlerExecutor handlerExecutor) {
 		super(name, cacheWriter, cacheConfiguration);
 		this.redisTemplate = Objects.requireNonNull(redisTemplate);

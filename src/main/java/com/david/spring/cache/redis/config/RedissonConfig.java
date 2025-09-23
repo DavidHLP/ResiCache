@@ -16,13 +16,13 @@ import org.springframework.util.StringUtils;
 
 /**
  * Redisson客户端自动配置类
- *
+ * <p>
  * 用于自动配置RedissonClient，仅在容器中不存在RedissonClient时生效。
- *
+ * <p>
  * 支持的配置方式：
  * - 根据spring.data.redis.url直接配置（推荐）
  * - 根据host/port/database/username/password组装单机地址
- *
+ * <p>
  * 主要功能：
  * - 自动创建RedissonClient Bean
  * - 支持单机Redis连接配置
@@ -37,7 +37,7 @@ public class RedissonConfig {
 
     /**
      * 创建RedissonClient Bean
-     *
+     * <p>
      * 仅在容器中不存在RedissonClient时才会创建。
      * 支持根据Spring Boot的Redis配置属性自动配置连接参数。
      *
@@ -75,7 +75,7 @@ public class RedissonConfig {
 
     /**
      * 构建Redis连接地址
-     *
+     * <p>
      * 优先使用url配置，如果没有则使用host和port组合。
      * 自动添加redis://协议前缀（如果需要）。
      *

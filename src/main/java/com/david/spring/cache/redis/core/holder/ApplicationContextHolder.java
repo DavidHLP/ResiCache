@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Spring应用上下文持有者，提供静态方法访问Spring容器
- *
+ * <p>
  * 主要功能：
  * - 持有Spring应用上下文引用
  * - 提供静态方法获取Bean实例

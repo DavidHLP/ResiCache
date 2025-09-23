@@ -87,7 +87,7 @@ public class RedisProCacheManager extends RedisCacheManager {
 
 		// 创建新的服务类实例
 		CacheRegistryService registryService = new CacheRegistryService(registryFactory);
-		CacheAsyncOperationService asyncOperationService = new CacheAsyncOperationService(
+		CacheAsyncService asyncOperationService = new CacheAsyncService(
 				properties, executor, distributedLock, registryFactory, registryService);
 		CacheHandlerService handlerService = new CacheHandlerService(
 				chainBuilder, contextValidator, handlerExecutor);

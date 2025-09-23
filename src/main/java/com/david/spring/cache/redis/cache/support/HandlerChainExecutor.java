@@ -8,85 +8,79 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 
 @Slf4j
-public class HandlerChainExecutor {
+public record HandlerChainExecutor(CacheHandlerChainBuilder chainBuilder) {
 
-    private final CacheHandlerChainBuilder chainBuilder;
+	public Cache.ValueWrapper execute(CacheHandlerContext context, Cache.ValueWrapper fallbackValue) {
+		String operationId = OperationIdGenerator.generate(context.key());
+		long startTime = System.currentTimeMillis();
 
-    public HandlerChainExecutor(CacheHandlerChainBuilder chainBuilder) {
-        this.chainBuilder = chainBuilder;
-    }
+		try {
+			log.debug("[{}] Starting handler chain execution: cache={}, key={}",
+					operationId, context.cacheName(), context.key());
 
-    public Cache.ValueWrapper execute(CacheHandlerContext context, Cache.ValueWrapper fallbackValue) {
-        String operationId = OperationIdGenerator.generate(context.key());
-        long startTime = System.currentTimeMillis();
+			CacheHandlerChain chain = buildChain(context.invocationContext());
+			if (chain.isEmpty()) {
+				log.error("[{}] No handlers available, using fallback: cache={}, key={}",
+						operationId, context.cacheName(), context.key());
+				return fallbackValue;
+			}
 
-        try {
-            log.debug("[{}] Starting handler chain execution: cache={}, key={}",
-                    operationId, context.cacheName(), context.key());
+			Cache.ValueWrapper result = chain.execute(context);
+			long duration = System.currentTimeMillis() - startTime;
 
-            CacheHandlerChain chain = buildChain(context.invocationContext());
-            if (chain.isEmpty()) {
-                log.error("[{}] No handlers available, using fallback: cache={}, key={}",
-                        operationId, context.cacheName(), context.key());
-                return fallbackValue;
-            }
+			return processResult(result, context, fallbackValue, operationId, duration);
 
-            Cache.ValueWrapper result = chain.execute(context);
-            long duration = System.currentTimeMillis() - startTime;
+		} catch (Exception e) {
+			long duration = System.currentTimeMillis() - startTime;
+			log.warn("[{}] Handler chain execution failed in {}ms for cache: {}, key: {}: {}, using fallback",
+					operationId, duration, context.cacheName(), context.key(), e.getMessage());
+			return fallbackValue;
+		}
+	}
 
-            return processResult(result, context, fallbackValue, operationId, duration);
+	private CacheHandlerChain buildChain(CachedInvocationContext invocationContext) {
+		return chainBuilder.buildChain(invocationContext);
+	}
 
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.warn("[{}] Handler chain execution failed in {}ms for cache: {}, key: {}: {}, using fallback",
-                    operationId, duration, context.cacheName(), context.key(), e.getMessage());
-            return fallbackValue;
-        }
-    }
+	private Cache.ValueWrapper processResult(Cache.ValueWrapper result, CacheHandlerContext context,
+	                                         Cache.ValueWrapper fallbackValue, String operationId, long duration) {
+		if (result != null) {
+			logSuccessfulExecution(operationId, duration, context, result);
+			return result;
+		} else {
+			log.debug("[{}] Handler chain execution returned null in {}ms: cache={}, key={}, processing null result",
+					operationId, duration, context.cacheName(), context.key());
+			return handleNullResult(context, fallbackValue, operationId);
+		}
+	}
 
-    private CacheHandlerChain buildChain(CachedInvocationContext invocationContext) {
-        return chainBuilder.buildChain(invocationContext);
-    }
+	private Cache.ValueWrapper handleNullResult(CacheHandlerContext context, Cache.ValueWrapper fallbackValue, String operationId) {
+		CachedInvocationContext invocationContext = context.invocationContext();
 
-    private Cache.ValueWrapper processResult(Cache.ValueWrapper result, CacheHandlerContext context,
-                                           Cache.ValueWrapper fallbackValue, String operationId, long duration) {
-        if (result != null) {
-            logSuccessfulExecution(operationId, duration, context, result);
-            return result;
-        } else {
-            log.debug("[{}] Handler chain execution returned null in {}ms: cache={}, key={}, processing null result",
-                    operationId, duration, context.cacheName(), context.key());
-            return handleNullResult(context, fallbackValue, operationId);
-        }
-    }
+		if (invocationContext.cacheNullValues()) {
+			log.debug("[{}] Null result accepted due to cacheNullValues=true: cache={}, key={}",
+					operationId, context.cacheName(), context.key());
+			return null;
+		}
 
-    private Cache.ValueWrapper handleNullResult(CacheHandlerContext context, Cache.ValueWrapper fallbackValue, String operationId) {
-        CachedInvocationContext invocationContext = context.invocationContext();
+		log.debug("[{}] Using fallback value due to null result and cacheNullValues=false: cache={}, key={}",
+				operationId, context.cacheName(), context.key());
+		return fallbackValue;
+	}
 
-        if (invocationContext.cacheNullValues()) {
-            log.debug("[{}] Null result accepted due to cacheNullValues=true: cache={}, key={}",
-                    operationId, context.cacheName(), context.key());
-            return null;
-        }
+	private void logSuccessfulExecution(String operationId, long duration, CacheHandlerContext context, Cache.ValueWrapper result) {
+		if (duration > 100) {
+			log.warn("[{}] Slow handler chain execution in {}ms: cache={}, key={}, hasValue={}",
+					operationId, duration, context.cacheName(), context.key(), result.get() != null);
+		} else {
+			log.debug("[{}] Handler chain execution successful in {}ms: cache={}, key={}, hasValue={}",
+					operationId, duration, context.cacheName(), context.key(), result.get() != null);
+		}
+	}
 
-        log.debug("[{}] Using fallback value due to null result and cacheNullValues=false: cache={}, key={}",
-                operationId, context.cacheName(), context.key());
-        return fallbackValue;
-    }
-
-    private void logSuccessfulExecution(String operationId, long duration, CacheHandlerContext context, Cache.ValueWrapper result) {
-        if (duration > 100) {
-            log.warn("[{}] Slow handler chain execution in {}ms: cache={}, key={}, hasValue={}",
-                    operationId, duration, context.cacheName(), context.key(), result.get() != null);
-        } else {
-            log.debug("[{}] Handler chain execution successful in {}ms: cache={}, key={}, hasValue={}",
-                    operationId, duration, context.cacheName(), context.key(), result.get() != null);
-        }
-    }
-
-    private static class OperationIdGenerator {
-        public static String generate(Object key) {
-            return String.format("%s-%d", String.valueOf(key).hashCode(), System.currentTimeMillis() % 10000);
-        }
-    }
+	private static class OperationIdGenerator {
+		public static String generate(Object key) {
+			return String.format("%s-%d", String.valueOf(key).hashCode(), System.currentTimeMillis() % 10000);
+		}
+	}
 }
