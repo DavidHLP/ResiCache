@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.protection;
+package com.david.spring.cache.redis.chain.protection;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

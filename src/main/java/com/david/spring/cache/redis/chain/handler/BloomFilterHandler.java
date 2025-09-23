@@ -1,11 +1,10 @@
 package com.david.spring.cache.redis.chain.handler;
 
 import com.david.spring.cache.redis.chain.AbstractCacheHandler;
-import com.david.spring.cache.redis.chain.CacheHandler;
 import com.david.spring.cache.redis.chain.CacheHandlerContext;
 import com.david.spring.cache.redis.chain.CacheOperationType;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
-import com.david.spring.cache.redis.protection.CachePenetration;
+import com.david.spring.cache.redis.chain.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.RegistryFactory;
 import com.david.spring.cache.redis.lock.DistributedLock;

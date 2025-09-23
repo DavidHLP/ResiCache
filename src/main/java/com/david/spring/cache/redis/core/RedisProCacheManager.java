@@ -1,15 +1,11 @@
 package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.cache.RedisProCache;
-import com.david.spring.cache.redis.cache.support.CacheContextValidator;
-import com.david.spring.cache.redis.cache.support.CacheHandlerExecutor;
+import com.david.spring.cache.redis.cache.support.*;
 import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.lock.DistributedLock;
-import com.david.spring.cache.redis.protection.CacheBreakdown;
-import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.RegistryFactory;
 import com.david.spring.cache.redis.chain.CacheHandlerChainBuilder;
-import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import jakarta.annotation.Nonnull;
 import lombok.Getter;
 import org.springframework.data.redis.cache.RedisCache;
@@ -89,19 +85,23 @@ public class RedisProCacheManager extends RedisCacheManager {
 		RedisCacheConfiguration config =
 				getRedisCacheConfigurationMap().getOrDefault(name, redisCacheConfiguration);
 
+		// 创建新的服务类实例
+		CacheRegistryService registryService = new CacheRegistryService(registryFactory);
+		CacheAsyncOperationService asyncOperationService = new CacheAsyncOperationService(
+				properties, executor, distributedLock, registryFactory, registryService);
+		CacheHandlerService handlerService = new CacheHandlerService(
+				chainBuilder, contextValidator, handlerExecutor);
+
 		return new RedisProCache(
 				name,
 				cacheWriter,
 				config,
 				redisTemplate,
-				registryFactory,
-				executor,
-				chainBuilder,
 				cacheOperationService,
-				contextValidator,
-				handlerExecutor,
-				distributedLock,
-				properties);
+				handlerService,
+				registryService,
+				asyncOperationService,
+				handlerExecutor);
 	}
 
 	public void initializeCaches() {

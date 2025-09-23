@@ -31,40 +31,74 @@ public final class LockUtils {
 			long distLeaseTime,
 			@Nonnull TimeUnit unit,
 			@Nonnull Runnable task) {
+		validateParameters(localLock, distributedLock, distKey, unit, task);
+
+		boolean localLocked = false;
+		try {
+			localLocked = tryAcquireLocalLock(localLock);
+			if (!localLocked) {
+				return false;
+			}
+
+			return executeWithDistributedLock(distributedLock, distKey, distWaitTime, distLeaseTime, unit, task);
+		} catch (Exception e) {
+			log.error("Error executing task with dual locks: {}", e.getMessage(), e);
+			return false;
+		} finally {
+			releaseLocalLockIfHeld(localLock, localLocked);
+		}
+	}
+
+	/**
+	 * 验证输入参数
+	 */
+	private static void validateParameters(ReentrantLock localLock, DistributedLock distributedLock,
+										  String distKey, TimeUnit unit, Runnable task) {
 		Objects.requireNonNull(localLock, "localLock cannot be null");
 		Objects.requireNonNull(distributedLock, "distributedLock cannot be null");
 		Objects.requireNonNull(distKey, "distKey cannot be null");
 		Objects.requireNonNull(unit, "unit cannot be null");
 		Objects.requireNonNull(task, "task cannot be null");
+	}
 
-		boolean localLocked = false;
-		try {
-			localLocked = localLock.tryLock();
-			if (!localLocked) {
-				log.debug("Failed to acquire local lock");
-				return false;
-			}
+	/**
+	 * 尝试获取本地锁
+	 */
+	private static boolean tryAcquireLocalLock(ReentrantLock localLock) {
+		boolean localLocked = localLock.tryLock();
+		if (!localLocked) {
+			log.debug("Failed to acquire local lock");
+		}
+		return localLocked;
+	}
 
-			boolean distLocked = distributedLock.tryLock(distKey, distWaitTime, distLeaseTime, unit);
-			if (!distLocked) {
-				log.debug("Failed to acquire distributed lock: {}", distKey);
-				return false;
-			}
-
-			try {
-				task.run();
-				log.debug("Successfully executed task with dual locks");
-				return true;
-			} finally {
-				distributedLock.unlock(distKey);
-			}
-		} catch (Exception e) {
-			log.error("Error executing task with dual locks: {}", e.getMessage(), e);
+	/**
+	 * 使用分布式锁执行任务
+	 */
+	private static boolean executeWithDistributedLock(DistributedLock distributedLock, String distKey,
+													  long distWaitTime, long distLeaseTime,
+													  TimeUnit unit, Runnable task) {
+		boolean distLocked = distributedLock.tryLock(distKey, distWaitTime, distLeaseTime, unit);
+		if (!distLocked) {
+			log.debug("Failed to acquire distributed lock: {}", distKey);
 			return false;
+		}
+
+		try {
+			task.run();
+			log.debug("Successfully executed task with dual locks");
+			return true;
 		} finally {
-			if (localLocked) {
-				localLock.unlock();
-			}
+			distributedLock.unlock(distKey);
+		}
+	}
+
+	/**
+	 * 如果持有本地锁则释放
+	 */
+	private static void releaseLocalLockIfHeld(ReentrantLock localLock, boolean localLocked) {
+		if (localLocked) {
+			localLock.unlock();
 		}
 	}
 

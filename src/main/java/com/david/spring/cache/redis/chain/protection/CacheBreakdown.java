@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.protection;
+package com.david.spring.cache.redis.chain.protection;
 
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.lock.LockUtils;

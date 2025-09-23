@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.cache.support;
 
 import com.david.spring.cache.redis.core.entity.CachedValue;
-import com.david.spring.cache.redis.protection.CacheAvalanche;
+import com.david.spring.cache.redis.chain.protection.CacheAvalanche;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import lombok.RequiredArgsConstructor;

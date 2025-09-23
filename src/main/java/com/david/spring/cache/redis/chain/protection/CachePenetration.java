@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.protection;
+package com.david.spring.cache.redis.chain.protection;
 
 import jakarta.annotation.Nonnull;
 import lombok.RequiredArgsConstructor;
