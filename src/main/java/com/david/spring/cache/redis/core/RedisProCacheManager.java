@@ -2,13 +2,13 @@ package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.cache.RedisProCache;
 import com.david.spring.cache.redis.cache.support.CacheContextValidator;
-import com.david.spring.cache.redis.cache.support.CacheStrategyExecutor;
+import com.david.spring.cache.redis.cache.support.CacheHandlerExecutor;
 import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.RegistryFactory;
-import com.david.spring.cache.redis.chain.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.chain.CacheHandlerChainBuilder;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import jakarta.annotation.Nonnull;
 import lombok.Getter;
@@ -36,13 +36,11 @@ public class RedisProCacheManager extends RedisCacheManager {
 	private final Executor executor;
 	@Getter
 	private final RedisCacheConfiguration redisCacheConfiguration;
-	private final DistributedLock distributedLock;
-	private final CachePenetration cachePenetration;
-	private final CacheBreakdown cacheBreakdown;
-	private final CacheFetchStrategyManager strategyManager;
+	private final CacheHandlerChainBuilder chainBuilder;
 	private final CacheOperationService cacheOperationService;
 	private final CacheContextValidator contextValidator;
-	private final CacheStrategyExecutor strategyExecutor;
+	private final CacheHandlerExecutor handlerExecutor;
+	private final DistributedLock distributedLock;
 	private final CacheGuardProperties properties;
 
 	public RedisProCacheManager(
@@ -52,13 +50,11 @@ public class RedisProCacheManager extends RedisCacheManager {
 			RedisCacheConfiguration redisCacheConfiguration,
 			RegistryFactory registryFactory,
 			Executor executor,
-			DistributedLock distributedLock,
-			CachePenetration cachePenetration,
-			CacheBreakdown cacheBreakdown,
-			CacheFetchStrategyManager strategyManager,
+			CacheHandlerChainBuilder chainBuilder,
 			CacheOperationService cacheOperationService,
 			CacheContextValidator contextValidator,
-			CacheStrategyExecutor strategyExecutor,
+			CacheHandlerExecutor handlerExecutor,
+			DistributedLock distributedLock,
 			CacheGuardProperties properties) {
 		super(cacheWriter, redisCacheConfiguration, redisCacheConfigurationMap);
 		this.redisCacheConfigurationMap = redisCacheConfigurationMap;
@@ -67,13 +63,11 @@ public class RedisProCacheManager extends RedisCacheManager {
 		this.redisCacheConfiguration = redisCacheConfiguration;
 		this.registryFactory = registryFactory;
 		this.executor = executor;
-		this.distributedLock = distributedLock;
-		this.cachePenetration = cachePenetration;
-		this.cacheBreakdown = cacheBreakdown;
-		this.strategyManager = strategyManager;
+		this.chainBuilder = chainBuilder;
 		this.cacheOperationService = cacheOperationService;
 		this.contextValidator = contextValidator;
-		this.strategyExecutor = strategyExecutor;
+		this.handlerExecutor = handlerExecutor;
+		this.distributedLock = distributedLock;
 		this.properties = properties;
 	}
 
@@ -102,13 +96,11 @@ public class RedisProCacheManager extends RedisCacheManager {
 				redisTemplate,
 				registryFactory,
 				executor,
-				distributedLock,
-				cachePenetration,
-				cacheBreakdown,
-				strategyManager,
+				chainBuilder,
 				cacheOperationService,
 				contextValidator,
-				strategyExecutor,
+				handlerExecutor,
+				distributedLock,
 				properties);
 	}
 

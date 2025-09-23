@@ -148,19 +148,10 @@ public class CacheOperationService {
 			return false;
 		}
 
-		// 如果用户明确配置了 fetchStrategy 为某些特定类型，可能有特殊的 TTL 处理需求
-		if (context.fetchStrategy() != null) {
-			return switch (context.fetchStrategy()) {
-				case SIMPLE ->
-					// SIMPLE 策略通常不需要系统级别的随机化
-						false;
-				case CUSTOM ->
-					// 自定义策略可能有自己的 TTL 处理逻辑
-						false;
-				default ->
-					// 其他策略默认应用雪崩保护
-						true;
-			};
+		// 检查是否有特殊的TTL处理需求
+		// 如果用户启用了布隆过滤器或预刷新，通常需要雪崩保护
+		if (context.useBloomFilter() || context.enablePreRefresh()) {
+			return true;
 		}
 
 		// 默认情况下应用雪崩保护

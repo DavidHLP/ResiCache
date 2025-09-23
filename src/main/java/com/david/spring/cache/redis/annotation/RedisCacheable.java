@@ -44,14 +44,8 @@ public @interface RedisCacheable {
 
 	float variance() default 0.2f;
 
-	String fetchStrategy() default "SIMPLE";
-
 	boolean enablePreRefresh() default false;
 
 	double preRefreshThreshold() default 0.3;
-
-	String distributedLockName() default "";
-
-	String customStrategyClass() default "";
 }
 

@@ -73,13 +73,10 @@ public class RedisCacheableAspect extends AbstractCacheAspect {
 				.variance(annotation.variance())
 				.cacheNullValues(annotation.cacheNullValues())
 				.distributedLock(annotation.distributedLock())
-				.distributedLockName(safeString(annotation.distributedLockName()))
 				.internalLock(annotation.internalLock())
 				.useSecondLevelCache(annotation.useSecondLevelCache())
-				.fetchStrategy(parseFetchStrategyType(annotation.fetchStrategy()))
 				.enablePreRefresh(annotation.enablePreRefresh())
 				.preRefreshThreshold(annotation.preRefreshThreshold())
-				.customStrategyClass(safeString(annotation.customStrategyClass()))
 				.build();
 
 		return CachedInvocation.builder()
@@ -90,16 +87,4 @@ public class RedisCacheableAspect extends AbstractCacheAspect {
 				.build();
 	}
 
-	private CachedInvocationContext.FetchStrategyType parseFetchStrategyType(String strategyType) {
-		if (strategyType == null || strategyType.trim().isEmpty()) {
-			return CachedInvocationContext.FetchStrategyType.AUTO;
-		}
-
-		try {
-			return CachedInvocationContext.FetchStrategyType.valueOf(strategyType.trim().toUpperCase());
-		} catch (IllegalArgumentException e) {
-			log.warn("无效的获取策略类型: {}, 使用默认AUTO", strategyType);
-			return CachedInvocationContext.FetchStrategyType.AUTO;
-		}
-	}
 }

@@ -5,10 +5,11 @@ import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.protection.CacheBreakdown;
 import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.registry.RegistryFactory;
-import com.david.spring.cache.redis.chain.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.chain.CacheHandlerChainBuilder;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import com.david.spring.cache.redis.cache.support.CacheContextValidator;
-import com.david.spring.cache.redis.cache.support.CacheStrategyExecutor;
+import com.david.spring.cache.redis.cache.support.CacheHandlerExecutor;
+import com.david.spring.cache.redis.lock.DistributedLock;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -48,13 +49,11 @@ public class RedisCacheConfig {
 			RedisConnectionFactory connectionFactory,
 			RegistryFactory registryFactory,
 			Executor cacheRefreshExecutor,
-			DistributedLock distributedLock,
-			CachePenetration cachePenetration,
-			CacheBreakdown cacheBreakdown,
-			CacheFetchStrategyManager strategyManager,
+			CacheHandlerChainBuilder chainBuilder,
 			CacheOperationService cacheOperationService,
 			CacheContextValidator contextValidator,
-			CacheStrategyExecutor strategyExecutor,
+			CacheHandlerExecutor handlerExecutor,
+			DistributedLock distributedLock,
 			CacheGuardProperties properties) {
 		RedisCacheWriter cacheWriter =
 				RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
@@ -94,13 +93,11 @@ public class RedisCacheConfig {
 				defaultCacheConfig,
 				registryFactory,
 				cacheRefreshExecutor,
-				distributedLock,
-				cachePenetration,
-				cacheBreakdown,
-				strategyManager,
+				chainBuilder,
 				cacheOperationService,
 				contextValidator,
-				strategyExecutor,
+				handlerExecutor,
+				distributedLock,
 				properties);
 	}
 

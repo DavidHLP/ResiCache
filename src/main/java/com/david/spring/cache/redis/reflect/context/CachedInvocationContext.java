@@ -61,17 +61,11 @@ public record CachedInvocationContext(
 		/* TTL方差 */
 		float variance,
 
-		/* 缓存获取策略类型 */
-		FetchStrategyType fetchStrategy,
-
 		/* 是否启用预刷新 */
 		boolean enablePreRefresh,
 
 		/* 预刷新阈值百分比（当剩余TTL低于总TTL的此百分比时触发） */
-		double preRefreshThreshold,
-
-		/* 自定义策略类名 */
-		String customStrategyClass) {
+		double preRefreshThreshold) {
 
 	/**
 	 * 获取默认的预刷新阈值
@@ -80,19 +74,4 @@ public record CachedInvocationContext(
 		return preRefreshThreshold > 0 ? preRefreshThreshold : 0.3;
 	}
 
-	/**
-	 * 缓存获取策略类型枚举
-	 */
-	public enum FetchStrategyType {
-		/** 自动选择策略 */
-		AUTO,
-		/** 简单获取策略 */
-		SIMPLE,
-		/** 预刷新策略 */
-		PRE_REFRESH,
-		/** 布隆过滤器策略 */
-		BLOOM_FILTER,
-		/** 自定义策略 */
-		CUSTOM
-	}
 }

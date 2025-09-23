@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.cache.support;
 
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
-import com.david.spring.cache.redis.chain.CacheFetchStrategy;
+import com.david.spring.cache.redis.chain.CacheHandlerContext;
 import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
@@ -25,21 +25,6 @@ public class CacheContextValidator {
 		return validateAllRequirements(context);
 	}
 
-	/**
-	 * 验证策略类型兼容性。
-	 */
-	public boolean isStrategyTypeCompatible(
-			@Nullable CachedInvocationContext.FetchStrategyType strategyType,
-			CachedInvocationContext.FetchStrategyType... supportedTypes) {
-		Objects.requireNonNull(supportedTypes, "Supported types cannot be null");
-		if (strategyType == null) {
-			return false;
-		}
-		if (strategyType == CachedInvocationContext.FetchStrategyType.AUTO) {
-			return true;
-		}
-		return Arrays.asList(supportedTypes).contains(strategyType);
-	}
 
 	/**
 	 * 验证上下文的基本要求。
@@ -79,10 +64,6 @@ public class CacheContextValidator {
 	 */
 	public boolean validateBloomFilterRequirements(CachedInvocationContext context) {
 		Objects.requireNonNull(context, "Context cannot be null");
-		CachedInvocationContext.FetchStrategyType strategyType = context.fetchStrategy();
-		if (strategyType == CachedInvocationContext.FetchStrategyType.BLOOM_FILTER) {
-			return context.useBloomFilter();
-		}
 		return true;
 	}
 
@@ -122,21 +103,17 @@ public class CacheContextValidator {
 	}
 
 	/**
-	 * 验证获取上下文
+	 * 验证处理器上下文
 	 */
-	public boolean isValidFetchContext(CacheFetchStrategy.CacheFetchContext context) {
+	public boolean isValidHandlerContext(CacheHandlerContext context) {
 		return context != null;
 	}
 
 	/**
-	 * 判断是否应该执行策略
+	 * 判断是否应该执行处理器链
 	 */
-	public boolean shouldExecuteStrategies(CachedInvocationContext invocationContext,
-	                                       Cache.ValueWrapper baseValue) {
-		if (invocationContext.fetchStrategy() == CachedInvocationContext.FetchStrategyType.SIMPLE) {
-			return baseValue == null || invocationContext.cacheNullValues();
-		}
-
+	public boolean shouldExecuteHandlers(CachedInvocationContext invocationContext,
+	                                    Cache.ValueWrapper baseValue) {
 		if (invocationContext.useBloomFilter()) {
 			return true;
 		}

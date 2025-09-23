@@ -64,7 +64,7 @@ public class UserTest {
 		 * @param id 用户ID
 		 * @return 用户对象
 		 */
-		@RedisCacheable(value = "users", key = "#id", ttl = 100, fetchStrategy = "AUTO")
+		@RedisCacheable(value = "users", key = "#id", ttl = 100)
 		public User getUser(Long id) {
 			// 模拟从数据库获取数据
 			log.info("从数据库获取用户，ID: {}", id);

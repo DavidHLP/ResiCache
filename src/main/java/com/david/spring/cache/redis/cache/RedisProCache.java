@@ -3,16 +3,15 @@ package com.david.spring.cache.redis.cache;
 import com.david.spring.cache.redis.config.CacheGuardProperties;
 import com.david.spring.cache.redis.lock.DistributedLock;
 import com.david.spring.cache.redis.lock.LockUtils;
-import com.david.spring.cache.redis.protection.CacheBreakdown;
-import com.david.spring.cache.redis.protection.CachePenetration;
 import com.david.spring.cache.redis.reflect.CachedInvocation;
 import com.david.spring.cache.redis.reflect.context.CachedInvocationContext;
 import com.david.spring.cache.redis.registry.RegistryFactory;
-import com.david.spring.cache.redis.chain.CacheFetchStrategy;
-import com.david.spring.cache.redis.chain.CacheFetchStrategyManager;
+import com.david.spring.cache.redis.chain.CacheHandlerChainBuilder;
+import com.david.spring.cache.redis.chain.CacheHandlerChain;
+import com.david.spring.cache.redis.chain.CacheHandlerContext;
 import com.david.spring.cache.redis.cache.support.CacheOperationService;
 import com.david.spring.cache.redis.cache.support.CacheContextValidator;
-import com.david.spring.cache.redis.cache.support.CacheStrategyExecutor;
+import com.david.spring.cache.redis.cache.support.CacheHandlerExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
@@ -24,7 +23,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
 import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -40,13 +39,11 @@ public class RedisProCache extends RedisCache {
 	private final RegistryFactory registryFactory;
 	private final Executor executor;
 	private final RedisCacheConfiguration cacheConfiguration;
-	private final DistributedLock distributedLock;
-	private final CachePenetration cachePenetration;
-	private final CacheBreakdown cacheBreakdown;
-	private final CacheFetchStrategyManager strategyManager;
+	private final CacheHandlerChainBuilder chainBuilder;
 	private final CacheOperationService cacheOperationService;
 	private final CacheContextValidator contextValidator;
-	private final CacheStrategyExecutor strategyExecutor;
+	private final CacheHandlerExecutor handlerExecutor;
+	private final DistributedLock distributedLock;
 
 
 	public RedisProCache(
@@ -56,29 +53,25 @@ public class RedisProCache extends RedisCache {
 			RedisTemplate<String, Object> redisTemplate,
 			RegistryFactory registryFactory,
 			Executor executor,
-			DistributedLock distributedLock,
-			CachePenetration cachePenetration,
-			CacheBreakdown cacheBreakdown,
-			CacheFetchStrategyManager strategyManager,
+			CacheHandlerChainBuilder chainBuilder,
 			CacheOperationService cacheOperationService,
 			CacheContextValidator contextValidator,
-			CacheStrategyExecutor strategyExecutor,
+			CacheHandlerExecutor handlerExecutor,
+			DistributedLock distributedLock,
 			CacheGuardProperties properties) {
 		super(name, cacheWriter, cacheConfiguration);
 		this.redisTemplate = Objects.requireNonNull(redisTemplate);
 		this.registryFactory = Objects.requireNonNull(registryFactory);
 		this.executor = Objects.requireNonNull(executor);
 		this.cacheConfiguration = Objects.requireNonNull(cacheConfiguration);
-		this.distributedLock = Objects.requireNonNull(distributedLock);
-		this.cachePenetration = Objects.requireNonNull(cachePenetration);
-		this.cacheBreakdown = Objects.requireNonNull(cacheBreakdown);
-		this.strategyManager = Objects.requireNonNull(strategyManager);
+		this.chainBuilder = Objects.requireNonNull(chainBuilder);
 		this.cacheOperationService = Objects.requireNonNull(cacheOperationService);
 		this.contextValidator = Objects.requireNonNull(contextValidator);
-		this.strategyExecutor = Objects.requireNonNull(strategyExecutor);
+		this.handlerExecutor = Objects.requireNonNull(handlerExecutor);
+		this.distributedLock = Objects.requireNonNull(distributedLock);
 		this.properties = Objects.requireNonNull(properties);
-		// 验证策略集成
-		validateStrategyIntegration();
+		// 验证处理器集成
+		validateHandlerIntegration();
 	}
 
 	@Override
@@ -99,22 +92,22 @@ public class RedisProCache extends RedisCache {
 			return baseValue;
 		}
 
-		if (!contextValidator.shouldExecuteStrategies(invocationContext, baseValue)) {
-			log.debug("Skipping chain execution for cache: {}, key: {}", getName(), key);
+		if (!contextValidator.shouldExecuteHandlers(invocationContext, baseValue)) {
+			log.debug("Skipping handler chain execution for cache: {}, key: {}", getName(), key);
 			return baseValue;
 		}
 
 		String cacheKey = createCacheKey(key);
-		CacheFetchStrategy.CacheFetchCallback callback = strategyExecutor.createFetchCallback(getName(), this, cacheOperationService);
-		CacheFetchStrategy.CacheFetchContext context = strategyExecutor.createFetchContext(
+		CacheHandlerContext.CacheFetchCallback callback = handlerExecutor.createFetchCallback(getName(), this, cacheOperationService);
+		CacheHandlerContext context = handlerExecutor.createHandlerContext(
 				getName(), key, cacheKey, baseValue, invocation, redisTemplate, callback);
 
-		if (!contextValidator.isValidFetchContext(context)) {
-			log.warn("Invalid fetch context for cache: {}, key: {}, returning base value", getName(), key);
+		if (!contextValidator.isValidHandlerContext(context)) {
+			log.warn("Invalid handler context for cache: {}, key: {}, returning base value", getName(), key);
 			return baseValue;
 		}
 
-		return strategyExecutor.executeStrategiesWithFallback(strategyManager, context, baseValue, key, getName());
+		return handlerExecutor.executeHandlersWithFallback(context, baseValue, key, getName());
 	}
 
 	// TTL、刷新、包装等方法已下沉到 CacheOperationService
@@ -125,16 +118,7 @@ public class RedisProCache extends RedisCache {
 		CachedInvocationContext invocationContext = getInvocationContext(key);
 		Object toStore = cacheOperationService.wrapIfMataAbsent(value, key, cacheConfiguration, invocationContext);
 		super.put(key, toStore);
-		// 成功写入后将 key 加入布隆过滤器（值非空时）
-		if (value != null) {
-			String membershipKey = String.valueOf(key);
-			try {
-				cachePenetration.addIfEnabled(getName(), membershipKey);
-			} catch (Exception e) {
-				log.error("Failed to add key to bloom filter: cache={}, key={}, error={}",
-						getName(), key, e.getMessage(), e);
-			}
-		}
+
 		// 雪崩保护：统一调用
 		String cacheKey = createCacheKey(key);
 		cacheOperationService.applyLitteredExpire(key, toStore, cacheKey, redisTemplate);
@@ -149,14 +133,6 @@ public class RedisProCache extends RedisCache {
 		boolean firstInsert = cacheOperationService.wasKeyAbsentBeforePut(cacheKey, redisTemplate);
 		ValueWrapper previous = super.putIfAbsent(key, toStore);
 		if (firstInsert) {
-			try {
-				if (value != null) {
-					String membershipKey = String.valueOf(key);
-					cachePenetration.addIfEnabled(getName(), membershipKey);
-				}
-			} catch (Exception e) {
-				log.debug("Failed to add key to bloom filter: cache={}, key={}", getName(), key, e);
-			}
 			cacheOperationService.applyLitteredExpire(key, toStore, cacheKey, redisTemplate);
 		}
 		return previous;
@@ -180,86 +156,55 @@ public class RedisProCache extends RedisCache {
 	@Override
 	@NonNull
 	public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
-		String cacheKey = createCacheKey(key);
-		String membershipKey = String.valueOf(key);
-		ReentrantLock localLock = registryFactory.getCacheInvocationRegistry().obtainLock(getName(), key);
-		String distKey = "cache:load:" + cacheKey;
-		long leaseTimeSec = 30L; // 防御性租期，避免锁永久占用
-		log.debug(
-				"First-load attempt: name={}, redisKey={}, distKey={}, leaseTimeSec={}",
-				getName(),
-				cacheKey,
-				distKey,
-				leaseTimeSec);
-
-		// Bloom 预检：若启用且断言“不可能存在”，直接抛出 ValueRetrievalException，阻断穿透
-		if (cachePenetration.isEnabled(getName())) {
-			boolean mightContain = cachePenetration.mightContain(getName(), membershipKey);
-			if (!mightContain) {
-				log.debug("Bloom blocked load: name={}, bloomKey={}", getName(), membershipKey);
-				throw new Cache.ValueRetrievalException(
-						key,
-						valueLoader,
-						new NoSuchElementException("Blocked by Bloom filter: " + membershipKey));
+		// 简化逻辑：首先尝试获取缓存值
+		ValueWrapper cached = this.get(key);
+		if (cached != null) {
+			@SuppressWarnings("unchecked")
+			T value = (T) cached.get();
+			if (value != null) {
+				return value;
 			}
 		}
+
+		// 缓存未命中，使用职责链加载数据
+		// 注意：这里需要扩展职责链来支持valueLoader
+		// 暂时使用简单的同步加载逻辑
 		try {
-			T result = cacheBreakdown.loadWithProtection(
-					getName(),
-					distKey,
-					localLock,
-					leaseTimeSec,
-					TimeUnit.SECONDS,
-					() -> {
-						ValueWrapper w = super.get(key);
-						if (w != null) {
-							Object v = w.get();
-							if (v != null) {
-								// 命中缓存则补偿加入 Bloom
-								try {
-									cachePenetration.addIfEnabled(getName(), membershipKey);
-								} catch (Exception e) {
-									log.debug("Failed to add key to bloom filter during cache hit: cache={}, key={}", getName(), key, e);
-								}
-								@SuppressWarnings("unchecked")
-								T casted = (T) v;
-								return casted;
-							}
-						}
-						return null;
-					},
-					valueLoader::call,
-					(val) -> this.put(key, val));
-			log.debug(
-					"First-load finished: name={}, redisKey={}, distKey={}",
-					getName(),
-					cacheKey,
-					distKey);
-			return result;
-		} catch (Exception ex) {
-			throw new Cache.ValueRetrievalException(key, valueLoader, ex);
+			T loadedValue = valueLoader.call();
+			if (loadedValue != null) {
+				this.put(key, loadedValue);
+			}
+			return loadedValue;
+		} catch (Exception e) {
+			throw new Cache.ValueRetrievalException(key, valueLoader, e);
 		}
 	}
 
 	@Override
 	public void evict(@NonNull Object key) {
+		// 使用责任链处理删除操作
+		CachedInvocation invocation = registryFactory.getCacheInvocationRegistry().get(getName(), key).orElse(null);
+		if (invocation == null) {
+			// 如果没有调用上下文，使用传统方式处理
+			doEvictInternal(key);
+			scheduleSecondDeleteForKey(key);
+			return;
+		}
+
 		String cacheKey = createCacheKey(key);
-		ReentrantLock localLock = registryFactory.getEvictInvocationRegistry().obtainLock(getName(), key);
-		String distKey = "cache:evict:" + cacheKey;
-		long leaseTimeSec = 10L;
-		boolean executed = LockUtils.runWithLocalTryThenDistTry(
-				localLock,
-				distributedLock,
-				distKey,
-				0L,
-				leaseTimeSec,
-				TimeUnit.SECONDS,
-				() -> {
-					doEvictInternal(key);
-					scheduleSecondDeleteForKey(key);
-				});
-		if (!executed) {
-			// 降级：未能加锁也尝试执行，以提升可用性
+		CacheHandlerContext.CacheFetchCallback callback = handlerExecutor.createFetchCallback(getName(), this, cacheOperationService);
+		CacheHandlerContext context = handlerExecutor.createHandlerContext(
+				getName(), key, cacheKey, null, invocation, redisTemplate, callback,
+				com.david.spring.cache.redis.chain.CacheOperationType.EVICT);
+
+		try {
+			// 通过责任链执行删除操作
+			handlerExecutor.executeHandlersWithFallback(context, null, key, getName());
+			log.debug("Evict operation completed through handler chain: cache={}, key={}", getName(), key);
+		} catch (Exception e) {
+			log.error("Handler chain evict failed, falling back to direct eviction: cache={}, key={}, error={}",
+					getName(), key, e.getMessage(), e);
+			// 降级到传统方式
 			doEvictInternal(key);
 			scheduleSecondDeleteForKey(key);
 		}
@@ -267,21 +212,33 @@ public class RedisProCache extends RedisCache {
 
 	@Override
 	public void clear() {
-		String distKey = "cache:evictAll:" + getName();
-		ReentrantLock localLock = registryFactory.getEvictInvocationRegistry().obtainLock(getName(), "*");
-		long leaseTimeSec = 15L;
-		boolean executed = LockUtils.runWithLocalTryThenDistTry(
-				localLock,
-				distributedLock,
-				distKey,
-				0L,
-				leaseTimeSec,
-				TimeUnit.SECONDS,
-				() -> {
-					doClearInternal();
-					scheduleSecondClear();
-				});
-		if (!executed) {
+		// 使用责任链处理清除操作
+		// 由于clear操作不针对特定key，我们创建一个虚拟的调用上下文
+		try {
+			String cacheKey = createCacheKey("*");
+			CacheHandlerContext.CacheFetchCallback callback = handlerExecutor.createFetchCallback(getName(), this, cacheOperationService);
+
+			// 创建虚拟的调用信息用于clear操作
+			CachedInvocation dummyInvocation = createDummyInvocationForClear();
+			if (dummyInvocation == null) {
+				// 如果无法创建虚拟调用信息，降级到传统方式
+				log.debug("Unable to create dummy invocation for clear, using traditional approach: cache={}", getName());
+				doClearInternal();
+				scheduleSecondClear();
+				return;
+			}
+
+			CacheHandlerContext context = handlerExecutor.createHandlerContext(
+					getName(), "*", cacheKey, null, dummyInvocation, redisTemplate, callback,
+					com.david.spring.cache.redis.chain.CacheOperationType.CLEAR);
+
+			// 通过责任链执行清除操作
+			handlerExecutor.executeHandlersWithFallback(context, null, "*", getName());
+			log.debug("Clear operation completed through handler chain: cache={}", getName());
+		} catch (Exception e) {
+			log.error("Handler chain clear failed, falling back to direct clear: cache={}, error={}",
+					getName(), e.getMessage(), e);
+			// 降级到传统方式
 			doClearInternal();
 			scheduleSecondClear();
 		}
@@ -392,31 +349,56 @@ public class RedisProCache extends RedisCache {
 				delayed);
 	}
 
-	private void validateStrategyIntegration() {
+	/**
+	 * 为clear操作创建虚拟的调用信息。
+	 *
+	 * @return 虚拟的缓存调用信息
+	 */
+	private CachedInvocation createDummyInvocationForClear() {
 		try {
-			List<String> strategies = strategyManager.getAvailableStrategies();
-			if (strategies.isEmpty()) {
-				log.warn("No strategies registered in cache: {}", getName());
+			// 创建一个最小配置的调用上下文用于clear操作
+			CachedInvocationContext dummyContext = CachedInvocationContext.builder()
+					.cacheNullValues(false)
+					.enablePreRefresh(false)
+					.preRefreshThreshold(0.3)
+					.build();
+
+			return CachedInvocation.builder()
+					.cachedInvocationContext(dummyContext)
+					.build();
+		} catch (Exception e) {
+			log.warn("Failed to create dummy invocation for clear operation: {}", e.getMessage());
+			// 如果创建失败，返回null，调用方会降级到传统方式
+			return null;
+		}
+	}
+
+	private void validateHandlerIntegration() {
+		try {
+			List<String> handlers = chainBuilder.getAvailableHandlers();
+			if (handlers.isEmpty()) {
+				log.warn("No handlers registered in cache: {}", getName());
 				return;
 			}
 
-			log.info("Strategy integration validation for cache: {} - {} strategies registered",
-					getName(), strategies.size());
+			log.info("Handler integration validation for cache: {} - {} handlers registered",
+					getName(), handlers.size());
 
-			// 验证是否有默认策略
-			boolean hasDefaultStrategy = strategies.contains("Simple");
+			// 验证是否有默认处理器
+			boolean hasDefaultHandler = handlers.contains("Simple");
 
-			if (!hasDefaultStrategy) {
-				log.warn("No default Simple chain found for cache: {}", getName());
+			if (!hasDefaultHandler) {
+				log.warn("No default Simple handler found for cache: {}", getName());
 			}
 
-			// 输出策略信息
+			// 输出处理器信息
 			if (log.isDebugEnabled()) {
-				log.debug("Strategy configuration for cache {}:\n{}", getName(), strategyManager.getStrategyInfo());
+				Map<String, Object> stats = chainBuilder.getCacheStats();
+				log.debug("Handler configuration for cache {}: {}", getName(), stats);
 			}
 
 		} catch (Exception e) {
-			log.error("Strategy integration validation failed for cache: {}, error: {}", getName(), e.getMessage(), e);
+			log.error("Handler integration validation failed for cache: {}, error: {}", getName(), e.getMessage(), e);
 		}
 	}
 
