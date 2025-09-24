@@ -67,6 +67,27 @@ public class CacheOperationService {
 	}
 
 	/**
+	 * 解析有效的TTL秒数：优先使用注解配置，其次使用RedisCacheConfiguration默认值
+	 */
+	private long resolveEffectiveTtlSeconds(@Nullable Object value, @NonNull Object key,
+	                                        @Nullable RedisCacheConfiguration cacheConfiguration,
+	                                        @Nullable CachedInvocationContext invocationContext) {
+		// 优先使用注解中配置的TTL
+		if (invocationContext != null && invocationContext.ttl() > 0) {
+			return invocationContext.ttl();
+		}
+
+		// 其次尝试从RedisCacheConfiguration解析TTL
+		long configTtl = resolveConfiguredTtlSeconds(value, key, cacheConfiguration);
+		if (configTtl > 0) {
+			return configTtl;
+		}
+
+		// 如果都没有配置，返回-1表示使用Redis默认过期策略
+		return -1L;
+	}
+
+	/**
 	 * 获取Redis中缓存的TTL
 	 */
 	public long getCacheTtl(String cacheKey, RedisTemplate<String, Object> redisTemplate) {
@@ -116,7 +137,8 @@ public class CacheOperationService {
 			return value;
 		}
 
-		long ttlSecs = resolveConfiguredTtlSeconds(value, key, cacheConfiguration);
+		// 优先使用注解中配置的TTL，如果没有配置则使用RedisCacheConfiguration的默认值
+		long ttlSecs = resolveEffectiveTtlSeconds(value, key, cacheConfiguration, invocationContext);
 
 		// 检查是否需要应用雪崩保护（只有在用户没有明确配置randomTtl时才应用）
 		long effectiveTtl = shouldApplyAvalancheProtection(invocationContext, ttlSecs)

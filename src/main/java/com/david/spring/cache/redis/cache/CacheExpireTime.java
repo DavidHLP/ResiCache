@@ -24,10 +24,10 @@ import java.util.stream.Stream;
 
 /**
  * 缓存过期时间配置管理器
- *
+ * <p>
  * 负责在Spring容器启动时扫描所有带有@RedisCacheable注解的方法，
  * 收集缓存TTL配置信息并初始化缓存管理器中的缓存配置。
- *
+ * <p>
  * 主要功能：
  * - 监听Spring容器刷新事件
  * - 扫描Bean中的缓存注解
@@ -101,7 +101,7 @@ public class CacheExpireTime implements ApplicationListener<ContextRefreshedEven
 	/**
 	 * 处理单个方法，提取缓存注解信息
 	 *
-	 * @param method 待处理的方法
+	 * @param method      待处理的方法
 	 * @param targetClass 目标类
 	 */
 	private void processMethod(Method method, Class<?> targetClass) {

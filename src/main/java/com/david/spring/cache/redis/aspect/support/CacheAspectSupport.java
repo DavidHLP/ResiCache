@@ -2,7 +2,9 @@ package com.david.spring.cache.redis.aspect.support;
 
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
+import com.david.spring.cache.redis.cache.RedisProCache;
 import com.david.spring.cache.redis.core.RedisProKeyManager;
+import com.david.spring.cache.redis.core.entity.CachedValue;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.springframework.cache.Cache;
@@ -116,8 +118,6 @@ public class CacheAspectSupport {
 		}
 	}
 
-	// ========== 工具方法 ==========
-
 	/**
 	 * 检查字符串是否为空
 	 */
@@ -157,5 +157,62 @@ public class CacheAspectSupport {
 	 */
 	public boolean isValidCacheName(String cacheName) {
 		return !isBlankString(cacheName);
+	}
+
+	/**
+	 * 存储结果到缓存，并直接指定TTL
+	 */
+	public void storeToCachesWithTtl(RedisCacheable annotation, Method method, Object targetBean, Object[] arguments, Object result) {
+		try {
+			String[] cacheNames = keyManager.getCacheNames(annotation.value(), annotation.cacheNames());
+			Object key = keyManager.resolveKey(targetBean, method, arguments, annotation.keyGenerator());
+
+			for (String cacheName : cacheNames) {
+				Cache cache = cacheManager.getCache(cacheName);
+				if (cache instanceof RedisProCache redisCache) {
+					// 使用putWithContext方法传递注解信息
+					putWithContext(redisCache, key, result, annotation);
+					log.debug("存储结果到缓存: key={} cache={} ttl={}", key, cacheName, annotation.ttl());
+				} else {
+					if (cache != null) {
+						cache.put(key, result);
+					}
+					log.debug("存储结果到缓存: key={} cache={} (默认TTL)", key, cacheName);
+				}
+			}
+		} catch (Exception e) {
+			log.warn("存储到缓存失败: method={}, error={}", method.getName(), e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * 存储结果到缓存 (向后兼容)
+	 */
+	public void storeToCaches(RedisCacheable annotation, Method method, Object targetBean, Object[] arguments, Object result) {
+		storeToCachesWithTtl(annotation, method, targetBean, arguments, result);
+	}
+
+	/**
+	 * 使用注解上下文信息存储到RedisProCache
+	 */
+	private void putWithContext(RedisProCache cache, Object key, Object value, RedisCacheable annotation) {
+		// 使用反射或者直接调用包装方法
+		Object wrappedValue = wrapValueWithTtl(value, annotation.ttl());
+		cache.put(key, wrappedValue);
+	}
+
+	/**
+	 * 使用指定TTL包装值
+	 */
+	private Object wrapValueWithTtl(Object value, long ttl) {
+		if (value == null) {
+			return null;
+		}
+
+		// 创建CachedValue，直接指定TTL
+		return CachedValue.builder()
+				.ttl(ttl)
+				.value(value)
+				.build();
 	}
 }
