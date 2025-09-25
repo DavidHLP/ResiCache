@@ -82,9 +82,26 @@ public class RedisCacheAspect implements Ordered {
 
 				String keyStr = String.valueOf(key);
 				if (!bloomFilter.contains(keyStr)) {
-					log.debug("Bloom filter rejected key: {}", keyStr);
-					// 布隆过滤器判断key不存在，直接返回null（假设这是数据库中也不存在的key）
-					return null;
+					log.debug("Bloom filter indicates key might not exist: {}", keyStr);
+					// 布隆过滤器说key不存在，但我们还是要执行方法验证
+					// 如果方法返回null，则确实不存在；如果返回数据，则将key添加到布隆过滤器
+					Object result = joinPoint.proceed();
+
+					// 处理布隆过滤器场景下的缓存
+					if (result != null) {
+						// 数据存在，添加到布隆过滤器并缓存
+						bloomFilter.add(keyStr);
+						log.debug("Added key to bloom filter: {}", keyStr);
+
+						// 缓存结果
+						for (CacheOperationResolver.CacheableOperation op : operations) {
+							if (shouldExecute(op, method, args, joinPoint.getTarget(), targetClass, result)) {
+								cacheResult(op, method, args, joinPoint.getTarget(), targetClass, result);
+							}
+						}
+					}
+
+					return result;
 				}
 			}
 
@@ -321,9 +338,9 @@ public class RedisCacheAspect implements Ordered {
 			long thresholdTime = (long) (totalTtlSeconds * preRefreshThreshold);
 
 			// 如果剩余TTL小于阈值时间，触发异步预刷新
-			if (stats.getRemainingTtl() <= thresholdTime) {
+			if (stats.remainingTtl() <= thresholdTime) {
 				log.debug("Triggering pre-refresh for key: {}, remaining TTL: {}s, threshold: {}s",
-						key, stats.getRemainingTtl(), thresholdTime);
+						key, stats.remainingTtl(), thresholdTime);
 
 				// 异步执行预刷新
 				preRefreshExecutor.submit(() -> {

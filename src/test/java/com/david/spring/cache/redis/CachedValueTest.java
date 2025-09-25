@@ -12,8 +12,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-import java.util.Objects;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(classes = {
@@ -69,10 +67,10 @@ public class CachedValueTest {
 
         RedisCache.CacheStats stats = cache.getCacheStats(userId);
         assertNotNull(stats);
-        assertEquals(1, stats.getVisitTimes()); // 第二次访问时更新了统计
-        assertTrue(stats.getAge() >= 0); // 存在时间应该>=0
-        assertTrue(stats.getRemainingTtl() > 0); // 剩余时间应该>0
-        assertEquals(User.class, stats.getValueType());
+        assertEquals(1, stats.visitTimes()); // 第二次访问时更新了统计
+        assertTrue(stats.age() >= 0); // 存在时间应该>=0
+        assertTrue(stats.remainingTtl() > 0); // 剩余时间应该>0
+        assertEquals(User.class, stats.valueType());
 
         System.out.println("第一次缓存统计: " + stats);
 
@@ -85,8 +83,8 @@ public class CachedValueTest {
         // 再次获取统计信息，访问次数应该增加
         RedisCache.CacheStats stats2 = cache.getCacheStats(userId);
         assertNotNull(stats2);
-        assertEquals(2, stats2.getVisitTimes()); // 访问了两次
-        assertTrue(stats2.getAge() >= stats.getAge()); // 存在时间应该增加
+        assertEquals(2, stats2.visitTimes()); // 访问了两次
+        assertTrue(stats2.age() >= stats.age()); // 存在时间应该增加
 
         System.out.println("第二次缓存统计: " + stats2);
 
@@ -96,7 +94,7 @@ public class CachedValueTest {
 
         RedisCache.CacheStats stats3 = cache.getCacheStats(userId);
         assertNotNull(stats3);
-        assertEquals(3, stats3.getVisitTimes()); // 访问了三次
+        assertEquals(3, stats3.visitTimes()); // 访问了三次
 
         System.out.println("第三次缓存统计: " + stats3);
     }
@@ -119,13 +117,13 @@ public class CachedValueTest {
 
         RedisCache.CacheStats stats = cache.getCacheStats(key);
         assertNotNull(stats);
-        assertEquals(1, stats.getVisitTimes()); // 第二次调用时触发了一次访问统计
-        assertTrue(stats.getRemainingTtl() > 0);
+        assertEquals(1, stats.visitTimes()); // 第二次调用时触发了一次访问统计
+        assertTrue(stats.remainingTtl() > 0);
 
         System.out.println("缓存统计信息: " + stats);
-        System.out.println("剩余TTL: " + stats.getRemainingTtl() + " 秒");
-        System.out.println("缓存年龄: " + stats.getAge() + " 秒");
-        System.out.println("值类型: " + stats.getValueType().getSimpleName());
+        System.out.println("剩余TTL: " + stats.remainingTtl() + " 秒");
+        System.out.println("缓存年龄: " + stats.age() + " 秒");
+        System.out.println("值类型: " + stats.valueType().getSimpleName());
     }
 
     @Test
@@ -156,13 +154,13 @@ public class CachedValueTest {
         // 空值也应该有缓存统计
         RedisCache.CacheStats nullStats = cache.getCacheStats(nullKey);
         assertNotNull(nullStats);
-        assertEquals(1, nullStats.getVisitTimes()); // 第二次调用时触发了访问统计
-        assertEquals(Object.class, nullStats.getValueType()); // 空值的类型是Object
+        assertEquals(1, nullStats.visitTimes()); // 第二次调用时触发了访问统计
+        assertEquals(Object.class, nullStats.valueType()); // 空值的类型是Object
 
         RedisCache.CacheStats regularStats = cache.getCacheStats(regularKey);
         assertNotNull(regularStats);
-        assertEquals(1, regularStats.getVisitTimes()); // 第二次调用时触发了访问统计
-        assertEquals(String.class, regularStats.getValueType());
+        assertEquals(1, regularStats.visitTimes()); // 第二次调用时触发了访问统计
+        assertEquals(String.class, regularStats.valueType());
 
         System.out.println("空值缓存统计: " + nullStats);
         System.out.println("普通值缓存统计: " + regularStats);

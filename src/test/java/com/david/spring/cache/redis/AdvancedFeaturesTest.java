@@ -12,7 +12,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -173,9 +172,9 @@ public class AdvancedFeaturesTest {
             if (cache != null) {
                 RedisCache.CacheStats stats = cache.getCacheStats(dataKey);
                 if (stats != null) {
-                    log.info("Key: {}, Remaining TTL: {}秒", dataKey, stats.getRemainingTtl());
+                    log.info("Key: {}, Remaining TTL: {}秒", dataKey, stats.remainingTtl());
                     // TTL应该在60-180秒之间（基础120秒 ± 50%）
-                    assertTrue(stats.getRemainingTtl() >= 60 && stats.getRemainingTtl() <= 180);
+                    assertTrue(stats.remainingTtl() >= 60 && stats.remainingTtl() <= 180);
                 }
             }
         }
@@ -223,9 +222,9 @@ public class AdvancedFeaturesTest {
         if (cache != null) {
             RedisCache.CacheStats stats = cache.getCacheStats(normalKey);
             if (stats != null) {
-                log.info("Combined features cache TTL: {}秒", stats.getRemainingTtl());
+                log.info("Combined features cache TTL: {}秒", stats.remainingTtl());
                 // TTL应该在168-312秒之间（基础240秒 ± 30%）
-                assertTrue(stats.getRemainingTtl() >= 168 && stats.getRemainingTtl() <= 312);
+                assertTrue(stats.remainingTtl() >= 168 && stats.remainingTtl() <= 312);
             }
         }
     }
