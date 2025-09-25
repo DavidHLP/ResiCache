@@ -49,7 +49,9 @@ public abstract class CacheOperationTemplate {
 
             // 查询缓存
             Object cachedValue = getCachedValue(operation, cacheKey, cacheName);
-            if (cachedValue != null) {
+
+            // 如果不是缓存未命中标记，说明缓存命中（包括null值）
+            if (!isCacheMissMarker(cachedValue)) {
                 // 缓存命中处理
                 onCacheHit(operation, cacheKey, cacheName, cachedValue, source, startTime);
                 return cachedValue;
@@ -169,5 +171,12 @@ public abstract class CacheOperationTemplate {
     protected void onCacheError(CacheOperationResolver.CacheableOperation operation,
                               Object cacheKey, String cacheName, Exception e) {
         log.warn("Cache operation error for key: {} in cache: {}: {}", cacheKey, cacheName, e.getMessage());
+    }
+
+    /**
+     * 判断是否为缓存未命中标记 - 子类需要实现
+     */
+    protected boolean isCacheMissMarker(Object value) {
+        return false; // 默认实现，子类可以重写
     }
 }

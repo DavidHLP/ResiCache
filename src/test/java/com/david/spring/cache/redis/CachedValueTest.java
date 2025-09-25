@@ -14,10 +14,15 @@ import org.springframework.test.context.TestPropertySource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(classes = {
-        SpringCacheRedis.class,
-        RedisCacheAutoConfiguration.class
-})
+@SpringBootTest(
+	classes = {
+		SpringCacheRedis.class,
+		RedisCacheAutoConfiguration.class
+	},
+	properties = {
+		"spring.autoconfigure.exclude=org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration"
+	}
+)
 @TestPropertySource(properties = {
         "spring.data.redis.host=192.168.1.111",
         "spring.data.redis.port=6379",
@@ -25,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.redis.cache.enabled=true",
         "spring.redis.cache.default-ttl=PT1M",
         "logging.level.com.david.spring.cache.redis=DEBUG",
+		"spring.jmx.enabled=false"
 })
 public class CachedValueTest {
 

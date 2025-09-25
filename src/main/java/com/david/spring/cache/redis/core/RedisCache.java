@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.core;
 
+import com.david.spring.cache.redis.event.*;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.support.AbstractValueAdaptingCache;
@@ -17,6 +18,9 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	private final Duration defaultTtl;
 	private final boolean allowNullValues;
 
+	// 观察者模式支持
+	private CacheEventPublisher eventPublisher;
+
 	public RedisCache(String name, RedisTemplate<String, Object> redisTemplate,
 	                  Duration defaultTtl, boolean allowNullValues) {
 		super(allowNullValues);
@@ -24,6 +28,13 @@ public class RedisCache extends AbstractValueAdaptingCache {
 		this.redisTemplate = redisTemplate;
 		this.defaultTtl = defaultTtl;
 		this.allowNullValues = allowNullValues;
+	}
+
+	/**
+	 * 设置事件发布器（观察者模式支持）
+	 */
+	public void setEventPublisher(CacheEventPublisher eventPublisher) {
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Override
@@ -40,9 +51,12 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	protected Object lookup(Object key) {
 		String cacheKey = createCacheKey(key);
 		try {
+			long startTime = System.currentTimeMillis();
 			Object rawValue = redisTemplate.opsForValue().get(cacheKey);
+
 			if (rawValue == null) {
 				log.debug("Cache miss for key '{}'", cacheKey);
+				publishCacheMissEvent(cacheKey, "not_found");
 				return null;
 			}
 
@@ -71,8 +85,13 @@ public class RedisCache extends AbstractValueAdaptingCache {
 				}
 
 				log.debug("Cache hit for key '{}', visitTimes: {}", cacheKey, cachedValue.getVisitTimes());
-				// 使用 fromStoreValue 来正确处理 null 值
-				return fromStoreValue(cachedValue.getValue());
+
+				// 发布缓存命中事件
+				long accessTime = System.currentTimeMillis() - startTime;
+				publishCacheHitEvent(cacheKey, cachedValue.getValue(), accessTime);
+
+				// CachedValue 已经处理了 null 值存储，直接返回
+				return cachedValue.getValue();
 			} else {
 				// 兼容旧的缓存格式
 				log.debug("Cache hit for key '{}' (legacy format)", cacheKey);
@@ -91,14 +110,14 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 	public void putWithTtl(Object key, @Nullable Object value, Duration ttl) {
 		String cacheKey = createCacheKey(key);
+		long startTime = System.currentTimeMillis();
 
 		try {
 			long ttlSeconds = (ttl != null && !ttl.isZero() && !ttl.isNegative()) ? ttl.getSeconds() : -1;
 
-			// 使用 toStoreValue 处理 null 值，然后创建 CachedValue 对象
-			Object storeValue = toStoreValue(value);
+			// CachedValue 直接存储原始值（包括null）
 			CachedValue cachedValue = CachedValue.of(
-					storeValue,
+					value,
 					value != null ? value.getClass() : Object.class,
 					ttlSeconds
 			);
@@ -111,6 +130,11 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 			log.debug("Cache put for key '{}' with TTL: {} seconds, type: {}",
 					cacheKey, ttlSeconds, cachedValue.getType().getSimpleName());
+
+			// 发布缓存写入事件
+			long executionTime = System.currentTimeMillis() - startTime;
+			publishCachePutEvent(key, value, ttl, executionTime);
+
 		} catch (Exception e) {
 			log.warn("Cache put failed for key '{}': {}", cacheKey, e.getMessage());
 		}
@@ -123,10 +147,9 @@ public class RedisCache extends AbstractValueAdaptingCache {
 		try {
 			long ttlSeconds = (defaultTtl != null && !defaultTtl.isZero() && !defaultTtl.isNegative()) ? defaultTtl.getSeconds() : -1;
 
-			// 使用 toStoreValue 处理 null 值，然后创建 CachedValue 对象
-			Object storeValue = toStoreValue(value);
+			// CachedValue 直接存储原始值（包括null）
 			CachedValue cachedValue = CachedValue.of(
-					storeValue,
+					value,
 					value != null ? value.getClass() : Object.class,
 					ttlSeconds
 			);
@@ -155,7 +178,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 							log.warn("Failed to update cache statistics for key '{}': {}", cacheKey, e.getMessage());
 						}
 						log.debug("Cache putIfAbsent failed for key '{}', existing value found", cacheKey);
-						return toValueWrapper(fromStoreValue(existingCachedValue.getValue()));
+						return toValueWrapper(existingCachedValue.getValue());
 					} else {
 						// 已过期的情况下，重新设置
 						putWithTtl(key, value, defaultTtl);
@@ -164,7 +187,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 				} else if (existingRawValue != null) {
 					// 兼容旧格式
 					log.debug("Cache putIfAbsent failed for key '{}', existing legacy value found", cacheKey);
-					return toValueWrapper(fromStoreValue(existingRawValue));
+					return toValueWrapper(existingRawValue);
 				} else {
 					// 不存在，重新设置
 					putWithTtl(key, value, defaultTtl);
@@ -239,6 +262,36 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 	private String createCacheKey(Object key) {
 		return name + ":" + key;
+	}
+
+	/**
+	 * 发布缓存命中事件
+	 */
+	private void publishCacheHitEvent(Object cacheKey, Object value, long accessTime) {
+		if (eventPublisher != null) {
+			CacheHitEvent event = new CacheHitEvent(name, cacheKey, "RedisCache", value, accessTime);
+			eventPublisher.publishEventAsync(event);
+		}
+	}
+
+	/**
+	 * 发布缓存未命中事件
+	 */
+	private void publishCacheMissEvent(Object cacheKey, String reason) {
+		if (eventPublisher != null) {
+			CacheMissEvent event = new CacheMissEvent(name, cacheKey, "RedisCache", reason);
+			eventPublisher.publishEventAsync(event);
+		}
+	}
+
+	/**
+	 * 发布缓存写入事件
+	 */
+	private void publishCachePutEvent(Object cacheKey, Object value, Duration ttl, long executionTime) {
+		if (eventPublisher != null) {
+			CachePutEvent event = new CachePutEvent(name, cacheKey, "RedisCache", value, ttl, executionTime);
+			eventPublisher.publishEventAsync(event);
+		}
 	}
 
 	/**

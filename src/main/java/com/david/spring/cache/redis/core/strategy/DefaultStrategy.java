@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.core.strategy;
 
+import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.core.CacheOperationResolver;
 import com.david.spring.cache.redis.core.RedisCacheManager;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.Cache;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -22,11 +24,14 @@ public class DefaultStrategy implements CacheExecutionStrategy {
 
     private final RedisCacheManager cacheManager;
     private final KeyGenerator keyGenerator;
+    private final CacheExpressionEvaluator expressionEvaluator;
 
     public DefaultStrategy(RedisCacheManager cacheManager,
-                          @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator) {
+                          @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator,
+                          CacheExpressionEvaluator expressionEvaluator) {
         this.cacheManager = cacheManager;
         this.keyGenerator = keyGenerator;
+        this.expressionEvaluator = expressionEvaluator;
     }
 
     @Override
@@ -97,6 +102,13 @@ public class DefaultStrategy implements CacheExecutionStrategy {
 
     private Object generateCacheKey(CacheOperationResolver.CacheableOperation operation,
                                    Method method, Object[] args, Object target, Class<?> targetClass) {
+        // 如果指定了key表达式，使用表达式计算键
+        if (StringUtils.hasText(operation.getKey())) {
+            Object key = expressionEvaluator.generateKey(operation.getKey(), method, args, target, targetClass, null);
+            return key != null ? key : keyGenerator.generate(target, method, args);
+        }
+
+        // 否则使用默认的KeyGenerator
         return keyGenerator.generate(target, method, args);
     }
 }

@@ -58,11 +58,25 @@ public class StandardCacheOperationTemplate extends CacheOperationTemplate {
                                   Object cacheKey, String cacheName) {
         Cache cache = cacheManager.getCache(cacheName);
         if (cache == null) {
-            return null;
+            return CACHE_MISS_MARKER;
         }
 
         Cache.ValueWrapper wrapper = cache.get(cacheKey);
-        return wrapper != null ? wrapper.get() : null;
+        if (wrapper != null) {
+            // 缓存命中，返回实际值（可能是null）
+            return wrapper.get();
+        }
+
+        // wrapper为null表示缓存未命中，返回特殊标记
+        return CACHE_MISS_MARKER;
+    }
+
+    // 缓存未命中的特殊标记
+    private static final Object CACHE_MISS_MARKER = new Object();
+
+    @Override
+    protected boolean isCacheMissMarker(Object value) {
+        return value == CACHE_MISS_MARKER;
     }
 
     @Override

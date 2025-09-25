@@ -15,17 +15,23 @@ import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(classes = {
+@SpringBootTest(
+	classes = {
 		SpringCacheRedis.class,
 		RedisCacheAutoConfiguration.class
-})
+	},
+	properties = {
+		"spring.autoconfigure.exclude=org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration"
+	}
+)
 @TestPropertySource(properties = {
 		"spring.data.redis.host=192.168.1.111",
 		"spring.data.redis.port=6379",
 		"spring.data.redis.password=Alone117",
 		"spring.redis.cache.enabled=true",
 		"spring.redis.cache.default-ttl=PT1M",
-		"logging.level.com.david.spring.cache.redis=DEBUG"
+		"logging.level.com.david.spring.cache.redis=DEBUG",
+		"spring.jmx.enabled=false"
 })
 public class RedisCacheTest {
 
@@ -94,13 +100,15 @@ public class RedisCacheTest {
 		User user = testService.getUserWithProfile(userId);
 		assertNotNull(user);
 
-		assertNotNull(Objects.requireNonNull(cacheManager.getCache("user-details")).get(userId));
-		assertNotNull(Objects.requireNonNull(cacheManager.getCache("user-profile")).get(userId));
+		// 使用实际的缓存键格式（key="#userId" 的结果）
+		String key = String.valueOf(userId); // key="#userId" 的结果
+		assertNotNull(Objects.requireNonNull(cacheManager.getCache("user-details")).get(key));
+		assertNotNull(Objects.requireNonNull(cacheManager.getCache("user-profile")).get(key));
 
 		testService.deleteUser(userId);
 
-		assertNull(Objects.requireNonNull(cacheManager.getCache("user-details")).get(userId));
-		assertNull(Objects.requireNonNull(cacheManager.getCache("user-profile")).get(userId));
+		assertNull(Objects.requireNonNull(cacheManager.getCache("user-details")).get(key));
+		assertNull(Objects.requireNonNull(cacheManager.getCache("user-profile")).get(key));
 	}
 
 	@Test
@@ -109,15 +117,20 @@ public class RedisCacheTest {
 		testService.getUser(2L);
 		testService.getUser(3L);
 
-		assertNotNull(Objects.requireNonNull(cacheManager.getCache("users")).get(1L));
-		assertNotNull(Objects.requireNonNull(cacheManager.getCache("users")).get(2L));
-		assertNotNull(Objects.requireNonNull(cacheManager.getCache("users")).get(3L));
+		// 使用实际的缓存键格式（cacheNames + ":" + key 表达式值）
+		String key1 = "1"; // key="#userId" 的结果
+		String key2 = "2";
+		String key3 = "3";
+
+		assertNotNull(Objects.requireNonNull(cacheManager.getCache("users")).get(key1));
+		assertNotNull(Objects.requireNonNull(cacheManager.getCache("users")).get(key2));
+		assertNotNull(Objects.requireNonNull(cacheManager.getCache("users")).get(key3));
 
 		testService.clearAllUsers();
 
-		assertNull(Objects.requireNonNull(cacheManager.getCache("users")).get(1L));
-		assertNull(Objects.requireNonNull(cacheManager.getCache("users")).get(2L));
-		assertNull(Objects.requireNonNull(cacheManager.getCache("users")).get(3L));
+		assertNull(Objects.requireNonNull(cacheManager.getCache("users")).get(key1));
+		assertNull(Objects.requireNonNull(cacheManager.getCache("users")).get(key2));
+		assertNull(Objects.requireNonNull(cacheManager.getCache("users")).get(key3));
 	}
 
 	@Test
@@ -147,6 +160,9 @@ public class RedisCacheTest {
 
 		String value2 = testService.getSyncValue(key);
 		assertEquals("Sync value for test-key", value2);
+
+		// 验证缓存是否正确存储 (key="#key" 的结果)
+		assertNotNull(Objects.requireNonNull(cacheManager.getCache("sync-cache")).get(key));
 	}
 
 	@Test
@@ -160,6 +176,7 @@ public class RedisCacheTest {
 		String nullValue = testService.getNullableValue(nullKey);
 		assertNull(nullValue);
 
+		// 验证null值也被正确缓存 (key="#key" 的结果)
 		assertNotNull(Objects.requireNonNull(cacheManager.getCache("null-cache")).get(nullKey));
 	}
 
@@ -170,6 +187,7 @@ public class RedisCacheTest {
 		String value = testService.getValueWithRandomTtl(key);
 		assertEquals("Value for random-ttl-key", value);
 
+		// 验证随机TTL缓存是否正确存储 (key="#key" 的结果)
 		assertNotNull(Objects.requireNonNull(cacheManager.getCache("random-ttl-cache")).get(key));
 	}
 }

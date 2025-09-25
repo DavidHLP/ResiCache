@@ -1,8 +1,12 @@
 package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.aspect.RedisCacheAspect;
+import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.core.CacheKeyGenerator;
 import com.david.spring.cache.redis.core.RedisCacheManager;
+import com.david.spring.cache.redis.core.strategy.CacheStrategyContext;
+import com.david.spring.cache.redis.event.CacheEventPublisher;
+import com.david.spring.cache.redis.factory.CacheFactoryRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -80,6 +84,13 @@ public class RedisCacheAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
+	public CacheExpressionEvaluator cacheExpressionEvaluator() {
+		log.info("Created CacheExpressionEvaluator");
+		return new CacheExpressionEvaluator();
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
 	public RedisCacheManager redisCacheManager(@Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisCacheTemplate) {
 		Map<String, Duration> cacheConfigurations = new HashMap<>();
 
@@ -132,9 +143,16 @@ public class RedisCacheAutoConfiguration {
 	@ConditionalOnMissingBean
 	public RedisCacheAspect redisCacheAspect(RedisCacheManager redisCacheManager,
 	                                         @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator,
-	                                         RedissonClient redissonClient) {
-		RedisCacheAspect aspect = new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient);
-		log.info("Created RedisCacheAspect with RedissonClient support");
+	                                         RedissonClient redissonClient,
+	                                         CacheStrategyContext strategyContext,
+	                                         CacheEventPublisher eventPublisher,
+	                                         CacheFactoryRegistry factoryRegistry) {
+		// 为RedisCacheManager设置工厂支持
+		redisCacheManager.setCacheFactoryRegistry(factoryRegistry);
+
+		RedisCacheAspect aspect = new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient,
+				strategyContext, eventPublisher);
+		log.info("Created RedisCacheAspect with design patterns support");
 		return aspect;
 	}
 

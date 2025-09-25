@@ -4,6 +4,10 @@ import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.core.CacheOperationResolver;
 import com.david.spring.cache.redis.core.RedisCache;
 import com.david.spring.cache.redis.core.RedisCacheManager;
+import com.david.spring.cache.redis.core.strategy.CacheStrategyContext;
+import com.david.spring.cache.redis.event.CacheEventPublisher;
+import com.david.spring.cache.redis.template.CacheOperationTemplate;
+import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -38,12 +42,26 @@ public class RedisCacheAspect implements Ordered {
 	private final ReentrantLock internalLock = new ReentrantLock();
 	private final ExecutorService preRefreshExecutor = Executors.newFixedThreadPool(2);
 
-	public RedisCacheAspect(RedisCacheManager cacheManager, KeyGenerator keyGenerator, RedissonClient redissonClient) {
+	// 设计模式组件
+	private final CacheStrategyContext strategyContext;
+	private final CacheEventPublisher eventPublisher;
+	private final CacheOperationTemplate operationTemplate;
+
+	public RedisCacheAspect(RedisCacheManager cacheManager,
+	                       KeyGenerator keyGenerator,
+	                       RedissonClient redissonClient,
+	                       CacheStrategyContext strategyContext,
+	                       CacheEventPublisher eventPublisher) {
 		this.cacheManager = cacheManager;
 		this.keyGenerator = keyGenerator;
 		this.redissonClient = redissonClient;
 		this.operationResolver = new CacheOperationResolver();
 		this.expressionEvaluator = new CacheExpressionEvaluator();
+
+		// 初始化设计模式组件
+		this.strategyContext = strategyContext;
+		this.eventPublisher = eventPublisher;
+		this.operationTemplate = new StandardCacheOperationTemplate(eventPublisher, cacheManager, keyGenerator);
 	}
 
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheable) || " +
@@ -61,68 +79,60 @@ public class RedisCacheAspect implements Ordered {
 			return joinPoint.proceed();
 		}
 
-		// 先检查缓存中是否有数据
-		for (CacheOperationResolver.CacheableOperation operation : operations) {
-			if (!shouldExecute(operation, method, args, joinPoint.getTarget(), targetClass, null)) {
-				continue;
-			}
+		// 对于单个操作，使用模板方法模式处理
+		if (operations.size() == 1) {
+			CacheOperationResolver.CacheableOperation operation = operations.get(0);
 
-			// 如果启用了布隆过滤器，先检查布隆过滤器
+			// 检查是否启用布隆过滤器的特殊处理
 			if (operation.isUseBloomFilter()) {
-				Object key = generateCacheKey(operation, method, args, joinPoint.getTarget(), targetClass);
-				String bloomFilterName = "bloom:" + operation.getCacheNames()[0];
-				RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(bloomFilterName);
-
-				// 确保布隆过滤器已初始化
-				if (!bloomFilter.isExists()) {
-					// 预期元素数量：10万，假阳性概率：0.03
-					bloomFilter.tryInit(100000L, 0.03);
-					log.debug("Initialized bloom filter: {}", bloomFilterName);
-				}
-
-				String keyStr = String.valueOf(key);
-				if (!bloomFilter.contains(keyStr)) {
-					log.debug("Bloom filter indicates key might not exist: {}", keyStr);
-					// 布隆过滤器说key不存在，但我们还是要执行方法验证
-					// 如果方法返回null，则确实不存在；如果返回数据，则将key添加到布隆过滤器
-					Object result = joinPoint.proceed();
-
-					// 处理布隆过滤器场景下的缓存
-					if (result != null) {
-						// 数据存在，添加到布隆过滤器并缓存
-						bloomFilter.add(keyStr);
-						log.debug("Added key to bloom filter: {}", keyStr);
-
-						// 缓存结果
-						for (CacheOperationResolver.CacheableOperation op : operations) {
-							if (shouldExecute(op, method, args, joinPoint.getTarget(), targetClass, result)) {
-								cacheResult(op, method, args, joinPoint.getTarget(), targetClass, result);
-							}
-						}
-					}
-
-					return result;
-				}
+				return handleBloomFilterOperation(joinPoint, operation, method, args, targetClass);
 			}
 
-			Object cachedResult = getCachedValue(operation, method, args, joinPoint.getTarget(), targetClass);
-			if (cachedResult != CACHE_MISS) {
-				if (cachedResult instanceof CachedResult) {
-					return ((CachedResult) cachedResult).getValue();
-				}
-				return cachedResult;
+			// 使用模板方法模式处理标准缓存操作
+			return operationTemplate.execute(joinPoint, operation, method, args, targetClass);
+		}
+
+		// 对于多个操作，使用策略模式选择执行策略
+		return strategyContext.execute(joinPoint, operations, method, args, targetClass);
+	}
+
+	/**
+	 * 处理布隆过滤器特殊场景
+	 */
+	private Object handleBloomFilterOperation(ProceedingJoinPoint joinPoint,
+	                                         CacheOperationResolver.CacheableOperation operation,
+	                                         Method method, Object[] args, Class<?> targetClass) throws Throwable {
+		Object key = generateCacheKey(operation, method, args, joinPoint.getTarget(), targetClass);
+		String bloomFilterName = "bloom:" + operation.getCacheNames()[0];
+		RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(bloomFilterName);
+
+		// 确保布隆过滤器已初始化
+		if (!bloomFilter.isExists()) {
+			bloomFilter.tryInit(100000L, 0.03);
+			log.debug("Initialized bloom filter: {}", bloomFilterName);
+		}
+
+		String keyStr = String.valueOf(key);
+		if (!bloomFilter.contains(keyStr)) {
+			log.debug("Bloom filter indicates key might not exist: {}", keyStr);
+
+			// 执行方法
+			Object result = joinPoint.proceed();
+
+			// 如果有结果，添加到布隆过滤器并缓存
+			if (result != null) {
+				bloomFilter.add(keyStr);
+				log.debug("Added key to bloom filter: {}", keyStr);
+
+				// 缓存结果
+				cacheResult(operation, method, args, joinPoint.getTarget(), targetClass, result);
 			}
+
+			return result;
 		}
 
-		// 如果缓存中没有数据，需要执行方法并缓存结果
-		// 根据配置决定是否使用锁
-		CacheOperationResolver.CacheableOperation primaryOperation = operations.get(0);
-
-		if (primaryOperation.isDistributedLock() || primaryOperation.isInternalLock() || primaryOperation.isSync()) {
-			return executeWithLock(primaryOperation, joinPoint, method, args, targetClass, operations);
-		} else {
-			return executeWithoutLock(joinPoint, operations, method, args, targetClass);
-		}
+		// 布隆过滤器说可能存在，继续正常的缓存处理流程
+		return operationTemplate.execute(joinPoint, operation, method, args, targetClass);
 	}
 
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheEvict) || " +
