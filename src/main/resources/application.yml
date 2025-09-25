@@ -3,17 +3,61 @@ spring:
     redis: # 基础 Redis 连接配置
       host: 192.168.1.111
       port: 6379
-      database: 0
-      timeout: 1800000 # 使用毫秒格式，兼容 Redis Lettuce
       password: Alone117
+      database: 0
+      timeout: 2000ms
       lettuce:
         pool:
           max-active: 20 # 最大连接数
           max-idle: 5 # 最大空闲连接数
           min-idle: 2 # 最小空闲连接数
 
-# CacheGuard 配置示例
-cache:
-  guard:
-    # 双删延迟时间（毫秒）
-    double-delete-delay-ms: 300
+  redis:
+    cache:
+      enabled: true
+      default-ttl: PT1H
+      allow-null-values: true
+      key-prefix: "cache:"
+      use-key-prefix: true
+      enable-transactions: false
+
+      # 具体缓存配置
+      caches:
+        users:
+          ttl: PT30M
+          allow-null-values: false
+          random-ttl: true
+          variance: 0.1
+        products:
+          ttl: PT1H
+          use-bloom-filter: true
+          enable-pre-refresh: true
+          pre-refresh-threshold: 0.3
+        orders:
+          ttl: PT15M
+          allow-null-values: true
+
+      # 分布式锁配置
+      lock:
+        enabled: true
+        lock-timeout: PT10S
+        lock-wait-time: PT5S
+
+      # 布隆过滤器配置
+      bloom-filter:
+        enabled: true
+        expected-insertions: 1000000
+        false-positive-probability: 0.01
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,cache
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.david.spring.cache.redis: INFO

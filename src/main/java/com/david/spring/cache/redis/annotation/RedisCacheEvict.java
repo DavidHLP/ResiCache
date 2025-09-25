@@ -14,9 +14,9 @@ public @interface RedisCacheEvict {
 
 	String key() default "";
 
-	String keyGenerator() default "keyGenerator";
+	String keyGenerator() default "";
 
-	String cacheManager() default "redisProCacheManager";
+	String cacheManager() default "";
 
 	String cacheResolver() default "";
 
