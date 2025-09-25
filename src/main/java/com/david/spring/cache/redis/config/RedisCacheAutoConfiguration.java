@@ -19,6 +19,7 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -36,6 +37,7 @@ import java.util.Map;
 @EnableConfigurationProperties(RedisCacheProperties.class)
 @EnableCaching
 @EnableAspectJAutoProxy
+@Import(CacheDesignPatternConfiguration.class)
 public class RedisCacheAutoConfiguration {
 
 	private final RedisCacheProperties properties;
