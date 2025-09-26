@@ -1,7 +1,6 @@
 package com.david.spring.cache.redis.core;
 
-import com.david.spring.cache.redis.template.CacheOperationTemplate;
-import lombok.Setter;
+import com.david.spring.cache.redis.manager.AbstractEventAwareCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.support.AbstractValueAdaptingCache;
 import org.springframework.data.redis.core.RedisTemplate;

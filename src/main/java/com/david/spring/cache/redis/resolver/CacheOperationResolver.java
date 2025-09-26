@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.core;
+package com.david.spring.cache.redis.resolver;
 
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.annotation.RedisCacheable;

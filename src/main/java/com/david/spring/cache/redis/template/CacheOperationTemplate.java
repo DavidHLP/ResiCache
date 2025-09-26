@@ -1,7 +1,6 @@
 package com.david.spring.cache.redis.template;
 
-import com.david.spring.cache.redis.core.CacheOperationResolver;
-import lombok.RequiredArgsConstructor;
+import com.david.spring.cache.redis.resolver.CacheOperationResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 

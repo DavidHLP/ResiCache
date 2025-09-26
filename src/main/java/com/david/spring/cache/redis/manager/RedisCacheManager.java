@@ -1,5 +1,6 @@
-package com.david.spring.cache.redis.core;
+package com.david.spring.cache.redis.manager;
 
+import com.david.spring.cache.redis.core.RedisCache;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.cache.CacheType;

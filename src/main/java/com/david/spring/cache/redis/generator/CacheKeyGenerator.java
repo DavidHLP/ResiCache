@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.core;
+package com.david.spring.cache.redis.generator;
 
 import cn.hutool.crypto.digest.DigestUtil;
 import lombok.extern.slf4j.Slf4j;

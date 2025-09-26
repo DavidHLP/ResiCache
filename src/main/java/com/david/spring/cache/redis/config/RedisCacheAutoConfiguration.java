@@ -1,9 +1,9 @@
 package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.aspect.RedisCacheAspect;
-import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
-import com.david.spring.cache.redis.core.CacheKeyGenerator;
-import com.david.spring.cache.redis.core.RedisCacheManager;
+import com.david.spring.cache.redis.expression.CacheExpressionEvaluator;
+import com.david.spring.cache.redis.generator.CacheKeyGenerator;
+import com.david.spring.cache.redis.manager.RedisCacheManager;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
 import jakarta.annotation.PostConstruct;
