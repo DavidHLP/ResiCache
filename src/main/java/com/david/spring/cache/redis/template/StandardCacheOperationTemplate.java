@@ -4,7 +4,6 @@ import com.david.spring.cache.redis.core.RedisCache;
 import com.david.spring.cache.redis.expression.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.manager.RedisCacheManager;
 import com.david.spring.cache.redis.resolver.CacheOperationResolver;
-import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.Cache;
@@ -17,7 +16,6 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * 标准缓存操作模板实现
  */
-@Slf4j
 public class StandardCacheOperationTemplate extends CacheOperationTemplate {
 
 	// 缓存未命中的特殊标记
@@ -45,9 +43,9 @@ public class StandardCacheOperationTemplate extends CacheOperationTemplate {
 
 	@Override
 	protected boolean shouldExecute(CacheOperationResolver.CacheableOperation operation,
-	                                Method method, Object[] args, Object target, Class<?> targetClass, Object result) {
-		return operation.hasCondition() ||
-				expressionEvaluator.evaluateCondition(operation.getCondition(), method, args, target, targetClass, result);
+	                                Method method, Object[] args, Object target, Class<?> targetClass) {
+		return !operation.hasCondition() ||
+				expressionEvaluator.evaluateCondition(operation.getCondition(), method, args, target, targetClass, null);
 	}
 
 	@Override
@@ -77,41 +75,23 @@ public class StandardCacheOperationTemplate extends CacheOperationTemplate {
 	protected Object executeTargetMethod(ProceedingJoinPoint joinPoint,
 	                                     CacheOperationResolver.CacheableOperation operation,
 	                                     Object cacheKey, String cacheName) throws Throwable {
-		long startTime = System.currentTimeMillis();
-
 		// 执行目标方法
 		Object result = joinPoint.proceed();
 
-		long executionTime = calculateElapsedTime(startTime);
-
 		// 缓存结果
 		if (result != null || operation.isCacheNullValues()) {
-			Duration ttl = calculateTtl(operation);
-			cacheResult(operation, cacheKey, cacheName, result, ttl);
-
-			String source = buildSourceName(joinPoint.getTarget().getClass(),
-					joinPoint.getSignature().getName());
-			onCachePut(operation, cacheKey, cacheName, result, source, ttl, executionTime);
+			Cache cache = cacheManager.getCache(cacheName);
+			if (cache != null) {
+				Duration ttl = calculateTtl(operation);
+				if (cache instanceof RedisCache redisCache && ttl != null) {
+					redisCache.putWithTtl(cacheKey, result, ttl);
+				} else {
+					cache.put(cacheKey, result);
+				}
+			}
 		}
 
 		return result;
-	}
-
-	@Override
-	protected void cacheResult(CacheOperationResolver.CacheableOperation operation,
-	                           Object cacheKey, String cacheName, Object result, Duration ttl) {
-		Cache cache = cacheManager.getCache(cacheName);
-		if (cache == null) {
-			return;
-		}
-
-		if (cache instanceof RedisCache redisCache) {
-			redisCache.putWithTtl(cacheKey, result, ttl);
-		} else {
-			cache.put(cacheKey, result);
-		}
-
-		log.debug("Cached result for key: {} with TTL: {}", cacheKey, ttl);
 	}
 
 	/**
