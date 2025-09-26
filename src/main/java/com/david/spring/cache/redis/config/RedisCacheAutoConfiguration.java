@@ -6,7 +6,9 @@ import com.david.spring.cache.redis.core.CacheKeyGenerator;
 import com.david.spring.cache.redis.core.RedisCacheManager;
 import com.david.spring.cache.redis.core.strategy.CacheStrategyContext;
 import com.david.spring.cache.redis.event.CacheEventPublisher;
+import com.david.spring.cache.redis.event.listener.CacheStatisticsListener;
 import com.david.spring.cache.redis.factory.CacheFactoryRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -22,8 +24,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
-import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -41,7 +43,11 @@ import java.util.Map;
 @EnableConfigurationProperties(RedisCacheProperties.class)
 @EnableCaching
 @EnableAspectJAutoProxy
-@Import(CacheDesignPatternConfiguration.class)
+@ComponentScan(basePackages = {
+		"com.david.spring.cache.redis.core.strategy",
+		"com.david.spring.cache.redis.factory",
+		"com.david.spring.cache.redis.template"
+})
 public class RedisCacheAutoConfiguration {
 
 	private final RedisCacheProperties properties;
@@ -49,6 +55,11 @@ public class RedisCacheAutoConfiguration {
 	public RedisCacheAutoConfiguration(RedisCacheProperties properties) {
 		this.properties = properties;
 		log.info("Initializing RedisCacheAutoConfiguration with properties: {}", properties);
+	}
+
+	@PostConstruct
+	public void init() {
+		log.info("Initializing Cache Design Pattern Configuration");
 	}
 
 	@Bean
@@ -97,7 +108,7 @@ public class RedisCacheAutoConfiguration {
 		for (Map.Entry<String, RedisCacheProperties.CacheConfiguration> entry : properties.getCaches().entrySet()) {
 			String cacheName = entry.getKey();
 			RedisCacheProperties.CacheConfiguration config = entry.getValue();
-			Duration ttl = config.getTtl() != null ? config.getTtl() : properties.getDefaultTtl();
+			Duration ttl = config.getTtl();
 			cacheConfigurations.put(cacheName, ttl);
 		}
 
@@ -161,5 +172,17 @@ public class RedisCacheAutoConfiguration {
 	@ConditionalOnClass(name = "org.springframework.boot.actuate.health.HealthIndicator")
 	public RedisCacheHealthIndicator redisCacheHealthIndicator(@Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisCacheTemplate) {
 		return new RedisCacheHealthIndicator(redisCacheTemplate);
+	}
+
+	/**
+	 * 注册缓存统计监听器
+	 */
+	@Bean
+	@ConditionalOnMissingBean
+	public CacheStatisticsListener cacheStatisticsListener(CacheEventPublisher eventPublisher) {
+		CacheStatisticsListener listener = new CacheStatisticsListener();
+		eventPublisher.registerListener(listener);
+		log.info("Registered CacheStatisticsListener");
+		return listener;
 	}
 }

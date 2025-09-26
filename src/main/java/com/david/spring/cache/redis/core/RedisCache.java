@@ -1,6 +1,9 @@
 package com.david.spring.cache.redis.core;
 
-import com.david.spring.cache.redis.event.*;
+import com.david.spring.cache.redis.event.CacheEventPublisher;
+import com.david.spring.cache.redis.event.CacheHitEvent;
+import com.david.spring.cache.redis.event.CacheMissEvent;
+import com.david.spring.cache.redis.event.CachePutEvent;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.support.AbstractValueAdaptingCache;
@@ -90,8 +93,16 @@ public class RedisCache extends AbstractValueAdaptingCache {
 				long accessTime = System.currentTimeMillis() - startTime;
 				publishCacheHitEvent(cacheKey, cachedValue.getValue(), accessTime);
 
-				// CachedValue 已经处理了 null 值存储，直接返回
-				return cachedValue.getValue();
+				// CachedValue 已经处理了 null 值存储
+				Object value = cachedValue.getValue();
+
+				// 如果值为null且allowNullValues为true，需要返回NullValue.INSTANCE
+				// 这样AbstractValueAdaptingCache才能正确识别这是一个缓存的null值
+				if (value == null && allowNullValues) {
+					return org.springframework.cache.support.NullValue.INSTANCE;
+				}
+
+				return value;
 			} else {
 				// 兼容旧的缓存格式
 				log.debug("Cache hit for key '{}' (legacy format)", cacheKey);
@@ -297,13 +308,13 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	/**
 	 * 缓存统计信息
 	 */
-		public record CacheStats(long visitTimes, long age, long remainingTtl, Class<?> valueType) {
+	public record CacheStats(long visitTimes, long age, long remainingTtl, Class<?> valueType) {
 
 
 		@Override
-			public String toString() {
-				return String.format("CacheStats{visitTimes=%d, age=%ds, remainingTtl=%ds, valueType=%s}",
-						visitTimes, age, remainingTtl, valueType.getSimpleName());
-			}
+		public String toString() {
+			return String.format("CacheStats{visitTimes=%d, age=%ds, remainingTtl=%ds, valueType=%s}",
+					visitTimes, age, remainingTtl, valueType.getSimpleName());
 		}
+	}
 }

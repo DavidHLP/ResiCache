@@ -33,7 +33,7 @@ public class RedisCacheProperties {
 
 	public Duration getCacheTtl(String cacheName) {
 		CacheConfiguration config = caches.get(cacheName);
-		return config != null && config.getTtl() != null ? config.getTtl() : defaultTtl;
+		return config != null ? config.getTtl() : defaultTtl;
 	}
 
 	public boolean isCacheAllowNullValues(String cacheName) {
