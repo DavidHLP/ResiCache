@@ -13,9 +13,9 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.redisson.api.RedissonClient;
-import org.redisson.api.RLock;
 import org.redisson.api.RBloomFilter;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.cache.Cache;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.support.NullValue;
@@ -24,16 +24,17 @@ import org.springframework.core.Ordered;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 @Aspect
 public class RedisCacheAspect implements Ordered {
 
+	private static final Object CACHE_MISS = new Object();
 	private final RedisCacheManager cacheManager;
 	private final CacheOperationResolver operationResolver;
 	private final CacheExpressionEvaluator expressionEvaluator;
@@ -41,17 +42,16 @@ public class RedisCacheAspect implements Ordered {
 	private final RedissonClient redissonClient;
 	private final ReentrantLock internalLock = new ReentrantLock();
 	private final ExecutorService preRefreshExecutor = Executors.newFixedThreadPool(2);
-
 	// 设计模式组件
 	private final CacheStrategyContext strategyContext;
 	private final CacheEventPublisher eventPublisher;
 	private final CacheOperationTemplate operationTemplate;
 
 	public RedisCacheAspect(RedisCacheManager cacheManager,
-	                       KeyGenerator keyGenerator,
-	                       RedissonClient redissonClient,
-	                       CacheStrategyContext strategyContext,
-	                       CacheEventPublisher eventPublisher) {
+	                        KeyGenerator keyGenerator,
+	                        RedissonClient redissonClient,
+	                        CacheStrategyContext strategyContext,
+	                        CacheEventPublisher eventPublisher) {
 		this.cacheManager = cacheManager;
 		this.keyGenerator = keyGenerator;
 		this.redissonClient = redissonClient;
@@ -100,8 +100,8 @@ public class RedisCacheAspect implements Ordered {
 	 * 处理布隆过滤器特殊场景
 	 */
 	private Object handleBloomFilterOperation(ProceedingJoinPoint joinPoint,
-	                                         CacheOperationResolver.CacheableOperation operation,
-	                                         Method method, Object[] args, Class<?> targetClass) throws Throwable {
+	                                          CacheOperationResolver.CacheableOperation operation,
+	                                          Method method, Object[] args, Class<?> targetClass) throws Throwable {
 		Object key = generateCacheKey(operation, method, args, joinPoint.getTarget(), targetClass);
 		String bloomFilterName = "bloom:" + operation.getCacheNames()[0];
 		RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(bloomFilterName);
@@ -159,8 +159,6 @@ public class RedisCacheAspect implements Ordered {
 		return result;
 	}
 
-	private static final Object CACHE_MISS = new Object();
-
 	/**
 	 * 使用锁执行缓存操作
 	 */
@@ -210,7 +208,7 @@ public class RedisCacheAspect implements Ordered {
 				Object cachedResult = getCachedValue(operation, method, args, joinPoint.getTarget(), targetClass);
 				if (cachedResult != CACHE_MISS) {
 					if (cachedResult instanceof CachedResult) {
-						return ((CachedResult) cachedResult).getValue();
+						return ((CachedResult) cachedResult).value();
 					}
 					return cachedResult;
 				}
@@ -245,7 +243,7 @@ public class RedisCacheAspect implements Ordered {
 				Object cachedResult = getCachedValue(operation, method, args, joinPoint.getTarget(), targetClass);
 				if (cachedResult != CACHE_MISS) {
 					if (cachedResult instanceof CachedResult) {
-						return ((CachedResult) cachedResult).getValue();
+						return ((CachedResult) cachedResult).value();
 					}
 					return cachedResult;
 				}
@@ -309,25 +307,11 @@ public class RedisCacheAspect implements Ordered {
 		return CACHE_MISS;
 	}
 
-	// 内部类用于包装缓存结果
-	private static class CachedResult {
-		private final Object value;
-
-		CachedResult(Object value) {
-			this.value = value;
-		}
-
-		Object getValue() {
-			// 将 Spring 的 NullValue 转换为真正的 null
-			return (value instanceof NullValue) ? null : value;
-		}
-	}
-
 	/**
 	 * 检查是否需要预刷新缓存
 	 */
 	private void checkAndPreRefresh(CacheOperationResolver.CacheableOperation operation, Cache cache, Object key,
-	                               Method method, Object[] args, Object target, Class<?> targetClass) {
+	                                Method method, Object[] args, Object target, Class<?> targetClass) {
 		if (!(cache instanceof RedisCache redisCache)) {
 			return;
 		}
@@ -420,7 +404,6 @@ public class RedisCacheAspect implements Ordered {
 		}
 	}
 
-
 	private void processEvictOperations(List<CacheOperationResolver.EvictOperation> operations,
 	                                    ProceedingJoinPoint joinPoint, Method method, Object[] args,
 	                                    Class<?> targetClass, boolean beforeInvocation) {
@@ -499,4 +482,14 @@ public class RedisCacheAspect implements Ordered {
 	public int getOrder() {
 		return Ordered.HIGHEST_PRECEDENCE + 1;
 	}
+
+	// 内部类用于包装缓存结果
+		private record CachedResult(Object value) {
+
+		@Override
+		public Object value() {
+				// 将 Spring 的 NullValue 转换为真正的 null
+				return (value instanceof NullValue) ? null : value;
+			}
+		}
 }

@@ -1,6 +1,7 @@
 package com.david.spring.cache.redis.factory;
 
 import com.david.spring.cache.redis.core.LayeredCache;
+import com.david.spring.cache.redis.core.RedisCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.cache.concurrent.ConcurrentMapCache;
@@ -21,8 +22,13 @@ public class LayeredCacheFactory implements CacheFactory {
         // 创建本地缓存（一级缓存）
         Cache localCache = new ConcurrentMapCache(config.getCacheName() + "_local", config.isAllowNullValues());
 
-        // 创建Redis缓存（二级缓存）
-        Cache redisCache = new RedisCacheFactory().createCache(config);
+        // 直接创建Redis缓存（二级缓存），避免循环依赖
+        Cache redisCache = new RedisCache(
+                config.getCacheName(),
+                config.getRedisTemplate(),
+                config.getDefaultTtl(),
+                config.isAllowNullValues()
+        );
 
         return new LayeredCache(config.getCacheName(), localCache, redisCache);
     }

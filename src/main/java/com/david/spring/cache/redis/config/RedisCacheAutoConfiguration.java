@@ -8,6 +8,8 @@ import com.david.spring.cache.redis.core.strategy.CacheStrategyContext;
 import com.david.spring.cache.redis.event.CacheEventPublisher;
 import com.david.spring.cache.redis.event.listener.CacheStatisticsListener;
 import com.david.spring.cache.redis.factory.CacheFactoryRegistry;
+import com.david.spring.cache.redis.template.CacheOperationTemplate;
+import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
@@ -26,6 +28,7 @@ import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -152,18 +155,31 @@ public class RedisCacheAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
+	@Primary
+	public CacheOperationTemplate cacheOperationTemplate(CacheEventPublisher eventPublisher,
+	                                                    RedisCacheManager redisCacheManager,
+	                                                    @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator) {
+		log.info("Created StandardCacheOperationTemplate as primary");
+		return new StandardCacheOperationTemplate(eventPublisher, redisCacheManager, keyGenerator);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
 	public RedisCacheAspect redisCacheAspect(RedisCacheManager redisCacheManager,
 	                                         @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator,
 	                                         RedissonClient redissonClient,
 	                                         CacheStrategyContext strategyContext,
 	                                         CacheEventPublisher eventPublisher,
-	                                         CacheFactoryRegistry factoryRegistry) {
+	                                         CacheFactoryRegistry factoryRegistry,
+	                                         CacheOperationTemplate operationTemplate) {
 		// 为RedisCacheManager设置工厂支持
 		redisCacheManager.setCacheFactoryRegistry(factoryRegistry);
+		// 为RedisCacheManager设置模板支持
+		redisCacheManager.setOperationTemplate(operationTemplate);
 
 		RedisCacheAspect aspect = new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient,
 				strategyContext, eventPublisher);
-		log.info("Created RedisCacheAspect with design patterns support");
+		log.info("Created RedisCacheAspect with design patterns and template support");
 		return aspect;
 	}
 

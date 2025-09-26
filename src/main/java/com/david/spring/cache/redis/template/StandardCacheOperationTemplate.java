@@ -20,7 +20,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * 标准缓存操作模板实现
  */
 @Slf4j
-@Component
 public class StandardCacheOperationTemplate extends CacheOperationTemplate {
 
     private final RedisCacheManager cacheManager;

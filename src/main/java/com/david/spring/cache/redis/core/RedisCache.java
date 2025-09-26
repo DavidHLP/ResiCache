@@ -4,6 +4,7 @@ import com.david.spring.cache.redis.event.CacheEventPublisher;
 import com.david.spring.cache.redis.event.CacheHitEvent;
 import com.david.spring.cache.redis.event.CacheMissEvent;
 import com.david.spring.cache.redis.event.CachePutEvent;
+import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.support.AbstractValueAdaptingCache;
@@ -23,6 +24,8 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 	// 观察者模式支持
 	private CacheEventPublisher eventPublisher;
+	// 缓存操作模板支持
+	private CacheOperationTemplate operationTemplate;
 
 	public RedisCache(String name, RedisTemplate<String, Object> redisTemplate,
 	                  Duration defaultTtl, boolean allowNullValues) {
@@ -38,6 +41,13 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	 */
 	public void setEventPublisher(CacheEventPublisher eventPublisher) {
 		this.eventPublisher = eventPublisher;
+	}
+
+	/**
+	 * 设置缓存操作模板（模板方法模式支持）
+	 */
+	public void setOperationTemplate(CacheOperationTemplate operationTemplate) {
+		this.operationTemplate = operationTemplate;
 	}
 
 	@Override
@@ -303,6 +313,24 @@ public class RedisCache extends AbstractValueAdaptingCache {
 			CachePutEvent event = new CachePutEvent(name, cacheKey, "RedisCache", value, ttl, executionTime);
 			eventPublisher.publishEventAsync(event);
 		}
+	}
+
+	/**
+	 * 使用模板执行缓存操作
+	 */
+	public <T> T executeWithTemplate(CacheOperationCallback<T> callback) {
+		if (operationTemplate != null) {
+			return callback.execute(operationTemplate);
+		}
+		return callback.execute(null);
+	}
+
+	/**
+	 * 缓存操作回调接口
+	 */
+	@FunctionalInterface
+	public interface CacheOperationCallback<T> {
+		T execute(CacheOperationTemplate template);
 	}
 
 	/**

@@ -20,7 +20,6 @@ import java.time.Duration;
  * 专门处理分层缓存的操作逻辑
  */
 @Slf4j
-@Component
 public class LayeredCacheOperationTemplate extends CacheOperationTemplate {
 
     private final RedisCacheManager cacheManager;
