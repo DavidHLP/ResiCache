@@ -47,7 +47,7 @@ public class LayeredCacheOperationTemplate extends CacheOperationTemplate {
     @Override
     protected boolean shouldExecute(CacheOperationResolver.CacheableOperation operation,
                                   Method method, Object[] args, Object target, Class<?> targetClass, Object result) {
-        return !operation.hasCondition() ||
+        return operation.hasCondition() ||
                 expressionEvaluator.evaluateCondition(operation.getCondition(), method, args, target, targetClass, result);
     }
 

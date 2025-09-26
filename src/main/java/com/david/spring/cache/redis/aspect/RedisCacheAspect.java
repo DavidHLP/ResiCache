@@ -455,7 +455,7 @@ public class RedisCacheAspect implements Ordered {
 
 	private boolean shouldExecute(CacheOperationResolver.CacheableOperation operation,
 	                              Method method, Object[] args, Object target, Class<?> targetClass, Object result) {
-		return !operation.hasCondition() ||
+		return operation.hasCondition() ||
 				expressionEvaluator.evaluateCondition(operation.getCondition(), method, args, target, targetClass, result);
 	}
 
@@ -484,12 +484,12 @@ public class RedisCacheAspect implements Ordered {
 	}
 
 	// 内部类用于包装缓存结果
-		private record CachedResult(Object value) {
+	private record CachedResult(Object value) {
 
 		@Override
 		public Object value() {
-				// 将 Spring 的 NullValue 转换为真正的 null
-				return (value instanceof NullValue) ? null : value;
-			}
+			// 将 Spring 的 NullValue 转换为真正的 null
+			return (value instanceof NullValue) ? null : value;
 		}
+	}
 }
