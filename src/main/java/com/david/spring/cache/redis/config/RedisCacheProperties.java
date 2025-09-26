@@ -31,39 +31,55 @@ public class RedisCacheProperties {
 
 	private BloomFilterConfiguration bloomFilter = new BloomFilterConfiguration();
 
+	/**
+	 * 通用的缓存配置获取方法
+	 */
+	private CacheConfiguration getCacheConfiguration(String cacheName) {
+		return caches.get(cacheName);
+	}
+
+	/**
+	 * 获取缓存配置值的通用方法
+	 */
+	private <T> T getCacheConfigValue(String cacheName, java.util.function.Function<CacheConfiguration, T> configExtractor, T defaultValue) {
+		CacheConfiguration config = getCacheConfiguration(cacheName);
+		return config != null ? configExtractor.apply(config) : defaultValue;
+	}
+
+	/**
+	 * 获取缓存配置布尔值的通用方法
+	 */
+	private boolean getCacheConfigBooleanValue(String cacheName, java.util.function.Function<CacheConfiguration, Boolean> configExtractor) {
+		CacheConfiguration config = getCacheConfiguration(cacheName);
+		return config != null && configExtractor.apply(config);
+	}
+
 	public Duration getCacheTtl(String cacheName) {
-		CacheConfiguration config = caches.get(cacheName);
-		return config != null ? config.getTtl() : defaultTtl;
+		return getCacheConfigValue(cacheName, CacheConfiguration::getTtl, defaultTtl);
 	}
 
 	public boolean isCacheAllowNullValues(String cacheName) {
-		CacheConfiguration config = caches.get(cacheName);
-		return config != null ? config.isAllowNullValues() : allowNullValues;
+		return getCacheConfigValue(cacheName, CacheConfiguration::isAllowNullValues, allowNullValues);
 	}
 
 	public boolean isCacheUseBloomFilter(String cacheName) {
-		CacheConfiguration config = caches.get(cacheName);
-		return config != null && config.isUseBloomFilter();
+		return getCacheConfigBooleanValue(cacheName, CacheConfiguration::isUseBloomFilter);
 	}
 
 	public boolean isCacheEnablePreRefresh(String cacheName) {
-		CacheConfiguration config = caches.get(cacheName);
-		return config != null && config.isEnablePreRefresh();
+		return getCacheConfigBooleanValue(cacheName, CacheConfiguration::isEnablePreRefresh);
 	}
 
 	public double getCachePreRefreshThreshold(String cacheName) {
-		CacheConfiguration config = caches.get(cacheName);
-		return config != null ? config.getPreRefreshThreshold() : 0.3;
+		return getCacheConfigValue(cacheName, CacheConfiguration::getPreRefreshThreshold, 0.3);
 	}
 
 	public boolean isCacheRandomTtl(String cacheName) {
-		CacheConfiguration config = caches.get(cacheName);
-		return config != null && config.isRandomTtl();
+		return getCacheConfigBooleanValue(cacheName, CacheConfiguration::isRandomTtl);
 	}
 
 	public float getCacheVariance(String cacheName) {
-		CacheConfiguration config = caches.get(cacheName);
-		return config != null ? config.getVariance() : 0.2f;
+		return getCacheConfigValue(cacheName, CacheConfiguration::getVariance, 0.2f);
 	}
 
 	@Data

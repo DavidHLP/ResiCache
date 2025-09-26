@@ -4,9 +4,6 @@ import com.david.spring.cache.redis.aspect.RedisCacheAspect;
 import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.core.CacheKeyGenerator;
 import com.david.spring.cache.redis.core.RedisCacheManager;
-import com.david.spring.cache.redis.core.strategy.CacheStrategyContext;
-import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
-import com.david.spring.cache.redis.event.listener.CacheStatisticsListener;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
 import jakarta.annotation.PostConstruct;
@@ -46,7 +43,6 @@ import java.util.Map;
 @EnableCaching
 @EnableAspectJAutoProxy
 @ComponentScan(basePackages = {
-		"com.david.spring.cache.redis.core.strategy",
 		"com.david.spring.cache.redis.template"
 })
 public class RedisCacheAutoConfiguration {
@@ -61,6 +57,14 @@ public class RedisCacheAutoConfiguration {
 	@PostConstruct
 	public void init() {
 		log.info("Initializing Cache Design Pattern Configuration");
+	}
+
+	/**
+	 * 记录Bean创建日志的通用方法
+	 */
+	private <T> T logBeanCreation(T bean, String beanName, String description) {
+		log.info("Created {} - {}", beanName, description);
+		return bean;
 	}
 
 	@Bean
@@ -82,23 +86,20 @@ public class RedisCacheAutoConfiguration {
 
 		template.afterPropertiesSet();
 
-		log.info("Created RedisCacheTemplate with StringRedisSerializer for keys and GenericJackson2JsonRedisSerializer for CachedValue");
-		return template;
+		return logBeanCreation(template, "RedisCacheTemplate",
+			"StringRedisSerializer for keys and GenericJackson2JsonRedisSerializer for CachedValue");
 	}
 
 	@Bean
 	@ConditionalOnMissingBean(name = "redisCacheKeyGenerator")
 	public KeyGenerator redisCacheKeyGenerator() {
-		CacheKeyGenerator keyGenerator = new CacheKeyGenerator();
-		log.info("Created RedisCacheKeyGenerator");
-		return keyGenerator;
+		return logBeanCreation(new CacheKeyGenerator(), "RedisCacheKeyGenerator", "for cache key generation");
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
 	public CacheExpressionEvaluator cacheExpressionEvaluator() {
-		log.info("Created CacheExpressionEvaluator");
-		return new CacheExpressionEvaluator();
+		return logBeanCreation(new CacheExpressionEvaluator(), "CacheExpressionEvaluator", "for cache expression evaluation");
 	}
 
 	@Bean
@@ -122,10 +123,9 @@ public class RedisCacheAutoConfiguration {
 
 		cacheManager.setTransactionAware(properties.isEnableTransactions());
 
-		log.info("Created RedisCacheManager with {} cache configurations, default TTL: {}, allowNullValues: {}",
-				cacheConfigurations.size(), properties.getDefaultTtl(), properties.isAllowNullValues());
-
-		return cacheManager;
+		return logBeanCreation(cacheManager, "RedisCacheManager",
+			String.format("with %d cache configurations, default TTL: %s, allowNullValues: %s",
+				cacheConfigurations.size(), properties.getDefaultTtl(), properties.isAllowNullValues()));
 	}
 
 	@Bean
@@ -146,19 +146,16 @@ public class RedisCacheAutoConfiguration {
 				.setRetryAttempts(3)
 				.setRetryInterval(1500);
 
-		RedissonClient redissonClient = Redisson.create(config);
-		log.info("Created RedissonClient with single server configuration");
-		return redissonClient;
+		return logBeanCreation(Redisson.create(config), "RedissonClient", "with single server configuration");
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
 	@Primary
-	public CacheOperationTemplate cacheOperationTemplate(CacheEventPublisher eventPublisher,
-	                                                    RedisCacheManager redisCacheManager,
-	                                                    @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator) {
-		log.info("Created StandardCacheOperationTemplate as primary");
-		return new StandardCacheOperationTemplate(eventPublisher, redisCacheManager, keyGenerator);
+	public CacheOperationTemplate cacheOperationTemplate(RedisCacheManager redisCacheManager,
+	                                                     @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator) {
+		return logBeanCreation(new StandardCacheOperationTemplate(redisCacheManager, keyGenerator),
+			"StandardCacheOperationTemplate", "as primary cache operation template");
 	}
 
 	@Bean
@@ -166,16 +163,12 @@ public class RedisCacheAutoConfiguration {
 	public RedisCacheAspect redisCacheAspect(RedisCacheManager redisCacheManager,
 	                                         @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator,
 	                                         RedissonClient redissonClient,
-	                                         CacheStrategyContext strategyContext,
-	                                         CacheEventPublisher eventPublisher,
 	                                         CacheOperationTemplate operationTemplate) {
 		// 为RedisCacheManager设置模板支持
 		redisCacheManager.setOperationTemplate(operationTemplate);
 
-		RedisCacheAspect aspect = new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient,
-				strategyContext, eventPublisher);
-		log.info("Created RedisCacheAspect with design patterns and template support");
-		return aspect;
+		return logBeanCreation(new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient),
+			"RedisCacheAspect", "with design patterns and template support");
 	}
 
 	@Bean
@@ -185,15 +178,4 @@ public class RedisCacheAutoConfiguration {
 		return new RedisCacheHealthIndicator(redisCacheTemplate);
 	}
 
-	/**
-	 * 注册缓存统计监听器
-	 */
-	@Bean
-	@ConditionalOnMissingBean
-	public CacheStatisticsListener cacheStatisticsListener(CacheEventPublisher eventPublisher) {
-		CacheStatisticsListener listener = new CacheStatisticsListener();
-		eventPublisher.registerListener(listener);
-		log.info("Registered CacheStatisticsListener");
-		return listener;
-	}
 }

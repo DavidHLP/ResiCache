@@ -47,15 +47,5 @@ public @interface RedisCacheable {
 	boolean enablePreRefresh() default false;
 
 	double preRefreshThreshold() default 0.3;
-
-	/**
-	 * 缓存类型 - 支持工厂模式
-	 */
-	String cacheType() default "REDIS";
-
-	/**
-	 * 执行策略 - 支持策略模式
-	 */
-	String executionStrategy() default "DEFAULT";
 }
 

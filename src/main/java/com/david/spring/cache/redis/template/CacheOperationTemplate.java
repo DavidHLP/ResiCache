@@ -1,8 +1,6 @@
 package com.david.spring.cache.redis.template;
 
 import com.david.spring.cache.redis.core.CacheOperationResolver;
-import com.david.spring.cache.redis.event.entity.*;
-import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -15,10 +13,7 @@ import java.time.Duration;
  * 使用模板方法模式定义缓存操作的标准流程
  */
 @Slf4j
-@RequiredArgsConstructor
 public abstract class CacheOperationTemplate {
-
-	protected final CacheEventPublisher eventPublisher;
 
 	/**
 	 * 执行缓存操作的模板方法
@@ -32,10 +27,10 @@ public abstract class CacheOperationTemplate {
 		long startTime = System.currentTimeMillis();
 		String cacheName = operation.getCacheNames()[0];
 		Object cacheKey = generateCacheKey(operation, method, args, joinPoint.getTarget(), targetClass);
-		String source = targetClass.getSimpleName() + "." + method.getName();
+		String source = buildSourceName(targetClass, method);
 		String methodName = method.getName();
 
-		// 发布操作开始事件
+		// 记录操作开始
 		onCacheOperationStart(operation, cacheKey, cacheName, source, methodName);
 
 		try {
@@ -67,9 +62,9 @@ public abstract class CacheOperationTemplate {
 			// 后置处理
 			afterCacheOperation(operation, cacheKey, cacheName, result, startTime);
 
-			// 发布操作结束事件（成功）
+			// 记录操作结束（成功）
 			onCacheOperationEnd(operation, cacheKey, cacheName, source, methodName,
-					System.currentTimeMillis() - startTime, true);
+					calculateElapsedTime(startTime), true);
 
 			return result;
 
@@ -77,9 +72,9 @@ public abstract class CacheOperationTemplate {
 			// 异常处理
 			onCacheError(operation, cacheKey, cacheName, e, "execute");
 
-			// 发布操作结束事件（失败）
+			// 记录操作结束（失败）
 			onCacheOperationEnd(operation, cacheKey, cacheName, source, methodName,
-					System.currentTimeMillis() - startTime, false);
+					calculateElapsedTime(startTime), false);
 			throw e;
 		}
 	}
@@ -137,13 +132,8 @@ public abstract class CacheOperationTemplate {
 	protected void onCacheHit(CacheOperationResolver.CacheableOperation operation,
 	                          Object cacheKey, String cacheName, Object value,
 	                          String source, long startTime) {
-		long accessTime = System.currentTimeMillis() - startTime;
+		long accessTime = calculateElapsedTime(startTime);
 		log.debug("Cache hit for key: {} in cache: {}, access time: {}ms", cacheKey, cacheName, accessTime);
-
-		if (eventPublisher != null) {
-			CacheHitEvent event = new CacheHitEvent(cacheName, cacheKey, source, value, accessTime);
-			eventPublisher.publishEventAsync(event);
-		}
 	}
 
 	/**
@@ -152,11 +142,6 @@ public abstract class CacheOperationTemplate {
 	protected void onCacheMiss(CacheOperationResolver.CacheableOperation operation,
 	                           Object cacheKey, String cacheName, String source, String reason) {
 		log.debug("Cache miss for key: {} in cache: {}, reason: {}", cacheKey, cacheName, reason);
-
-		if (eventPublisher != null) {
-			CacheMissEvent event = new CacheMissEvent(cacheName, cacheKey, source, reason);
-			eventPublisher.publishEventAsync(event);
-		}
 	}
 
 	/**
@@ -167,11 +152,6 @@ public abstract class CacheOperationTemplate {
 	                          String source, Duration ttl, long executionTime) {
 		log.debug("Cache put for key: {} in cache: {}, TTL: {}, execution time: {}ms",
 				cacheKey, cacheName, ttl, executionTime);
-
-		if (eventPublisher != null) {
-			CachePutEvent event = new CachePutEvent(cacheName, cacheKey, source, value, ttl, executionTime);
-			eventPublisher.publishEventAsync(event);
-		}
 	}
 
 	/**
@@ -180,12 +160,6 @@ public abstract class CacheOperationTemplate {
 	protected void onCacheError(CacheOperationResolver.CacheableOperation operation,
 	                            Object cacheKey, String cacheName, Exception e, String operationType) {
 		log.warn("Cache operation error for key: {} in cache: {}: {}", cacheKey, cacheName, e.getMessage());
-
-		if (eventPublisher != null) {
-			CacheErrorEvent event = new CacheErrorEvent(cacheName, cacheKey,
-					operation.getClass().getSimpleName(), e, operationType);
-			eventPublisher.publishEventAsync(event);
-		}
 	}
 
 	/**
@@ -194,12 +168,6 @@ public abstract class CacheOperationTemplate {
 	protected void onCacheOperationStart(CacheOperationResolver.CacheableOperation operation,
 	                                     Object cacheKey, String cacheName, String source, String methodName) {
 		log.debug("Cache operation starting for key: {} in cache: {}, method: {}", cacheKey, cacheName, methodName);
-
-		if (eventPublisher != null) {
-			CacheOperationStartEvent event = new CacheOperationStartEvent(cacheName, cacheKey, source,
-					"cacheable", methodName);
-			eventPublisher.publishEventAsync(event);
-		}
 	}
 
 	/**
@@ -210,12 +178,6 @@ public abstract class CacheOperationTemplate {
 	                                   long totalTime, boolean successful) {
 		log.debug("Cache operation completed for key: {} in cache: {}, method: {}, time: {}ms, success: {}",
 				cacheKey, cacheName, methodName, totalTime, successful);
-
-		if (eventPublisher != null) {
-			CacheOperationEndEvent event = new CacheOperationEndEvent(cacheName, cacheKey, source,
-					"cacheable", methodName, totalTime, successful);
-			eventPublisher.publishEventAsync(event);
-		}
 	}
 
 	/**
@@ -224,4 +186,26 @@ public abstract class CacheOperationTemplate {
 	protected boolean isCacheMissMarker(Object value) {
 		return false; // 默认实现，子类可以重写
 	}
+
+	/**
+	 * 构建源名称
+	 */
+	protected String buildSourceName(Class<?> targetClass, Method method) {
+		return targetClass.getSimpleName() + "." + method.getName();
+	}
+
+	/**
+	 * 构建源名称（通过方法名）
+	 */
+	protected String buildSourceName(Class<?> targetClass, String methodName) {
+		return targetClass.getSimpleName() + "." + methodName;
+	}
+
+	/**
+	 * 计算执行时间
+	 */
+	protected long calculateElapsedTime(long startTime) {
+		return System.currentTimeMillis() - startTime;
+	}
+
 }

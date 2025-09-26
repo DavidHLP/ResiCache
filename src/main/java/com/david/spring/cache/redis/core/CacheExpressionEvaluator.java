@@ -74,6 +74,33 @@ public class CacheExpressionEvaluator {
 		return evaluationContext;
 	}
 
+	private <T> T evaluateExpression(String expressionStr, Method method, Object[] args,
+	                                 Object target, Class<?> targetClass, Object result,
+	                                 ExpressionGetter expressionGetter, Class<T> resultType,
+	                                 T defaultValue, String expressionType) {
+		if (!StringUtils.hasText(expressionStr)) {
+			return defaultValue;
+		}
+
+		EvaluationContext evaluationContext = createEvaluationContext(method, args, target, targetClass, result);
+		Expression expression = expressionGetter.get(expressionStr, method, targetClass);
+
+		try {
+			T evaluationResult = expression.getValue(evaluationContext, resultType);
+			log.debug("{} '{}' evaluated to: {}", expressionType, expressionStr, evaluationResult);
+			if (Boolean.class.equals(resultType)) return resultType.cast(Boolean.TRUE.equals(evaluationResult));
+			return evaluationResult;
+		} catch (Exception e) {
+			log.warn("Failed to evaluate {} '{}': {}", expressionType, expressionStr, e.getMessage());
+			return defaultValue;
+		}
+	}
+
+	@FunctionalInterface
+	private interface ExpressionGetter {
+		Expression get(String expression, Method method, Class<?> targetClass);
+	}
+
 	private record ExpressionKey(String expression, Method method, Class<?> targetClass) {
 
 		@Override
@@ -95,32 +122,6 @@ public class CacheExpressionEvaluator {
 					ObjectUtils.nullSafeHashCode(this.method) * 17 +
 					ObjectUtils.nullSafeHashCode(this.targetClass);
 		}
-	}
-
-	private <T> T evaluateExpression(String expressionStr, Method method, Object[] args,
-	                                 Object target, Class<?> targetClass, Object result,
-	                                 ExpressionGetter expressionGetter, Class<T> resultType,
-	                                 T defaultValue, String expressionType) {
-		if (!StringUtils.hasText(expressionStr)) {
-			return defaultValue;
-		}
-
-		EvaluationContext evaluationContext = createEvaluationContext(method, args, target, targetClass, result);
-		Expression expression = expressionGetter.get(expressionStr, method, targetClass);
-
-		try {
-			T evaluationResult = expression.getValue(evaluationContext, resultType);
-			log.debug("{} '{}' evaluated to: {}", expressionType, expressionStr, evaluationResult);
-			return Boolean.class.equals(resultType) ? (T) Boolean.valueOf(Boolean.TRUE.equals(evaluationResult)) : evaluationResult;
-		} catch (Exception e) {
-			log.warn("Failed to evaluate {} '{}': {}", expressionType, expressionStr, e.getMessage());
-			return defaultValue;
-		}
-	}
-
-	@FunctionalInterface
-	private interface ExpressionGetter {
-		Expression get(String expression, Method method, Class<?> targetClass);
 	}
 
 	private record CacheExpressionRootObject(Method method, Object[] args, Object target, Class<?> targetClass) {

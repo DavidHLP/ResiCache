@@ -1,6 +1,5 @@
 package com.david.spring.cache.redis.core;
 
-import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +12,8 @@ import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
-import static com.david.spring.cache.redis.core.CacheConstants.*;
+import static com.david.spring.cache.redis.core.CacheConstants.CacheLayers;
+import static com.david.spring.cache.redis.core.CacheConstants.Operations;
 
 @Slf4j
 public class RedisCache extends AbstractValueAdaptingCache {
@@ -22,15 +22,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	private final RedisTemplate<String, Object> redisTemplate;
 	private final Duration defaultTtl;
 	private final boolean allowNullValues;
-	// 事件支持（通过父类）
 	private final AbstractEventAwareCache eventSupport = new AbstractEventAwareCache() {};
-	/**
-	 * -- SETTER --
-	 * 设置缓存操作模板（模板方法模式支持）
-	 */
-	// 缓存操作模板支持
-	@Setter
-	private CacheOperationTemplate operationTemplate;
 
 	public RedisCache(String name, RedisTemplate<String, Object> redisTemplate,
 	                  Duration defaultTtl, boolean allowNullValues) {
@@ -41,30 +33,6 @@ public class RedisCache extends AbstractValueAdaptingCache {
 		this.allowNullValues = allowNullValues;
 	}
 
-	/**
-	 * 设置事件发布器（观察者模式支持）
-	 */
-	public void setEventPublisher(CacheEventPublisher eventPublisher) {
-		eventSupport.setEventPublisher(eventPublisher);
-	}
-
-	/**
-	 * 启用/禁用事件驱动功能
-	 */
-	public void setEventDrivenEnabled(boolean eventDrivenEnabled) {
-		eventSupport.setEventDrivenEnabled(eventDrivenEnabled);
-		log.debug("Event driven mode {} for cache '{}'",
-				eventDrivenEnabled ? "enabled" : "disabled", name);
-	}
-
-	/**
-	 * 启用/禁用详细事件记录
-	 */
-	public void setDetailedEventsEnabled(boolean detailedEventsEnabled) {
-		eventSupport.setDetailedEventsEnabled(detailedEventsEnabled);
-		log.debug("Detailed events {} for cache '{}'",
-				detailedEventsEnabled ? "enabled" : "disabled", name);
-	}
 
 	@Override
 	@NonNull
@@ -86,7 +54,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 			if (rawValue == null) {
 				eventSupport.logCacheOperation(Operations.GET, cacheKey, "miss");
-				eventSupport.publishCacheMissEvent(name, cacheKey, CacheLayers.REDIS_CACHE, MissReasons.NOT_FOUND);
+				log.debug("Cache miss: cache='{}', key='{}', reason='{}'", name, cacheKey, "NOT_FOUND");
 				return null;
 			}
 
@@ -96,7 +64,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 				if (cachedValue.isExpired()) {
 					eventSupport.logCacheOperation(Operations.GET, cacheKey, "expired");
 					redisTemplate.delete(cacheKey);
-					eventSupport.publishCacheMissEvent(name, cacheKey, CacheLayers.REDIS_CACHE, MissReasons.EXPIRED);
+					log.debug("Cache miss: cache='{}', key='{}', reason='{}'", name, cacheKey, "EXPIRED");
 					return null;
 				}
 
@@ -117,7 +85,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 				// 发布缓存命中事件
 				eventSupport.logCacheOperation(Operations.GET, cacheKey, "hit");
-				eventSupport.publishCacheHitEvent(name, cacheKey, CacheLayers.REDIS_CACHE, cachedValue.getValue(), 0);
+				log.debug("Cache hit: cache='{}', key='{}'", name, cacheKey);
 
 				// CachedValue 已经处理了 null 值存储
 				Object value = cachedValue.getValue();
@@ -167,7 +135,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 			// 发布缓存写入事件
 			eventSupport.logCacheOperation(Operations.PUT, cacheKey, "success");
-			eventSupport.publishCachePutEvent(name, key, CacheLayers.REDIS_CACHE, value, ttl, 0);
+			log.debug("Cache put: cache='{}', key='{}', ttl='{}'", name, key, ttl);
 
 		} catch (Exception e) {
 			eventSupport.logCacheError(Operations.PUT, cacheKey, e.getMessage());
@@ -271,7 +239,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 			Set<String> keys = redisTemplate.keys(pattern);
 			long deletedCount = 0;
 
-			if (keys != null && !keys.isEmpty()) {
+			if (!keys.isEmpty()) {
 				deletedCount = redisTemplate.delete(keys);
 			}
 
@@ -292,6 +260,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
 		ValueWrapper result = get(key);
 		if (result != null) {
@@ -333,24 +302,6 @@ public class RedisCache extends AbstractValueAdaptingCache {
 		return name + ":" + key;
 	}
 
-
-	/**
-	 * 使用模板执行缓存操作
-	 */
-	public <T> T executeWithTemplate(CacheOperationCallback<T> callback) {
-		if (operationTemplate != null) {
-			return callback.execute(operationTemplate);
-		}
-		return callback.execute(null);
-	}
-
-	/**
-	 * 缓存操作回调接口
-	 */
-	@FunctionalInterface
-	public interface CacheOperationCallback<T> {
-		T execute(CacheOperationTemplate template);
-	}
 
 	/**
 	 * 缓存统计信息

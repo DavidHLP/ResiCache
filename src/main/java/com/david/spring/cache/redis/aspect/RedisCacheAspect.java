@@ -4,8 +4,6 @@ import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.core.CacheOperationResolver;
 import com.david.spring.cache.redis.core.RedisCache;
 import com.david.spring.cache.redis.core.RedisCacheManager;
-import com.david.spring.cache.redis.core.strategy.CacheStrategyContext;
-import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
 import lombok.extern.slf4j.Slf4j;
@@ -42,26 +40,18 @@ public class RedisCacheAspect implements Ordered {
 	private final RedissonClient redissonClient;
 	private final ReentrantLock internalLock = new ReentrantLock();
 	private final ExecutorService preRefreshExecutor = Executors.newFixedThreadPool(2);
-	// 设计模式组件
-	private final CacheStrategyContext strategyContext;
-	private final CacheEventPublisher eventPublisher;
 	private final CacheOperationTemplate operationTemplate;
 
 	public RedisCacheAspect(RedisCacheManager cacheManager,
 	                        KeyGenerator keyGenerator,
-	                        RedissonClient redissonClient,
-	                        CacheStrategyContext strategyContext,
-	                        CacheEventPublisher eventPublisher) {
+	                        RedissonClient redissonClient) {
 		this.cacheManager = cacheManager;
 		this.keyGenerator = keyGenerator;
 		this.redissonClient = redissonClient;
 		this.operationResolver = new CacheOperationResolver();
 		this.expressionEvaluator = new CacheExpressionEvaluator();
 
-		// 初始化设计模式组件
-		this.strategyContext = strategyContext;
-		this.eventPublisher = eventPublisher;
-		this.operationTemplate = new StandardCacheOperationTemplate(eventPublisher, cacheManager, keyGenerator);
+		this.operationTemplate = new StandardCacheOperationTemplate(cacheManager, keyGenerator);
 	}
 
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheable) || " +
@@ -91,9 +81,7 @@ public class RedisCacheAspect implements Ordered {
 			// 使用模板方法模式处理标准缓存操作
 			return operationTemplate.execute(joinPoint, operation, method, args, targetClass);
 		}
-
-		// 对于多个操作，使用策略模式选择执行策略
-		return strategyContext.execute(joinPoint, operations, method, args, targetClass);
+		return executeWithLock(operations.get(0), joinPoint, method, args, targetClass, operations);
 	}
 
 	/**
