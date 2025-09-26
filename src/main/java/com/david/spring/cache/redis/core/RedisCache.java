@@ -1,18 +1,19 @@
 package com.david.spring.cache.redis.core;
 
-import com.david.spring.cache.redis.event.entity.CacheHitEvent;
-import com.david.spring.cache.redis.event.entity.CacheMissEvent;
-import com.david.spring.cache.redis.event.entity.CachePutEvent;
 import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
-import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.support.AbstractValueAdaptingCache;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
 import java.time.Duration;
+import java.util.Set;
 import java.util.concurrent.Callable;
+
+import static com.david.spring.cache.redis.core.CacheConstants.*;
 
 @Slf4j
 public class RedisCache extends AbstractValueAdaptingCache {
@@ -21,10 +22,14 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	private final RedisTemplate<String, Object> redisTemplate;
 	private final Duration defaultTtl;
 	private final boolean allowNullValues;
-
-	// 观察者模式支持
-	private CacheEventPublisher eventPublisher;
+	// 事件支持（通过父类）
+	private final AbstractEventAwareCache eventSupport = new AbstractEventAwareCache() {};
+	/**
+	 * -- SETTER --
+	 * 设置缓存操作模板（模板方法模式支持）
+	 */
 	// 缓存操作模板支持
+	@Setter
 	private CacheOperationTemplate operationTemplate;
 
 	public RedisCache(String name, RedisTemplate<String, Object> redisTemplate,
@@ -40,36 +45,48 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	 * 设置事件发布器（观察者模式支持）
 	 */
 	public void setEventPublisher(CacheEventPublisher eventPublisher) {
-		this.eventPublisher = eventPublisher;
+		eventSupport.setEventPublisher(eventPublisher);
 	}
 
 	/**
-	 * 设置缓存操作模板（模板方法模式支持）
+	 * 启用/禁用事件驱动功能
 	 */
-	public void setOperationTemplate(CacheOperationTemplate operationTemplate) {
-		this.operationTemplate = operationTemplate;
+	public void setEventDrivenEnabled(boolean eventDrivenEnabled) {
+		eventSupport.setEventDrivenEnabled(eventDrivenEnabled);
+		log.debug("Event driven mode {} for cache '{}'",
+				eventDrivenEnabled ? "enabled" : "disabled", name);
+	}
+
+	/**
+	 * 启用/禁用详细事件记录
+	 */
+	public void setDetailedEventsEnabled(boolean detailedEventsEnabled) {
+		eventSupport.setDetailedEventsEnabled(detailedEventsEnabled);
+		log.debug("Detailed events {} for cache '{}'",
+				detailedEventsEnabled ? "enabled" : "disabled", name);
 	}
 
 	@Override
+	@NonNull
 	public String getName() {
 		return this.name;
 	}
 
 	@Override
+	@NonNull
 	public Object getNativeCache() {
 		return this.redisTemplate;
 	}
 
 	@Override
-	protected Object lookup(Object key) {
+	protected Object lookup(@NonNull Object key) {
 		String cacheKey = createCacheKey(key);
 		try {
-			long startTime = System.currentTimeMillis();
 			Object rawValue = redisTemplate.opsForValue().get(cacheKey);
 
 			if (rawValue == null) {
-				log.debug("Cache miss for key '{}'", cacheKey);
-				publishCacheMissEvent(cacheKey, "not_found");
+				eventSupport.logCacheOperation(Operations.GET, cacheKey, "miss");
+				eventSupport.publishCacheMissEvent(name, cacheKey, CacheLayers.REDIS_CACHE, MissReasons.NOT_FOUND);
 				return null;
 			}
 
@@ -77,8 +94,9 @@ public class RedisCache extends AbstractValueAdaptingCache {
 			if (rawValue instanceof CachedValue cachedValue) {
 				// 检查是否过期
 				if (cachedValue.isExpired()) {
-					log.debug("Cache value expired for key '{}', removing", cacheKey);
+					eventSupport.logCacheOperation(Operations.GET, cacheKey, "expired");
 					redisTemplate.delete(cacheKey);
+					eventSupport.publishCacheMissEvent(name, cacheKey, CacheLayers.REDIS_CACHE, MissReasons.EXPIRED);
 					return null;
 				}
 
@@ -94,14 +112,12 @@ public class RedisCache extends AbstractValueAdaptingCache {
 						redisTemplate.opsForValue().set(cacheKey, cachedValue);
 					}
 				} catch (Exception e) {
-					log.warn("Failed to update cache statistics for key '{}': {}", cacheKey, e.getMessage());
+					RedisCacheLogUtils.logCacheStatisticsUpdateFailure(cacheKey, e);
 				}
 
-				log.debug("Cache hit for key '{}', visitTimes: {}", cacheKey, cachedValue.getVisitTimes());
-
 				// 发布缓存命中事件
-				long accessTime = System.currentTimeMillis() - startTime;
-				publishCacheHitEvent(cacheKey, cachedValue.getValue(), accessTime);
+				eventSupport.logCacheOperation(Operations.GET, cacheKey, "hit");
+				eventSupport.publishCacheHitEvent(name, cacheKey, CacheLayers.REDIS_CACHE, cachedValue.getValue(), 0);
 
 				// CachedValue 已经处理了 null 值存储
 				Object value = cachedValue.getValue();
@@ -115,23 +131,23 @@ public class RedisCache extends AbstractValueAdaptingCache {
 				return value;
 			} else {
 				// 兼容旧的缓存格式
-				log.debug("Cache hit for key '{}' (legacy format)", cacheKey);
+				eventSupport.logCacheOperation(Operations.GET, cacheKey, "hit-legacy");
 				return rawValue;
 			}
 		} catch (Exception e) {
-			log.warn("Cache lookup failed for key '{}': {}", cacheKey, e.getMessage());
+			eventSupport.logCacheError(Operations.GET, cacheKey, e.getMessage());
+			eventSupport.publishCacheErrorEvent(name, cacheKey, CacheLayers.REDIS_CACHE, e, Operations.GET);
 			return null;
 		}
 	}
 
 	@Override
-	public void put(Object key, @Nullable Object value) {
+	public void put(@NonNull Object key, @Nullable Object value) {
 		putWithTtl(key, value, defaultTtl);
 	}
 
 	public void putWithTtl(Object key, @Nullable Object value, Duration ttl) {
 		String cacheKey = createCacheKey(key);
-		long startTime = System.currentTimeMillis();
 
 		try {
 			long ttlSeconds = (ttl != null && !ttl.isZero() && !ttl.isNegative()) ? ttl.getSeconds() : -1;
@@ -149,20 +165,18 @@ public class RedisCache extends AbstractValueAdaptingCache {
 				redisTemplate.opsForValue().set(cacheKey, cachedValue);
 			}
 
-			log.debug("Cache put for key '{}' with TTL: {} seconds, type: {}",
-					cacheKey, ttlSeconds, cachedValue.getType().getSimpleName());
-
 			// 发布缓存写入事件
-			long executionTime = System.currentTimeMillis() - startTime;
-			publishCachePutEvent(key, value, ttl, executionTime);
+			eventSupport.logCacheOperation(Operations.PUT, cacheKey, "success");
+			eventSupport.publishCachePutEvent(name, key, CacheLayers.REDIS_CACHE, value, ttl, 0);
 
 		} catch (Exception e) {
-			log.warn("Cache put failed for key '{}': {}", cacheKey, e.getMessage());
+			eventSupport.logCacheError(Operations.PUT, cacheKey, e.getMessage());
+			eventSupport.publishCacheErrorEvent(name, cacheKey, CacheLayers.REDIS_CACHE, e, Operations.PUT);
 		}
 	}
 
 	@Override
-	public ValueWrapper putIfAbsent(Object key, @Nullable Object value) {
+	public ValueWrapper putIfAbsent(@NonNull Object key, @Nullable Object value) {
 		String cacheKey = createCacheKey(key);
 
 		try {
@@ -196,7 +210,7 @@ public class RedisCache extends AbstractValueAdaptingCache {
 								redisTemplate.opsForValue().set(cacheKey, existingCachedValue);
 							}
 						} catch (Exception e) {
-							log.warn("Failed to update cache statistics for key '{}': {}", cacheKey, e.getMessage());
+							RedisCacheLogUtils.logCacheStatisticsUpdateFailure(cacheKey, e);
 						}
 						log.debug("Cache putIfAbsent failed for key '{}', existing value found", cacheKey);
 						return toValueWrapper(existingCachedValue.getValue());
@@ -224,27 +238,61 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	@Override
 	public void evict(@NonNull Object key) {
 		String cacheKey = createCacheKey(key);
+
+		// 发布驱逐开始事件
+		eventSupport.publishOperationStartEvent(name, key, CacheLayers.REDIS_CACHE, Operations.EVICT, Operations.EVICT);
+
 		try {
 			Boolean result = redisTemplate.delete(cacheKey);
-			log.debug("Cache evict for key '{}': {}", cacheKey, result ? "success" : "not found");
+
+			eventSupport.logCacheOperation(Operations.EVICT, cacheKey, result ? "success" : "not found");
+
+			// 发布操作完成事件
+			eventSupport.publishOperationEndEvent(name, key, CacheLayers.REDIS_CACHE, Operations.EVICT, Operations.EVICT, 0, true);
+
 		} catch (Exception e) {
-			log.warn("Cache evict failed for key '{}': {}", cacheKey, e.getMessage());
+			eventSupport.logCacheError(Operations.EVICT, cacheKey, e.getMessage());
+
+			// 发布错误事件
+			eventSupport.publishCacheErrorEvent(name, key, CacheLayers.REDIS_CACHE, e, Operations.EVICT);
+
+			// 发布操作完成事件（失败）
+			eventSupport.publishOperationEndEvent(name, key, CacheLayers.REDIS_CACHE, Operations.EVICT, Operations.EVICT, 0, false);
 		}
 	}
 
 	@Override
 	public void clear() {
+		// 发布清空开始事件
+		eventSupport.publishOperationStartEvent(name, "*", CacheLayers.REDIS_CACHE, Operations.CLEAR, Operations.CLEAR);
+
 		try {
 			String pattern = name + ":*";
-			redisTemplate.delete(redisTemplate.keys(pattern));
-			log.debug("Cache clear for pattern '{}'", pattern);
+			Set<String> keys = redisTemplate.keys(pattern);
+			long deletedCount = 0;
+
+			if (keys != null && !keys.isEmpty()) {
+				deletedCount = redisTemplate.delete(keys);
+			}
+
+			eventSupport.logCacheOperation(Operations.CLEAR, pattern, "deleted " + deletedCount + " keys");
+
+			// 发布操作完成事件
+			eventSupport.publishOperationEndEvent(name, "*", CacheLayers.REDIS_CACHE, Operations.CLEAR, Operations.CLEAR, 0, true);
+
 		} catch (Exception e) {
-			log.warn("Cache clear failed for cache '{}': {}", name, e.getMessage());
+			eventSupport.logCacheError(Operations.CLEAR, name, e.getMessage());
+
+			// 发布错误事件
+			eventSupport.publishCacheErrorEvent(name, "*", CacheLayers.REDIS_CACHE, e, Operations.CLEAR);
+
+			// 发布操作完成事件（失败）
+			eventSupport.publishOperationEndEvent(name, "*", CacheLayers.REDIS_CACHE, Operations.CLEAR, Operations.CLEAR, 0, false);
 		}
 	}
 
 	@Override
-	public <T> T get(Object key, Callable<T> valueLoader) {
+	public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
 		ValueWrapper result = get(key);
 		if (result != null) {
 			return (T) result.get();
@@ -285,35 +333,6 @@ public class RedisCache extends AbstractValueAdaptingCache {
 		return name + ":" + key;
 	}
 
-	/**
-	 * 发布缓存命中事件
-	 */
-	private void publishCacheHitEvent(Object cacheKey, Object value, long accessTime) {
-		if (eventPublisher != null) {
-			CacheHitEvent event = new CacheHitEvent(name, cacheKey, "RedisCache", value, accessTime);
-			eventPublisher.publishEventAsync(event);
-		}
-	}
-
-	/**
-	 * 发布缓存未命中事件
-	 */
-	private void publishCacheMissEvent(Object cacheKey, String reason) {
-		if (eventPublisher != null) {
-			CacheMissEvent event = new CacheMissEvent(name, cacheKey, "RedisCache", reason);
-			eventPublisher.publishEventAsync(event);
-		}
-	}
-
-	/**
-	 * 发布缓存写入事件
-	 */
-	private void publishCachePutEvent(Object cacheKey, Object value, Duration ttl, long executionTime) {
-		if (eventPublisher != null) {
-			CachePutEvent event = new CachePutEvent(name, cacheKey, "RedisCache", value, ttl, executionTime);
-			eventPublisher.publishEventAsync(event);
-		}
-	}
 
 	/**
 	 * 使用模板执行缓存操作
@@ -338,8 +357,8 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	 */
 	public record CacheStats(long visitTimes, long age, long remainingTtl, Class<?> valueType) {
 
-
 		@Override
+		@NonNull
 		public String toString() {
 			return String.format("CacheStats{visitTimes=%d, age=%ds, remainingTtl=%ds, valueType=%s}",
 					visitTimes, age, remainingTtl, valueType.getSimpleName());

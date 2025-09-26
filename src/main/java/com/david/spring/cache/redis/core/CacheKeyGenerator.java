@@ -9,34 +9,32 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
+import static com.david.spring.cache.redis.core.CacheConstants.*;
+
 @Slf4j
 public class CacheKeyGenerator implements KeyGenerator {
-
-    private static final String SEPARATOR = ":";
-    private static final String NULL_PARAM = "null";
-    private static final int MAX_KEY_LENGTH = 250;
 
     @Override
     public Object generate(Object target, Method method, Object... params) {
         StringBuilder keyBuilder = new StringBuilder();
 
         keyBuilder.append(target.getClass().getSimpleName())
-                  .append(SEPARATOR)
+                  .append(CACHE_KEY_SEPARATOR)
                   .append(method.getName());
 
         if (params != null && params.length > 0) {
             String paramsString = Arrays.stream(params)
                     .map(this::paramToString)
-                    .collect(Collectors.joining(SEPARATOR));
+                    .collect(Collectors.joining(CACHE_KEY_SEPARATOR));
 
-            keyBuilder.append(SEPARATOR).append(paramsString);
+            keyBuilder.append(CACHE_KEY_SEPARATOR).append(paramsString);
         }
 
         String key = keyBuilder.toString();
 
         if (key.length() > MAX_KEY_LENGTH) {
             String hash = DigestUtil.md5Hex(key);
-            key = key.substring(0, MAX_KEY_LENGTH - 32 - 1) + ":" + hash;
+            key = key.substring(0, MAX_KEY_LENGTH - HASH_LENGTH - 1) + CACHE_KEY_SEPARATOR + hash;
             log.debug("Generated key was too long, truncated and hashed: {}", key);
         }
 
@@ -62,6 +60,6 @@ public class CacheKeyGenerator implements KeyGenerator {
     }
 
     public static String generateKey(String cacheName, Object key) {
-        return cacheName + SEPARATOR + String.valueOf(key);
+        return cacheName + CACHE_KEY_SEPARATOR + String.valueOf(key);
     }
 }

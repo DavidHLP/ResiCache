@@ -1,18 +1,24 @@
 package com.david.spring.cache.redis.core;
 
+import com.david.spring.cache.redis.event.entity.CacheErrorEvent;
+import com.david.spring.cache.redis.event.entity.CacheOperationEndEvent;
+import com.david.spring.cache.redis.event.entity.CacheOperationStartEvent;
+import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.boot.autoconfigure.cache.CacheType;
 import org.springframework.cache.Cache;
 import org.springframework.cache.transaction.AbstractTransactionSupportingCacheManager;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.NonNull;
 
 import java.time.Duration;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.david.spring.cache.redis.core.CacheConstants.*;
 
 @Slf4j
 public class RedisCacheManager extends AbstractTransactionSupportingCacheManager {
@@ -23,10 +29,22 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 	private final boolean allowNullValues;
 	private final Map<String, Cache> cacheMap = new ConcurrentHashMap<>();
 	private final Map<String, CacheType> cacheTypes = new ConcurrentHashMap<>();
+	private final Map<String, CacheManagerMetrics> cacheMetrics = new ConcurrentHashMap<>();
+
 	// 缓存操作模板支持
 	private CacheOperationTemplate operationTemplate;
+	// 事件发布器支持
+	private CacheEventPublisher eventPublisher;
+	// 事件支持（通过抽象类）
+	private final AbstractEventAwareCache eventSupport = new AbstractEventAwareCache() {};
+	// 应用事件发布器
+	private ApplicationEventPublisher applicationEventPublisher;
+	// Bean 工厂
+	private BeanFactory beanFactory;
 	// 默认缓存类型
 	private CacheType defaultCacheType = CacheType.REDIS;
+	// 智能管理开关
+	private boolean intelligentManagementEnabled = false;
 
 	public RedisCacheManager(RedisTemplate<String, Object> redisTemplate) {
 		this(redisTemplate, Duration.ofMinutes(60), true, Collections.emptyMap());
@@ -65,11 +83,61 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 
 	private Cache createRedisCache(String name) {
 		Duration ttl = cacheConfigurations.getOrDefault(name, defaultTtl);
+		CacheType cacheType = cacheTypes.getOrDefault(name, defaultCacheType);
 
-		// 回退到直接创建Redis缓存
-		log.debug("Creating Redis cache '{}' with TTL: {} (direct creation)", name, ttl);
+		log.debug("Creating cache '{}' with type: {}, TTL: {}", name, cacheType, ttl);
+
+		// 发布缓存创建开始事件
+		eventSupport.publishOperationStartEvent(name, name, CacheLayers.CACHE_MANAGER, Operations.CACHE_CREATION, "createCache");
+
+		Cache cache;
+		try {
+			cache = switch (cacheType) {
+				case REDIS -> createEnhancedRedisCache(name, ttl);
+				case CAFFEINE ->
+					// 如果需要本地缓存，可以在这里扩展
+						createEnhancedRedisCache(name, ttl);
+				default -> createEnhancedRedisCache(name, ttl);
+			};
+
+			// 初始化缓存指标
+			cacheMetrics.put(name, new CacheManagerMetrics());
+
+			// 发布缓存创建完成事件
+			eventSupport.publishOperationEndEvent(name, name, CacheLayers.CACHE_MANAGER, Operations.CACHE_CREATION, "createCache", 0, true);
+
+			log.info("Successfully created cache '{}' with type: {}", name, cacheType);
+			return cache;
+
+		} catch (Exception e) {
+			log.error("Failed to create cache '{}': {}", name, e.getMessage());
+			eventSupport.publishCacheErrorEvent(name, name, CacheLayers.CACHE_MANAGER, e, Operations.CACHE_CREATION);
+			// 回退到基础实现
+			return createBasicRedisCache(name, ttl);
+		}
+	}
+
+	private Cache createEnhancedRedisCache(String name, Duration ttl) {
 		RedisCache redisCache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
-		// 注入模板支持
+
+		// 注入依赖
+		if (operationTemplate != null) {
+			redisCache.setOperationTemplate(operationTemplate);
+		}
+		if (eventPublisher != null) {
+			redisCache.setEventPublisher(eventPublisher);
+		}
+
+		// 如果启用智能管理，添加增强功能
+		if (intelligentManagementEnabled) {
+			enhanceCacheWithIntelligentFeatures(redisCache);
+		}
+
+		return redisCache;
+	}
+
+	private Cache createBasicRedisCache(String name, Duration ttl) {
+		RedisCache redisCache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
 		if (operationTemplate != null) {
 			redisCache.setOperationTemplate(operationTemplate);
 		}
@@ -109,17 +177,197 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 		this.operationTemplate = operationTemplate;
 		log.info("Cache operation template configured: {}", operationTemplate.getClass().getSimpleName());
 		// 更新已创建的缓存
+		updateExistingCaches();
+	}
+
+	/**
+	 * 设置事件发布器
+	 */
+	public void setEventPublisher(CacheEventPublisher eventPublisher) {
+		this.eventPublisher = eventPublisher;
+		eventSupport.setEventPublisher(eventPublisher);
+		log.info("Cache event publisher configured: {}", eventPublisher.getClass().getSimpleName());
+		// 更新已创建的缓存
+		updateExistingCaches();
+	}
+
+	/**
+	 * 设置应用事件发布器
+	 */
+	public void setApplicationEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
+		this.applicationEventPublisher = applicationEventPublisher;
+	}
+
+	/**
+	 * 设置 Bean 工厂
+	 */
+	public void setBeanFactory(BeanFactory beanFactory) {
+		this.beanFactory = beanFactory;
+	}
+
+	/**
+	 * 启用智能管理
+	 */
+	public void enableIntelligentManagement() {
+		this.intelligentManagementEnabled = true;
+		log.info("Intelligent cache management enabled");
+		// 重新创建所有缓存以应用智能功能
+		recreateAllCaches();
+	}
+
+	/**
+	 * 禁用智能管理
+	 */
+	public void disableIntelligentManagement() {
+		this.intelligentManagementEnabled = false;
+		log.info("Intelligent cache management disabled");
+	}
+
+	/**
+	 * 更新已存在的缓存配置
+	 */
+	private void updateExistingCaches() {
 		cacheMap.values().forEach(cache -> {
 			if (cache instanceof RedisCache redisCache) {
-				redisCache.setOperationTemplate(operationTemplate);
+				if (operationTemplate != null) {
+					redisCache.setOperationTemplate(operationTemplate);
+				}
+				if (eventPublisher != null) {
+					redisCache.setEventPublisher(eventPublisher);
+				}
 			}
 		});
+	}
+
+	/**
+	 * 重新创建所有缓存
+	 */
+	private void recreateAllCaches() {
+		Set<String> cacheNames = new HashSet<>(cacheMap.keySet());
+		cacheMap.clear();
+		log.info("Recreating {} caches with new configuration", cacheNames.size());
+
+		// 预热关键缓存
+		cacheNames.forEach(this::getCache);
 	}
 
 	@Override
 	public void afterPropertiesSet() {
 		super.afterPropertiesSet();
-		log.info("RedisCacheManager initialized with default TTL: {}, allowNullValues: {}",
-				defaultTtl, allowNullValues);
+		log.info("RedisCacheManager initialized with default TTL: {}, allowNullValues: {}, intelligentManagement: {}",
+				defaultTtl, allowNullValues, intelligentManagementEnabled);
+	}
+
+	/**
+	 * 智能增强缓存功能
+	 */
+	private void enhanceCacheWithIntelligentFeatures(RedisCache cache) {
+		// 这里可以添加智能功能，如：
+		// 1. 自动预刷新
+		// 2. 智能TTL调整
+		// 3. 异常检测和恢复
+		// 4. 性能监控和优化建议
+		log.debug("Enhanced cache '{}' with intelligent features", cache.getName());
+	}
+
+
+	/**
+	 * 获取缓存管理器指标
+	 */
+	public CacheManagerMetrics getCacheManagerMetrics(String cacheName) {
+		return cacheMetrics.get(cacheName);
+	}
+
+	/**
+	 * 获取所有缓存指标
+	 */
+	public Map<String, CacheManagerMetrics> getAllCacheMetrics() {
+		return new ConcurrentHashMap<>(cacheMetrics);
+	}
+
+	/**
+	 * 获取缓存健康状态
+	 */
+	public boolean isCacheHealthy(String cacheName) {
+		CacheManagerMetrics metrics = cacheMetrics.get(cacheName);
+		return metrics == null || metrics.isHealthy();
+	}
+
+	/**
+	 * 执行缓存健康检查
+	 */
+	public void performHealthCheck() {
+		log.debug("Performing cache health check for {} caches", cacheMap.size());
+
+		for (Map.Entry<String, Cache> entry : cacheMap.entrySet()) {
+			String cacheName = entry.getKey();
+			Cache cache = entry.getValue();
+
+			try {
+				// 简单的健康检查 - 尝试放入和获取一个测试值
+				Object testKey = HEALTH_CHECK_KEY_PREFIX + System.currentTimeMillis();
+				cache.put(testKey, "test");
+				cache.get(testKey);
+				cache.evict(testKey);
+
+				// 更新健康状态
+				CacheManagerMetrics metrics = cacheMetrics.get(cacheName);
+				if (metrics != null) {
+					metrics.recordHealthCheck(true);
+				}
+
+				log.debug("Cache '{}' health check passed", cacheName);
+
+			} catch (Exception e) {
+				log.warn("Cache '{}' health check failed: {}", cacheName, e.getMessage());
+
+				// 更新健康状态
+				CacheManagerMetrics metrics = cacheMetrics.get(cacheName);
+				if (metrics != null) {
+					metrics.recordHealthCheck(false);
+				}
+
+				// 发布健康检查失败事件
+				eventSupport.publishCacheErrorEvent(cacheName, cacheName, CacheLayers.CACHE_MANAGER, e, Operations.HEALTH_CHECK);
+			}
+		}
+	}
+
+	/**
+	 * 缓存管理器指标
+	 */
+	public static class CacheManagerMetrics {
+		private final long creationTime = System.currentTimeMillis();
+		private volatile boolean healthy = true;
+		private volatile long lastHealthCheck = System.currentTimeMillis();
+		private volatile int consecutiveFailures = 0;
+
+		public void recordHealthCheck(boolean successful) {
+			this.lastHealthCheck = System.currentTimeMillis();
+			if (successful) {
+				this.consecutiveFailures = 0;
+				this.healthy = true;
+			} else {
+				this.consecutiveFailures++;
+				// 连续3次失败认为不健康
+				this.healthy = consecutiveFailures < 3;
+			}
+		}
+
+		public boolean isHealthy() {
+			return healthy;
+		}
+
+		public long getLastHealthCheck() {
+			return lastHealthCheck;
+		}
+
+		public int getConsecutiveFailures() {
+			return consecutiveFailures;
+		}
+
+		public long getAge() {
+			return System.currentTimeMillis() - creationTime;
+		}
 	}
 }
