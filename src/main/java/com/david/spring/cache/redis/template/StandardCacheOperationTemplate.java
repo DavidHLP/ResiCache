@@ -4,13 +4,12 @@ import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.core.CacheOperationResolver;
 import com.david.spring.cache.redis.core.RedisCache;
 import com.david.spring.cache.redis.core.RedisCacheManager;
-import com.david.spring.cache.redis.event.CacheEventPublisher;
+import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.springframework.cache.Cache;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.time.Duration;

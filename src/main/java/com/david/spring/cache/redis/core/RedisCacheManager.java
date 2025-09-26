@@ -1,10 +1,8 @@
 package com.david.spring.cache.redis.core;
 
-import com.david.spring.cache.redis.factory.CacheCreationConfig;
-import com.david.spring.cache.redis.factory.CacheFactoryRegistry;
-import com.david.spring.cache.redis.factory.CacheType;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.cache.CacheType;
 import org.springframework.cache.Cache;
 import org.springframework.cache.transaction.AbstractTransactionSupportingCacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -25,8 +23,6 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 	private final boolean allowNullValues;
 	private final Map<String, Cache> cacheMap = new ConcurrentHashMap<>();
 	private final Map<String, CacheType> cacheTypes = new ConcurrentHashMap<>();
-	// 工厂模式支持
-	private CacheFactoryRegistry factoryRegistry;
 	// 缓存操作模板支持
 	private CacheOperationTemplate operationTemplate;
 	// 默认缓存类型
@@ -70,23 +66,6 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 	private Cache createRedisCache(String name) {
 		Duration ttl = cacheConfigurations.getOrDefault(name, defaultTtl);
 
-		// 检查是否有工厂注册表，如果有则使用工厂模式
-		if (factoryRegistry != null) {
-			CacheType cacheType = cacheTypes.getOrDefault(name, defaultCacheType);
-
-			CacheCreationConfig config = CacheCreationConfig.builder()
-					.cacheName(name)
-					.cacheType(cacheType)
-					.redisTemplate(redisTemplate)
-					.defaultTtl(ttl)
-					.allowNullValues(allowNullValues)
-					.enableStatistics(true)
-					.build();
-
-			log.debug("Creating cache '{}' using factory pattern with type: {}", name, cacheType);
-			return factoryRegistry.createCache(config);
-		}
-
 		// 回退到直接创建Redis缓存
 		log.debug("Creating Redis cache '{}' with TTL: {} (direct creation)", name, ttl);
 		RedisCache redisCache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
@@ -104,17 +83,6 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 
 	public Duration getCacheTtl(String cacheName) {
 		return cacheConfigurations.getOrDefault(cacheName, defaultTtl);
-	}
-
-	/**
-	 * 设置工厂注册表（支持工厂模式）
-	 */
-	public void setCacheFactoryRegistry(CacheFactoryRegistry factoryRegistry) {
-		this.factoryRegistry = factoryRegistry;
-		if (factoryRegistry != null) {
-			log.info("Cache factory registry configured with {} factories", factoryRegistry.getFactoryCount());
-			log.debug("Supported cache types: {}", factoryRegistry.getSupportedCacheTypes());
-		}
 	}
 
 	/**

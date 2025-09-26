@@ -1,14 +1,16 @@
 package com.david.spring.cache.redis.template;
 
 import com.david.spring.cache.redis.core.CacheOperationResolver;
-import com.david.spring.cache.redis.event.CacheEventPublisher;
-import com.david.spring.cache.redis.event.CacheHitEvent;
-import com.david.spring.cache.redis.event.CacheMissEvent;
-import com.david.spring.cache.redis.event.CachePutEvent;
+import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
+import com.david.spring.cache.redis.event.entity.CacheHitEvent;
+import com.david.spring.cache.redis.event.entity.CacheMissEvent;
+import com.david.spring.cache.redis.event.entity.CachePutEvent;
+import com.david.spring.cache.redis.event.entity.CacheErrorEvent;
+import com.david.spring.cache.redis.event.entity.CacheOperationStartEvent;
+import com.david.spring.cache.redis.event.entity.CacheOperationEndEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.springframework.cache.Cache;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
@@ -36,6 +38,10 @@ public abstract class CacheOperationTemplate {
         String cacheName = operation.getCacheNames()[0];
         Object cacheKey = generateCacheKey(operation, method, args, joinPoint.getTarget(), targetClass);
         String source = targetClass.getSimpleName() + "." + method.getName();
+        String methodName = method.getName();
+
+        // 发布操作开始事件
+        onCacheOperationStart(operation, cacheKey, cacheName, source, methodName);
 
         try {
             // 前置处理
@@ -66,11 +72,19 @@ public abstract class CacheOperationTemplate {
             // 后置处理
             afterCacheOperation(operation, cacheKey, cacheName, result, startTime);
 
+            // 发布操作结束事件（成功）
+            onCacheOperationEnd(operation, cacheKey, cacheName, source, methodName,
+                              System.currentTimeMillis() - startTime, true);
+
             return result;
 
         } catch (Exception e) {
             // 异常处理
-            onCacheError(operation, cacheKey, cacheName, e);
+            onCacheError(operation, cacheKey, cacheName, e, "execute");
+
+            // 发布操作结束事件（失败）
+            onCacheOperationEnd(operation, cacheKey, cacheName, source, methodName,
+                              System.currentTimeMillis() - startTime, false);
             throw e;
         }
     }
@@ -169,8 +183,44 @@ public abstract class CacheOperationTemplate {
      * 缓存错误处理 - 子类可以重写
      */
     protected void onCacheError(CacheOperationResolver.CacheableOperation operation,
-                              Object cacheKey, String cacheName, Exception e) {
+                              Object cacheKey, String cacheName, Exception e, String operationType) {
         log.warn("Cache operation error for key: {} in cache: {}: {}", cacheKey, cacheName, e.getMessage());
+
+        if (eventPublisher != null) {
+            CacheErrorEvent event = new CacheErrorEvent(cacheName, cacheKey,
+                    operation.getClass().getSimpleName(), e, operationType);
+            eventPublisher.publishEventAsync(event);
+        }
+    }
+
+    /**
+     * 缓存操作开始处理 - 子类可以重写
+     */
+    protected void onCacheOperationStart(CacheOperationResolver.CacheableOperation operation,
+                                       Object cacheKey, String cacheName, String source, String methodName) {
+        log.debug("Cache operation starting for key: {} in cache: {}, method: {}", cacheKey, cacheName, methodName);
+
+        if (eventPublisher != null) {
+            CacheOperationStartEvent event = new CacheOperationStartEvent(cacheName, cacheKey, source,
+                    "cacheable", methodName);
+            eventPublisher.publishEventAsync(event);
+        }
+    }
+
+    /**
+     * 缓存操作结束处理 - 子类可以重写
+     */
+    protected void onCacheOperationEnd(CacheOperationResolver.CacheableOperation operation,
+                                     Object cacheKey, String cacheName, String source, String methodName,
+                                     long totalTime, boolean successful) {
+        log.debug("Cache operation completed for key: {} in cache: {}, method: {}, time: {}ms, success: {}",
+                cacheKey, cacheName, methodName, totalTime, successful);
+
+        if (eventPublisher != null) {
+            CacheOperationEndEvent event = new CacheOperationEndEvent(cacheName, cacheKey, source,
+                    "cacheable", methodName, totalTime, successful);
+            eventPublisher.publishEventAsync(event);
+        }
     }
 
     /**

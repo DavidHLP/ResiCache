@@ -5,9 +5,8 @@ import com.david.spring.cache.redis.core.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.core.CacheKeyGenerator;
 import com.david.spring.cache.redis.core.RedisCacheManager;
 import com.david.spring.cache.redis.core.strategy.CacheStrategyContext;
-import com.david.spring.cache.redis.event.CacheEventPublisher;
+import com.david.spring.cache.redis.event.publisher.CacheEventPublisher;
 import com.david.spring.cache.redis.event.listener.CacheStatisticsListener;
-import com.david.spring.cache.redis.factory.CacheFactoryRegistry;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
 import jakarta.annotation.PostConstruct;
@@ -48,7 +47,6 @@ import java.util.Map;
 @EnableAspectJAutoProxy
 @ComponentScan(basePackages = {
 		"com.david.spring.cache.redis.core.strategy",
-		"com.david.spring.cache.redis.factory",
 		"com.david.spring.cache.redis.template"
 })
 public class RedisCacheAutoConfiguration {
@@ -170,10 +168,7 @@ public class RedisCacheAutoConfiguration {
 	                                         RedissonClient redissonClient,
 	                                         CacheStrategyContext strategyContext,
 	                                         CacheEventPublisher eventPublisher,
-	                                         CacheFactoryRegistry factoryRegistry,
 	                                         CacheOperationTemplate operationTemplate) {
-		// 为RedisCacheManager设置工厂支持
-		redisCacheManager.setCacheFactoryRegistry(factoryRegistry);
 		// 为RedisCacheManager设置模板支持
 		redisCacheManager.setOperationTemplate(operationTemplate);
 

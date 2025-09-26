@@ -42,5 +42,20 @@ public enum CacheEventType {
     /**
      * 预刷新完成
      */
-    PRE_REFRESH_COMPLETED
+    PRE_REFRESH_COMPLETED,
+
+    /**
+     * 缓存操作开始
+     */
+    CACHE_OPERATION_START,
+
+    /**
+     * 缓存操作结束
+     */
+    CACHE_OPERATION_END,
+
+    /**
+     * 缓存错误
+     */
+    CACHE_ERROR
 }

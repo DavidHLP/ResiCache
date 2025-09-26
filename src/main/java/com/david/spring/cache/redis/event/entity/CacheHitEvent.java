@@ -1,5 +1,7 @@
-package com.david.spring.cache.redis.event;
+package com.david.spring.cache.redis.event.entity;
 
+import com.david.spring.cache.redis.event.CacheEvent;
+import com.david.spring.cache.redis.event.CacheEventType;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
