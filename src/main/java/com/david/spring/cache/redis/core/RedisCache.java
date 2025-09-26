@@ -1,12 +1,17 @@
 package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.manager.AbstractEventAwareCache;
+import com.david.spring.cache.redis.resolver.CacheOperationResolver;
+import com.david.spring.cache.redis.template.CacheOperationTemplate;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.aspectj.lang.ProceedingJoinPoint;
 import org.springframework.cache.support.AbstractValueAdaptingCache;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -22,6 +27,9 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	private final Duration defaultTtl;
 	private final boolean allowNullValues;
 	private final AbstractEventAwareCache eventSupport = new AbstractEventAwareCache() {};
+	// 设置操作模板，由 RedisCacheManager 调用
+	@Setter
+	private CacheOperationTemplate operationTemplate;
 
 	public RedisCache(String name, RedisTemplate<String, Object> redisTemplate,
 	                  Duration defaultTtl, boolean allowNullValues) {
@@ -301,6 +309,20 @@ public class RedisCache extends AbstractValueAdaptingCache {
 		return name + ":" + key;
 	}
 
+
+	/**
+	 * 使用模板方法执行缓存操作
+	 */
+	public Object executeWithTemplate(ProceedingJoinPoint joinPoint,
+	                                  CacheOperationResolver.CacheableOperation operation,
+	                                  Method method,
+	                                  Object[] args,
+	                                  Class<?> targetClass) throws Throwable {
+		if (operationTemplate == null) {
+			throw new IllegalStateException("CacheOperationTemplate not set. Please call setOperationTemplate() first.");
+		}
+		return operationTemplate.execute(joinPoint, operation, method, args, targetClass);
+	}
 
 	/**
 	 * 缓存统计信息

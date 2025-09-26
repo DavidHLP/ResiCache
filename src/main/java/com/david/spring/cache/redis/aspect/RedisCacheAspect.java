@@ -1,11 +1,9 @@
 package com.david.spring.cache.redis.aspect;
 
-import com.david.spring.cache.redis.expression.CacheExpressionEvaluator;
-import com.david.spring.cache.redis.resolver.CacheOperationResolver;
 import com.david.spring.cache.redis.core.RedisCache;
+import com.david.spring.cache.redis.expression.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.manager.RedisCacheManager;
-import com.david.spring.cache.redis.template.CacheOperationTemplate;
-import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
+import com.david.spring.cache.redis.resolver.CacheOperationResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -26,7 +24,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 @Aspect
@@ -38,9 +35,7 @@ public class RedisCacheAspect implements Ordered {
 	private final CacheExpressionEvaluator expressionEvaluator;
 	private final KeyGenerator keyGenerator;
 	private final RedissonClient redissonClient;
-	private final ReentrantLock internalLock = new ReentrantLock();
 	private final ExecutorService preRefreshExecutor = Executors.newFixedThreadPool(2);
-	private final CacheOperationTemplate operationTemplate;
 
 	public RedisCacheAspect(RedisCacheManager cacheManager,
 	                        KeyGenerator keyGenerator,
@@ -50,8 +45,6 @@ public class RedisCacheAspect implements Ordered {
 		this.redissonClient = redissonClient;
 		this.operationResolver = new CacheOperationResolver();
 		this.expressionEvaluator = new CacheExpressionEvaluator();
-
-		this.operationTemplate = new StandardCacheOperationTemplate(cacheManager, keyGenerator);
 	}
 
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheable) || " +
@@ -78,8 +71,12 @@ public class RedisCacheAspect implements Ordered {
 				return handleBloomFilterOperation(joinPoint, operation, method, args, targetClass);
 			}
 
-			// 使用模板方法模式处理标准缓存操作
-			return operationTemplate.execute(joinPoint, operation, method, args, targetClass);
+			// 使用 RedisCache 中的模板方法处理标准缓存操作
+			String cacheName = operation.getCacheNames()[0];
+			Cache cache = cacheManager.getCache(cacheName);
+			if (cache instanceof RedisCache redisCache) {
+				return redisCache.executeWithTemplate(joinPoint, operation, method, args, targetClass);
+			}
 		}
 		return executeWithLock(operations.get(0), joinPoint, method, args, targetClass, operations);
 	}
@@ -120,7 +117,13 @@ public class RedisCacheAspect implements Ordered {
 		}
 
 		// 布隆过滤器说可能存在，继续正常的缓存处理流程
-		return operationTemplate.execute(joinPoint, operation, method, args, targetClass);
+		String cacheName = operation.getCacheNames()[0];
+		Cache cache = cacheManager.getCache(cacheName);
+		if (cache instanceof RedisCache redisCache) {
+			return redisCache.executeWithTemplate(joinPoint, operation, method, args, targetClass);
+		}
+		// 如果不是 RedisCache，回退到直接执行方法
+		return joinPoint.proceed();
 	}
 
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheEvict) || " +

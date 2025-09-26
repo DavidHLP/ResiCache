@@ -77,9 +77,14 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 		// 发布缓存创建开始事件
 		eventSupport.publishOperationStartEvent(name, name, CacheLayers.CACHE_MANAGER, Operations.CACHE_CREATION, "createCache");
 
-		Cache cache;
+		RedisCache cache;
 		try {
 			cache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
+
+			// 设置操作模板
+			if (operationTemplate != null) {
+				cache.setOperationTemplate(operationTemplate);
+			}
 
 			// 发布缓存创建完成事件
 			eventSupport.publishOperationEndEvent(name, name, CacheLayers.CACHE_MANAGER, Operations.CACHE_CREATION, "createCache", 0, true);
@@ -91,7 +96,11 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 			log.error("Failed to create cache '{}': {}", name, e.getMessage());
 			eventSupport.publishCacheErrorEvent(name, name, CacheLayers.CACHE_MANAGER, e, Operations.CACHE_CREATION);
 			// 回退到基础实现
-			return new RedisCache(name, redisTemplate, ttl, allowNullValues);
+			RedisCache fallbackCache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
+			if (operationTemplate != null) {
+				fallbackCache.setOperationTemplate(operationTemplate);
+			}
+			return fallbackCache;
 		}
 	}
 
