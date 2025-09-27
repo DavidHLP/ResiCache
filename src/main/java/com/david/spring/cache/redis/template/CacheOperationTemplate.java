@@ -15,10 +15,11 @@ public abstract class CacheOperationTemplate {
 	/**
 	 * 查找缓存值的模板方法
 	 */
-	public final Object lookup(String cacheName, Object key) {
+	public final Object lookup(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+							   String cacheName, Object key, boolean allowNullValues) {
 		try {
 			beforeLookup(cacheName, key);
-			Object rawValue = doLookup(cacheName, key);
+			Object rawValue = doLookup(redisTemplate, cacheName, key, allowNullValues);
 			return afterLookup(cacheName, key, rawValue);
 		} catch (Exception e) {
 			handleLookupError(cacheName, key, e);
@@ -29,10 +30,11 @@ public abstract class CacheOperationTemplate {
 	/**
 	 * 存储缓存值的模板方法
 	 */
-	public final void put(String cacheName, Object key, Object value, Duration ttl) {
+	public final void put(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+						  String cacheName, Object key, Object value, Duration ttl, boolean allowNullValues) {
 		try {
 			beforePut(cacheName, key, value, ttl);
-			doPut(cacheName, key, value, ttl);
+			doPut(redisTemplate, cacheName, key, value, ttl, allowNullValues);
 			afterPut(cacheName, key, value, ttl);
 		} catch (Exception e) {
 			handlePutError(cacheName, key, value, e);
@@ -42,10 +44,11 @@ public abstract class CacheOperationTemplate {
 	/**
 	 * 条件存储缓存值的模板方法
 	 */
-	public final Cache.ValueWrapper putIfAbsent(String cacheName, Object key, Object value, Duration ttl) {
+	public final Cache.ValueWrapper putIfAbsent(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+												String cacheName, Object key, Object value, Duration ttl, boolean allowNullValues) {
 		try {
 			beforePutIfAbsent(cacheName, key, value, ttl);
-			Cache.ValueWrapper result = doPutIfAbsent(cacheName, key, value, ttl);
+			Cache.ValueWrapper result = doPutIfAbsent(redisTemplate, cacheName, key, value, ttl, allowNullValues);
 			afterPutIfAbsent(cacheName, key, value, ttl, result);
 			return result;
 		} catch (Exception e) {
@@ -57,10 +60,11 @@ public abstract class CacheOperationTemplate {
 	/**
 	 * 删除缓存项的模板方法
 	 */
-	public final void evict(String cacheName, Object key) {
+	public final void evict(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+							String cacheName, Object key) {
 		try {
 			beforeEvict(cacheName, key);
-			doEvict(cacheName, key);
+			doEvict(redisTemplate, cacheName, key);
 			afterEvict(cacheName, key);
 		} catch (Exception e) {
 			handleEvictError(cacheName, key, e);
@@ -70,10 +74,11 @@ public abstract class CacheOperationTemplate {
 	/**
 	 * 清空缓存的模板方法
 	 */
-	public final void clear(String cacheName) {
+	public final void clear(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+							String cacheName) {
 		try {
 			beforeClear(cacheName);
-			doClear(cacheName);
+			doClear(redisTemplate, cacheName);
 			afterClear(cacheName);
 		} catch (Exception e) {
 			handleClearError(cacheName, e);
@@ -83,10 +88,11 @@ public abstract class CacheOperationTemplate {
 	/**
 	 * 获取或加载缓存值的模板方法
 	 */
-	public final <T> T get(String cacheName, Object key, Callable<T> valueLoader) {
+	public final <T> T get(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+						   String cacheName, Object key, Callable<T> valueLoader, boolean allowNullValues) {
 		try {
 			beforeGet(cacheName, key, valueLoader);
-			T result = doGet(cacheName, key, valueLoader);
+			T result = doGet(redisTemplate, cacheName, key, valueLoader, allowNullValues);
 			afterGet(cacheName, key, valueLoader, result);
 			return result;
 		} catch (Exception e) {
@@ -97,17 +103,23 @@ public abstract class CacheOperationTemplate {
 
 
 	// 核心缓存操作的抽象方法
-	protected abstract Object doLookup(String cacheName, Object key);
+	protected abstract Object doLookup(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+									   String cacheName, Object key, boolean allowNullValues);
 
-	protected abstract void doPut(String cacheName, Object key, Object value, Duration ttl);
+	protected abstract void doPut(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+								  String cacheName, Object key, Object value, Duration ttl, boolean allowNullValues);
 
-	protected abstract Cache.ValueWrapper doPutIfAbsent(String cacheName, Object key, Object value, Duration ttl);
+	protected abstract Cache.ValueWrapper doPutIfAbsent(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+														String cacheName, Object key, Object value, Duration ttl, boolean allowNullValues);
 
-	protected abstract void doEvict(String cacheName, Object key);
+	protected abstract void doEvict(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+									String cacheName, Object key);
 
-	protected abstract void doClear(String cacheName);
+	protected abstract void doClear(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+									String cacheName);
 
-	protected abstract <T> T doGet(String cacheName, Object key, Callable<T> valueLoader) throws Exception;
+	protected abstract <T> T doGet(org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate,
+								   String cacheName, Object key, Callable<T> valueLoader, boolean allowNullValues) throws Exception;
 
 	// 钩子方法（可选重写）
 	protected void beforeLookup(String cacheName, Object key) {}

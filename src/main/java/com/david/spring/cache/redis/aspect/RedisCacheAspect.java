@@ -404,11 +404,6 @@ public class RedisCacheAspect implements Ordered {
 	private void cacheResult(CacheOperationResolver.CacheableOperation operation,
 	                         Method method, Object[] args, Object target, Class<?> targetClass, Object result) {
 
-		if (result == null && !operation.isCacheNullValues()) {
-			log.debug("Not caching null result");
-			return;
-		}
-
 		if (operation.hasUnless() &&
 				expressionEvaluator.evaluateUnless(operation.getUnless(), method, args, target, targetClass, result)) {
 			log.debug("Unless condition matched, not caching result");

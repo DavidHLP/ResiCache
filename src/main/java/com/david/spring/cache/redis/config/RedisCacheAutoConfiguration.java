@@ -87,7 +87,7 @@ public class RedisCacheAutoConfiguration {
 		template.afterPropertiesSet();
 
 		return logBeanCreation(template, "RedisCacheTemplate",
-			"StringRedisSerializer for keys and GenericJackson2JsonRedisSerializer for CachedValue");
+				"StringRedisSerializer for keys and GenericJackson2JsonRedisSerializer for CachedValue");
 	}
 
 	@Bean
@@ -124,8 +124,8 @@ public class RedisCacheAutoConfiguration {
 		cacheManager.setTransactionAware(properties.isEnableTransactions());
 
 		return logBeanCreation(cacheManager, "RedisCacheManager",
-			String.format("with %d cache configurations, default TTL: %s, allowNullValues: %s",
-				cacheConfigurations.size(), properties.getDefaultTtl(), properties.isAllowNullValues()));
+				String.format("with %d cache configurations, default TTL: %s, allowNullValues: %s",
+						cacheConfigurations.size(), properties.getDefaultTtl(), properties.isAllowNullValues()));
 	}
 
 	@Bean
@@ -152,9 +152,9 @@ public class RedisCacheAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	@Primary
-	public CacheOperationTemplate cacheOperationTemplate(RedisCacheManager redisCacheManager) {
-		return logBeanCreation(new StandardCacheOperationTemplate(redisCacheManager),
-			"StandardCacheOperationTemplate", "as primary cache operation template");
+	public CacheOperationTemplate cacheOperationTemplate() {
+		return logBeanCreation(new StandardCacheOperationTemplate(),
+				"StandardCacheOperationTemplate", "as primary cache operation template");
 	}
 
 	@Bean
@@ -167,7 +167,7 @@ public class RedisCacheAutoConfiguration {
 		redisCacheManager.setOperationTemplate(operationTemplate);
 
 		return logBeanCreation(new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient),
-			"RedisCacheAspect", "with direct cache operations");
+				"RedisCacheAspect", "with direct cache operations");
 	}
 
 	@Bean
