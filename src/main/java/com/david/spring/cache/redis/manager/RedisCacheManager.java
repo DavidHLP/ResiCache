@@ -1,7 +1,6 @@
 package com.david.spring.cache.redis.manager;
 
 import com.david.spring.cache.redis.core.RedisCache;
-import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.cache.CacheType;
 import org.springframework.cache.Cache;
@@ -30,8 +29,6 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 	private final AbstractEventAwareCache eventSupport = new AbstractEventAwareCache() {};
 	// 默认缓存类型
 	private final CacheType defaultCacheType;
-	// 缓存操作模板支持
-	private CacheOperationTemplate operationTemplate;
 
 	public RedisCacheManager(RedisTemplate<String, Object> redisTemplate) {
 		this(redisTemplate, Duration.ofMinutes(60), true, Collections.emptyMap(), CacheType.REDIS);
@@ -81,11 +78,6 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 		try {
 			cache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
 
-			// 设置操作模板
-			if (operationTemplate != null) {
-				cache.setOperationTemplate(operationTemplate);
-			}
-
 			// 发布缓存创建完成事件
 			eventSupport.publishOperationEndEvent(name, name, CacheLayers.CACHE_MANAGER, Operations.CACHE_CREATION, "createCache", 0, true);
 
@@ -96,21 +88,10 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 			log.error("Failed to create cache '{}': {}", name, e.getMessage());
 			eventSupport.publishCacheErrorEvent(name, name, CacheLayers.CACHE_MANAGER, e, Operations.CACHE_CREATION);
 			// 回退到基础实现
-			RedisCache fallbackCache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
-			if (operationTemplate != null) {
-				fallbackCache.setOperationTemplate(operationTemplate);
-			}
-			return fallbackCache;
+			return new RedisCache(name, redisTemplate, ttl, allowNullValues);
 		}
 	}
 
-	/**
-	 * 设置缓存操作模板（支持模板方法模式）
-	 */
-	public void setOperationTemplate(CacheOperationTemplate operationTemplate) {
-		this.operationTemplate = operationTemplate;
-		log.info("Cache operation template configured: {}", operationTemplate.getClass().getSimpleName());
-	}
 
 	@Override
 	public void afterPropertiesSet() {

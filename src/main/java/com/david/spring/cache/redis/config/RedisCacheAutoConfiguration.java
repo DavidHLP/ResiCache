@@ -4,8 +4,6 @@ import com.david.spring.cache.redis.aspect.RedisCacheAspect;
 import com.david.spring.cache.redis.expression.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.generator.CacheKeyGenerator;
 import com.david.spring.cache.redis.manager.RedisCacheManager;
-import com.david.spring.cache.redis.template.CacheOperationTemplate;
-import com.david.spring.cache.redis.template.StandardCacheOperationTemplate;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
@@ -42,9 +40,6 @@ import java.util.Map;
 @EnableConfigurationProperties(RedisCacheProperties.class)
 @EnableCaching
 @EnableAspectJAutoProxy
-@ComponentScan(basePackages = {
-		"com.david.spring.cache.redis.template"
-})
 public class RedisCacheAutoConfiguration {
 
 	private final RedisCacheProperties properties;
@@ -149,23 +144,12 @@ public class RedisCacheAutoConfiguration {
 		return logBeanCreation(Redisson.create(config), "RedissonClient", "with single server configuration");
 	}
 
-	@Bean
-	@ConditionalOnMissingBean
-	@Primary
-	public CacheOperationTemplate cacheOperationTemplate() {
-		return logBeanCreation(new StandardCacheOperationTemplate(),
-				"StandardCacheOperationTemplate", "as primary cache operation template");
-	}
 
 	@Bean
 	@ConditionalOnMissingBean
 	public RedisCacheAspect redisCacheAspect(RedisCacheManager redisCacheManager,
 	                                         @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator,
-	                                         RedissonClient redissonClient,
-	                                         CacheOperationTemplate operationTemplate) {
-		// 为RedisCacheManager设置模板支持
-		redisCacheManager.setOperationTemplate(operationTemplate);
-
+	                                         RedissonClient redissonClient) {
 		return logBeanCreation(new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient),
 				"RedisCacheAspect", "with direct cache operations");
 	}
