@@ -1,17 +1,14 @@
 package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.manager.AbstractEventAwareCache;
-import com.david.spring.cache.redis.resolver.CacheOperationResolver;
 import com.david.spring.cache.redis.template.CacheOperationTemplate;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.aspectj.lang.ProceedingJoinPoint;
 import org.springframework.cache.support.AbstractValueAdaptingCache;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -55,6 +52,14 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 	@Override
 	protected Object lookup(@NonNull Object key) {
+		if (operationTemplate != null) {
+			return operationTemplate.lookup(name, key);
+		}
+		// 兼容性处理：如果没有模板，使用原有逻辑
+		return doLookupDirect(key);
+	}
+
+	public Object doLookupDirect(Object key) {
 		String cacheKey = createCacheKey(key);
 		try {
 			Object rawValue = redisTemplate.opsForValue().get(cacheKey);
@@ -122,6 +127,15 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	}
 
 	public void putWithTtl(Object key, @Nullable Object value, Duration ttl) {
+		if (operationTemplate != null) {
+			operationTemplate.put(name, key, value, ttl);
+		} else {
+			// 兼容性处理：如果没有模板，使用原有逻辑
+			doPutDirect(key, value, ttl);
+		}
+	}
+
+	public void doPutDirect(Object key, Object value, Duration ttl) {
 		String cacheKey = createCacheKey(key);
 
 		try {
@@ -152,6 +166,15 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 	@Override
 	public ValueWrapper putIfAbsent(@NonNull Object key, @Nullable Object value) {
+		if (operationTemplate != null) {
+			return operationTemplate.putIfAbsent(name, key, value, defaultTtl);
+		} else {
+			// 兼容性处理：如果没有模板，使用原有逻辑
+			return doPutIfAbsentDirect(key, value);
+		}
+	}
+
+	public ValueWrapper doPutIfAbsentDirect(Object key, Object value) {
 		String cacheKey = createCacheKey(key);
 
 		try {
@@ -212,6 +235,15 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 	@Override
 	public void evict(@NonNull Object key) {
+		if (operationTemplate != null) {
+			operationTemplate.evict(name, key);
+		} else {
+			// 兼容性处理：如果没有模板，使用原有逻辑
+			doEvictDirect(key);
+		}
+	}
+
+	public void doEvictDirect(Object key) {
 		String cacheKey = createCacheKey(key);
 
 		// 发布驱逐开始事件
@@ -238,6 +270,15 @@ public class RedisCache extends AbstractValueAdaptingCache {
 
 	@Override
 	public void clear() {
+		if (operationTemplate != null) {
+			operationTemplate.clear(name);
+		} else {
+			// 兼容性处理：如果没有模板，使用原有逻辑
+			doClearDirect();
+		}
+	}
+
+	public void doClearDirect() {
 		// 发布清空开始事件
 		eventSupport.publishOperationStartEvent(name, "*", CacheLayers.REDIS_CACHE, Operations.CLEAR, Operations.CLEAR);
 
@@ -269,6 +310,16 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	@Override
 	@SuppressWarnings("unchecked")
 	public <T> T get(@NonNull Object key, @NonNull Callable<T> valueLoader) {
+		if (operationTemplate != null) {
+			return operationTemplate.get(name, key, valueLoader);
+		} else {
+			// 兼容性处理：如果没有模板，使用原有逻辑
+			return doGetDirect(key, valueLoader);
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	public <T> T doGetDirect(Object key, Callable<T> valueLoader) {
 		ValueWrapper result = get(key);
 		if (result != null) {
 			return (T) result.get();
@@ -309,20 +360,6 @@ public class RedisCache extends AbstractValueAdaptingCache {
 		return name + ":" + key;
 	}
 
-
-	/**
-	 * 使用模板方法执行缓存操作
-	 */
-	public Object executeWithTemplate(ProceedingJoinPoint joinPoint,
-	                                  CacheOperationResolver.CacheableOperation operation,
-	                                  Method method,
-	                                  Object[] args,
-	                                  Class<?> targetClass) throws Throwable {
-		if (operationTemplate == null) {
-			throw new IllegalStateException("CacheOperationTemplate not set. Please call setOperationTemplate() first.");
-		}
-		return operationTemplate.execute(joinPoint, operation, method, args, targetClass);
-	}
 
 	/**
 	 * 缓存统计信息

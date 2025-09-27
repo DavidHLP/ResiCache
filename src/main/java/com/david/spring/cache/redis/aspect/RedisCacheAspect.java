@@ -71,12 +71,8 @@ public class RedisCacheAspect implements Ordered {
 				return handleBloomFilterOperation(joinPoint, operation, method, args, targetClass);
 			}
 
-			// 使用 RedisCache 中的模板方法处理标准缓存操作
-			String cacheName = operation.getCacheNames()[0];
-			Cache cache = cacheManager.getCache(cacheName);
-			if (cache instanceof RedisCache redisCache) {
-				return redisCache.executeWithTemplate(joinPoint, operation, method, args, targetClass);
-			}
+			// 使用直接的缓存操作处理标准缓存
+			return handleStandardCacheOperation(joinPoint, operation, method, args, targetClass);
 		}
 		return executeWithLock(operations.get(0), joinPoint, method, args, targetClass, operations);
 	}
@@ -117,13 +113,72 @@ public class RedisCacheAspect implements Ordered {
 		}
 
 		// 布隆过滤器说可能存在，继续正常的缓存处理流程
+		return handleStandardCacheOperation(joinPoint, operation, method, args, targetClass);
+	}
+
+	/**
+	 * 处理标准缓存操作
+	 */
+	private Object handleStandardCacheOperation(ProceedingJoinPoint joinPoint,
+	                                            CacheOperationResolver.CacheableOperation operation,
+	                                            Method method, Object[] args, Class<?> targetClass) throws Throwable {
 		String cacheName = operation.getCacheNames()[0];
-		Cache cache = cacheManager.getCache(cacheName);
-		if (cache instanceof RedisCache redisCache) {
-			return redisCache.executeWithTemplate(joinPoint, operation, method, args, targetClass);
+		Object cacheKey = generateCacheKey(operation, method, args, joinPoint.getTarget(), targetClass);
+
+		// 检查条件
+		if (!shouldExecute(operation, method, args, joinPoint.getTarget(), targetClass)) {
+			return joinPoint.proceed();
 		}
-		// 如果不是 RedisCache，回退到直接执行方法
-		return joinPoint.proceed();
+
+		// 查询缓存
+		Cache cache = cacheManager.getCache(cacheName);
+		if (cache != null) {
+			Cache.ValueWrapper wrapper = cache.get(cacheKey);
+			if (wrapper != null) {
+				// 缓存命中
+				return wrapper.get();
+			}
+		}
+
+		// 缓存未命中，执行目标方法
+		Object result = joinPoint.proceed();
+
+		// 缓存结果
+		if (cache != null && (result != null || operation.isCacheNullValues())) {
+			if (cache instanceof RedisCache redisCache) {
+				Duration ttl = operation.getTtl();
+				if (ttl != null) {
+					redisCache.putWithTtl(cacheKey, result, ttl);
+				} else {
+					cache.put(cacheKey, result);
+				}
+			} else {
+				cache.put(cacheKey, result);
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * 生成缓存键
+	 */
+	private Object generateCacheKey(CacheOperationResolver.CacheableOperation operation,
+	                                Method method, Object[] args, Object target, Class<?> targetClass) {
+		if (operation.hasKey()) {
+			Object key = expressionEvaluator.generateKey(operation.getKey(), method, args, target, targetClass, null);
+			return key != null ? key : keyGenerator.generate(target, method, args);
+		}
+		return keyGenerator.generate(target, method, args);
+	}
+
+	/**
+	 * 判断是否应该执行缓存操作
+	 */
+	private boolean shouldExecute(CacheOperationResolver.CacheableOperation operation,
+	                              Method method, Object[] args, Object target, Class<?> targetClass) {
+		return !operation.hasCondition() ||
+				expressionEvaluator.evaluateCondition(operation.getCondition(), method, args, target, targetClass, null);
 	}
 
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheEvict) || " +
@@ -420,17 +475,6 @@ public class RedisCacheAspect implements Ordered {
 		}
 	}
 
-	private Object generateCacheKey(CacheOperationResolver.CacheableOperation operation,
-	                                Method method, Object[] args, Object target, Class<?> targetClass) {
-		if (operation.hasKey()) {
-			Object key = expressionEvaluator.generateKey(operation.getKey(), method, args, target, targetClass, null);
-			return key != null ? key : keyGenerator.generate(target, method, args);
-		}
-
-		operation.hasKeyGenerator();
-
-		return keyGenerator.generate(target, method, args);
-	}
 
 	private Object generateEvictKey(CacheOperationResolver.EvictOperation operation,
 	                                Method method, Object[] args, Object target, Class<?> targetClass) {

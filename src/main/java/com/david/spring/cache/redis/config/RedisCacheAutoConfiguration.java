@@ -152,9 +152,8 @@ public class RedisCacheAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	@Primary
-	public CacheOperationTemplate cacheOperationTemplate(RedisCacheManager redisCacheManager,
-	                                                     @Qualifier("redisCacheKeyGenerator") KeyGenerator keyGenerator) {
-		return logBeanCreation(new StandardCacheOperationTemplate(redisCacheManager, keyGenerator),
+	public CacheOperationTemplate cacheOperationTemplate(RedisCacheManager redisCacheManager) {
+		return logBeanCreation(new StandardCacheOperationTemplate(redisCacheManager),
 			"StandardCacheOperationTemplate", "as primary cache operation template");
 	}
 
@@ -168,7 +167,7 @@ public class RedisCacheAutoConfiguration {
 		redisCacheManager.setOperationTemplate(operationTemplate);
 
 		return logBeanCreation(new RedisCacheAspect(redisCacheManager, keyGenerator, redissonClient),
-			"RedisCacheAspect", "with design patterns and template support");
+			"RedisCacheAspect", "with direct cache operations");
 	}
 
 	@Bean
