@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis;
 
 import com.david.spring.cache.redis.config.RedisCacheAutoConfiguration;
-import com.david.spring.cache.redis.core.RedisCache;
+import com.david.spring.cache.redis.core.RedisProCache;
 import com.david.spring.cache.redis.service.TestService;
 import com.david.spring.cache.redis.service.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,10 +68,10 @@ public class CachedValueTest {
         assertEquals(1, testService.getGetUserCallCount()); // 不应该再次调用数据库
 
         // 获取缓存统计信息
-        RedisCache cache = (RedisCache) cacheManager.getCache("users");
+        RedisProCache cache = (RedisProCache) cacheManager.getCache("users");
         assertNotNull(cache);
 
-        RedisCache.CacheStats stats = cache.getCacheStats(userId);
+        RedisProCache.CacheStats stats = cache.getCacheStats(userId);
         assertNotNull(stats);
         assertEquals(1, stats.visitTimes()); // 第二次访问时更新了统计
         assertTrue(stats.age() >= 0); // 存在时间应该>=0
@@ -87,7 +87,7 @@ public class CachedValueTest {
         assertEquals(1, testService.getGetUserCallCount()); // 不应该再次调用数据库
 
         // 再次获取统计信息，访问次数应该增加
-        RedisCache.CacheStats stats2 = cache.getCacheStats(userId);
+        RedisProCache.CacheStats stats2 = cache.getCacheStats(userId);
         assertNotNull(stats2);
         assertEquals(2, stats2.visitTimes()); // 访问了两次
         assertTrue(stats2.age() >= stats.age()); // 存在时间应该增加
@@ -98,7 +98,7 @@ public class CachedValueTest {
         User user3 = testService.getUser(userId);
         assertEquals(1, testService.getGetUserCallCount());
 
-        RedisCache.CacheStats stats3 = cache.getCacheStats(userId);
+        RedisProCache.CacheStats stats3 = cache.getCacheStats(userId);
         assertNotNull(stats3);
         assertEquals(3, stats3.visitTimes()); // 访问了三次
 
@@ -118,10 +118,10 @@ public class CachedValueTest {
         assertEquals("Value for expiring-key", value2);
 
         // 获取缓存统计
-        RedisCache cache = (RedisCache) cacheManager.getCache("random-ttl-cache");
+        RedisProCache cache = (RedisProCache) cacheManager.getCache("random-ttl-cache");
         assertNotNull(cache);
 
-        RedisCache.CacheStats stats = cache.getCacheStats(key);
+        RedisProCache.CacheStats stats = cache.getCacheStats(key);
         assertNotNull(stats);
         assertEquals(1, stats.visitTimes()); // 第二次调用时触发了一次访问统计
         assertTrue(stats.remainingTtl() > 0);
@@ -154,16 +154,16 @@ public class CachedValueTest {
         assertEquals("Value for regular", regularValue2);
 
         // 获取缓存统计
-        RedisCache cache = (RedisCache) cacheManager.getCache("null-cache");
+        RedisProCache cache = (RedisProCache) cacheManager.getCache("null-cache");
         assertNotNull(cache);
 
         // 空值也应该有缓存统计
-        RedisCache.CacheStats nullStats = cache.getCacheStats(nullKey);
+        RedisProCache.CacheStats nullStats = cache.getCacheStats(nullKey);
         assertNotNull(nullStats);
         assertEquals(1, nullStats.visitTimes()); // 第二次调用时触发了访问统计
         assertEquals(Object.class, nullStats.valueType()); // 空值的类型是Object
 
-        RedisCache.CacheStats regularStats = cache.getCacheStats(regularKey);
+        RedisProCache.CacheStats regularStats = cache.getCacheStats(regularKey);
         assertNotNull(regularStats);
         assertEquals(1, regularStats.visitTimes()); // 第二次调用时触发了访问统计
         assertEquals(String.class, regularStats.valueType());

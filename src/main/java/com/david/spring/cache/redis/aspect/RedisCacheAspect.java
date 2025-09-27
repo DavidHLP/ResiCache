@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.aspect;
 
-import com.david.spring.cache.redis.core.RedisCache;
+import com.david.spring.cache.redis.core.RedisProCache;
 import com.david.spring.cache.redis.expression.CacheExpressionEvaluator;
 import com.david.spring.cache.redis.manager.RedisCacheManager;
 import com.david.spring.cache.redis.resolver.CacheOperationResolver;
@@ -145,10 +145,10 @@ public class RedisCacheAspect implements Ordered {
 
 		// 缓存结果
 		if (cache != null && (result != null || operation.isCacheNullValues())) {
-			if (cache instanceof RedisCache redisCache) {
+			if (cache instanceof RedisProCache redisProCache) {
 				Duration ttl = operation.getTtl();
 				if (ttl != null) {
-					redisCache.putWithTtl(cacheKey, result, ttl);
+					redisProCache.putWithTtl(cacheKey, result, ttl);
 				} else {
 					cache.put(cacheKey, result);
 				}
@@ -358,12 +358,12 @@ public class RedisCacheAspect implements Ordered {
 	 */
 	private void checkAndPreRefresh(CacheOperationResolver.CacheableOperation operation, Cache cache, Object key,
 	                                Method method, Object[] args, Object target, Class<?> targetClass) {
-		if (!(cache instanceof RedisCache redisCache)) {
+		if (!(cache instanceof RedisProCache redisProCache)) {
 			return;
 		}
 
 		try {
-			RedisCache.CacheStats stats = redisCache.getCacheStats(key);
+			RedisProCache.CacheStats stats = redisProCache.getCacheStats(key);
 			if (stats == null) {
 				return;
 			}
@@ -419,8 +419,8 @@ public class RedisCacheAspect implements Ordered {
 			Object key = generateCacheKey(operation, method, args, target, targetClass);
 
 			Duration ttl = calculateTtl(operation);
-			if (cache instanceof RedisCache) {
-				((RedisCache) cache).putWithTtl(key, result, ttl);
+			if (cache instanceof RedisProCache) {
+				((RedisProCache) cache).putWithTtl(key, result, ttl);
 			} else {
 				cache.put(key, result);
 			}

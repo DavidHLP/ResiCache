@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.manager;
 
-import com.david.spring.cache.redis.core.RedisCache;
+import com.david.spring.cache.redis.core.RedisProCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.cache.CacheType;
 import org.springframework.cache.Cache;
@@ -74,9 +74,9 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 		// 发布缓存创建开始事件
 		eventSupport.publishOperationStartEvent(name, name, CacheLayers.CACHE_MANAGER, Operations.CACHE_CREATION, "createCache");
 
-		RedisCache cache;
+		RedisProCache cache;
 		try {
-			cache = new RedisCache(name, redisTemplate, ttl, allowNullValues);
+			cache = new RedisProCache(name, redisTemplate, ttl, allowNullValues);
 
 			// 发布缓存创建完成事件
 			eventSupport.publishOperationEndEvent(name, name, CacheLayers.CACHE_MANAGER, Operations.CACHE_CREATION, "createCache", 0, true);
@@ -88,7 +88,7 @@ public class RedisCacheManager extends AbstractTransactionSupportingCacheManager
 			log.error("Failed to create cache '{}': {}", name, e.getMessage());
 			eventSupport.publishCacheErrorEvent(name, name, CacheLayers.CACHE_MANAGER, e, Operations.CACHE_CREATION);
 			// 回退到基础实现
-			return new RedisCache(name, redisTemplate, ttl, allowNullValues);
+			return new RedisProCache(name, redisTemplate, ttl, allowNullValues);
 		}
 	}
 

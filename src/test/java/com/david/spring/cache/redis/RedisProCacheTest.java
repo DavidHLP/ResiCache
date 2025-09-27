@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 		"logging.level.com.david.spring.cache.redis=DEBUG",
 		"spring.jmx.enabled=false"
 })
-public class RedisCacheTest {
+public class RedisProCacheTest {
 
 	@Autowired
 	private TestService testService;

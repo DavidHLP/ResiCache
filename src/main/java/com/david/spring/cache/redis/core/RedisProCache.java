@@ -15,7 +15,7 @@ import static com.david.spring.cache.redis.core.CacheConstants.CacheLayers;
 import static com.david.spring.cache.redis.core.CacheConstants.Operations;
 
 @Slf4j
-public class RedisCache extends AbstractValueAdaptingCache {
+public class RedisProCache extends AbstractValueAdaptingCache {
 
 	private final String name;
 	private final RedisTemplate<String, Object> redisTemplate;
@@ -24,8 +24,8 @@ public class RedisCache extends AbstractValueAdaptingCache {
 	// 事件支持
 	private final AbstractEventAwareCache eventSupport = new AbstractEventAwareCache() {};
 
-	public RedisCache(String name, RedisTemplate<String, Object> redisTemplate,
-	                  Duration defaultTtl, boolean allowNullValues) {
+	public RedisProCache(String name, RedisTemplate<String, Object> redisTemplate,
+	                     Duration defaultTtl, boolean allowNullValues) {
 		super(allowNullValues);
 		this.name = name;
 		this.redisTemplate = redisTemplate;
