@@ -16,22 +16,19 @@ import java.util.Objects;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(
-	classes = {
-		SpringCacheRedis.class,
-		RedisCacheAutoConfiguration.class
-	},
-	properties = {
-		"spring.autoconfigure.exclude=org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration"
-	}
+		classes = {
+				SpringCacheRedis.class,
+				RedisCacheAutoConfiguration.class
+		},
+		properties = {
+				"spring.autoconfigure.exclude=org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration"
+		}
 )
 @TestPropertySource(properties = {
 		"spring.data.redis.host=192.168.1.111",
 		"spring.data.redis.port=6379",
 		"spring.data.redis.password=Alone117",
-		"spring.redis.cache.enabled=true",
-		"spring.redis.cache.default-ttl=PT1M",
 		"logging.level.com.david.spring.cache.redis=DEBUG",
-		"spring.jmx.enabled=false"
 })
 public class RedisProCacheTest {
 

@@ -12,52 +12,6 @@ spring:
           max-idle: 5 # 最大空闲连接数
           min-idle: 2 # 最小空闲连接数
 
-  redis:
-    cache:
-      enabled: true
-      default-ttl: PT1H
-      allow-null-values: true
-      key-prefix: "cache:"
-      use-key-prefix: true
-      enable-transactions: false
-
-      # 具体缓存配置
-      caches:
-        users:
-          ttl: PT30M
-          allow-null-values: false
-          random-ttl: true
-          variance: 0.1
-        products:
-          ttl: PT1H
-          use-bloom-filter: true
-          enable-pre-refresh: true
-          pre-refresh-threshold: 0.3
-        orders:
-          ttl: PT15M
-          allow-null-values: true
-
-      # 分布式锁配置
-      lock:
-        enabled: true
-        lock-timeout: PT10S
-        lock-wait-time: PT5S
-
-      # 布隆过滤器配置
-      bloom-filter:
-        enabled: true
-        expected-insertions: 1000000
-        false-positive-probability: 0.01
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,cache
-  endpoint:
-    health:
-      show-details: always
-
 logging:
   level:
-    com.david.spring.cache.redis: INFO
+    com.david.spring.cache.redis: DEBUG

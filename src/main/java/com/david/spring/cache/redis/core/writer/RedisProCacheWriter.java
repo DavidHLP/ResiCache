@@ -1,5 +1,8 @@
 package com.david.spring.cache.redis.core.writer;
 
+import com.david.spring.cache.redis.register.RedisCacheRegister;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.CacheStatistics;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
@@ -7,7 +10,10 @@ import org.springframework.data.redis.cache.RedisCacheWriter;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
+@RequiredArgsConstructor
 public class RedisProCacheWriter implements RedisCacheWriter {
+	private final RedisCacheRegister redisCacheRegister;
 
 	@Override
 	public byte[] get(String name, byte[] key) {
