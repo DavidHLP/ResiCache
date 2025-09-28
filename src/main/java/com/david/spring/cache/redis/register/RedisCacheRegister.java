@@ -50,23 +50,45 @@ public class RedisCacheRegister {
 	}
 
 	public RedisCacheableOperation getCacheableOperation(String name, String key) {
+		// 先尝试直接匹配
 		Key operationKey = Key.builder()
 				.name(name)
 				.key(key)
 				.operationType(Key.OperationType.CACHE)
 				.build();
 		CacheOperation operation = cacheableOperations.get(operationKey);
-		return operation instanceof RedisCacheableOperation ? (RedisCacheableOperation) operation : null;
+		if (operation instanceof RedisCacheableOperation) {
+			return (RedisCacheableOperation) operation;
+		}
+
+		// 如果直接匹配失败，尝试通过cacheName查找
+		return cacheableOperations.values().stream()
+				.filter(op -> op instanceof RedisCacheableOperation)
+				.map(op -> (RedisCacheableOperation) op)
+				.filter(op -> op.getCacheNames().contains(name))
+				.findFirst()
+				.orElse(null);
 	}
 
 	public RedisCacheEvictOperation getCacheEvictOperation(String name, String key) {
+		// 先尝试直接匹配
 		Key operationKey = Key.builder()
 				.name(name)
 				.key(key)
 				.operationType(Key.OperationType.EVICT)
 				.build();
 		CacheOperation operation = cacheableOperations.get(operationKey);
-		return operation instanceof RedisCacheEvictOperation ? (RedisCacheEvictOperation) operation : null;
+		if (operation instanceof RedisCacheEvictOperation) {
+			return (RedisCacheEvictOperation) operation;
+		}
+
+		// 如果直接匹配失败，尝试通过cacheName查找
+		return cacheableOperations.values().stream()
+				.filter(op -> op instanceof RedisCacheEvictOperation)
+				.map(op -> (RedisCacheEvictOperation) op)
+				.filter(op -> op.getCacheNames().contains(name))
+				.findFirst()
+				.orElse(null);
 	}
 }
 

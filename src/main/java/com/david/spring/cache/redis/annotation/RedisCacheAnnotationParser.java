@@ -16,6 +16,7 @@ import java.util.List;
 
 public class RedisCacheAnnotationParser extends SpringCacheAnnotationParser implements Serializable {
 
+
 	@Override
 	@Nullable
 	public Collection<CacheOperation> parseCacheAnnotations(Class<?> type) {
@@ -108,13 +109,13 @@ public class RedisCacheAnnotationParser extends SpringCacheAnnotationParser impl
 	private void validateCacheOperation(AnnotatedElement ae, CacheOperation operation) {
 		if (StringUtils.hasText(operation.getKey()) && StringUtils.hasText(operation.getKeyGenerator())) {
 			throw new IllegalStateException("Invalid cache annotation configuration on '" +
-					ae.toString() + "'. Both 'key' and 'keyGenerator' attributes have been set. " +
+					ae + "'. Both 'key' and 'keyGenerator' attributes have been set. " +
 					"These attributes are mutually exclusive: either set the SpEL expression used to " +
 					"compute the key at runtime or set the name of the KeyGenerator bean to use.");
 		}
 		if (StringUtils.hasText(operation.getCacheManager()) && StringUtils.hasText(operation.getCacheResolver())) {
 			throw new IllegalStateException("Invalid cache annotation configuration on '" +
-					ae.toString() + "'. Both 'cacheManager' and 'cacheResolver' attributes have been set. " +
+					ae + "'. Both 'cacheManager' and 'cacheResolver' attributes have been set. " +
 					"These attributes are mutually exclusive: the cache manager is used to configure a " +
 					"default cache resolver if none is set. If a cache resolver is set, the cache manager " +
 					"won't be used.");
@@ -122,7 +123,7 @@ public class RedisCacheAnnotationParser extends SpringCacheAnnotationParser impl
 
 		if (operation.getCacheNames().isEmpty()) {
 			throw new IllegalStateException("Invalid cache annotation configuration on '" +
-					ae.toString() + "'. At least one cache name must be specified.");
+					ae + "'. At least one cache name must be specified.");
 		}
 	}
 }

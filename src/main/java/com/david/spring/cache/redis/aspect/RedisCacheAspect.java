@@ -2,10 +2,10 @@ package com.david.spring.cache.redis.aspect;
 
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
-import com.david.spring.cache.redis.annotation.RedisCaching;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.interceptor.RedisCacheEvictOperation;
 import com.david.spring.cache.redis.register.interceptor.RedisCacheableOperation;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -13,13 +13,19 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.core.Ordered;
+import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 @Aspect
-public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerator keyGenerator) implements Ordered {
+@Component
+@RequiredArgsConstructor
+public class RedisCacheAspect implements Ordered {
+
+	private final RedisCacheRegister redisCacheRegister;
+	private final KeyGenerator keyGenerator;
 
 	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheable)")
 	public Object handleRedisCacheable(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -29,10 +35,12 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 
 		RedisCacheable redisCacheable = method.getAnnotation(RedisCacheable.class);
 		String[] cacheNames = getCacheNames(redisCacheable);
-		String cacheKey = generateKey(method, args, target);
+		String key = generateKey(method, args, target);
 
-		registerCacheOperation(redisCacheable, cacheNames, cacheKey, method);
+		// 注册缓存操作
+		registerCacheOperation(redisCacheable, cacheNames, key, method);
 
+		// 直接执行原方法，让 Spring Cache 的标准拦截器处理缓存逻辑
 		return joinPoint.proceed();
 	}
 
@@ -42,20 +50,21 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 		Object[] args = joinPoint.getArgs();
 		Object target = joinPoint.getTarget();
 
-		RedisCaching redisCaching = method.getAnnotation(RedisCaching.class);
+		// 处理 @RedisCaching 注解中的所有 @RedisCacheable 注解
+		com.david.spring.cache.redis.annotation.RedisCaching redisCaching =
+				method.getAnnotation(com.david.spring.cache.redis.annotation.RedisCaching.class);
 
-		// 注册 RedisCacheable 操作
 		for (RedisCacheable cacheable : redisCaching.redisCacheable()) {
-			String[] cacheNames = getCacheNames(cacheable);
-			String cacheKey = generateKey(method, args, target);
-			registerCacheOperation(cacheable, cacheNames, cacheKey, method);
+			String[] cacheNames = getCacheNames(cacheable.cacheNames(), cacheable.value());
+			String key = generateKey(method, args, target);
+			registerCacheOperation(cacheable, cacheNames, key, method);
 		}
 
-		// 注册 RedisCacheEvict 操作
 		for (RedisCacheEvict cacheEvict : redisCaching.redisCacheEvict()) {
 			registerCacheEvictOperation(cacheEvict, method, args, target);
 		}
 
+		// 直接执行原方法，让 Spring Cache 的标准拦截器处理缓存逻辑
 		return joinPoint.proceed();
 	}
 
@@ -65,9 +74,10 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 		Object[] args = joinPoint.getArgs();
 		Object target = joinPoint.getTarget();
 
-		RedisCacheEvict redisCacheEvict = method.getAnnotation(RedisCacheEvict.class);
-		registerCacheEvictOperation(redisCacheEvict, method, args, target);
+		// 注册缓存驱逐操作
+		registerCacheEvictOperation(method.getAnnotation(RedisCacheEvict.class), method, args, target);
 
+		// 直接执行原方法，让 Spring Cache 的标准拦截器处理缓存逻辑
 		return joinPoint.proceed();
 	}
 
@@ -112,17 +122,19 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 					.variance(redisCacheable.variance())
 					.enablePreRefresh(redisCacheable.enablePreRefresh())
 					.preRefreshThreshold(redisCacheable.preRefreshThreshold())
+					.condition(redisCacheable.condition())
 					.name(method.getName())
 					.key(key)
 					.cacheNames(cacheNames)
 					.build();
 
 			redisCacheRegister.registerCacheableOperation(operation);
+			log.debug("Registered cacheable operation: {} with key: {} for caches: {}",
+					method.getName(), key, String.join(",", cacheNames));
 		} catch (Exception e) {
 			log.error("Failed to register cache operation", e);
 		}
 	}
-
 
 	private void registerCacheEvictOperation(RedisCacheEvict cacheEvict, Method method, Object[] args, Object target) {
 		try {
@@ -134,9 +146,13 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 					.key(key)
 					.cacheNames(cacheNames)
 					.condition(cacheEvict.condition())
+					.allEntries(cacheEvict.allEntries())
+					.beforeInvocation(cacheEvict.beforeInvocation())
 					.build();
 
 			redisCacheRegister.registerCacheEvictOperation(operation);
+			log.debug("Registered cache evict operation: {} with key: {} for caches: {}",
+					method.getName(), key, String.join(",", cacheNames));
 		} catch (Exception e) {
 			log.error("Failed to register cache evict operation", e);
 		}
@@ -146,4 +162,5 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 	public int getOrder() {
 		return Ordered.HIGHEST_PRECEDENCE;
 	}
+
 }

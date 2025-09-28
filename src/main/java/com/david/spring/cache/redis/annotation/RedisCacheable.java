@@ -1,8 +1,5 @@
 package com.david.spring.cache.redis.annotation;
 
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.core.annotation.AliasFor;
-
 import java.lang.annotation.*;
 
 @Target({ElementType.TYPE, ElementType.METHOD})
@@ -11,31 +8,22 @@ import java.lang.annotation.*;
 @Documented
 public @interface RedisCacheable {
 
-	@AliasFor(annotation = Cacheable.class, attribute = "value")
 	String[] value() default {};
 
-	@AliasFor(annotation = Cacheable.class, attribute = "cacheNames")
 	String[] cacheNames() default {};
 
-	@AliasFor(annotation = Cacheable.class, attribute = "key")
 	String key() default "";
 
-	@AliasFor(annotation = Cacheable.class, attribute = "keyGenerator")
 	String keyGenerator() default "";
 
-	@AliasFor(annotation = Cacheable.class, attribute = "cacheManager")
 	String cacheManager() default "";
 
-	@AliasFor(annotation = Cacheable.class, attribute = "cacheResolver")
 	String cacheResolver() default "";
 
-	@AliasFor(annotation = Cacheable.class, attribute = "condition")
 	String condition() default "";
 
-	@AliasFor(annotation = Cacheable.class, attribute = "unless")
 	String unless() default "";
 
-	@AliasFor(annotation = Cacheable.class, attribute = "sync")
 	boolean sync() default false;
 
 	long ttl() default 60;

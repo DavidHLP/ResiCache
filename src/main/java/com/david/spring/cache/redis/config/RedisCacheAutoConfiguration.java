@@ -1,9 +1,6 @@
 package com.david.spring.cache.redis.config;
 
-import com.david.spring.cache.redis.annotation.RedisCacheAnnotationParser;
-import com.david.spring.cache.redis.aspect.RedisCacheAspect;
 import com.david.spring.cache.redis.core.writer.RedisProCacheWriter;
-import com.david.spring.cache.redis.interceptor.RedisCacheInterceptor;
 import com.david.spring.cache.redis.manager.RedisProCacheManager;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import jakarta.annotation.PostConstruct;
@@ -18,13 +15,11 @@ import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.annotation.SpringCacheAnnotationParser;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -37,7 +32,7 @@ import java.time.Duration;
 @AutoConfiguration(after = RedisAutoConfiguration.class)
 @ConditionalOnClass({RedisOperations.class})
 @EnableCaching
-@EnableAspectJAutoProxy
+@Import(RedisProxyCachingConfiguration.class)
 public class RedisCacheAutoConfiguration {
 
 	@PostConstruct
@@ -52,6 +47,7 @@ public class RedisCacheAutoConfiguration {
 		log.info("Created {} - {}", beanName, description);
 		return bean;
 	}
+
 
 	@Bean
 	@ConditionalOnMissingBean(name = "redisCacheTemplate")
@@ -129,24 +125,11 @@ public class RedisCacheAutoConfiguration {
 				"RedisProCacheManager", "custom cache manager");
 	}
 
-	@Bean
-	@ConditionalOnMissingBean
-	public RedisCacheAspect redisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerator keyGenerator) {
-		return logBeanCreation(new RedisCacheAspect(redisCacheRegister, keyGenerator),
-				"RedisCacheAspect", "AOP support for @RedisCacheable annotation");
-	}
 
 	@Bean
 	@ConditionalOnMissingBean
 	public KeyGenerator keyGenerator() {
 		return logBeanCreation(new SimpleKeyGenerator(),
 				"KeyGenerator", "SimpleKeyGenerator for cache operations");
-	}
-
-	@Bean
-	@ConditionalOnMissingBean
-	public SpringCacheAnnotationParser redisCacheAnnotationParser() {
-		return logBeanCreation(new RedisCacheAnnotationParser(),
-				"RedisCacheAnnotationParser", "AnnotationParser for @RedisCacheable annotation");
 	}
 }

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
-public class registerTestService {
+public class RegisterTestService {
 	@RedisCaching(
 			redisCacheable = {
 					@RedisCacheable(cacheNames = "user-details", key = "#userId", ttl = 600),

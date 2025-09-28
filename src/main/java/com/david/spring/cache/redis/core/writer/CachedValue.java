@@ -6,16 +6,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serial;
-import java.io.Serializable;
-
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-class CachedValue implements Serializable {
-	@Serial
-	private static final long serialVersionUID = 1L;
+class CachedValue {
 
 	private Object value;
 
