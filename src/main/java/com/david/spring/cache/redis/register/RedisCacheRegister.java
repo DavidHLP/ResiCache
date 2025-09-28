@@ -21,6 +21,7 @@ public class RedisCacheRegister {
 			Key key = Key.builder()
 					.name(cacheName)
 					.key(cacheOperation.getKey())
+					.operationType(Key.OperationType.CACHE)
 					.build();
 			if (cacheableOperations.containsKey(key)) {
 				log.warn("Cacheable operation for cache '{}' already registered", key.toString());
@@ -36,6 +37,7 @@ public class RedisCacheRegister {
 			Key key = Key.builder()
 					.name(cacheName)
 					.key(cacheOperation.getKey())
+					.operationType(Key.OperationType.EVICT)
 					.build();
 			if (cacheableOperations.containsKey(key)) {
 				log.warn("CacheEvict operation for cache '{}' already registered", key.toString());

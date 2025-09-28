@@ -3,6 +3,7 @@ package com.david.spring.cache.redis.config;
 import com.david.spring.cache.redis.annotation.RedisCacheAnnotationParser;
 import com.david.spring.cache.redis.aspect.RedisCacheAspect;
 import com.david.spring.cache.redis.core.writer.RedisProCacheWriter;
+import com.david.spring.cache.redis.interceptor.RedisCacheInterceptor;
 import com.david.spring.cache.redis.manager.RedisProCacheManager;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import jakarta.annotation.PostConstruct;
@@ -16,13 +17,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheAnnotationParser;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.annotation.SpringCacheAnnotationParser;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -143,8 +145,8 @@ public class RedisCacheAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public CacheAnnotationParser redisCacheAnnotationParser() {
+	public SpringCacheAnnotationParser redisCacheAnnotationParser() {
 		return logBeanCreation(new RedisCacheAnnotationParser(),
-				"RedisCacheAnnotationParser", "parser for @RedisCacheable annotation");
+				"RedisCacheAnnotationParser", "AnnotationParser for @RedisCacheable annotation");
 	}
 }

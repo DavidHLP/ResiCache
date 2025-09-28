@@ -9,7 +9,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
-@Cacheable
 public @interface RedisCacheable {
 
 	@AliasFor(annotation = Cacheable.class, attribute = "value")

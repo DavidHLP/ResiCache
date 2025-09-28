@@ -21,12 +21,13 @@ import java.util.concurrent.ThreadLocalRandom;
 @Aspect
 public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerator keyGenerator) implements Ordered {
 
-	@Around("@annotation(redisCacheable)")
-	public Object handleRedisCacheable(ProceedingJoinPoint joinPoint, RedisCacheable redisCacheable) throws Throwable {
+	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheable)")
+	public Object handleRedisCacheable(ProceedingJoinPoint joinPoint) throws Throwable {
 		Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
 		Object[] args = joinPoint.getArgs();
 		Object target = joinPoint.getTarget();
 
+		RedisCacheable redisCacheable = method.getAnnotation(RedisCacheable.class);
 		String[] cacheNames = getCacheNames(redisCacheable);
 		String cacheKey = generateKey(method, args, target);
 
@@ -35,11 +36,13 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 		return joinPoint.proceed();
 	}
 
-	@Around("@annotation(redisCaching)")
-	public Object handleRedisCaching(ProceedingJoinPoint joinPoint, RedisCaching redisCaching) throws Throwable {
+	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCaching)")
+	public Object handleRedisCaching(ProceedingJoinPoint joinPoint) throws Throwable {
 		Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
 		Object[] args = joinPoint.getArgs();
 		Object target = joinPoint.getTarget();
+
+		RedisCaching redisCaching = method.getAnnotation(RedisCaching.class);
 
 		// 注册 RedisCacheable 操作
 		for (RedisCacheable cacheable : redisCaching.redisCacheable()) {
@@ -56,12 +59,13 @@ public record RedisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerat
 		return joinPoint.proceed();
 	}
 
-	@Around("@annotation(redisCacheEvict)")
-	public Object handleRedisCacheEvict(ProceedingJoinPoint joinPoint, RedisCacheEvict redisCacheEvict) throws Throwable {
+	@Around("@annotation(com.david.spring.cache.redis.annotation.RedisCacheEvict)")
+	public Object handleRedisCacheEvict(ProceedingJoinPoint joinPoint) throws Throwable {
 		Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
 		Object[] args = joinPoint.getArgs();
 		Object target = joinPoint.getTarget();
 
+		RedisCacheEvict redisCacheEvict = method.getAnnotation(RedisCacheEvict.class);
 		registerCacheEvictOperation(redisCacheEvict, method, args, target);
 
 		return joinPoint.proceed();

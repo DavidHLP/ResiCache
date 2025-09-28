@@ -9,10 +9,14 @@ import org.springframework.lang.NonNull;
 @EqualsAndHashCode(callSuper = true)
 public class RedisCacheEvictOperation extends CacheOperation {
 	private final boolean sync;
+	private final boolean allEntries;
+	private final boolean beforeInvocation;
 
 	protected RedisCacheEvictOperation(Builder b) {
 		super(b);
 		this.sync = b.sync;
+		this.allEntries = b.allEntries;
+		this.beforeInvocation = b.beforeInvocation;
 	}
 
 	public static Builder builder() {
@@ -21,6 +25,8 @@ public class RedisCacheEvictOperation extends CacheOperation {
 
 	public static class Builder extends CacheOperation.Builder {
 		private boolean sync;
+		private boolean allEntries;
+		private boolean beforeInvocation;
 
 		public Builder name(String name) {
 			super.setName(name);
@@ -59,6 +65,16 @@ public class RedisCacheEvictOperation extends CacheOperation {
 
 		public Builder sync(boolean sync) {
 			this.sync = sync;
+			return this;
+		}
+
+		public Builder allEntries(boolean allEntries) {
+			this.allEntries = allEntries;
+			return this;
+		}
+
+		public Builder beforeInvocation(boolean beforeInvocation) {
+			this.beforeInvocation = beforeInvocation;
 			return this;
 		}
 

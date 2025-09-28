@@ -2,8 +2,9 @@ package com.david.spring.cache.redis.annotation;
 
 import com.david.spring.cache.redis.register.interceptor.RedisCacheEvictOperation;
 import com.david.spring.cache.redis.register.interceptor.RedisCacheableOperation;
-import org.springframework.cache.annotation.CacheAnnotationParser;
+import org.springframework.cache.annotation.SpringCacheAnnotationParser;
 import org.springframework.cache.interceptor.CacheOperation;
+import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
 
 import java.io.Serializable;
@@ -13,42 +14,53 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-public class RedisCacheAnnotationParser implements CacheAnnotationParser, Serializable {
+public class RedisCacheAnnotationParser extends SpringCacheAnnotationParser implements Serializable {
 
 	@Override
+	@Nullable
 	public Collection<CacheOperation> parseCacheAnnotations(Class<?> type) {
 		return parseCacheAnnotations((AnnotatedElement) type);
 	}
 
 	@Override
+	@Nullable
 	public Collection<CacheOperation> parseCacheAnnotations(java.lang.reflect.Method method) {
 		return parseCacheAnnotations((AnnotatedElement) method);
 	}
 
+	@Nullable
 	private Collection<CacheOperation> parseCacheAnnotations(AnnotatedElement ae) {
 		List<CacheOperation> ops = new ArrayList<>();
 
 		RedisCacheable cacheable = ae.getAnnotation(RedisCacheable.class);
 		if (cacheable != null) {
-			ops.add(parseRedisCacheable(cacheable, ae));
+			RedisCacheableOperation operation = parseRedisCacheable(cacheable, ae);
+			validateCacheOperation(ae, operation);
+			ops.add(operation);
 		}
 
 		RedisCacheEvict cacheEvict = ae.getAnnotation(RedisCacheEvict.class);
 		if (cacheEvict != null) {
-			ops.add(parseRedisCacheEvict(cacheEvict, ae));
+			RedisCacheEvictOperation operation = parseRedisCacheEvict(cacheEvict, ae);
+			validateCacheOperation(ae, operation);
+			ops.add(operation);
 		}
 
 		RedisCaching caching = ae.getAnnotation(RedisCaching.class);
 		if (caching != null) {
 			for (RedisCacheable c : caching.redisCacheable()) {
-				ops.add(parseRedisCacheable(c, ae));
+				RedisCacheableOperation operation = parseRedisCacheable(c, ae);
+				validateCacheOperation(ae, operation);
+				ops.add(operation);
 			}
 			for (RedisCacheEvict e : caching.redisCacheEvict()) {
-				ops.add(parseRedisCacheEvict(e, ae));
+				RedisCacheEvictOperation operation = parseRedisCacheEvict(e, ae);
+				validateCacheOperation(ae, operation);
+				ops.add(operation);
 			}
 		}
 
-		return ops.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(ops);
+		return ops.isEmpty() ? null : Collections.unmodifiableList(ops);
 	}
 
 	private RedisCacheableOperation parseRedisCacheable(RedisCacheable ann, AnnotatedElement ae) {
@@ -86,8 +98,31 @@ public class RedisCacheAnnotationParser implements CacheAnnotationParser, Serial
 				.cacheManager(StringUtils.hasText(ann.cacheManager()) ? ann.cacheManager() : null)
 				.cacheResolver(StringUtils.hasText(ann.cacheResolver()) ? ann.cacheResolver() : null)
 				.condition(StringUtils.hasText(ann.condition()) ? ann.condition() : null)
-				.sync(ann.sync());
+				.sync(ann.sync())
+				.allEntries(ann.allEntries())
+				.beforeInvocation(ann.beforeInvocation());
 
 		return builder.build();
+	}
+
+	private void validateCacheOperation(AnnotatedElement ae, CacheOperation operation) {
+		if (StringUtils.hasText(operation.getKey()) && StringUtils.hasText(operation.getKeyGenerator())) {
+			throw new IllegalStateException("Invalid cache annotation configuration on '" +
+					ae.toString() + "'. Both 'key' and 'keyGenerator' attributes have been set. " +
+					"These attributes are mutually exclusive: either set the SpEL expression used to " +
+					"compute the key at runtime or set the name of the KeyGenerator bean to use.");
+		}
+		if (StringUtils.hasText(operation.getCacheManager()) && StringUtils.hasText(operation.getCacheResolver())) {
+			throw new IllegalStateException("Invalid cache annotation configuration on '" +
+					ae.toString() + "'. Both 'cacheManager' and 'cacheResolver' attributes have been set. " +
+					"These attributes are mutually exclusive: the cache manager is used to configure a " +
+					"default cache resolver if none is set. If a cache resolver is set, the cache manager " +
+					"won't be used.");
+		}
+
+		if (operation.getCacheNames().isEmpty()) {
+			throw new IllegalStateException("Invalid cache annotation configuration on '" +
+					ae.toString() + "'. At least one cache name must be specified.");
+		}
 	}
 }

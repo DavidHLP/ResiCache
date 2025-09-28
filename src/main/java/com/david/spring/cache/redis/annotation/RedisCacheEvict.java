@@ -9,7 +9,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
-@CacheEvict
 public @interface RedisCacheEvict {
 
 	@AliasFor(annotation = CacheEvict.class, attribute = "value")
