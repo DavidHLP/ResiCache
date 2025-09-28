@@ -1,6 +1,5 @@
 package com.david.spring.cache.redis.register;
 
-import com.david.spring.cache.redis.register.interceptor.Key;
 import com.david.spring.cache.redis.register.interceptor.RedisCacheEvictOperation;
 import com.david.spring.cache.redis.register.interceptor.RedisCacheableOperation;
 import lombok.extern.slf4j.Slf4j;

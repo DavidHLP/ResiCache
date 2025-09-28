@@ -1,10 +1,10 @@
-package com.david.spring.cache.redis.register.interceptor;
+package com.david.spring.cache.redis.register;
 
 import lombok.Builder;
 import org.springframework.lang.NonNull;
 
-public @Builder
-record Key(String name, String key, OperationType operationType) {
+@Builder
+public record Key(String name, String key, OperationType operationType) {
 
 	@Override
 	@NonNull
@@ -21,3 +21,4 @@ record Key(String name, String key, OperationType operationType) {
 		CACHE
 	}
 }
+
