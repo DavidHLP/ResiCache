@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.config;
 
+import com.david.spring.cache.redis.annotation.RedisCacheAnnotationParser;
 import com.david.spring.cache.redis.aspect.RedisCacheAspect;
 import com.david.spring.cache.redis.core.writer.RedisProCacheWriter;
 import com.david.spring.cache.redis.manager.RedisProCacheManager;
@@ -15,6 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheAnnotationParser;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
@@ -137,5 +139,12 @@ public class RedisCacheAutoConfiguration {
 	public KeyGenerator keyGenerator() {
 		return logBeanCreation(new SimpleKeyGenerator(),
 				"KeyGenerator", "SimpleKeyGenerator for cache operations");
+	}
+
+	@Bean
+	@ConditionalOnMissingBean
+	public CacheAnnotationParser redisCacheAnnotationParser() {
+		return logBeanCreation(new RedisCacheAnnotationParser(),
+				"RedisCacheAnnotationParser", "parser for @RedisCacheable annotation");
 	}
 }
