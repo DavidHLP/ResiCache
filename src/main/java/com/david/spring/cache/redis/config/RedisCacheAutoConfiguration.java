@@ -16,6 +16,8 @@ import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.KeyGenerator;
+import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -125,9 +127,15 @@ public class RedisCacheAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public RedisCacheAspect redisCacheAspect(RedisCacheRegister redisCacheRegister, CacheManager cacheManager) {
-		return logBeanCreation(new RedisCacheAspect(redisCacheRegister, cacheManager),
+	public RedisCacheAspect redisCacheAspect(RedisCacheRegister redisCacheRegister, KeyGenerator keyGenerator) {
+		return logBeanCreation(new RedisCacheAspect(redisCacheRegister, keyGenerator),
 				"RedisCacheAspect", "AOP support for @RedisCacheable annotation");
 	}
 
+	@Bean
+	@ConditionalOnMissingBean
+	public KeyGenerator keyGenerator() {
+		return logBeanCreation(new SimpleKeyGenerator(),
+				"KeyGenerator", "SimpleKeyGenerator for cache operations");
+	}
 }

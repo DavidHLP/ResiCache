@@ -2,13 +2,17 @@ package com.david.spring.cache.redis.register;
 
 import com.david.spring.cache.redis.register.interceptor.RedisCacheEvictOperation;
 import com.david.spring.cache.redis.register.interceptor.RedisCacheableOperation;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheOperation;
+import org.springframework.lang.NonNull;
+import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
+@Component
 public class RedisCacheRegister {
 	private final Map<Key, CacheOperation> cacheableOperations = new ConcurrentHashMap<>();
 
@@ -61,5 +65,24 @@ public class RedisCacheRegister {
 				.build();
 		CacheOperation operation = cacheableOperations.get(operationKey);
 		return operation instanceof RedisCacheEvictOperation ? (RedisCacheEvictOperation) operation : null;
+	}
+}
+
+@Builder
+record Key(String name, String key, OperationType operationType) {
+
+	@Override
+	@NonNull
+	public String toString() {
+		return "Key{" +
+				"name='" + name + '\'' +
+				", key='" + key + '\'' +
+				", operationType=" + operationType +
+				'}';
+	}
+
+	public enum OperationType {
+		EVICT,
+		CACHE
 	}
 }
