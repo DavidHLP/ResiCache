@@ -21,10 +21,9 @@ import org.springframework.context.annotation.Role;
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 public class RedisProxyCachingConfiguration {
 
-	public static final String REDIS_CACHE_ADVISOR_BEAN_NAME = "com.david.spring.cache.redis.config.internalRedisCacheAdvisor";
-	public static final String REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME = "com.david.spring.cache.redis.config.internalRedisCacheOperationSource";
+	public static final String REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME = "redisCacheOperationSource";
 
-	@Bean(name = REDIS_CACHE_ADVISOR_BEAN_NAME)
+	@Bean(name = "redisCacheAdvisor")
 	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public BeanFactoryCacheOperationSourceAdvisor redisCacheAdvisor(
 			@Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME) CacheOperationSource redisCacheOperationSource,

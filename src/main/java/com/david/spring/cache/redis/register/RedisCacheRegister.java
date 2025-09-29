@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.register;
 
-import com.david.spring.cache.redis.register.interceptor.RedisCacheEvictOperation;
-import com.david.spring.cache.redis.register.interceptor.RedisCacheableOperation;
+import com.david.spring.cache.redis.register.operation.RedisCacheEvictOperation;
+import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheOperation;
@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RedisCacheRegister {
 	private final Map<Key, CacheOperation> cacheableOperations = new ConcurrentHashMap<>();
 
-	public boolean registerCacheableOperation(RedisCacheableOperation cacheOperation) {
+	public void registerCacheableOperation(RedisCacheableOperation cacheOperation) {
 		for (String cacheName : cacheOperation.getCacheNames()) {
 			Key key = Key.builder()
 					.name(cacheName)
@@ -24,15 +24,14 @@ public class RedisCacheRegister {
 					.operationType(Key.OperationType.CACHE)
 					.build();
 			if (cacheableOperations.containsKey(key)) {
-				log.warn("Cacheable operation for cache '{}' already registered", key.toString());
+				continue;
 			}
 			cacheableOperations.put(key, cacheOperation);
 			log.info("Registered cacheable operation for cache '{}'", key.toString());
 		}
-		return true;
 	}
 
-	public boolean registerCacheEvictOperation(RedisCacheEvictOperation cacheOperation) {
+	public void registerCacheEvictOperation(RedisCacheEvictOperation cacheOperation) {
 		for (String cacheName : cacheOperation.getCacheNames()) {
 			Key key = Key.builder()
 					.name(cacheName)
@@ -40,13 +39,11 @@ public class RedisCacheRegister {
 					.operationType(Key.OperationType.EVICT)
 					.build();
 			if (cacheableOperations.containsKey(key)) {
-				log.warn("CacheEvict operation for cache '{}' already registered", key.toString());
-				return false;
+				continue;
 			}
 			cacheableOperations.put(key, cacheOperation);
 			log.info("Registered CacheEvict operation for cache '{}'", key.toString());
 		}
-		return true;
 	}
 
 	public RedisCacheableOperation getCacheableOperation(String name, String key) {

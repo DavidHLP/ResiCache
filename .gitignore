@@ -39,3 +39,4 @@ application-myself.yml
 **/data
 
 **.zip
+/CLAUDE.md

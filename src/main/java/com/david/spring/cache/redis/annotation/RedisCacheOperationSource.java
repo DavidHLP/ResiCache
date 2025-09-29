@@ -1,6 +1,6 @@
 package com.david.spring.cache.redis.annotation;
 
-import com.david.spring.cache.redis.register.interceptor.RedisCacheEvictOperation;
+import com.david.spring.cache.redis.register.operation.RedisCacheEvictOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
 import org.springframework.cache.interceptor.CacheOperation;

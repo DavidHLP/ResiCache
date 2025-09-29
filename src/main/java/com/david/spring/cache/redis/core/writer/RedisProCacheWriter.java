@@ -30,22 +30,33 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 	@Override
 	@Nullable
 	public byte[] get(@NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
+		String redisKey = new String(key);
+		log.debug("Starting cache retrieval: cacheName={}, key={}, ttl={}", name, redisKey, ttl);
 		try {
-			String redisKey = new String(key);
 			CachedValue cachedValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
 
 			statistics.incGets(name);
 
-			if (cachedValue == null || cachedValue.isExpired()) {
+			if (cachedValue == null) {
+				log.debug("Cache miss - data not found: cacheName={}, key={}", name, redisKey);
 				statistics.incMisses(name);
 				return null;
 			}
 
+			if (cachedValue.isExpired()) {
+				log.debug("Cache miss - data expired: cacheName={}, key={}", name, redisKey);
+				statistics.incMisses(name);
+				return null;
+			}
+
+			log.debug("Cache hit: cacheName={}, key={}, remainingTtl={}s", name, redisKey, cachedValue.getRemainingTtl());
 			statistics.incHits(name);
 			cachedValue.updateAccess();
 			redisTemplate.opsForValue().set(redisKey, cachedValue, Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-			return objectMapper.writeValueAsBytes(cachedValue.getValue());
+			byte[] result = objectMapper.writeValueAsBytes(cachedValue.getValue());
+			log.debug("Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes", name, redisKey, result.length);
+			return result;
 		} catch (JsonProcessingException e) {
 			log.error("Failed to serialize cached value", e);
 			statistics.incMisses(name);
@@ -76,21 +87,23 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
 	@Override
 	public void put(@NonNull String name, @NonNull byte[] key, @NonNull byte[] value, @Nullable Duration ttl) {
+		String redisKey = new String(key);
+		log.debug("Starting cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes", name, redisKey, ttl, value.length);
 		try {
-			String redisKey = new String(key);
 			Object deserializedValue = objectMapper.readValue(value, Object.class);
 
 			CachedValue cachedValue;
 			if (ttl != null && !ttl.isZero() && !ttl.isNegative()) {
 				cachedValue = CachedValue.of(deserializedValue, ttl.getSeconds());
 				redisTemplate.opsForValue().set(redisKey, cachedValue, ttl);
+				log.debug("Successfully stored cache data with TTL: cacheName={}, key={}, ttl={}s", name, redisKey, ttl.getSeconds());
 			} else {
 				cachedValue = CachedValue.of(deserializedValue, -1);
 				redisTemplate.opsForValue().set(redisKey, cachedValue);
+				log.debug("Successfully stored permanent cache data: cacheName={}, key={}", name, redisKey);
 			}
 
 			statistics.incPuts(name);
-			log.debug("Cached value for key: {} with TTL: {}", redisKey, ttl);
 		} catch (JsonProcessingException e) {
 			log.error("Failed to deserialize value for caching", e);
 		} catch (Exception e) {
@@ -107,11 +120,13 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 	@Override
 	@Nullable
 	public byte[] putIfAbsent(@NonNull String name, @NonNull byte[] key, @NonNull byte[] value, @Nullable Duration ttl) {
+		String redisKey = new String(key);
+		log.debug("Starting conditional cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes", name, redisKey, ttl, value.length);
 		try {
-			String redisKey = new String(key);
 			CachedValue existingValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
 
 			if (existingValue != null && !existingValue.isExpired()) {
+				log.debug("Cache data exists and not expired, returning existing value: cacheName={}, key={}", name, redisKey);
 				return objectMapper.writeValueAsBytes(existingValue.getValue());
 			}
 
@@ -128,9 +143,11 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 			}
 
 			if (Boolean.TRUE.equals(success)) {
+				log.debug("Conditional storage succeeded: cacheName={}, key={}", name, redisKey);
 				statistics.incPuts(name);
 				return null;
 			} else {
+				log.debug("Conditional storage failed, retrieving existing value: cacheName={}, key={}", name, redisKey);
 				CachedValue actualValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
 				return actualValue != null ? objectMapper.writeValueAsBytes(actualValue.getValue()) : null;
 			}
@@ -145,11 +162,12 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
 	@Override
 	public void remove(@NonNull String name, @NonNull byte[] key) {
+		String redisKey = new String(key);
+		log.debug("Starting cache data removal: cacheName={}, key={}", name, redisKey);
 		try {
-			String redisKey = new String(key);
-			redisTemplate.delete(redisKey);
+			Boolean deleted = redisTemplate.delete(redisKey);
 			statistics.incDeletes(name);
-			log.debug("Removed cache entry for key: {}", redisKey);
+			log.debug("Cache data removal completed: cacheName={}, key={}, deleted={}", name, redisKey, deleted);
 		} catch (Exception e) {
 			log.error("Failed to remove value from cache: {}", name, e);
 		}
@@ -157,14 +175,18 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
 	@Override
 	public void clean(@NonNull String name, @NonNull byte[] pattern) {
+		String keyPattern = new String(pattern);
+		log.debug("Starting batch cache cleanup: cacheName={}, pattern={}", name, keyPattern);
 		try {
-			String keyPattern = new String(pattern);
 			var keys = redisTemplate.keys(keyPattern);
-			if (!keys.isEmpty()) {
+			log.debug("Found matching cache keys: cacheName={}, pattern={}, count={}", name, keyPattern, keys != null ? keys.size() : 0);
+			if (keys != null && !keys.isEmpty()) {
 				Long deleteCount = redisTemplate.delete(keys);
 				statistics.incDeletesBy(name, deleteCount.intValue());
+				log.debug("Batch cache cleanup completed: cacheName={}, pattern={}, deletedCount={}", name, keyPattern, deleteCount);
+			} else {
+				log.debug("No matching cache keys found: cacheName={}, pattern={}", name, keyPattern);
 			}
-			log.debug("Cleaned cache entries matching pattern: {}", keyPattern);
 		} catch (Exception e) {
 			log.error("Failed to clean cache: {}", name, e);
 		}
@@ -172,8 +194,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
 	@Override
 	public void clearStatistics(@NonNull String name) {
+		log.debug("Starting cache statistics cleanup: cacheName={}", name);
 		statistics.reset(name);
-		log.debug("Clear statistics for cache: {}", name);
+		log.debug("Cache statistics cleanup completed: cacheName={}", name);
 	}
 
 	@Override

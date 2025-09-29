@@ -11,7 +11,7 @@ import org.springframework.data.redis.core.RedisOperations;
 
 /**
  * Redis缓存自动配置主入口
- *
+ * <p>
  * 职责：
  * 1. 作为Redis缓存模块的配置入口点
  * 2. 启用Spring Cache功能
@@ -23,10 +23,10 @@ import org.springframework.data.redis.core.RedisOperations;
 @ConditionalOnClass({RedisOperations.class})
 @EnableCaching
 @Import({
-    RedisConnectionConfiguration.class,
-    RedisCacheConfiguration.class,
-    RedisCacheRegistryConfiguration.class,
-    RedisProxyCachingConfiguration.class
+		RedisConnectionConfiguration.class,
+		RedisCacheConfiguration.class,
+		RedisCacheRegistryConfiguration.class,
+		RedisProxyCachingConfiguration.class
 })
 public class RedisCacheAutoConfiguration {
 
