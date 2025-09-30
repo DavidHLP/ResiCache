@@ -2,13 +2,10 @@ package com.david.spring.cache.redis.core.writer;
 
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.assertj.core.util.VisibleForTesting;
 import org.springframework.data.redis.cache.CacheStatistics;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
@@ -25,7 +22,6 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     private static final Duration DEFAULT_TTL = Duration.ofSeconds(60);
     private final RedisTemplate<String, Object> redisTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final CacheStatisticsCollector statistics;
     private final RedisCacheRegister redisCacheRegister;
     private final WriterChainableUtils writerChainableUtils;
@@ -86,7 +82,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @Override
     @Nullable
     public byte[] get(@NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        String redisKey = new String(key);
+        String redisKey = writerChainableUtils.TypeSupport().bytesToString(key);
         log.debug("Starting cache retrieval: cacheName={}, key={}, ttl={}", name, redisKey, ttl);
         try {
             CachedValue cachedValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
@@ -142,17 +138,14 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                     .opsForValue()
                     .set(redisKey, cachedValue, Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-            byte[] result = objectMapper.writeValueAsBytes(cachedValue.getValue());
+            byte[] result =
+                    writerChainableUtils.TypeSupport().serializeToBytes(cachedValue.getValue());
             log.debug(
                     "Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
                     name,
                     redisKey,
                     result.length);
             return result;
-        } catch (JsonProcessingException e) {
-            log.error("Failed to serialize cached value", e);
-            statistics.incMisses(name);
-            return null;
         } catch (Exception e) {
             log.error("Failed to get value from cache: {}", name, e);
             statistics.incMisses(name);
@@ -184,7 +177,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        String redisKey = new String(key);
+        String redisKey = writerChainableUtils.TypeSupport().bytesToString(key);
         log.debug(
                 "Starting cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes",
                 name,
@@ -192,7 +185,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 ttl,
                 value.length);
         try {
-            Object deserializedValue = objectMapper.readValue(value, Object.class);
+            Object deserializedValue =
+                    writerChainableUtils.TypeSupport().deserializeFromBytes(value);
 
             // 使用统一的TTL计算逻辑
             TtlCalculationResult ttlResult = calculateTtl(name, redisKey, ttl);
@@ -219,8 +213,6 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             }
 
             statistics.incPuts(name);
-        } catch (JsonProcessingException e) {
-            log.error("Failed to deserialize value for caching", e);
         } catch (Exception e) {
             log.error("Failed to put value to cache: {}", name, e);
         }
@@ -243,7 +235,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        String redisKey = new String(key);
+        String redisKey = writerChainableUtils.TypeSupport().bytesToString(key);
         log.debug(
                 "Starting conditional cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes",
                 name,
@@ -258,10 +250,13 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                         "Cache data exists and not expired, returning existing value: cacheName={}, key={}",
                         name,
                         redisKey);
-                return objectMapper.writeValueAsBytes(existingValue.getValue());
+                return writerChainableUtils
+                        .TypeSupport()
+                        .serializeToBytes(existingValue.getValue());
             }
 
-            Object deserializedValue = objectMapper.readValue(value, Object.class);
+            Object deserializedValue =
+                    writerChainableUtils.TypeSupport().deserializeFromBytes(value);
 
             // 使用统一的TTL计算逻辑
             TtlCalculationResult ttlResult = calculateTtl(name, redisKey, ttl);
@@ -304,12 +299,11 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                         redisKey);
                 CachedValue actualValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
                 return actualValue != null
-                        ? objectMapper.writeValueAsBytes(actualValue.getValue())
+                        ? writerChainableUtils
+                                .TypeSupport()
+                                .serializeToBytes(actualValue.getValue())
                         : null;
             }
-        } catch (JsonProcessingException e) {
-            log.error("Failed to process value for putIfAbsent", e);
-            return null;
         } catch (Exception e) {
             log.error("Failed to putIfAbsent value to cache: {}", name, e);
             return null;
@@ -318,7 +312,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     @Override
     public void remove(@NonNull String name, @NonNull byte[] key) {
-        String redisKey = new String(key);
+        String redisKey = writerChainableUtils.TypeSupport().bytesToString(key);
         log.debug("Starting cache data removal: cacheName={}, key={}", name, redisKey);
         try {
             Boolean deleted = redisTemplate.delete(redisKey);
@@ -335,7 +329,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     @Override
     public void clean(@NonNull String name, @NonNull byte[] pattern) {
-        String keyPattern = new String(pattern);
+        String keyPattern = writerChainableUtils.TypeSupport().bytesToString(pattern);
         log.debug("Starting batch cache cleanup: cacheName={}, pattern={}", name, keyPattern);
         try {
             var keys = redisTemplate.keys(keyPattern);

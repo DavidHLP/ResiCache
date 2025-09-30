@@ -2,13 +2,20 @@ package com.david.spring.cache.redis.register;
 
 import com.david.spring.cache.redis.SpringCacheRedis;
 import com.david.spring.cache.redis.config.RedisCacheAutoConfiguration;
+
 import jakarta.annotation.Resource;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.Assert;
+
+import java.util.Objects;
 
 @EnableAutoConfiguration
 @SpringBootTest(classes = {SpringCacheRedis.class, RedisCacheAutoConfiguration.class})
@@ -24,6 +31,17 @@ public class RegisterTest {
     @Resource private RegisterTestService registerTestService;
 
     @Resource private RedisCacheRegister redisCacheRegister;
+
+    @Resource private RedisTemplate<String, Object> redisTemplate;
+
+    @BeforeEach
+    @AfterEach
+    public void clearCache() {
+        Objects.requireNonNull(redisTemplate.getConnectionFactory())
+                .getConnection()
+                .serverCommands()
+                .flushDb();
+    }
 
     @Test
     @DisplayName("测试缓存注解")

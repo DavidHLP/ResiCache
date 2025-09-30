@@ -18,13 +18,11 @@ public class BasicCacheTestService {
 
     @RedisCacheable(value = "user", key = "#id", ttl = 300)
     public User getUser(Long id) {
-        log.info("getUser: {}", id);
         return User.builder().id(id).name("David").email("<EMAIL>").build();
     }
 
     @RedisCacheable(value = "user", key = "#id", ttl = 300, randomTtl = true, variance = 0.5F)
     public User getUserWithRandomTtl(Long id) {
-        log.info("getUser: {}", id);
         return User.builder().id(id).name("David").email("<EMAIL>").build();
     }
 }

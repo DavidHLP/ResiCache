@@ -1,7 +1,9 @@
 package com.david.spring.cache.redis.config;
 
 import jakarta.annotation.PostConstruct;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
@@ -19,6 +21,7 @@ import org.springframework.data.redis.core.RedisOperations;
 @ConditionalOnClass({RedisOperations.class})
 @EnableCaching
 @Import({
+    JacksonConfig.class,
     RedisConnectionConfiguration.class,
     RedisCacheRegistryConfiguration.class,
     RedisProxyCachingConfiguration.class,
