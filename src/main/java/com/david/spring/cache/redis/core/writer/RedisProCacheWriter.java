@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.assertj.core.util.VisibleForTesting;
 import org.springframework.data.redis.cache.CacheStatistics;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
@@ -379,6 +380,18 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @NonNull
     public CacheStatistics getCacheStatistics(@NonNull String cacheName) {
         return statistics.getCacheStatistics(cacheName);
+    }
+
+    protected long getTtl(String redisKey) {
+        CachedValue cachedValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
+        if (cachedValue != null) {
+            return cachedValue.getTtl();
+        }
+        return -1;
+    }
+
+    protected long getExpiration(String redisKey) {
+        return redisTemplate.getExpire(redisKey);
     }
 
     /** TTL计算结果 */

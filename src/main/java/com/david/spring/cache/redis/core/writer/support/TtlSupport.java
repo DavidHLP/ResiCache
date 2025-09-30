@@ -8,9 +8,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class TtlSupport {
 
-    /**
-     * 判断是否应该应用TTL
-     */
+    /** 判断是否应该应用TTL */
     public boolean shouldApplyTtl(Duration ttl) {
         return ttl != null && !ttl.isZero() && !ttl.isNegative();
     }
@@ -27,20 +25,27 @@ public class TtlSupport {
         if (baseTtl == null || baseTtl <= 0) {
             return -1;
         }
-        if (!randomTtl) {
+        if (!randomTtl || variance <= 0) {
             return baseTtl;
         }
 
-        long randomOffset =
-                (long) (baseTtl * variance * (ThreadLocalRandom.current().nextFloat() - 0.5) * 2);
-        long result = baseTtl + randomOffset;
+        // 限制方差在合理范围内
+        variance = Math.min(1.0f, Math.max(0.0f, variance));
 
-        return Math.max(1, result);
+        // 使用高斯分布生成更合理的随机值，99.7%的数据落在3个标准差内
+        double randomFactor = ThreadLocalRandom.current().nextGaussian();
+        // 将随机因子限制在 [-3, 3] 范围内，避免极端值
+        randomFactor = Math.max(-3.0, Math.min(3.0, randomFactor));
+
+        // 基于方差调整随机因子的影响程度
+        long offset = (long) (baseTtl * variance * randomFactor / 3.0);
+        long result = baseTtl + offset;
+
+        // 确保结果至少为1秒且不超过基础TTL的2倍
+        return Math.max(1, Math.min(result, baseTtl * 2));
     }
 
-    /**
-     * 检查缓存是否过期
-     */
+    /** 检查缓存是否过期 */
     public boolean isExpired(long createdTime, long ttl) {
         if (ttl <= 0) {
             return false;
@@ -48,9 +53,7 @@ public class TtlSupport {
         return (System.currentTimeMillis() - createdTime) > (ttl * 1000);
     }
 
-    /**
-     * 获取剩余TTL
-     */
+    /** 获取剩余TTL */
     public long getRemainingTtl(long createdTime, long ttl) {
         if (ttl <= 0) {
             return -1;
@@ -80,23 +83,17 @@ public class TtlSupport {
         return usedRatio >= (1 - threshold);
     }
 
-    /**
-     * 转换Duration为秒
-     */
+    /** 转换Duration为秒 */
     public long fromDuration(Duration duration) {
         return duration != null ? duration.getSeconds() : 0;
     }
 
-    /**
-     * 转换秒为Duration
-     */
+    /** 转换秒为Duration */
     public Duration toDuration(long ttlInSeconds) {
         return ttlInSeconds > 0 ? Duration.ofSeconds(ttlInSeconds) : Duration.ZERO;
     }
 
-    /**
-     * 验证TTL是否有效
-     */
+    /** 验证TTL是否有效 */
     public boolean isValidTtl(long ttl) {
         return ttl > 0;
     }

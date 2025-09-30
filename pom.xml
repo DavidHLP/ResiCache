@@ -105,9 +105,16 @@
             <version>1.8.0</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
+        <directory>${project.basedir}/build</directory>
+
         <plugins>
             <plugin>
                 <groupId>org.sonatype.central</groupId>

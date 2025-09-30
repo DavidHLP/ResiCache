@@ -1,10 +1,8 @@
 package com.david.spring.cache.redis.core.writer;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+
+import lombok.*;
 
 @Data
 @Builder
@@ -15,8 +13,7 @@ class CachedValue {
     private Object value;
 
     private Class<?> type;
-
-    private long ttl;
+    @Builder.Default private long ttl = 60;
 
     @Builder.Default private long createdTime = System.currentTimeMillis();
 
