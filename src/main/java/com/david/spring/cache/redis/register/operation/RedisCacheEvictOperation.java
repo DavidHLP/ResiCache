@@ -5,6 +5,10 @@ import lombok.Getter;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.lang.NonNull;
 
+/**
+ * Redis缓存清除操作
+ * 对应 @RedisCacheEvict 注解的所有配置项
+ */
 @Getter
 @EqualsAndHashCode(callSuper = true)
 public class RedisCacheEvictOperation extends CacheOperation {
@@ -23,6 +27,7 @@ public class RedisCacheEvictOperation extends CacheOperation {
 		return new Builder();
 	}
 
+	@EqualsAndHashCode(callSuper = true)
 	public static class Builder extends CacheOperation.Builder {
 		private boolean sync;
 		private boolean allEntries;

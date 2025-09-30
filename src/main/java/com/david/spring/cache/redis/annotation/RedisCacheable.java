@@ -8,44 +8,43 @@ import java.lang.annotation.*;
 @Documented
 public @interface RedisCacheable {
 
-	String[] value() default {};
+    String[] value() default {};
 
-	String[] cacheNames() default {};
+    String[] cacheNames() default {};
 
-	String key() default "";
+    String key() default "";
 
-	String keyGenerator() default "";
+    String keyGenerator() default "";
 
-	String cacheManager() default "";
+    String cacheManager() default "";
 
-	String cacheResolver() default "";
+    String cacheResolver() default "";
 
-	String condition() default "";
+    String condition() default "";
 
-	String unless() default "";
+    String unless() default "";
 
-	boolean sync() default false;
+    boolean sync() default false;
 
-	long ttl() default 60;
+    long ttl() default 60;
 
-	Class<?> type() default Object.class;
+    Class<?> type() default Object.class;
 
-	boolean useSecondLevelCache() default false;
+    boolean useSecondLevelCache() default false;
 
-	boolean distributedLock() default false;
+    boolean distributedLock() default false;
 
-	boolean internalLock() default false;
+    boolean internalLock() default false;
 
-	boolean cacheNullValues() default false;
+    boolean cacheNullValues() default false;
 
-	boolean useBloomFilter() default false;
+    boolean useBloomFilter() default false;
 
-	boolean randomTtl() default false;
+    boolean randomTtl() default false;
 
-	float variance() default 0.2f;
+    float variance() default 0.2F;
 
-	boolean enablePreRefresh() default false;
+    boolean enablePreRefresh() default false;
 
-	double preRefreshThreshold() default 0.3;
+    double preRefreshThreshold() default 0.3;
 }
-
