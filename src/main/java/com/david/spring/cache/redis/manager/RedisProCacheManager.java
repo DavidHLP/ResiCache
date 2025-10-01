@@ -27,24 +27,27 @@ public class RedisProCacheManager extends RedisCacheManager {
 
     @Override
     @NonNull
-    protected RedisCache createRedisCache(@NonNull String name, RedisCacheConfiguration cacheConfiguration) {
+    protected RedisCache createRedisCache(
+            @NonNull String name, RedisCacheConfiguration cacheConfiguration) {
         log.debug("Creating RedisProCache for cache name: {}", name);
-        return new RedisProCache(name, redisProCacheWriter, resolveCacheConfiguration(cacheConfiguration));
+        return new RedisProCache(
+                name, redisProCacheWriter, resolveCacheConfiguration(cacheConfiguration));
     }
 
-	private RedisCacheConfiguration resolveCacheConfiguration(@Nullable RedisCacheConfiguration cacheConfiguration) {
-		return cacheConfiguration != null ? cacheConfiguration : getDefaultCacheConfiguration();
-	}
+    private RedisCacheConfiguration resolveCacheConfiguration(
+            @Nullable RedisCacheConfiguration cacheConfiguration) {
+        return cacheConfiguration != null ? cacheConfiguration : getDefaultCacheConfiguration();
+    }
 
-	@Override
-	public Cache getCache(@NonNull String name) {
-		Cache cache = super.getCache(name);
-		if (cache == null) {
-			log.debug("Cache '{}' not found, creating new RedisProCache", name);
-			cache = createRedisCache(name, defaultConfiguration);
-			// 注册新创建的缓存
-			getMissingCache(name);
-		}
-		return cache;
-	}
+    @Override
+    public Cache getCache(@NonNull String name) {
+        Cache cache = super.getCache(name);
+        if (cache == null) {
+            log.debug("Cache '{}' not found, creating new RedisProCache", name);
+            cache = createRedisCache(name, defaultConfiguration);
+            // 注册新创建的缓存
+            getMissingCache(name);
+        }
+        return cache;
+    }
 }
