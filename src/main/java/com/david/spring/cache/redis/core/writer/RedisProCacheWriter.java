@@ -30,15 +30,20 @@ public class RedisProCacheWriter implements RedisCacheWriter {
      * 统一的TTL处理逻辑 优先级：上下文配置的TTL > 方法参数传入的TTL
      *
      * @param name 缓存名称
-     * @param key 缓存key
+     * @param key 缓存key (完整的Redis key，格式为 {cacheName}::{actualKey})
      * @param ttl 方法参数传入的TTL
      * @return TTL计算结果
      */
     private TtlCalculationResult calculateTtl(String name, String key, @Nullable Duration ttl) {
         if (ttl == null) ttl = DEFAULT_TTL;
+
+        // 从完整的Redis key中提取实际的key部分
+        // Redis key格式: {cacheName}::{actualKey}
+        String actualKey = extractActualKey(name, key);
+
         // 先尝试从注册器获取缓存操作上下文
         RedisCacheableOperation cacheOperation =
-                redisCacheRegister.getCacheableOperation(name, key);
+                redisCacheRegister.getCacheableOperation(name, actualKey);
 
         // 如果上下文存在且配置了TTL，优先使用上下文配置
         if (cacheOperation != null && cacheOperation.getTtl() > 0) {
@@ -102,8 +107,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             }
 
             // 检查是否需要预刷新
+            String actualKey = extractActualKey(name, redisKey);
             RedisCacheableOperation cacheOperation =
-                    redisCacheRegister.getCacheableOperation(name, redisKey);
+                    redisCacheRegister.getCacheableOperation(name, actualKey);
             if (cacheOperation != null && cacheOperation.isEnablePreRefresh()) {
                 boolean needsPreRefresh =
                         writerChainableUtils
@@ -386,6 +392,22 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     protected long getExpiration(String redisKey) {
         return redisTemplate.getExpire(redisKey);
+    }
+
+    /**
+     * 从完整的Redis key中提取实际的key部分 Redis key格式: {cacheName}::{actualKey}
+     *
+     * @param cacheName 缓存名称
+     * @param redisKey 完整的Redis key
+     * @return 实际的key部分
+     */
+    private String extractActualKey(String cacheName, String redisKey) {
+        String prefix = cacheName + "::";
+        if (redisKey.startsWith(prefix)) {
+            return redisKey.substring(prefix.length());
+        }
+        // 如果格式不匹配，返回原始key
+        return redisKey;
     }
 
     /** TTL计算结果 */

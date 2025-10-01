@@ -25,6 +25,35 @@ public class BasicCacheTestService {
     public User getUserWithRandomTtl(Long id) {
         return User.builder().id(id).name("David").email("<EMAIL>").build();
     }
+
+    @RedisCacheable(value = "user", key = "#id", ttl = 300, condition = "#id > 10")
+    public User getUserWithCondition(Long id) {
+        log.info("getUserWithCondition called with id: {}", id);
+        return User.builder().id(id).name("Alice").email("<EMAIL>").build();
+    }
+
+    @RedisCacheable(value = "user", key = "#id", ttl = 300, unless = "#result.name == 'Anonymous'")
+    public User getUserWithUnless(Long id) {
+        log.info("getUserWithUnless called with id: {}", id);
+        if (id == 999L) {
+            return User.builder().id(id).name("Anonymous").email("").build();
+        }
+        return User.builder().id(id).name("Bob").email("<EMAIL>").build();
+    }
+
+    @RedisCacheable(
+            value = "user",
+            key = "#id",
+            ttl = 300,
+            condition = "#id > 0",
+            unless = "#result == null")
+    public User getUserWithConditionAndUnless(Long id) {
+        log.info("getUserWithConditionAndUnless called with id: {}", id);
+        if (id == 0L) {
+            return null;
+        }
+        return User.builder().id(id).name("Charlie").email("<EMAIL>").build();
+    }
 }
 
 @Data

@@ -8,23 +8,23 @@ import java.lang.annotation.*;
 @Documented
 public @interface RedisCacheEvict {
 
-	String[] value() default {};
+    String[] value() default {};
 
-	String[] cacheNames() default {};
+    String[] cacheNames() default {};
 
-	String key() default "";
+    String key() default "";
 
-	String keyGenerator() default "";
+    String keyGenerator() default "";
 
-	String cacheManager() default "";
+    String cacheManager() default "";
 
-	String cacheResolver() default "";
+    String cacheResolver() default "";
 
-	String condition() default "";
+    String condition() default "";
 
-	boolean allEntries() default false;
+    boolean allEntries() default false;
 
-	boolean beforeInvocation() default false;
+    boolean beforeInvocation() default false;
 
-	boolean sync() default false;
+    boolean sync() default false;
 }

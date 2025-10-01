@@ -70,23 +70,166 @@ public class BasicCacheTest {
     @Test
     @DisplayName("测试ttl的雪崩防护功能")
     public void testRandomTtlForAvalanchePrevention() {
-        Long userId1 = 100L;
-        Long userId2 = 101L;
-        Long userId3 = 102L;
+        long[] tels = new long[20];
 
-        testService.getUserWithRandomTtl(userId1);
-        testService.getUserWithRandomTtl(userId2);
-        testService.getUserWithRandomTtl(userId3);
+        for (int i = 0; i < 20; i++) {
+            testService.getUserWithRandomTtl((long) i);
+            tels[i] = redisCacheWriter.getTtl("user::" + i);
+        }
 
-        long ttl1 = redisCacheWriter.getTtl("user::100");
-        long ttl2 = redisCacheWriter.getTtl("user::101");
-        long ttl3 = redisCacheWriter.getTtl("user::102");
+        // 验证每个TTL都在合理范围内（基于variance=0.5，理论范围是 [150, 600]）
+        for (long ttl : tels) {
+            Assertions.assertThat(ttl).isBetween(150L, 600L);
+        }
 
-        Assertions.assertThat(ttl1).isBetween(150L, 600L);
-        Assertions.assertThat(ttl2).isBetween(150L, 600L);
-        Assertions.assertThat(ttl3).isBetween(150L, 600L);
+        // 验证至少有一个TTL不等于基础值300L（随机化生效）
+        boolean hasRandomization = false;
+        for (long ttl : tels) {
+            if (ttl != 300L) {
+                hasRandomization = true;
+                break;
+            }
+        }
+        Assertions.assertThat(hasRandomization)
+                .as("Expected at least one TTL to be randomized from base value 300")
+                .isTrue();
 
-        boolean hasRandomization = ttl1 != 300L || ttl2 != 300L || ttl3 != 300L;
-        Assertions.assertThat(hasRandomization).isTrue();
+        // 验证TTL值有差异（不是所有值都相同）
+        long firstTtl = tels[0];
+        boolean hasDiversity = false;
+        for (int i = 1; i < tels.length; i++) {
+            if (tels[i] != firstTtl) {
+                hasDiversity = true;
+                break;
+            }
+        }
+        Assertions.assertThat(hasDiversity).as("Expected TTL values to have diversity").isTrue();
+    }
+
+    @Test
+    @DisplayName("测试condition条件：当条件满足时才缓存")
+    public void testConditionTrue() {
+        Long userId = 20L;
+
+        // 第一次调用，id > 10，满足条件，应该缓存
+        User user1 = testService.getUserWithCondition(userId);
+        Assertions.assertThat(user1).isNotNull();
+        Assertions.assertThat(user1.getName()).isEqualTo("Alice");
+
+        // 验证缓存已创建
+        String key = "user::20";
+        long ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(300L);
+
+        // 第二次调用，应该从缓存获取
+        User user2 = testService.getUserWithCondition(userId);
+        Assertions.assertThat(user2).isNotNull();
+        Assertions.assertThat(user2.getId()).isEqualTo(user1.getId());
+    }
+
+    @Test
+    @DisplayName("测试condition条件：当条件不满足时不缓存")
+    public void testConditionFalse() {
+        Long userId = 5L;
+
+        // 第一次调用，id <= 10，不满足条件，不应该缓存
+        User user1 = testService.getUserWithCondition(userId);
+        Assertions.assertThat(user1).isNotNull();
+        Assertions.assertThat(user1.getName()).isEqualTo("Alice");
+
+        // 验证缓存未创建
+        String key = "user::5";
+        long ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(-1L);
+
+        // 第二次调用，由于没有缓存，会再次执行方法
+        User user2 = testService.getUserWithCondition(userId);
+        Assertions.assertThat(user2).isNotNull();
+
+        // 验证仍然没有缓存
+        ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(-1L);
+    }
+
+    @Test
+    @DisplayName("测试unless条件：正常结果应该被缓存")
+    public void testUnlessCacheNormalResult() {
+        Long userId = 200L;
+
+        // 第一次调用，返回正常用户，不满足unless条件（name != 'Anonymous'），应该缓存
+        User user1 = testService.getUserWithUnless(userId);
+        Assertions.assertThat(user1).isNotNull();
+        Assertions.assertThat(user1.getName()).isEqualTo("Bob");
+
+        // 验证缓存已创建
+        String key = "user::200";
+        long ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(300L);
+
+        // 第二次调用，应该从缓存获取
+        User user2 = testService.getUserWithUnless(userId);
+        Assertions.assertThat(user2).isNotNull();
+        Assertions.assertThat(user2.getName()).isEqualTo("Bob");
+    }
+
+    @Test
+    @DisplayName("测试unless条件：匹配unless条件的结果不应该被缓存")
+    public void testUnlessSkipCacheForAnonymous() {
+        Long userId = 999L;
+
+        // 第一次调用，返回Anonymous用户，满足unless条件，不应该缓存
+        User user1 = testService.getUserWithUnless(userId);
+        Assertions.assertThat(user1).isNotNull();
+        Assertions.assertThat(user1.getName()).isEqualTo("Anonymous");
+
+        // 验证缓存未创建
+        String key = "user::999";
+        long ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(-1L);
+
+        // 第二次调用，由于没有缓存，会再次执行方法
+        User user2 = testService.getUserWithUnless(userId);
+        Assertions.assertThat(user2).isNotNull();
+        Assertions.assertThat(user2.getName()).isEqualTo("Anonymous");
+
+        // 验证仍然没有缓存
+        ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(-1L);
+    }
+
+    @Test
+    @DisplayName("测试condition和unless组合：条件满足且结果不为null时缓存")
+    public void testConditionAndUnlessBothPass() {
+        Long userId = 300L;
+
+        // 第一次调用，id > 0 且 result != null，应该缓存
+        User user1 = testService.getUserWithConditionAndUnless(userId);
+        Assertions.assertThat(user1).isNotNull();
+        Assertions.assertThat(user1.getName()).isEqualTo("Charlie");
+
+        // 验证缓存已创建
+        String key = "user::300";
+        long ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(300L);
+
+        // 第二次调用，应该从缓存获取
+        User user2 = testService.getUserWithConditionAndUnless(userId);
+        Assertions.assertThat(user2).isNotNull();
+        Assertions.assertThat(user2.getId()).isEqualTo(user1.getId());
+    }
+
+    @Test
+    @DisplayName("测试condition和unless组合：条件不满足时不缓存")
+    public void testConditionAndUnlessConditionFails() {
+        Long userId = 0L;
+
+        // 第一次调用，id = 0 不满足condition，不应该缓存
+        User user1 = testService.getUserWithConditionAndUnless(userId);
+        Assertions.assertThat(user1).isNull();
+
+        // 验证缓存未创建
+        String key = "user::0";
+        long ttl = redisCacheWriter.getTtl(key);
+        Assertions.assertThat(ttl).isEqualTo(-1L);
     }
 }
