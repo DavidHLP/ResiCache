@@ -6,7 +6,7 @@
 /// - [com.david.spring.cache.redis.strategy.eviction.EvictionStats] - 统计信息
 /// - [com.david.spring.cache.redis.strategy.eviction.EvictionStrategyFactory] - 策略工厂
 /// ## 策略实现
-/// - [com.david.spring.cache.redis.strategy.eviction.TwoListEvictionStrategy] - 双链表策略
+/// - [com.david.spring.cache.redis.strategy.eviction.impl.TwoListEvictionStrategy] - 双链表策略
 /// ## 使用示例
 /// ```java
 /// // 1. 使用工厂创建策略
@@ -34,8 +34,6 @@
 /// ## 性能特点
 /// | 策略 | 时间复杂度(get/put) | 空间复杂度 | 适用场景 |
 /// |------|-------------------|----------|---------|
-/// | LRU | O(1) | O(n) | 时间局部性强的场景 |
-/// | LFU | O(log n) | O(n) | 访问频率差异明显的场景 |
 /// | Two-List | O(1) | O(n) | 冷热数据分离，防止缓存污染 |
 ///
 /// @author David

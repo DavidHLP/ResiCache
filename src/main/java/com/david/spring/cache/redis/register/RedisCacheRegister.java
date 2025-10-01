@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.lang.NonNull;
 
-/** Redis缓存注册器V2 使用通用淘汰策略管理缓存操作,防止内存占用过多 */
+/** Redis缓存注册器 使用通用淘汰策略管理缓存操作,防止内存占用过多 */
 @Slf4j
 public class RedisCacheRegister {
 
@@ -86,26 +86,6 @@ public class RedisCacheRegister {
     /** 构建操作key */
     private String buildKey(String name, String key, String type) {
         return String.format("%s:%s:%s", type, name, key);
-    }
-
-    /** 获取Active List大小 */
-    public int getActiveSize() {
-        return operationStrategy.getStats().activeEntries();
-    }
-
-    /** 获取Inactive List大小 */
-    public int getInactiveSize() {
-        return operationStrategy.getStats().inactiveEntries();
-    }
-
-    /** 获取总操作数 */
-    public int getTotalSize() {
-        return operationStrategy.size();
-    }
-
-    /** 获取统计信息 */
-    public String getStats() {
-        return operationStrategy.getStats().toString();
     }
 }
 

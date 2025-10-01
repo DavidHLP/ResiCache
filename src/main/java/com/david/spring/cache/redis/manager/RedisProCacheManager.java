@@ -2,7 +2,9 @@ package com.david.spring.cache.redis.manager;
 
 import com.david.spring.cache.redis.core.RedisProCache;
 import com.david.spring.cache.redis.core.writer.RedisProCacheWriter;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -13,21 +15,22 @@ import org.springframework.lang.Nullable;
 @Slf4j
 public class RedisProCacheManager extends RedisCacheManager {
 
-	private final RedisProCacheWriter redisProCacheWriter;
-	private final RedisCacheConfiguration defaultConfiguration;
+    private final RedisProCacheWriter redisProCacheWriter;
+    private final RedisCacheConfiguration defaultConfiguration;
 
-	public RedisProCacheManager(RedisProCacheWriter cacheWriter, RedisCacheConfiguration defaultCacheConfiguration) {
-		super(cacheWriter, defaultCacheConfiguration);
-		this.redisProCacheWriter = cacheWriter;
-		this.defaultConfiguration = defaultCacheConfiguration;
-	}
+    public RedisProCacheManager(
+            RedisProCacheWriter cacheWriter, RedisCacheConfiguration defaultCacheConfiguration) {
+        super(cacheWriter, defaultCacheConfiguration);
+        this.redisProCacheWriter = cacheWriter;
+        this.defaultConfiguration = defaultCacheConfiguration;
+    }
 
-	@Override
-	@NonNull
-	protected RedisCache createRedisCache(@NonNull String name, RedisCacheConfiguration cacheConfiguration) {
-		log.debug("Creating RedisProCache for cache name: {}", name);
-		return new RedisProCache(name, redisProCacheWriter, resolveCacheConfiguration(cacheConfiguration));
-	}
+    @Override
+    @NonNull
+    protected RedisCache createRedisCache(@NonNull String name, RedisCacheConfiguration cacheConfiguration) {
+        log.debug("Creating RedisProCache for cache name: {}", name);
+        return new RedisProCache(name, redisProCacheWriter, resolveCacheConfiguration(cacheConfiguration));
+    }
 
 	private RedisCacheConfiguration resolveCacheConfiguration(@Nullable RedisCacheConfiguration cacheConfiguration) {
 		return cacheConfiguration != null ? cacheConfiguration : getDefaultCacheConfiguration();

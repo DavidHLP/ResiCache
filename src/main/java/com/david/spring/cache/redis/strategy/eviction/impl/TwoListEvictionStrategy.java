@@ -1,4 +1,7 @@
-package com.david.spring.cache.redis.strategy.eviction;
+package com.david.spring.cache.redis.strategy.eviction.impl;
+
+import com.david.spring.cache.redis.strategy.eviction.EvictionStats;
+import com.david.spring.cache.redis.strategy.eviction.EvictionStrategy;
 
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -459,10 +462,10 @@ public class TwoListEvictionStrategy<K, V> implements EvictionStrategy<K, V> {
             while (node != activeTail) {
                 actualActiveCount++;
                 if (!node.isActive) {
-                    log.error("发现Active链表中的非Active节点: {}", node.key);
+                    log.error("Found non-active node in active list: {}", node.key);
                 }
                 if (!nodeMap.containsKey(node.key)) {
-                    log.error("发现Active链表中但不在nodeMap的节点: {}", node.key);
+                    log.error("Found node in active list but not in nodeMap: {}", node.key);
                 }
                 node = node.next;
             }
@@ -472,17 +475,17 @@ public class TwoListEvictionStrategy<K, V> implements EvictionStrategy<K, V> {
             while (node != inactiveTail) {
                 actualInactiveCount++;
                 if (node.isActive) {
-                    log.error("发现Inactive链表中的Active节点: {}", node.key);
+                    log.error("Found active node in inactive list: {}", node.key);
                 }
                 if (!nodeMap.containsKey(node.key)) {
-                    log.error("发现Inactive链表中但不在nodeMap的节点: {}", node.key);
+                    log.error("Found node in inactive list but not in nodeMap: {}", node.key);
                 }
                 node = node.next;
             }
 
             if (log.isInfoEnabled()) {
                 log.info(
-                        "链表验证: activeSize={}/{}, inactiveSize={}/{}, nodeMap.size={}",
+                        "List validation: activeSize={}/{}, inactiveSize={}/{}, nodeMap.size={}",
                         actualActiveCount,
                         activeSize,
                         actualInactiveCount,
@@ -490,40 +493,43 @@ public class TwoListEvictionStrategy<K, V> implements EvictionStrategy<K, V> {
                         nodeMap.size());
             }
 
-            // 检查nodeMap中的孤儿节点
+            // Check for orphaned nodes in nodeMap
             int orphans = 0;
             for (Node<K, V> n : nodeMap.values()) {
                 if (n.prev == null && n.next == null) {
                     orphans++;
-                    log.error("发现孤儿节点(prev/next都为null): key={}, isActive={}", n.key, n.isActive);
+                    log.error(
+                            "Found orphaned node (prev/next are both null): key={}, isActive={}",
+                            n.key,
+                            n.isActive);
                 }
             }
             if (log.isInfoEnabled()) {
-                log.info("孤儿节点数: {}", orphans);
+                log.info("Number of orphaned nodes: {}", orphans);
             }
 
         } finally {
             listLock.readLock().unlock();
         }
     }
+}
 
-    /**
-     * 双向链表节点
-     *
-     * @param <K> 键类型
-     * @param <V> 值类型
-     */
-    private static class Node<K, V> {
-        final K key;
-        V value;
-        Node<K, V> prev;
-        Node<K, V> next;
-        boolean isActive; // true=Active List, false=Inactive List
+/**
+ * 双向链表节点
+ *
+ * @param <K> 键类型
+ * @param <V> 值类型
+ */
+class Node<K, V> {
+    final K key;
+    V value;
+    Node<K, V> prev;
+    Node<K, V> next;
+    boolean isActive; // true=Active List, false=Inactive List
 
-        Node(K key, V value) {
-            this.key = key;
-            this.value = value;
-            this.isActive = true;
-        }
+    Node(K key, V value) {
+        this.key = key;
+        this.value = value;
+        this.isActive = true;
     }
 }

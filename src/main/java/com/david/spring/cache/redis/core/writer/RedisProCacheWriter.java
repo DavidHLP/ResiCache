@@ -88,6 +88,45 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @Nullable
     public byte[] get(@NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
         String redisKey = writerChainableUtils.TypeSupport().bytesToString(key);
+        String actualKey = extractActualKey(name, redisKey);
+
+        // 检查是否需要使用sync模式
+        RedisCacheableOperation cacheOperation =
+                redisCacheRegister.getCacheableOperation(name, actualKey);
+
+        if (cacheOperation != null && cacheOperation.isSync()) {
+            log.debug("Using sync mode for cache retrieval: cacheName={}, key={}", name, redisKey);
+            return getWithSync(name, redisKey, actualKey, ttl, cacheOperation);
+        }
+
+        // 普通模式
+        return getNormal(name, redisKey, actualKey, ttl, cacheOperation);
+    }
+
+    /** 同步模式获取缓存（防止缓存击穿） */
+    @Nullable
+    private byte[] getWithSync(
+            String name,
+            String redisKey,
+            String actualKey,
+            @Nullable Duration ttl,
+            @Nullable RedisCacheableOperation cacheOperation) {
+        return writerChainableUtils
+                .SyncSupport()
+                .executeSync(
+                        redisKey,
+                        () -> getNormal(name, redisKey, actualKey, ttl, cacheOperation),
+                        10); // 默认10秒超时
+    }
+
+    /** 普通模式获取缓存 */
+    @Nullable
+    private byte[] getNormal(
+            String name,
+            String redisKey,
+            String actualKey,
+            @Nullable Duration ttl,
+            @Nullable RedisCacheableOperation cacheOperation) {
         log.debug("Starting cache retrieval: cacheName={}, key={}, ttl={}", name, redisKey, ttl);
         try {
             CachedValue cachedValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
@@ -107,9 +146,6 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             }
 
             // 检查是否需要预刷新
-            String actualKey = extractActualKey(name, redisKey);
-            RedisCacheableOperation cacheOperation =
-                    redisCacheRegister.getCacheableOperation(name, actualKey);
             if (cacheOperation != null && cacheOperation.isEnablePreRefresh()) {
                 boolean needsPreRefresh =
                         writerChainableUtils
@@ -126,8 +162,6 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                             redisKey,
                             cacheOperation.getPreRefreshThreshold(),
                             cachedValue.getRemainingTtl());
-                    // 标记为需要刷新（实际的刷新逻辑由上层AOP处理）
-                    // 这里返回null，触发缓存miss，让AOP重新加载数据
                     statistics.incMisses(name);
                     return null;
                 }
@@ -146,11 +180,13 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
             byte[] result =
                     writerChainableUtils.TypeSupport().serializeToBytes(cachedValue.getValue());
-            log.debug(
-                    "Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
-                    name,
-                    redisKey,
-                    result.length);
+            if (result != null) {
+                log.debug(
+                        "Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
+                        name,
+                        redisKey,
+                        result.length);
+            }
             return result;
         } catch (Exception e) {
             log.error("Failed to get value from cache: {}", name, e);
@@ -242,6 +278,37 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] value,
             @Nullable Duration ttl) {
         String redisKey = writerChainableUtils.TypeSupport().bytesToString(key);
+        String actualKey = extractActualKey(name, redisKey);
+
+        // 检查是否需要使用sync模式
+        RedisCacheableOperation cacheOperation =
+                redisCacheRegister.getCacheableOperation(name, actualKey);
+
+        if (cacheOperation != null && cacheOperation.isSync()) {
+            log.debug(
+                    "Using sync mode for conditional cache storage: cacheName={}, key={}",
+                    name,
+                    redisKey);
+            return putIfAbsentWithSync(name, redisKey, value, ttl);
+        }
+
+        // 普通模式
+        return putIfAbsentNormal(name, redisKey, value, ttl);
+    }
+
+    /** 同步模式的 putIfAbsent（防止缓存击穿） */
+    @Nullable
+    private byte[] putIfAbsentWithSync(
+            String name, String redisKey, byte[] value, @Nullable Duration ttl) {
+        return writerChainableUtils
+                .SyncSupport()
+                .executeSync(redisKey, () -> putIfAbsentNormal(name, redisKey, value, ttl), 10);
+    }
+
+    /** 普通模式的 putIfAbsent */
+    @Nullable
+    private byte[] putIfAbsentNormal(
+            String name, String redisKey, byte[] value, @Nullable Duration ttl) {
         log.debug(
                 "Starting conditional cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes",
                 name,

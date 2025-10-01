@@ -1,6 +1,5 @@
 package com.david.spring.cache.redis.strategy.eviction;
 
-import lombok.Getter;
 import org.springframework.lang.NonNull;
 
 /** 淘汰策略统计信息 */

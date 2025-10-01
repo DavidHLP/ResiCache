@@ -37,7 +37,7 @@ public class RedisProCacheConfiguration {
                         CacheStatisticsCollector.none(),
                         redisCacheRegister,
                         writerChainableUtils);
-        log.debug("Created RedisProCacheWriter with custom CachedValue support");
+        log.debug("Created RedisProCacheWriter with sync support");
         return writer;
     }
 
@@ -67,7 +67,7 @@ public class RedisProCacheConfiguration {
             RedisCacheConfiguration defaultRedisCacheConfiguration) {
         RedisProCacheManager manager =
                 new RedisProCacheManager(redisProCacheWriter, defaultRedisCacheConfiguration);
-        log.debug("Created RedisProCacheManager with custom cache writer");
+        log.debug("Created RedisProCacheManager");
         return manager;
     }
 

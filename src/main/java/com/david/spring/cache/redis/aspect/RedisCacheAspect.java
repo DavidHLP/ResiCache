@@ -88,8 +88,6 @@ public class RedisCacheAspect implements Ordered {
                             .ttl(redisCacheable.ttl())
                             .type(redisCacheable.type())
                             .useSecondLevelCache(redisCacheable.useSecondLevelCache())
-                            .distributedLock(redisCacheable.distributedLock())
-                            .internalLock(redisCacheable.internalLock())
                             .cacheNullValues(redisCacheable.cacheNullValues())
                             .useBloomFilter(redisCacheable.useBloomFilter())
                             .randomTtl(redisCacheable.randomTtl())

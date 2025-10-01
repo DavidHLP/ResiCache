@@ -2,6 +2,8 @@ package com.david.spring.cache.redis.strategy.eviction;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.david.spring.cache.redis.strategy.eviction.impl.TwoListEvictionStrategy;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

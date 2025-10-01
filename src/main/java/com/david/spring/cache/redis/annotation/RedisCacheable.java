@@ -24,7 +24,6 @@ public @interface RedisCacheable {
 
     String unless() default "";
 
-    // TODO
     boolean sync() default false;
 
     long ttl() default 60;
@@ -33,12 +32,6 @@ public @interface RedisCacheable {
 
     // TODO
     boolean useSecondLevelCache() default false;
-
-    // TODO
-    boolean distributedLock() default false;
-
-    // TODO
-    boolean internalLock() default false;
 
     // TODO
     boolean cacheNullValues() default false;
