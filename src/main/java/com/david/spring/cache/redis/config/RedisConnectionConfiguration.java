@@ -1,6 +1,9 @@
 package com.david.spring.cache.redis.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
@@ -14,25 +17,21 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-/**
- * Redis连接和模板配置
- * 负责：
- * 1. RedisTemplate配置和序列化策略
- * 2. RedissonClient连接配置
- * 3. 连接池参数优化
- */
+/** Redis连接和模板配置 负责： 1. RedisTemplate配置和序列化策略 2. RedissonClient连接配置 3. 连接池参数优化 */
 @Slf4j
 @Configuration(proxyBeanMethods = false)
 public class RedisConnectionConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "redisCacheTemplate")
-    public RedisTemplate<String, Object> redisCacheTemplate(RedisConnectionFactory redisConnectionFactory) {
+    public RedisTemplate<String, Object> redisCacheTemplate(
+            RedisConnectionFactory redisConnectionFactory, ObjectMapper objectMapper) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(redisConnectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer();
+        GenericJackson2JsonRedisSerializer jsonSerializer =
+                new GenericJackson2JsonRedisSerializer(objectMapper);
 
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);
@@ -43,7 +42,8 @@ public class RedisConnectionConfiguration {
         template.setEnableDefaultSerializer(true);
         template.afterPropertiesSet();
 
-        log.debug("Created RedisCacheTemplate with StringRedisSerializer for keys and GenericJackson2JsonRedisSerializer for values");
+        log.debug(
+                "Created RedisCacheTemplate with StringRedisSerializer for keys and GenericJackson2JsonRedisSerializer for values");
         return template;
     }
 

@@ -43,7 +43,8 @@ public class RedisProCacheConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public RedisCacheConfiguration defaultRedisCacheConfiguration() {
+    public RedisCacheConfiguration defaultRedisCacheConfiguration(
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
         RedisCacheConfiguration config =
                 RedisCacheConfiguration.defaultCacheConfig()
                         .entryTtl(Duration.ofMinutes(30))
@@ -54,7 +55,7 @@ public class RedisProCacheConfiguration {
                         .serializeValuesWith(
                                 org.springframework.data.redis.serializer.RedisSerializationContext
                                         .SerializationPair.fromSerializer(
-                                        new GenericJackson2JsonRedisSerializer()));
+                                        new GenericJackson2JsonRedisSerializer(objectMapper)));
 
         log.debug("Created default RedisCacheConfiguration with 30 minutes TTL");
         return config;

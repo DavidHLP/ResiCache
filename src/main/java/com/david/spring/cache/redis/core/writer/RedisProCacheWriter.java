@@ -178,14 +178,18 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                     .opsForValue()
                     .set(redisKey, cachedValue, Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-            byte[] result =
-                    writerChainableUtils.TypeSupport().serializeToBytes(cachedValue.getValue());
+            // 将缓存值转换为实际值（处理NULL_VALUE标记）
+            Object actualValue =
+                    writerChainableUtils.NullValueSupport().fromStoreValue(cachedValue.getValue());
+            byte[] result = writerChainableUtils.TypeSupport().serializeToBytes(actualValue);
             if (result != null) {
                 log.debug(
                         "Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
                         name,
                         redisKey,
                         result.length);
+            } else if (actualValue == null) {
+                log.debug("Cache data is null: cacheName={}, key={}", name, redisKey);
             }
             return result;
         } catch (Exception e) {
@@ -230,28 +234,53 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             Object deserializedValue =
                     writerChainableUtils.TypeSupport().deserializeFromBytes(value);
 
+            // 从完整的Redis key中提取实际的key部分
+            String actualKey = extractActualKey(name, redisKey);
+
+            // 获取缓存操作配置
+            RedisCacheableOperation cacheOperation =
+                    redisCacheRegister.getCacheableOperation(name, actualKey);
+
+            // 处理null值：如果值为null且不允许缓存null，则直接返回
+            if (deserializedValue == null
+                    && !writerChainableUtils.NullValueSupport().shouldCacheNull(cacheOperation)) {
+                log.debug(
+                        "Skipping null value caching (cacheNullValues=false): cacheName={}, key={}",
+                        name,
+                        redisKey);
+                return;
+            }
+
+            // 将null值转换为特殊标记（如果需要）
+            Object storeValue =
+                    writerChainableUtils
+                            .NullValueSupport()
+                            .toStoreValue(deserializedValue, cacheOperation);
+
             // 使用统一的TTL计算逻辑
             TtlCalculationResult ttlResult = calculateTtl(name, redisKey, ttl);
 
             CachedValue cachedValue;
             if (ttlResult.shouldApply) {
-                cachedValue = CachedValue.of(deserializedValue, ttlResult.finalTtl);
+                cachedValue = CachedValue.of(storeValue, ttlResult.finalTtl);
                 redisTemplate
                         .opsForValue()
                         .set(redisKey, cachedValue, Duration.ofSeconds(ttlResult.finalTtl));
                 log.debug(
-                        "Successfully stored cache data with TTL: cacheName={}, key={}, ttl={}s, fromContext={}",
+                        "Successfully stored cache data with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
                         name,
                         redisKey,
                         ttlResult.finalTtl,
-                        ttlResult.fromContext);
+                        ttlResult.fromContext,
+                        deserializedValue == null);
             } else {
-                cachedValue = CachedValue.of(deserializedValue, -1);
+                cachedValue = CachedValue.of(storeValue, -1);
                 redisTemplate.opsForValue().set(redisKey, cachedValue);
                 log.debug(
-                        "Successfully stored permanent cache data: cacheName={}, key={}",
+                        "Successfully stored permanent cache data: cacheName={}, key={}, isNull={}",
                         name,
-                        redisKey);
+                        redisKey,
+                        deserializedValue == null);
             }
 
             statistics.incPuts(name);
@@ -316,6 +345,13 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 ttl,
                 value.length);
         try {
+            // 从完整的Redis key中提取实际的key部分
+            String actualKey = extractActualKey(name, redisKey);
+
+            // 获取缓存操作配置
+            RedisCacheableOperation cacheOperation =
+                    redisCacheRegister.getCacheableOperation(name, actualKey);
+
             CachedValue existingValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
 
             if (existingValue != null && !existingValue.isExpired()) {
@@ -323,13 +359,32 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                         "Cache data exists and not expired, returning existing value: cacheName={}, key={}",
                         name,
                         redisKey);
-                return writerChainableUtils
-                        .TypeSupport()
-                        .serializeToBytes(existingValue.getValue());
+                // 将缓存值转换为实际值（处理NULL_VALUE标记）
+                Object actualValue =
+                        writerChainableUtils
+                                .NullValueSupport()
+                                .fromStoreValue(existingValue.getValue());
+                return writerChainableUtils.TypeSupport().serializeToBytes(actualValue);
             }
 
             Object deserializedValue =
                     writerChainableUtils.TypeSupport().deserializeFromBytes(value);
+
+            // 处理null值：如果值为null且不允许缓存null，则直接返回
+            if (deserializedValue == null
+                    && !writerChainableUtils.NullValueSupport().shouldCacheNull(cacheOperation)) {
+                log.debug(
+                        "Skipping null value caching in putIfAbsent (cacheNullValues=false): cacheName={}, key={}",
+                        name,
+                        redisKey);
+                return null;
+            }
+
+            // 将null值转换为特殊标记（如果需要）
+            Object storeValue =
+                    writerChainableUtils
+                            .NullValueSupport()
+                            .toStoreValue(deserializedValue, cacheOperation);
 
             // 使用统一的TTL计算逻辑
             TtlCalculationResult ttlResult = calculateTtl(name, redisKey, ttl);
@@ -338,7 +393,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             Boolean success;
 
             if (ttlResult.shouldApply) {
-                cachedValue = CachedValue.of(deserializedValue, ttlResult.finalTtl);
+                cachedValue = CachedValue.of(storeValue, ttlResult.finalTtl);
                 success =
                         redisTemplate
                                 .opsForValue()
@@ -347,18 +402,20 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                                         cachedValue,
                                         Duration.ofSeconds(ttlResult.finalTtl));
                 log.debug(
-                        "Attempting conditional storage with TTL: cacheName={}, key={}, ttl={}s, fromContext={}",
+                        "Attempting conditional storage with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
                         name,
                         redisKey,
                         ttlResult.finalTtl,
-                        ttlResult.fromContext);
+                        ttlResult.fromContext,
+                        deserializedValue == null);
             } else {
-                cachedValue = CachedValue.of(deserializedValue, -1);
+                cachedValue = CachedValue.of(storeValue, -1);
                 success = redisTemplate.opsForValue().setIfAbsent(redisKey, cachedValue);
                 log.debug(
-                        "Attempting conditional storage without TTL: cacheName={}, key={}",
+                        "Attempting conditional storage without TTL: cacheName={}, key={}, isNull={}",
                         name,
-                        redisKey);
+                        redisKey,
+                        deserializedValue == null);
             }
 
             if (Boolean.TRUE.equals(success)) {
@@ -371,11 +428,15 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                         name,
                         redisKey);
                 CachedValue actualValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
-                return actualValue != null
-                        ? writerChainableUtils
-                                .TypeSupport()
-                                .serializeToBytes(actualValue.getValue())
-                        : null;
+                if (actualValue != null) {
+                    // 将缓存值转换为实际值（处理NULL_VALUE标记）
+                    Object returnValue =
+                            writerChainableUtils
+                                    .NullValueSupport()
+                                    .fromStoreValue(actualValue.getValue());
+                    return writerChainableUtils.TypeSupport().serializeToBytes(returnValue);
+                }
+                return null;
             }
         } catch (Exception e) {
             log.error("Failed to putIfAbsent value to cache: {}", name, e);
