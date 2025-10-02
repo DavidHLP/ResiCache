@@ -1,5 +1,7 @@
 package com.david.spring.cache.redis.strategy.eviction;
 
+import com.david.spring.cache.redis.strategy.eviction.stats.EvictionStats;
+
 /**
  * 淘汰策略接口
  *
