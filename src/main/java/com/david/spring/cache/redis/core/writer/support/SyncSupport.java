@@ -2,8 +2,8 @@ package com.david.spring.cache.redis.core.writer.support;
 
 import com.david.spring.cache.redis.strategy.eviction.EvictionStrategy;
 import com.david.spring.cache.redis.strategy.eviction.EvictionStrategyFactory;
-import com.david.spring.cache.redis.strategy.eviction.LockWrapper;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -366,5 +366,33 @@ class InternalLockSupport {
 
     private void logCreateLock(String key, Object stats) {
         log.debug("Created new internal lock for key: {}, stats={}", key, stats);
+    }
+}
+
+@Getter
+class LockWrapper {
+    private final ReentrantLock lock;
+
+    /** 使用非公平锁（默认） */
+    public LockWrapper() {
+        this(false);
+    }
+
+    public LockWrapper(boolean fair) {
+        this.lock = new ReentrantLock(fair);
+    }
+
+    public boolean canEvict() {
+        return !lock.isLocked() && !lock.hasQueuedThreads();
+    }
+
+    /** 释放锁 */
+    public void unlock() {
+        lock.unlock();
+    }
+
+    /** 获取锁（阻塞） */
+    public void lock() {
+        lock.lock();
     }
 }

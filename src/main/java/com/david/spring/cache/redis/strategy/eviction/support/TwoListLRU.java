@@ -9,25 +9,6 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 
-/**
- * 双链表LRU算法实现 - 基于Linux内核的Two-List策略
- *
- * <p>策略说明：
- *
- * <ul>
- *   <li>Active List：活跃使用的元素，容量为maxActiveSize
- *   <li>Inactive List：不活跃的元素，容量为maxInactiveSize
- *   <li>新元素加入Active List头部
- *   <li>Active List满时，将最老的元素降级到Inactive List
- *   <li>Inactive List满时，淘汰最老的元素
- *   <li>访问Inactive List中的元素时，提升到Active List
- * </ul>
- *
- * <p>线程安全：使用ReentrantReadWriteLock保证并发访问的安全性
- *
- * @param <K> 键类型
- * @param <V> 值类型
- */
 @Slf4j
 public class TwoListLRU<K, V> {
 

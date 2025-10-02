@@ -1,8 +1,9 @@
-package com.david.spring.cache.redis.register;
+package com.david.spring.cache.redis.core;
 
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.annotation.RedisCaching;
+import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
 
 import lombok.RequiredArgsConstructor;
