@@ -178,18 +178,14 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                     .opsForValue()
                     .set(redisKey, cachedValue, Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-            // 将缓存值转换为实际值（处理NULL_VALUE标记）
-            Object actualValue =
-                    writerChainableUtils.NullValueSupport().fromStoreValue(cachedValue.getValue());
-            byte[] result = writerChainableUtils.TypeSupport().serializeToBytes(actualValue);
+            // 直接序列化存储的值（包括NULL_VALUE标记），避免二次序列化导致数据不一致
+            byte[] result = writerChainableUtils.TypeSupport().serializeToBytes(cachedValue.getValue());
             if (result != null) {
                 log.debug(
                         "Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
                         name,
                         redisKey,
                         result.length);
-            } else if (actualValue == null) {
-                log.debug("Cache data is null: cacheName={}, key={}", name, redisKey);
             }
             return result;
         } catch (Exception e) {
@@ -429,12 +425,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                         "Cache data exists and not expired, returning existing value: cacheName={}, key={}",
                         name,
                         redisKey);
-                // 将缓存值转换为实际值（处理NULL_VALUE标记）
-                Object actualValue =
-                        writerChainableUtils
-                                .NullValueSupport()
-                                .fromStoreValue(existingValue.getValue());
-                return writerChainableUtils.TypeSupport().serializeToBytes(actualValue);
+                // 直接序列化存储的值（包括NULL_VALUE标记），避免二次序列化导致数据不一致
+                return writerChainableUtils.TypeSupport().serializeToBytes(existingValue.getValue());
             }
 
             Object deserializedValue =
@@ -499,12 +491,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                         redisKey);
                 CachedValue actualValue = (CachedValue) redisTemplate.opsForValue().get(redisKey);
                 if (actualValue != null) {
-                    // 将缓存值转换为实际值（处理NULL_VALUE标记）
-                    Object returnValue =
-                            writerChainableUtils
-                                    .NullValueSupport()
-                                    .fromStoreValue(actualValue.getValue());
-                    return writerChainableUtils.TypeSupport().serializeToBytes(returnValue);
+                    // 直接序列化存储的值（包括NULL_VALUE标记），避免二次序列化导致数据不一致
+                    return writerChainableUtils.TypeSupport().serializeToBytes(actualValue.getValue());
                 }
                 return null;
             }

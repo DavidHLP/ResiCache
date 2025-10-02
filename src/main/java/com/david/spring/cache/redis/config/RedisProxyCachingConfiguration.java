@@ -52,7 +52,8 @@ public class RedisProxyCachingConfiguration {
             RedisCacheRegister redisCacheRegister) {
 
         // 创建带调试信息的 CacheInterceptor
-        RedisCacheInterceptor interceptor = new RedisCacheInterceptor(redisCacheRegister);
+        RedisCacheInterceptor interceptor =
+                new RedisCacheInterceptor(redisCacheRegister, keyGenerator);
 
         interceptor.setCacheOperationSource(redisCacheOperationSource);
         interceptor.setCacheManager(cacheManager);
