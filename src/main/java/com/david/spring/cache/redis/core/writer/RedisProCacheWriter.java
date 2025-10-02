@@ -217,6 +217,76 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         return CompletableFuture.supplyAsync(() -> get(name, key, ttl));
     }
 
+    /**
+     * 带操作配置的 put 方法（从 RedisProCache 调用）
+     *
+     * @param name 缓存名称
+     * @param key 缓存key
+     * @param value 缓存值
+     * @param ttl TTL
+     * @param operation 缓存操作配置
+     */
+    public void put(
+            @NonNull String name,
+            @NonNull byte[] key,
+            @NonNull byte[] value,
+            @Nullable Duration ttl,
+            @NonNull RedisCacheableOperation operation) {
+        String redisKey = writerChainableUtils.TypeSupport().bytesToString(key);
+        log.debug(
+                "Starting cache storage with operation: cacheName={}, key={}, ttl={}, dataSize={} bytes, operationTtl={}",
+                name,
+                redisKey,
+                ttl,
+                value.length,
+                operation.getTtl());
+        try {
+            Object deserializedValue =
+                    writerChainableUtils.TypeSupport().deserializeFromBytes(value);
+
+            // 处理null值：如果值为null且不允许缓存null，则直接返回
+            if (deserializedValue == null
+                    && !writerChainableUtils.NullValueSupport().shouldCacheNull(operation)) {
+                log.debug(
+                        "Skipping null value caching (cacheNullValues=false): cacheName={}, key={}",
+                        name,
+                        redisKey);
+                return;
+            }
+
+            // 将null值转换为特殊标记（如果需要）
+            Object storeValue =
+                    writerChainableUtils
+                            .NullValueSupport()
+                            .toStoreValue(deserializedValue, operation);
+
+            // 使用操作中的TTL配置
+            long finalTtl =
+                    writerChainableUtils
+                            .TtlSupport()
+                            .calculateFinalTtl(
+                                    operation.getTtl(),
+                                    operation.isRandomTtl(),
+                                    operation.getVariance());
+
+            CachedValue cachedValue = CachedValue.of(storeValue, finalTtl);
+            redisTemplate.opsForValue().set(redisKey, cachedValue, Duration.ofSeconds(finalTtl));
+
+            log.debug(
+                    "Successfully stored cache data with operation TTL: cacheName={}, key={}, ttl={}s, randomTtl={}, variance={}, isNull={}",
+                    name,
+                    redisKey,
+                    finalTtl,
+                    operation.isRandomTtl(),
+                    operation.getVariance(),
+                    deserializedValue == null);
+
+            statistics.incPuts(name);
+        } catch (Exception e) {
+            log.error("Failed to put value to cache: {}", name, e);
+        }
+    }
+
     @Override
     public void put(
             @NonNull String name,
