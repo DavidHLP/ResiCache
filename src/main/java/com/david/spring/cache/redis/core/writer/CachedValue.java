@@ -8,7 +8,7 @@ import lombok.*;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-class CachedValue {
+public class CachedValue {
 
     private Object value;
 
