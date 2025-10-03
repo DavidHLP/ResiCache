@@ -2,8 +2,9 @@ package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.annotation.RedisCacheOperationSource;
 import com.david.spring.cache.redis.core.RedisCacheInterceptor;
-import com.david.spring.cache.redis.core.factory.CacheableOperationFactory;
-import com.david.spring.cache.redis.core.factory.EvictOperationFactory;
+import com.david.spring.cache.redis.core.handler.CacheableAnnotationHandler;
+import com.david.spring.cache.redis.core.handler.CachingAnnotationHandler;
+import com.david.spring.cache.redis.core.handler.EvictAnnotationHandler;
 import com.david.spring.cache.redis.manager.RedisProCacheManager;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 
@@ -52,16 +53,16 @@ public class RedisProxyCachingConfiguration {
             RedisProCacheManager cacheManager,
             KeyGenerator keyGenerator,
             RedisCacheRegister redisCacheRegister,
-            CacheableOperationFactory cacheableOperationFactory,
-            EvictOperationFactory evictOperationFactory) {
+            CacheableAnnotationHandler cacheableAnnotationHandler,
+            EvictAnnotationHandler evictAnnotationHandler,
+            CachingAnnotationHandler cachingAnnotationHandler) {
 
         // 创建带调试信息的 CacheInterceptor
         RedisCacheInterceptor interceptor =
                 new RedisCacheInterceptor(
-                        redisCacheRegister,
-                        keyGenerator,
-                        cacheableOperationFactory,
-                        evictOperationFactory);
+                        cacheableAnnotationHandler,
+                        evictAnnotationHandler,
+                        cachingAnnotationHandler);
 
         interceptor.setCacheOperationSource(redisCacheOperationSource);
         interceptor.setCacheManager(cacheManager);

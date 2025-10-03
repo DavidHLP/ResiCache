@@ -1,0 +1,73 @@
+package com.david.spring.cache.redis.core.handler;
+
+import com.david.spring.cache.redis.annotation.RedisCacheable;
+import com.david.spring.cache.redis.core.factory.CacheableOperationFactory;
+import com.david.spring.cache.redis.register.RedisCacheRegister;
+import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.interceptor.KeyGenerator;
+import org.springframework.stereotype.Component;
+
+import java.lang.reflect.Method;
+
+/**
+ * @RedisCacheable 注解处理器
+ * 负责处理方法上的 @RedisCacheable 注解
+ */
+@Slf4j
+@Component
+public class CacheableAnnotationHandler extends AnnotationHandler {
+
+    private final RedisCacheRegister redisCacheRegister;
+    private final KeyGenerator keyGenerator;
+    private final CacheableOperationFactory cacheableOperationFactory;
+
+    public CacheableAnnotationHandler(
+            RedisCacheRegister redisCacheRegister,
+            KeyGenerator keyGenerator,
+            CacheableOperationFactory cacheableOperationFactory) {
+        this.redisCacheRegister = redisCacheRegister;
+        this.keyGenerator = keyGenerator;
+        this.cacheableOperationFactory = cacheableOperationFactory;
+    }
+
+    @Override
+    protected boolean canHandle(Method method) {
+        return method.isAnnotationPresent(RedisCacheable.class);
+    }
+
+    @Override
+    protected void doHandle(Method method, Object target, Object[] args) {
+        RedisCacheable[] cacheables = method.getAnnotationsByType(RedisCacheable.class);
+
+        for (RedisCacheable cacheable : cacheables) {
+            registerCacheableOperation(method, target, args, cacheable);
+        }
+    }
+
+    /**
+     * 注册 Cacheable 缓存操作
+     */
+    private void registerCacheableOperation(
+            Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
+        try {
+            String key = generateKey(target, method, args);
+            RedisCacheableOperation operation =
+                    cacheableOperationFactory.create(method, redisCacheable, target, args, key);
+
+            redisCacheRegister.registerCacheableOperation(operation);
+            log.debug(
+                    "Registered cacheable operation: {} with key: {} for caches: {}",
+                    method.getName(),
+                    key,
+                    String.join(",", operation.getCacheNames()));
+        } catch (Exception e) {
+            log.error("Failed to register cacheable operation", e);
+        }
+    }
+
+    private String generateKey(Object target, Method method, Object[] args) {
+        Object key = keyGenerator.generate(target, method, args);
+        return String.valueOf(key);
+    }
+}
