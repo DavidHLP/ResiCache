@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -52,6 +53,12 @@ public class RedisConnectionConfiguration {
     @ConditionalOnMissingBean
     public HashOperations hashOperations(RedisTemplate<String, Object> redisTemplate) {
         return redisTemplate.opsForHash();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ValueOperations valueOperations(RedisTemplate<String, Object> redisTemplate) {
+        return redisTemplate.opsForValue();
     }
 
     @Bean

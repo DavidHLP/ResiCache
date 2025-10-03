@@ -2,6 +2,8 @@ package com.david.spring.cache.redis;
 
 import com.david.spring.cache.redis.core.writer.RedisProCacheWriter;
 import com.david.spring.cache.redis.core.writer.WriterChainableUtils;
+import com.david.spring.cache.redis.core.writer.handler.CacheHandlerChainFactory;
+import com.david.spring.cache.redis.core.writer.support.TypeSupport;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
@@ -13,13 +15,15 @@ public class RedisProCacheWriterTestable extends RedisProCacheWriter {
             RedisTemplate<String, Object> redisTemplate,
             CacheStatisticsCollector statistics,
             RedisCacheRegister redisCacheRegister,
-            WriterChainableUtils writerChainableUtils) {
+            TypeSupport support,
+            CacheHandlerChainFactory cacheHandlerChainFactory) {
         super(
                 redisTemplate,
                 redisTemplate.opsForValue(),
                 statistics,
                 redisCacheRegister,
-                writerChainableUtils);
+                support,
+                cacheHandlerChainFactory);
     }
 
     @Override

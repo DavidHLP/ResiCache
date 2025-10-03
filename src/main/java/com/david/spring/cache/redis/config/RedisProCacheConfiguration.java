@@ -1,7 +1,8 @@
 package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.core.writer.RedisProCacheWriter;
-import com.david.spring.cache.redis.core.writer.WriterChainableUtils;
+import com.david.spring.cache.redis.core.writer.handler.CacheHandlerChainFactory;
+import com.david.spring.cache.redis.core.writer.support.TypeSupport;
 import com.david.spring.cache.redis.manager.RedisProCacheManager;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 
@@ -30,15 +31,18 @@ public class RedisProCacheConfiguration {
     public RedisProCacheWriter redisProCacheWriter(
             RedisTemplate<String, Object> redisCacheTemplate,
             RedisCacheRegister redisCacheRegister,
-            WriterChainableUtils writerChainableUtils) {
+            TypeSupport typeSupport,
+            CacheHandlerChainFactory chainFactory,
+            CacheStatisticsCollector cacheStatisticsCollector) {
         RedisProCacheWriter writer =
                 new RedisProCacheWriter(
                         redisCacheTemplate,
                         redisCacheTemplate.opsForValue(),
-                        CacheStatisticsCollector.none(),
+                        cacheStatisticsCollector,
                         redisCacheRegister,
-                        writerChainableUtils);
-        log.debug("Created RedisProCacheWriter with sync support");
+                        typeSupport,
+                        chainFactory);
+        log.info("Created RedisProCacheWriter with handler chain pattern");
         return writer;
     }
 
@@ -78,5 +82,11 @@ public class RedisProCacheConfiguration {
     public KeyGenerator keyGenerator() {
         log.debug("Created SimpleKeyGenerator for cache key generation");
         return new SimpleKeyGenerator();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public CacheStatisticsCollector cacheStatisticsCollector() {
+        return CacheStatisticsCollector.create();
     }
 }

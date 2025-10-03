@@ -1,7 +1,8 @@
 package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.RedisProCacheWriterTestable;
-import com.david.spring.cache.redis.core.writer.WriterChainableUtils;
+import com.david.spring.cache.redis.core.writer.handler.CacheHandlerChainFactory;
+import com.david.spring.cache.redis.core.writer.support.TypeSupport;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 
 import org.springframework.boot.test.context.TestConfiguration;
@@ -15,11 +16,14 @@ public class TestConfig {
     public RedisProCacheWriterTestable redisProCacheWriterTestable(
             RedisTemplate<String, Object> redisTemplate,
             RedisCacheRegister redisCacheRegister,
-            WriterChainableUtils writerChainableUtils) {
+            TypeSupport support,
+            CacheHandlerChainFactory cacheHandlerChainFactory,
+            CacheStatisticsCollector cacheStatisticsCollector) {
         return new RedisProCacheWriterTestable(
                 redisTemplate,
-                CacheStatisticsCollector.none(),
+                cacheStatisticsCollector,
                 redisCacheRegister,
-                writerChainableUtils);
+                support,
+                cacheHandlerChainFactory);
     }
 }
