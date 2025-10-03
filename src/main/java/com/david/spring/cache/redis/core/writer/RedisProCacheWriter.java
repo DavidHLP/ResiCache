@@ -179,17 +179,18 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                     } else {
                         // 异步模式：返回旧值，异步删除缓存
                         logAsyncPreRefreshTriggered(name, redisKey);
-                        writerChainableUtils.PreRefreshSupport().submitAsyncRefresh(
-                                redisKey,
-                                () -> {
-                                    try {
-                                        redisTemplate.delete(redisKey);
-                                        logAsyncPreRefreshCacheDeleted(name, redisKey);
-                                    } catch (Exception e) {
-                                        logAsyncPreRefreshFailed(name, redisKey, e);
-                                    }
-                                }
-                        );
+                        writerChainableUtils
+                                .PreRefreshSupport()
+                                .submitAsyncRefresh(
+                                        redisKey,
+                                        () -> {
+                                            try {
+                                                redisTemplate.delete(redisKey);
+                                                logAsyncPreRefreshCacheDeleted(name, redisKey);
+                                            } catch (Exception e) {
+                                                logAsyncPreRefreshFailed(name, redisKey, e);
+                                            }
+                                        });
                         // 继续返回旧值，不增加 miss 统计
                     }
                 }
@@ -832,27 +833,37 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     private void logBloomFilterRejects(String name, String redisKey) {
-        log.debug("布隆过滤器拦截（key不存在）: cacheName={}, key={}", name, redisKey);
+        log.debug(
+                "Bloom filter rejected (key does not exist): cacheName={}, key={}", name, redisKey);
     }
 
     private void logBloomFilterClearedWithCache(String name) {
-        log.debug("布隆过滤器已随缓存清空: cacheName={}", name);
+        log.debug("Bloom filter cleared along with cache: cacheName={}", name);
     }
 
     private void logSyncPreRefreshTriggered(String name, String redisKey) {
-        log.info("同步预刷新触发，返回null触发缓存未命中: cacheName={}, key={}", name, redisKey);
+        log.info(
+                "Synchronous pre-refresh triggered, returning null to trigger cache miss: cacheName={}, key={}",
+                name,
+                redisKey);
     }
 
     private void logAsyncPreRefreshTriggered(String name, String redisKey) {
-        log.info("异步预刷新触发，返回旧值并后台刷新缓存: cacheName={}, key={}", name, redisKey);
+        log.info(
+                "Asynchronous pre-refresh triggered, returning old value and refreshing cache in background: cacheName={}, key={}",
+                name,
+                redisKey);
     }
 
     private void logAsyncPreRefreshCacheDeleted(String name, String redisKey) {
-        log.debug("异步预刷新成功删除缓存: cacheName={}, key={}", name, redisKey);
+        log.debug(
+                "Asynchronous pre-refresh successfully deleted cache: cacheName={}, key={}",
+                name,
+                redisKey);
     }
 
     private void logAsyncPreRefreshFailed(String name, String redisKey, Exception e) {
-        log.error("异步预刷新失败: cacheName={}, key={}", name, redisKey, e);
+        log.error("Asynchronous pre-refresh failed: cacheName={}, key={}", name, redisKey, e);
     }
 
     /** TTL计算结果 */
