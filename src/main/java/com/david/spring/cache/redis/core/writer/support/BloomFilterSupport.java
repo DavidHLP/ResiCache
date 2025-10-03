@@ -191,8 +191,7 @@ public class BloomFilterSupport {
             }
             return result;
         } catch (NoSuchAlgorithmException e) {
-            log.error("哈希算法不支持: {}", algorithm, e);
-            // 降级使用Java的hashCode
+            log.error("Hash algorithm not supported: {}", algorithm, e);
             return key.hashCode();
         }
     }
@@ -201,7 +200,7 @@ public class BloomFilterSupport {
     private void logBloomFilterAdd(String cacheName, String key, int[] positions) {
         if (log.isDebugEnabled()) {
             log.debug(
-                    "布隆过滤器添加: cacheName={}, key={}, positions={}",
+                    "Bloom filter add: cacheName={}, key={}, positions={}",
                     cacheName,
                     key,
                     formatPositions(positions));
@@ -209,27 +208,30 @@ public class BloomFilterSupport {
     }
 
     private void logBloomFilterAddFailed(String cacheName, String key, Exception e) {
-        log.error("布隆过滤器添加失败: cacheName={}, key={}", cacheName, key, e);
+        log.error("Bloom filter add failed: cacheName={}, key={}", cacheName, key, e);
     }
 
     private void logBloomFilterHit(String cacheName, String key) {
-        log.debug("布隆过滤器命中（可能存在）: cacheName={}, key={}", cacheName, key);
+        log.debug("Bloom filter hit (might exist): cacheName={}, key={}", cacheName, key);
     }
 
     private void logBloomFilterMiss(String cacheName, String key) {
-        log.debug("布隆过滤器未命中（一定不存在）: cacheName={}, key={}", cacheName, key);
+        log.debug(
+                "Bloom filter miss (definitely does not exist): cacheName={}, key={}",
+                cacheName,
+                key);
     }
 
     private void logBloomFilterCheckFailed(String cacheName, String key, Exception e) {
-        log.error("布隆过滤器检查失败: cacheName={}, key={}", cacheName, key, e);
+        log.error("Bloom filter check failed: cacheName={}, key={}", cacheName, key, e);
     }
 
     private void logBloomFilterDeleted(String cacheName) {
-        log.debug("布隆过滤器已删除: cacheName={}", cacheName);
+        log.debug("Bloom filter deleted: cacheName={}", cacheName);
     }
 
     private void logBloomFilterDeleteFailed(String cacheName, Exception e) {
-        log.error("布隆过滤器删除失败: cacheName={}", cacheName, e);
+        log.error("Bloom filter delete failed: cacheName={}", cacheName, e);
     }
 
     private String formatPositions(int[] positions) {

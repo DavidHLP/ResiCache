@@ -95,6 +95,7 @@ public class RedisCacheInterceptor extends CacheInterceptor {
                             .variance(redisCacheable.variance())
                             .enablePreRefresh(redisCacheable.enablePreRefresh())
                             .preRefreshThreshold(redisCacheable.preRefreshThreshold())
+                            .preRefreshMode(redisCacheable.preRefreshMode())
                             .sync(redisCacheable.sync())
                             .cacheManager(redisCacheable.cacheManager())
                             .cacheResolver(redisCacheable.cacheResolver())

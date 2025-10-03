@@ -14,6 +14,7 @@ public class WriterChainableUtils {
     private final SyncSupport syncSupport;
     private final NullValueSupport nullValueSupport;
     private final BloomFilterSupport bloomFilterSupport;
+    private final PreRefreshSupport preRefreshSupport;
 
     public TtlSupport TtlSupport() {
         return ttlSupport;
@@ -33,5 +34,9 @@ public class WriterChainableUtils {
 
     public BloomFilterSupport BloomFilterSupport() {
         return bloomFilterSupport;
+    }
+
+    public PreRefreshSupport PreRefreshSupport() {
+        return preRefreshSupport;
     }
 }

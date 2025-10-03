@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.register.operation;
 
+import com.david.spring.cache.redis.core.writer.support.PreRefreshMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
@@ -21,6 +22,7 @@ public class RedisCacheableOperation extends CacheOperation {
     private final float variance;
     private final boolean enablePreRefresh;
     private final double preRefreshThreshold;
+    private final PreRefreshMode preRefreshMode;
 
     protected RedisCacheableOperation(Builder b) {
         super(b);
@@ -35,6 +37,7 @@ public class RedisCacheableOperation extends CacheOperation {
         this.variance = b.variance;
         this.enablePreRefresh = b.enablePreRefresh;
         this.preRefreshThreshold = b.preRefreshThreshold;
+        this.preRefreshMode = b.preRefreshMode;
     }
 
     public static Builder builder() {
@@ -54,6 +57,7 @@ public class RedisCacheableOperation extends CacheOperation {
         private float variance;
         private boolean enablePreRefresh;
         private double preRefreshThreshold;
+        private PreRefreshMode preRefreshMode;
 
         public Builder name(String name) {
             super.setName(name);
@@ -142,6 +146,11 @@ public class RedisCacheableOperation extends CacheOperation {
 
         public Builder preRefreshThreshold(double preRefreshThreshold) {
             this.preRefreshThreshold = preRefreshThreshold;
+            return this;
+        }
+
+        public Builder preRefreshMode(PreRefreshMode preRefreshMode) {
+            this.preRefreshMode = preRefreshMode;
             return this;
         }
 

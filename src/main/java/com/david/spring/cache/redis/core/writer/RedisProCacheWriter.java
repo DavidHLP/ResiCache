@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.core.writer;
 
+import com.david.spring.cache.redis.core.writer.support.PreRefreshMode;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
 
@@ -163,8 +164,34 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
                 if (needsPreRefresh) {
                     logCacheNeedsPreRefresh(name, redisKey, cacheOperation, cachedValue);
-                    statistics.incMisses(name);
-                    return null;
+
+                    // 根据预刷新模式决定处理方式
+                    PreRefreshMode mode = cacheOperation.getPreRefreshMode();
+                    if (mode == null) {
+                        mode = PreRefreshMode.SYNC; // 默认同步模式
+                    }
+
+                    if (mode == PreRefreshMode.SYNC) {
+                        // 同步模式：返回 null，触发缓存未命中
+                        logSyncPreRefreshTriggered(name, redisKey);
+                        statistics.incMisses(name);
+                        return null;
+                    } else {
+                        // 异步模式：返回旧值，异步删除缓存
+                        logAsyncPreRefreshTriggered(name, redisKey);
+                        writerChainableUtils.PreRefreshSupport().submitAsyncRefresh(
+                                redisKey,
+                                () -> {
+                                    try {
+                                        redisTemplate.delete(redisKey);
+                                        logAsyncPreRefreshCacheDeleted(name, redisKey);
+                                    } catch (Exception e) {
+                                        logAsyncPreRefreshFailed(name, redisKey, e);
+                                    }
+                                }
+                        );
+                        // 继续返回旧值，不增加 miss 统计
+                    }
                 }
             }
 
@@ -810,6 +837,22 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     private void logBloomFilterClearedWithCache(String name) {
         log.debug("布隆过滤器已随缓存清空: cacheName={}", name);
+    }
+
+    private void logSyncPreRefreshTriggered(String name, String redisKey) {
+        log.info("同步预刷新触发，返回null触发缓存未命中: cacheName={}, key={}", name, redisKey);
+    }
+
+    private void logAsyncPreRefreshTriggered(String name, String redisKey) {
+        log.info("异步预刷新触发，返回旧值并后台刷新缓存: cacheName={}, key={}", name, redisKey);
+    }
+
+    private void logAsyncPreRefreshCacheDeleted(String name, String redisKey) {
+        log.debug("异步预刷新成功删除缓存: cacheName={}, key={}", name, redisKey);
+    }
+
+    private void logAsyncPreRefreshFailed(String name, String redisKey, Exception e) {
+        log.error("异步预刷新失败: cacheName={}, key={}", name, redisKey, e);
     }
 
     /** TTL计算结果 */
