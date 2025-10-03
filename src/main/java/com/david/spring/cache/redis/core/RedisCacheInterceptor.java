@@ -3,6 +3,8 @@ package com.david.spring.cache.redis.core;
 import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.annotation.RedisCaching;
+import com.david.spring.cache.redis.core.factory.CacheableOperationFactory;
+import com.david.spring.cache.redis.core.factory.EvictOperationFactory;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.operation.RedisCacheEvictOperation;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
@@ -21,10 +23,18 @@ public class RedisCacheInterceptor extends CacheInterceptor {
 
     private final RedisCacheRegister redisCacheRegister;
     private final KeyGenerator keyGenerator;
+    private final CacheableOperationFactory cacheableOperationFactory;
+    private final EvictOperationFactory evictOperationFactory;
 
-    public RedisCacheInterceptor(RedisCacheRegister redisCacheRegister, KeyGenerator keyGenerator) {
+    public RedisCacheInterceptor(
+            RedisCacheRegister redisCacheRegister,
+            KeyGenerator keyGenerator,
+            CacheableOperationFactory cacheableOperationFactory,
+            EvictOperationFactory evictOperationFactory) {
         this.redisCacheRegister = redisCacheRegister;
         this.keyGenerator = keyGenerator;
+        this.cacheableOperationFactory = cacheableOperationFactory;
+        this.evictOperationFactory = evictOperationFactory;
     }
 
     @Override
@@ -76,41 +86,16 @@ public class RedisCacheInterceptor extends CacheInterceptor {
     private void registerCacheableOperation(
             Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
         try {
-            // Note: Key generation here is for registration purposes.
-            // The actual key used by the cache operation might be evaluated later via SpEL.
             String key = generateKey(target, method, args);
-            String[] cacheNames =
-                    resolveCacheNames(redisCacheable.cacheNames(), redisCacheable.value());
-
             RedisCacheableOperation operation =
-                    RedisCacheableOperation.builder()
-                            .name(method.getName())
-                            .key(key) // Storing the generated key for context
-                            .ttl(redisCacheable.ttl())
-                            .type(redisCacheable.type())
-                            .useSecondLevelCache(redisCacheable.useSecondLevelCache())
-                            .cacheNullValues(redisCacheable.cacheNullValues())
-                            .useBloomFilter(redisCacheable.useBloomFilter())
-                            .randomTtl(redisCacheable.randomTtl())
-                            .variance(redisCacheable.variance())
-                            .enablePreRefresh(redisCacheable.enablePreRefresh())
-                            .preRefreshThreshold(redisCacheable.preRefreshThreshold())
-                            .preRefreshMode(redisCacheable.preRefreshMode())
-                            .sync(redisCacheable.sync())
-                            .cacheManager(redisCacheable.cacheManager())
-                            .cacheResolver(redisCacheable.cacheResolver())
-                            .condition(redisCacheable.condition())
-                            .keyGenerator(redisCacheable.keyGenerator())
-                            .unless(redisCacheable.unless())
-                            .cacheNames(cacheNames)
-                            .build();
+                    cacheableOperationFactory.create(method, redisCacheable, target, args, key);
 
             redisCacheRegister.registerCacheableOperation(operation);
             log.debug(
                     "Registered cacheable operation: {} with key: {} for caches: {}",
                     method.getName(),
                     key,
-                    String.join(",", cacheNames));
+                    String.join(",", operation.getCacheNames()));
         } catch (Exception e) {
             log.error("Failed to register cacheable operation", e);
         }
@@ -121,28 +106,15 @@ public class RedisCacheInterceptor extends CacheInterceptor {
             Method method, Object target, Object[] args, RedisCacheEvict cacheEvict) {
         try {
             String key = generateKey(target, method, args);
-            String[] cacheNames = resolveCacheNames(cacheEvict.cacheNames(), cacheEvict.value());
-
             RedisCacheEvictOperation operation =
-                    RedisCacheEvictOperation.builder()
-                            .name(method.getName())
-                            .key(key)
-                            .cacheNames(cacheNames)
-                            .keyGenerator(cacheEvict.keyGenerator())
-                            .cacheManager(cacheEvict.cacheManager())
-                            .cacheResolver(cacheEvict.cacheResolver())
-                            .condition(cacheEvict.condition())
-                            .allEntries(cacheEvict.allEntries())
-                            .beforeInvocation(cacheEvict.beforeInvocation())
-                            .sync(cacheEvict.sync())
-                            .build();
+                    evictOperationFactory.create(method, cacheEvict, target, args, key);
 
             redisCacheRegister.registerCacheEvictOperation(operation);
             log.debug(
                     "Registered cache evict operation: {} with key: {} for caches: {}",
                     method.getName(),
                     key,
-                    String.join(",", cacheNames));
+                    String.join(",", operation.getCacheNames()));
         } catch (Exception e) {
             log.error("Failed to register cache evict operation", e);
         }
@@ -151,9 +123,5 @@ public class RedisCacheInterceptor extends CacheInterceptor {
     private String generateKey(Object target, Method method, Object[] args) {
         Object key = keyGenerator.generate(target, method, args);
         return String.valueOf(key);
-    }
-
-    private String[] resolveCacheNames(String[] cacheNames, String[] values) {
-        return (cacheNames != null && cacheNames.length > 0) ? cacheNames : values;
     }
 }

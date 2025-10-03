@@ -25,7 +25,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.test.context.TestPropertySource;
 
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 @SpringBootTest(
         classes = {SpringCacheRedis.class, RedisCacheAutoConfiguration.class, TestConfig.class})
@@ -269,10 +268,7 @@ public class PreRefreCacheTest {
 @Service
 class PreRefreshCacheService extends BasicService {
 
-    /**
-     * 同步预刷新模式测试
-     * TTL=10秒，阈值=0.5（剩余50%时触发）
-     */
+    /** 同步预刷新模式测试 TTL=10秒，阈值=0.5（剩余50%时触发） */
     @RedisCacheable(
             value = "sync-pre-refresh",
             key = "#id",
@@ -286,10 +282,7 @@ class PreRefreshCacheService extends BasicService {
         return "Data-" + id;
     }
 
-    /**
-     * 异步预刷新模式测试
-     * TTL=10秒，阈值=0.5（剩余50%时触发）
-     */
+    /** 异步预刷新模式测试 TTL=10秒，阈值=0.5（剩余50%时触发） */
     @RedisCacheable(
             value = "async-pre-refresh",
             key = "#id",
@@ -303,9 +296,7 @@ class PreRefreshCacheService extends BasicService {
         return "Data-" + id;
     }
 
-    /**
-     * 未启用预刷新
-     */
+    /** 未启用预刷新 */
     @RedisCacheable(value = "no-pre-refresh", key = "#id", ttl = 10, enablePreRefresh = false)
     public String getDataWithoutPreRefresh(Long id) {
         callCount.incrementAndGet();
@@ -313,10 +304,7 @@ class PreRefreshCacheService extends BasicService {
         return "Data-" + id;
     }
 
-    /**
-     * 预刷新阈值30%测试
-     * TTL=10秒，阈值=0.3（剩余30%时触发，即7秒后）
-     */
+    /** 预刷新阈值30%测试 TTL=10秒，阈值=0.3（剩余30%时触发，即7秒后） */
     @RedisCacheable(
             value = "pre-refresh-30",
             key = "#id",
@@ -330,9 +318,7 @@ class PreRefreshCacheService extends BasicService {
         return "Data-" + id;
     }
 
-    /**
-     * 预刷新与随机TTL组合
-     */
+    /** 预刷新与随机TTL组合 */
     @RedisCacheable(
             value = "pre-refresh-random",
             key = "#id",
@@ -348,9 +334,7 @@ class PreRefreshCacheService extends BasicService {
         return "Data-" + id;
     }
 
-    /**
-     * 预刷新与null值缓存组合
-     */
+    /** 预刷新与null值缓存组合 */
     @RedisCacheable(
             value = "pre-refresh-null",
             key = "#id",

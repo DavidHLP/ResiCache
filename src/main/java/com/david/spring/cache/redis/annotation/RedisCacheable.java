@@ -32,9 +32,6 @@ public @interface RedisCacheable {
 
     Class<?> type() default Object.class;
 
-    // TODO
-    boolean useSecondLevelCache() default false;
-
     boolean cacheNullValues() default false;
 
     boolean useBloomFilter() default false;
@@ -51,4 +48,7 @@ public @interface RedisCacheable {
 
     /** 预刷新模式 SYNC: 同步模式，返回null触发缓存未命中，让调用者重新加载数据 ASYNC: 异步模式，返回旧值给用户，同时在后台异步刷新缓存（需要在拦截器层面支持） */
     PreRefreshMode preRefreshMode() default PreRefreshMode.SYNC;
+
+    // TODO 待定是否需要多级缓存
+    boolean useSecondLevelCache() default false;
 }

@@ -11,10 +11,7 @@ import org.junit.jupiter.api.Test;
 /**
  * TwoListEvictionStrategy 测试
  *
- * <p>职责说明：
- * - 本测试类仅测试 EvictionStrategy 接口的实现正确性
- * - 核心算法逻辑由 TwoListLRUTest 覆盖
- * - 重点验证策略接口适配、统计信息和参数配置
+ * <p>职责说明： - 本测试类仅测试 EvictionStrategy 接口的实现正确性 - 核心算法逻辑由 TwoListLRUTest 覆盖 - 重点验证策略接口适配、统计信息和参数配置
  */
 @DisplayName("TwoListEvictionStrategy 接口适配测试")
 public class TwoListEvictionStrategyTest {
