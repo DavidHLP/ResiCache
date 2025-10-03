@@ -2,6 +2,7 @@ package com.david.spring.cache.redis.service;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.david.spring.cache.redis.BasicService;
 import com.david.spring.cache.redis.RedisProCacheWriterTestable;
 import com.david.spring.cache.redis.SpringCacheRedis;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
@@ -22,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.test.context.TestPropertySource;
 
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @SpringBootTest(
         classes = {SpringCacheRedis.class, RedisCacheAutoConfiguration.class, TestConfig.class})
@@ -152,8 +152,7 @@ public class NullCacheTest {
 
 @Slf4j
 @Service
-class NullCacheService {
-    private final AtomicInteger callCount = new AtomicInteger(0);
+class NullCacheService extends BasicService {
 
     @RedisCacheable(value = "user", key = "#id", ttl = 60, cacheNullValues = true)
     public String getUserNameWithNullCache(Long id) {
@@ -188,13 +187,5 @@ class NullCacheService {
             return null;
         }
         return "User-" + id;
-    }
-
-    public int getCallCount() {
-        return callCount.get();
-    }
-
-    public void resetCallCount() {
-        callCount.set(0);
     }
 }

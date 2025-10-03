@@ -33,16 +33,13 @@ public @interface RedisCacheable {
     // TODO
     boolean useSecondLevelCache() default false;
 
-    // TODO
     boolean cacheNullValues() default false;
 
     // TODO
     boolean useBloomFilter() default false;
 
-    // TODO
     boolean randomTtl() default false;
 
-    // TODO
     float variance() default 0.2F;
 
     // TODO

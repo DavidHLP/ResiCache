@@ -34,6 +34,7 @@ public class RedisProCacheConfiguration {
         RedisProCacheWriter writer =
                 new RedisProCacheWriter(
                         redisCacheTemplate,
+                        redisCacheTemplate.opsForValue(),
                         CacheStatisticsCollector.none(),
                         redisCacheRegister,
                         writerChainableUtils);

@@ -5,6 +5,7 @@ import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.cache.support.NullValue;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class NullValueSupport {
+
+    private final TypeSupport typeSupport;
 
     /**
      * 检查是否应该缓存null值
@@ -60,5 +63,27 @@ public class NullValueSupport {
      */
     public boolean isNullValue(@Nullable Object value) {
         return value == null;
+    }
+
+    /**
+     * 将缓存值转换为返回给Spring的字节数组 如果值为null，则序列化为Spring期望的NullValue格式
+     *
+     * @param value 缓存值
+     * @param cacheName 缓存名称
+     * @param key 缓存key
+     * @return 序列化后的字节数组
+     */
+    @Nullable
+    public byte[] toReturnValue(@Nullable Object value, String cacheName, String key) {
+        if (isNullValue(value)) {
+            // 对于null值，使用标准的NullValue序列化格式，确保Spring能正确识别
+            byte[] result = typeSupport.serializeToBytes(NullValue.INSTANCE);
+            log.debug(
+                    "Returning null value in standard format: cacheName={}, key={}",
+                    cacheName,
+                    key);
+            return result;
+        }
+        return typeSupport.serializeToBytes(value);
     }
 }

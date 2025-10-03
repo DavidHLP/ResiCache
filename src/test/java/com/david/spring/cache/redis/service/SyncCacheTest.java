@@ -2,6 +2,7 @@ package com.david.spring.cache.redis.service;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.david.spring.cache.redis.BasicService;
 import com.david.spring.cache.redis.SpringCacheRedis;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.config.RedisCacheAutoConfiguration;
@@ -25,7 +26,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @SpringBootTest(
@@ -125,9 +125,7 @@ public class SyncCacheTest {
 
 @Slf4j
 @Service
-class SyncCacheService {
-    private final AtomicInteger callCount = new AtomicInteger(0);
-
+class SyncCacheService extends BasicService {
     @RedisCacheable(value = "user", key = "#id", sync = true, ttl = 60)
     public String getUserName(Long id) {
         callCount.incrementAndGet();
@@ -139,13 +137,5 @@ class SyncCacheService {
             Thread.currentThread().interrupt();
         }
         return "David-" + id;
-    }
-
-    public int getCallCount() {
-        return callCount.get();
-    }
-
-    public void resetCallCount() {
-        callCount.set(0);
     }
 }

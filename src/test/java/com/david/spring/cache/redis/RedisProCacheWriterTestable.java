@@ -14,7 +14,12 @@ public class RedisProCacheWriterTestable extends RedisProCacheWriter {
             CacheStatisticsCollector statistics,
             RedisCacheRegister redisCacheRegister,
             WriterChainableUtils writerChainableUtils) {
-        super(redisTemplate, statistics, redisCacheRegister, writerChainableUtils);
+        super(
+                redisTemplate,
+                redisTemplate.opsForValue(),
+                statistics,
+                redisCacheRegister,
+                writerChainableUtils);
     }
 
     @Override

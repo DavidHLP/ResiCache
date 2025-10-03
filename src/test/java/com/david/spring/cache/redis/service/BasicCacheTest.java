@@ -1,5 +1,6 @@
 package com.david.spring.cache.redis.service;
 
+import com.david.spring.cache.redis.BasicService;
 import com.david.spring.cache.redis.RedisProCacheWriterTestable;
 import com.david.spring.cache.redis.SpringCacheRedis;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
@@ -57,19 +58,24 @@ public class BasicCacheTest {
     @DisplayName("测试ttl自定义功能")
     public void testCustomTtl() throws InterruptedException {
         Long userId = 1L;
+        testService.resetCallCount();
 
+        // 第一次调用，应该执行方法
         User user1 = testService.getUser(userId);
         Assertions.assertThat(user1).isNotNull();
         Assertions.assertThat(user1.getId()).isEqualTo(userId);
         Assertions.assertThat(user1.getName()).isEqualTo("David");
+        Assertions.assertThat(testService.getCallCount()).isEqualTo(1);
 
         String key = "user::1";
         long ttl = redisCacheWriter.getTtl(key);
         Assertions.assertThat(ttl).isEqualTo(300L);
 
+        // 第二次调用，应该从缓存获取，不执行方法
         User user2 = testService.getUser(userId);
         Assertions.assertThat(user2).isNotNull();
         Assertions.assertThat(user2.getId()).isEqualTo(user1.getId());
+        Assertions.assertThat(testService.getCallCount()).as("第二次调用应该从缓存获取").isEqualTo(1);
 
         Thread.sleep(1000);
         long ttlAfter = redisCacheWriter.getExpiration(key);
@@ -79,12 +85,15 @@ public class BasicCacheTest {
     @Test
     @DisplayName("测试ttl的雪崩防护功能")
     public void testRandomTtlForAvalanchePrevention() {
+        testService.resetCallCount();
         long[] tels = new long[20];
 
+        // 每个id调用一次，应该都被缓存
         for (int i = 0; i < 20; i++) {
             testService.getUserWithRandomTtl((long) i);
             tels[i] = redisCacheWriter.getTtl("user::" + i);
         }
+        Assertions.assertThat(testService.getCallCount()).as("20个不同的id应该调用20次").isEqualTo(20);
 
         // 验证每个TTL都在合理范围内（基于variance=0.5，理论范围是 [150, 600]）
         for (long ttl : tels) {
@@ -119,11 +128,13 @@ public class BasicCacheTest {
     @DisplayName("测试condition条件：当条件满足时才缓存")
     public void testConditionTrue() {
         Long userId = 20L;
+        testService.resetCallCount();
 
         // 第一次调用，id > 10，满足条件，应该缓存
         User user1 = testService.getUserWithCondition(userId);
         Assertions.assertThat(user1).isNotNull();
         Assertions.assertThat(user1.getName()).isEqualTo("Alice");
+        Assertions.assertThat(testService.getCallCount()).isEqualTo(1);
 
         // 验证缓存已创建
         String key = "user::20";
@@ -134,6 +145,7 @@ public class BasicCacheTest {
         User user2 = testService.getUserWithCondition(userId);
         Assertions.assertThat(user2).isNotNull();
         Assertions.assertThat(user2.getId()).isEqualTo(user1.getId());
+        Assertions.assertThat(testService.getCallCount()).as("第二次调用应该从缓存获取").isEqualTo(1);
     }
 
     @Test
@@ -245,27 +257,33 @@ public class BasicCacheTest {
 
 @Slf4j
 @Service
-class BasicCacheTestService {
+class BasicCacheTestService extends BasicService {
 
     @RedisCacheable(value = "user", key = "#id", ttl = 300)
     public User getUser(Long id) {
+        callCount.incrementAndGet();
+        log.info("getUser called with id: {}, callCount: {}", id, callCount.get());
         return User.builder().id(id).name("David").email("<EMAIL>").build();
     }
 
     @RedisCacheable(value = "user", key = "#id", ttl = 300, randomTtl = true, variance = 0.5F)
     public User getUserWithRandomTtl(Long id) {
+        callCount.incrementAndGet();
+        log.info("getUserWithRandomTtl called with id: {}, callCount: {}", id, callCount.get());
         return User.builder().id(id).name("David").email("<EMAIL>").build();
     }
 
     @RedisCacheable(value = "user", key = "#id", ttl = 300, condition = "#id > 10")
     public User getUserWithCondition(Long id) {
-        log.info("getUserWithCondition called with id: {}", id);
+        callCount.incrementAndGet();
+        log.info("getUserWithCondition called with id: {}, callCount: {}", id, callCount.get());
         return User.builder().id(id).name("Alice").email("<EMAIL>").build();
     }
 
     @RedisCacheable(value = "user", key = "#id", ttl = 300, unless = "#result.name == 'Anonymous'")
     public User getUserWithUnless(Long id) {
-        log.info("getUserWithUnless called with id: {}", id);
+        callCount.incrementAndGet();
+        log.info("getUserWithUnless called with id: {}, callCount: {}", id, callCount.get());
         if (id == 999L) {
             return User.builder().id(id).name("Anonymous").email("").build();
         }
@@ -279,7 +297,11 @@ class BasicCacheTestService {
             condition = "#id > 0",
             unless = "#result == null")
     public User getUserWithConditionAndUnless(Long id) {
-        log.info("getUserWithConditionAndUnless called with id: {}", id);
+        callCount.incrementAndGet();
+        log.info(
+                "getUserWithConditionAndUnless called with id: {}, callCount: {}",
+                id,
+                callCount.get());
         if (id == 0L) {
             return null;
         }

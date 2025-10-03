@@ -10,7 +10,9 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 
 /** 类型转换支持工具类 集中处理各类型转换逻辑，包括： - 字节数组与字符串的转换 - JSON序列化与反序列化 - 类型安全的类型转换 */
 @Component
@@ -38,10 +40,33 @@ public class TypeSupport {
      */
     @Nullable
     public byte[] serializeToBytes(@NonNull Object value) {
+        // 对于Spring的NullValue，使用Java序列化以保证兼容性
+        if ("org.springframework.cache.support.NullValue".equals(value.getClass().getName())) {
+            return serializeToJava(value);
+        }
+
         try {
             return objectMapper.writeValueAsBytes(value);
         } catch (JsonProcessingException e) {
             throw new SerializationException("Failed to serialize value", e);
+        }
+    }
+
+    /**
+     * 使用Java序列化将对象序列化为字节数组
+     *
+     * @param value 待序列化的对象
+     * @return 序列化后的字节数组
+     */
+    @NonNull
+    private byte[] serializeToJava(@NonNull Object value) {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+             ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+            oos.writeObject(value);
+            oos.flush();
+            return bos.toByteArray();
+        } catch (Exception e) {
+            throw new SerializationException("Failed to serialize value using Java serialization", e);
         }
     }
 
