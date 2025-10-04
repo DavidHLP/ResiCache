@@ -1,5 +1,6 @@
-package com.david.spring.cache.redis.core.writer.handler;
+package com.david.spring.cache.redis.core.writer.chain.handler;
 
+import com.david.spring.cache.redis.core.writer.chain.CacheHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

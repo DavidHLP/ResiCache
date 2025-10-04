@@ -1,5 +1,6 @@
-package com.david.spring.cache.redis.core.writer.handler;
+package com.david.spring.cache.redis.core.writer.chain.handler;
 
+import com.david.spring.cache.redis.core.writer.chain.CacheOperation;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
 import lombok.Builder;
 import lombok.Data;

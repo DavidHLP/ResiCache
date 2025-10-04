@@ -1,7 +1,7 @@
 package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.RedisProCacheWriterTestable;
-import com.david.spring.cache.redis.core.writer.handler.CacheHandlerChainFactory;
+import com.david.spring.cache.redis.core.writer.chain.CacheHandlerChainFactory;
 import com.david.spring.cache.redis.core.writer.support.TypeSupport;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 
