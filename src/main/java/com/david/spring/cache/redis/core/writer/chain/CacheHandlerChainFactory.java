@@ -37,45 +37,11 @@ public class CacheHandlerChainFactory {
                 .addHandler(nullValueHandler)
                 .addHandler(actualCacheHandler);
 
-        log.info("Cache handler chain created with {} handlers: {}",
+        log.info(
+                "Cache handler chain created with {} handlers: {}",
                 chain.size(),
                 chain.getHandlerNames());
 
-        return chain;
-    }
-
-    /**
-     * 创建 GET 操作专用的责任链（优化性能）
-     *
-     * @return GET 操作责任链
-     */
-    public CacheHandlerChain createGetChain() {
-        CacheHandlerChain chain = new CacheHandlerChain();
-
-        // GET 操作需要的处理器
-        chain.addHandler(bloomFilterHandler)
-                .addHandler(syncLockHandler)
-                .addHandler(actualCacheHandler);
-
-        log.debug("GET operation handler chain created");
-        return chain;
-    }
-
-    /**
-     * 创建 PUT 操作专用的责任链（优化性能）
-     *
-     * @return PUT 操作责任链
-     */
-    public CacheHandlerChain createPutChain() {
-        CacheHandlerChain chain = new CacheHandlerChain();
-
-        // PUT 操作需要的处理器
-        chain.addHandler(ttlHandler)
-                .addHandler(nullValueHandler)
-                .addHandler(actualCacheHandler)
-                .addHandler(bloomFilterHandler); // 布隆过滤器在最后添加
-
-        log.debug("PUT operation handler chain created");
         return chain;
     }
 }

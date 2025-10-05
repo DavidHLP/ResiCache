@@ -8,17 +8,15 @@ import org.springframework.stereotype.Component;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 
-/**
- * Cacheable 操作工厂
- * 负责创建 RedisCacheableOperation 对象
- */
+/** Cacheable 操作工厂 负责创建 RedisCacheableOperation 对象 */
 @Slf4j
 @Component
-public class CacheableOperationFactory implements OperationFactory<RedisCacheable, RedisCacheableOperation> {
+public class CacheableOperationFactory
+        implements OperationFactory<RedisCacheable, RedisCacheableOperation> {
 
     @Override
-    public RedisCacheableOperation create(Method method, RedisCacheable annotation,
-                                          Object target, Object[] args, String key) {
+    public RedisCacheableOperation create(
+            Method method, RedisCacheable annotation, Object target, Object[] args, String key) {
         String[] cacheNames = resolveCacheNames(annotation.cacheNames(), annotation.value());
 
         return RedisCacheableOperation.builder()
@@ -35,6 +33,7 @@ public class CacheableOperationFactory implements OperationFactory<RedisCacheabl
                 .preRefreshThreshold(annotation.preRefreshThreshold())
                 .preRefreshMode(annotation.preRefreshMode())
                 .sync(annotation.sync())
+                .syncTimeout(annotation.syncTimeout())
                 .cacheManager(annotation.cacheManager())
                 .cacheResolver(annotation.cacheResolver())
                 .condition(annotation.condition())
@@ -49,10 +48,7 @@ public class CacheableOperationFactory implements OperationFactory<RedisCacheabl
         return annotation instanceof RedisCacheable;
     }
 
-    /**
-     * 解析缓存名称
-     * 优先使用 cacheNames，如果为空则使用 value
-     */
+    /** 解析缓存名称 优先使用 cacheNames，如果为空则使用 value */
     private String[] resolveCacheNames(String[] cacheNames, String[] values) {
         return (cacheNames != null && cacheNames.length > 0) ? cacheNames : values;
     }

@@ -1,7 +1,6 @@
-package com.david.spring.cache.redis.core.writer.chain;
+package com.david.spring.cache.redis.core.writer.chain.handler;
 
-import com.david.spring.cache.redis.core.writer.chain.handler.CacheContext;
-import com.david.spring.cache.redis.core.writer.chain.handler.CacheResult;
+import com.david.spring.cache.redis.core.writer.chain.CacheResult;
 
 /** 缓存处理器接口（责任链模式） */
 public interface CacheHandler {

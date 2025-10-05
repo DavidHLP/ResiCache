@@ -2,10 +2,7 @@ package com.david.spring.cache.redis.core.handler;
 
 import java.lang.reflect.Method;
 
-/**
- * 注解处理器责任链
- * 采用责任链模式处理不同类型的缓存注解
- */
+/** 注解处理器责任链 采用责任链模式处理不同类型的缓存注解 */
 public abstract class AnnotationHandler {
 
     /** 责任链的下一个处理器 */
@@ -23,9 +20,7 @@ public abstract class AnnotationHandler {
     }
 
     /**
-     * 处理方法上的注解
-     * 如果当前处理器能处理，则处理后继续传递给下一个处理器
-     * 如果不能处理，直接传递给下一个处理器
+     * 处理方法上的注解 如果当前处理器能处理，则处理后继续传递给下一个处理器 如果不能处理，直接传递给下一个处理器
      *
      * @param method 方法
      * @param target 目标对象

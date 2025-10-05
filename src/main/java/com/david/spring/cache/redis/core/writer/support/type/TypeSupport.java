@@ -1,4 +1,4 @@
-package com.david.spring.cache.redis.core.writer.support;
+package com.david.spring.cache.redis.core.writer.support.type;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,12 +61,13 @@ public class TypeSupport {
     @NonNull
     private byte[] serializeToJava(@NonNull Object value) {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
-             ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+                ObjectOutputStream oos = new ObjectOutputStream(bos)) {
             oos.writeObject(value);
             oos.flush();
             return bos.toByteArray();
         } catch (Exception e) {
-            throw new SerializationException("Failed to serialize value using Java serialization", e);
+            throw new SerializationException(
+                    "Failed to serialize value using Java serialization", e);
         }
     }
 

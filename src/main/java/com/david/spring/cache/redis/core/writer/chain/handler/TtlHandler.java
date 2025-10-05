@@ -1,8 +1,8 @@
 package com.david.spring.cache.redis.core.writer.chain.handler;
 
-import com.david.spring.cache.redis.core.writer.chain.AbstractCacheHandler;
 import com.david.spring.cache.redis.core.writer.chain.CacheOperation;
-import com.david.spring.cache.redis.core.writer.support.TtlSupport;
+import com.david.spring.cache.redis.core.writer.chain.CacheResult;
+import com.david.spring.cache.redis.core.writer.support.protect.ttl.TtlPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -10,47 +10,39 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * TTL 处理器 职责：计算和配置缓存的 TTL - PUT/PUT_IF_ABSENT 操作：计算最终的 TTL（支持随机化） - 优先级：上下文配置的 TTL >
- * 方法参数传入的 TTL
+ * TTL handler responsible for calculating final TTL values.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class TtlHandler extends AbstractCacheHandler {
 
-    private final TtlSupport ttlSupport;
+    private final TtlPolicy ttlPolicy;
 
-    /** 默认 TTL（秒） */
     private static final long DEFAULT_TTL = 60;
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
-        // 只处理 PUT 和 PUT_IF_ABSENT 操作
         return context.getOperation() == CacheOperation.PUT
                 || context.getOperation() == CacheOperation.PUT_IF_ABSENT;
     }
 
     @Override
     protected CacheResult doHandle(CacheContext context) {
-        // 计算 TTL
         calculateTtl(context);
-
-        // 继续责任链
         return invokeNext(context);
     }
 
-    /** 计算 TTL 并设置到上下文中 */
     private void calculateTtl(CacheContext context) {
         Duration ttl = context.getTtl();
         if (ttl == null) {
             ttl = Duration.ofSeconds(DEFAULT_TTL);
         }
 
-        // 优先使用上下文配置的 TTL
         if (context.getCacheOperation() != null
                 && context.getCacheOperation().getTtl() > 0) {
             long finalTtl =
-                    ttlSupport.calculateFinalTtl(
+                    ttlPolicy.calculateFinalTtl(
                             context.getCacheOperation().getTtl(),
                             context.getCacheOperation().isRandomTtl(),
                             context.getCacheOperation().getVariance());
@@ -67,8 +59,7 @@ public class TtlHandler extends AbstractCacheHandler {
                     finalTtl,
                     context.getCacheOperation().isRandomTtl(),
                     context.getCacheOperation().getVariance());
-        } else if (ttlSupport.shouldApplyTtl(ttl)) {
-            // 使用方法参数传入的 TTL
+        } else if (ttlPolicy.shouldApply(ttl)) {
             long finalTtl = ttl.getSeconds();
             context.setFinalTtl(finalTtl);
             context.setShouldApplyTtl(true);
@@ -80,7 +71,6 @@ public class TtlHandler extends AbstractCacheHandler {
                     context.getRedisKey(),
                     finalTtl);
         } else {
-            // 不应用 TTL
             context.setFinalTtl(-1);
             context.setShouldApplyTtl(false);
             context.setTtlFromContext(false);

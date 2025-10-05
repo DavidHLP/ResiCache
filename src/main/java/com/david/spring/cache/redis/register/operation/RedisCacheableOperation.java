@@ -1,9 +1,8 @@
 package com.david.spring.cache.redis.register.operation;
 
-import com.david.spring.cache.redis.core.writer.support.PreRefreshMode;
+import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.lang.NonNull;
 
@@ -13,6 +12,7 @@ public class RedisCacheableOperation extends CacheOperation {
 
     private final String unless;
     private final boolean sync;
+    private final long syncTimeout;
     private final long ttl;
     private final Class<?> type;
     private final boolean useSecondLevelCache;
@@ -28,6 +28,7 @@ public class RedisCacheableOperation extends CacheOperation {
         super(b);
         this.unless = b.unless;
         this.sync = b.sync;
+        this.syncTimeout = b.syncTimeout;
         this.ttl = b.ttl;
         this.type = b.type;
         this.useSecondLevelCache = b.useSecondLevelCache;
@@ -48,6 +49,7 @@ public class RedisCacheableOperation extends CacheOperation {
     public static class Builder extends CacheOperation.Builder {
         private String unless;
         private boolean sync;
+        private long syncTimeout = 10;
         private long ttl;
         private Class<?> type;
         private boolean useSecondLevelCache;
@@ -101,6 +103,11 @@ public class RedisCacheableOperation extends CacheOperation {
 
         public Builder sync(boolean sync) {
             this.sync = sync;
+            return this;
+        }
+
+        public Builder syncTimeout(long syncTimeout) {
+            this.syncTimeout = syncTimeout;
             return this;
         }
 

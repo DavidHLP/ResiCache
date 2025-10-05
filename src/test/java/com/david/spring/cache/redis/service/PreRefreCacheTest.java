@@ -8,8 +8,8 @@ import com.david.spring.cache.redis.SpringCacheRedis;
 import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import com.david.spring.cache.redis.config.TestConfig;
-import com.david.spring.cache.redis.core.writer.support.PreRefreshMode;
-import com.david.spring.cache.redis.core.writer.support.PreRefreshSupport;
+import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
 
 import jakarta.annotation.Resource;
 

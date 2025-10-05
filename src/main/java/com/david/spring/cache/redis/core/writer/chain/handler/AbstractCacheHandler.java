@@ -1,25 +1,24 @@
-package com.david.spring.cache.redis.core.writer.chain;
+package com.david.spring.cache.redis.core.writer.chain.handler;
 
-import com.david.spring.cache.redis.core.writer.chain.handler.CacheContext;
-import com.david.spring.cache.redis.core.writer.chain.handler.CacheResult;
+import com.david.spring.cache.redis.core.writer.chain.CacheResult;
 import lombok.Getter;
 import lombok.Setter;
 
 /** 抽象缓存处理器，提供责任链的基础实现 */
 @Getter
 @Setter
-public abstract class AbstractCacheHandler implements CacheHandler {
+abstract class AbstractCacheHandler implements CacheHandler {
     /** 下一个处理器 */
     private CacheHandler next;
 
     @Override
-    public void setNext(CacheHandler next) {
-        this.next = next;
+    public CacheHandler getNext() {
+        return next;
     }
 
     @Override
-    public CacheHandler getNext() {
-        return next;
+    public void setNext(CacheHandler next) {
+        this.next = next;
     }
 
     /**

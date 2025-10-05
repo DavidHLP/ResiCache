@@ -4,16 +4,14 @@ import com.david.spring.cache.redis.annotation.RedisCacheEvict;
 import com.david.spring.cache.redis.core.factory.EvictOperationFactory;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.operation.RedisCacheEvictOperation;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
-/**
- * @RedisCacheEvict 注解处理器
- * 负责处理方法上的 @RedisCacheEvict 注解
- */
 @Slf4j
 @Component
 public class EvictAnnotationHandler extends AnnotationHandler {
@@ -45,9 +43,6 @@ public class EvictAnnotationHandler extends AnnotationHandler {
         }
     }
 
-    /**
-     * 注册 CacheEvict 缓存操作
-     */
     private void registerCacheEvictOperation(
             Method method, Object target, Object[] args, RedisCacheEvict cacheEvict) {
         try {

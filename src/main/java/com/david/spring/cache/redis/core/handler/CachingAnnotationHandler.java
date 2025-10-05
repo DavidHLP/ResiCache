@@ -8,17 +8,14 @@ import com.david.spring.cache.redis.core.factory.EvictOperationFactory;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.operation.RedisCacheEvictOperation;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
-/**
- * @RedisCaching 组合注解处理器
- * 负责处理方法上的 @RedisCaching 组合注解
- * 将组合注解内的 cacheable 和 evict 注解分别处理
- */
 @Slf4j
 @Component
 public class CachingAnnotationHandler extends AnnotationHandler {
@@ -59,9 +56,6 @@ public class CachingAnnotationHandler extends AnnotationHandler {
         }
     }
 
-    /**
-     * 注册 Cacheable 缓存操作
-     */
     private void registerCacheableOperation(
             Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
         try {
@@ -80,9 +74,6 @@ public class CachingAnnotationHandler extends AnnotationHandler {
         }
     }
 
-    /**
-     * 注册 CacheEvict 缓存操作
-     */
     private void registerCacheEvictOperation(
             Method method, Object target, Object[] args, RedisCacheEvict cacheEvict) {
         try {

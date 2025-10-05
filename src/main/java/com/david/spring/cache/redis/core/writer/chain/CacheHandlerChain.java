@@ -1,7 +1,9 @@
-package com.david.spring.cache.redis.core.writer.chain.handler;
+package com.david.spring.cache.redis.core.writer.chain;
 
-import com.david.spring.cache.redis.core.writer.chain.CacheHandler;
+import com.david.spring.cache.redis.core.writer.chain.handler.CacheContext;
+import com.david.spring.cache.redis.core.writer.chain.handler.CacheHandler;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -11,11 +13,10 @@ import java.util.List;
 @Slf4j
 @Component
 public class CacheHandlerChain {
-    /** 责任链头节点 */
-    private CacheHandler head;
-
     /** 所有处理器列表（用于调试） */
     private final List<CacheHandler> handlers = new ArrayList<>();
+    /** 责任链头节点 */
+    private CacheHandler head;
 
     /**
      * 添加处理器到责任链末尾

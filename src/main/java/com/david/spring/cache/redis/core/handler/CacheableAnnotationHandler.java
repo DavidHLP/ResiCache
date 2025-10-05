@@ -4,16 +4,14 @@ import com.david.spring.cache.redis.annotation.RedisCacheable;
 import com.david.spring.cache.redis.core.factory.CacheableOperationFactory;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
-/**
- * @RedisCacheable 注解处理器
- * 负责处理方法上的 @RedisCacheable 注解
- */
 @Slf4j
 @Component
 public class CacheableAnnotationHandler extends AnnotationHandler {
@@ -45,9 +43,6 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
         }
     }
 
-    /**
-     * 注册 Cacheable 缓存操作
-     */
     private void registerCacheableOperation(
             Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
         try {

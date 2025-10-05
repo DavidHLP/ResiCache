@@ -1,8 +1,8 @@
 package com.david.spring.cache.redis.core.writer.chain.handler;
 
-import com.david.spring.cache.redis.core.writer.chain.AbstractCacheHandler;
 import com.david.spring.cache.redis.core.writer.chain.CacheOperation;
-import com.david.spring.cache.redis.core.writer.support.SyncSupport;
+import com.david.spring.cache.redis.core.writer.chain.CacheResult;
+import com.david.spring.cache.redis.core.writer.support.lock.SyncSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

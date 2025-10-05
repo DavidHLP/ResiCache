@@ -2,7 +2,7 @@ package com.david.spring.cache.redis.config;
 
 import com.david.spring.cache.redis.core.writer.RedisProCacheWriter;
 import com.david.spring.cache.redis.core.writer.chain.CacheHandlerChainFactory;
-import com.david.spring.cache.redis.core.writer.support.TypeSupport;
+import com.david.spring.cache.redis.core.writer.support.type.TypeSupport;
 import com.david.spring.cache.redis.manager.RedisProCacheManager;
 import com.david.spring.cache.redis.register.RedisCacheRegister;
 
@@ -20,6 +20,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.time.Clock;
 import java.time.Duration;
 
 @Slf4j
@@ -89,4 +90,11 @@ public class RedisProCacheConfiguration {
     public CacheStatisticsCollector cacheStatisticsCollector() {
         return CacheStatisticsCollector.create();
     }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Clock systemClock() {
+        return Clock.systemUTC();
+    }
 }
+

@@ -1,13 +1,15 @@
 package com.david.spring.cache.redis.core.writer.chain.handler;
 
 import com.david.spring.cache.redis.core.writer.CachedValue;
-import com.david.spring.cache.redis.core.writer.chain.AbstractCacheHandler;
-import com.david.spring.cache.redis.core.writer.support.NullValueSupport;
-import com.david.spring.cache.redis.core.writer.support.PreRefreshMode;
-import com.david.spring.cache.redis.core.writer.support.PreRefreshSupport;
-import com.david.spring.cache.redis.core.writer.support.TtlSupport;
+import com.david.spring.cache.redis.core.writer.chain.CacheResult;
+import com.david.spring.cache.redis.core.writer.support.protect.nullvalue.NullValuePolicy;
+import com.david.spring.cache.redis.core.writer.support.protect.ttl.TtlPolicy;
+import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -16,10 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Set;
 
-/**
- * 实际缓存操作处理器 职责：执行真正的 Redis 缓存操作 - GET：从 Redis 读取缓存，处理预刷新逻辑 - PUT：写入缓存到 Redis -
- * PUT_IF_ABSENT：条件写入缓存 - REMOVE：删除缓存 - CLEAN：批量清理缓存
- */
+/** */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -28,13 +27,13 @@ public class ActualCacheHandler extends AbstractCacheHandler {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
     private final CacheStatisticsCollector statistics;
-    private final TtlSupport ttlSupport;
-    private final NullValueSupport nullValueSupport;
+    private final TtlPolicy ttlPolicy;
+    private final NullValuePolicy nullValuePolicy;
     private final PreRefreshSupport preRefreshSupport;
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
-        // 所有操作都需要实际执行
+        // 所有操作都需要实际执�?
         return true;
     }
 
@@ -97,19 +96,19 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
             statistics.incHits(context.getCacheName());
 
-            // 更新访问时间和次数
+            // 更新访问时间和次�?
             cachedValue.updateAccess();
             valueOperations.set(
                     context.getRedisKey(),
                     cachedValue,
                     Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-            // 转换返回值
+            // 转换返回�?
             byte[] result =
-                    nullValueSupport.toReturnValue(
+                    nullValuePolicy.toReturnValue(
                             cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
 
-            if (result != null && !nullValueSupport.isNullValue(cachedValue.getValue())) {
+            if (result != null && !nullValuePolicy.isNullValue(cachedValue.getValue())) {
                 log.debug(
                         "Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
                         context.getCacheName(),
@@ -129,7 +128,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
     private boolean shouldPreRefresh(CacheContext context, CachedValue cachedValue) {
         return context.getCacheOperation() != null
                 && context.getCacheOperation().isEnablePreRefresh()
-                && ttlSupport.shouldPreRefresh(
+                && ttlPolicy.shouldPreRefresh(
                         cachedValue.getCreatedTime(),
                         cachedValue.getTtl(),
                         context.getCacheOperation().getPreRefreshThreshold());
@@ -150,7 +149,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         }
 
         if (mode == PreRefreshMode.SYNC) {
-            // 同步模式：返回 null，触发缓存未命中
+            // 同步模式：返�?null，触发缓存未命中
             log.info(
                     "Synchronous pre-refresh triggered, returning null to trigger cache miss: cacheName={}, key={}",
                     context.getCacheName(),
@@ -182,7 +181,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                         }
                     });
 
-            // 异步模式：返回 null 表示继续执行后续逻辑，返回旧值（不增加 miss 统计）
+            // 异步模式：返�?null 表示继续执行后续逻辑，返回旧值（不增�?miss 统计�?
             return null;
         }
     }
@@ -197,13 +196,13 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 context.getValueBytes() != null ? context.getValueBytes().length : 0);
 
         try {
-            // 获取存储值（可能是 null 或转换后的值）
+            // 获取存储值（可能�?null 或转换后的值）
             Object storeValue =
                     context.getStoreValue() != null
                             ? context.getStoreValue()
                             : context.getDeserializedValue();
 
-            // 创建缓存值对象
+            // 创建缓存值对�?
             CachedValue cachedValue;
             if (context.isShouldApplyTtl()) {
                 cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
@@ -249,8 +248,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 context.getValueBytes() != null ? context.getValueBytes().length : 0);
 
         try {
-            CachedValue existingValue =
-                    (CachedValue) valueOperations.get(context.getRedisKey());
+            CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
 
             if (existingValue != null && !existingValue.isExpired()) {
                 log.debug(
@@ -259,14 +257,14 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                         context.getRedisKey());
 
                 byte[] result =
-                        nullValueSupport.toReturnValue(
+                        nullValuePolicy.toReturnValue(
                                 existingValue.getValue(),
                                 context.getCacheName(),
                                 context.getRedisKey());
                 return CacheResult.success(result);
             }
 
-            // 获取存储值
+            // 获取存储�?
             Object storeValue =
                     context.getStoreValue() != null
                             ? context.getStoreValue()
@@ -315,11 +313,10 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                         context.getCacheName(),
                         context.getRedisKey());
 
-                CachedValue actualValue =
-                        (CachedValue) valueOperations.get(context.getRedisKey());
+                CachedValue actualValue = (CachedValue) valueOperations.get(context.getRedisKey());
                 if (actualValue != null) {
                     byte[] result =
-                            nullValueSupport.toReturnValue(
+                            nullValuePolicy.toReturnValue(
                                     actualValue.getValue(),
                                     context.getCacheName(),
                                     context.getRedisKey());
