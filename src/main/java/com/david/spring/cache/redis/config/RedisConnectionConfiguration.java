@@ -51,13 +51,15 @@ public class RedisConnectionConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public HashOperations hashOperations(RedisTemplate<String, Object> redisTemplate) {
+    public HashOperations<String, String, String> hashOperations(
+            RedisTemplate<String, Object> redisTemplate) {
         return redisTemplate.opsForHash();
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public ValueOperations valueOperations(RedisTemplate<String, Object> redisTemplate) {
+    public ValueOperations<String, Object> valueOperations(
+            RedisTemplate<String, Object> redisTemplate) {
         return redisTemplate.opsForValue();
     }
 

@@ -33,7 +33,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
-        // 所有操作都需要实际执�?
         return true;
     }
 
@@ -96,14 +95,12 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
             statistics.incHits(context.getCacheName());
 
-            // 更新访问时间和次�?
             cachedValue.updateAccess();
             valueOperations.set(
                     context.getRedisKey(),
                     cachedValue,
                     Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-            // 转换返回�?
             byte[] result =
                     nullValuePolicy.toReturnValue(
                             cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
@@ -136,20 +133,24 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
     /** 处理预刷新逻辑 */
     private CacheResult handlePreRefresh(CacheContext context, CachedValue cachedValue) {
-        log.info(
-                "Cache needs pre-refresh: cacheName={}, key={}, threshold={}, remainingTtl={}s",
-                context.getCacheName(),
-                context.getRedisKey(),
-                context.getCacheOperation().getPreRefreshThreshold(),
-                cachedValue.getRemainingTtl());
+        if (context.getCacheOperation() != null) {
+            log.info(
+                    "Cache needs pre-refresh: cacheName={}, key={}, threshold={}, remainingTtl={}s",
+                    context.getCacheName(),
+                    context.getRedisKey(),
+                    context.getCacheOperation().getPreRefreshThreshold(),
+                    cachedValue.getRemainingTtl());
+        }
 
-        PreRefreshMode mode = context.getCacheOperation().getPreRefreshMode();
+        PreRefreshMode mode = null;
+        if (context.getCacheOperation() != null) {
+            mode = context.getCacheOperation().getPreRefreshMode();
+        }
         if (mode == null) {
-            mode = PreRefreshMode.SYNC; // 默认同步模式
+            mode = PreRefreshMode.SYNC;
         }
 
         if (mode == PreRefreshMode.SYNC) {
-            // 同步模式：返�?null，触发缓存未命中
             log.info(
                     "Synchronous pre-refresh triggered, returning null to trigger cache miss: cacheName={}, key={}",
                     context.getCacheName(),
@@ -180,8 +181,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                                     e);
                         }
                     });
-
-            // 异步模式：返�?null 表示继续执行后续逻辑，返回旧值（不增�?miss 统计�?
             return null;
         }
     }
@@ -196,13 +195,12 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 context.getValueBytes() != null ? context.getValueBytes().length : 0);
 
         try {
-            // 获取存储值（可能�?null 或转换后的值）
+
             Object storeValue =
                     context.getStoreValue() != null
                             ? context.getStoreValue()
                             : context.getDeserializedValue();
 
-            // 创建缓存值对�?
             CachedValue cachedValue;
             if (context.isShouldApplyTtl()) {
                 cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
@@ -264,7 +262,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 return CacheResult.success(result);
             }
 
-            // 获取存储�?
             Object storeValue =
                     context.getStoreValue() != null
                             ? context.getStoreValue()
@@ -306,7 +303,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                         context.getCacheName(),
                         context.getRedisKey());
                 statistics.incPuts(context.getCacheName());
-                return CacheResult.success();
             } else {
                 log.debug(
                         "Conditional storage failed, retrieving existing value: cacheName={}, key={}",
@@ -322,8 +318,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                                     context.getRedisKey());
                     return CacheResult.success(result);
                 }
-                return CacheResult.success();
             }
+            return CacheResult.success();
 
         } catch (Exception e) {
             log.error("Failed to putIfAbsent value to cache: {}", context.getCacheName(), e);
@@ -369,9 +365,9 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                     "Found matching cache keys: cacheName={}, pattern={}, count={}",
                     context.getCacheName(),
                     keyPattern,
-                    keys != null ? keys.size() : 0);
+                    keys.size());
 
-            if (keys != null && !keys.isEmpty()) {
+            if (!keys.isEmpty()) {
                 Long deleteCount = redisTemplate.delete(keys);
                 statistics.incDeletesBy(context.getCacheName(), deleteCount.intValue());
 
