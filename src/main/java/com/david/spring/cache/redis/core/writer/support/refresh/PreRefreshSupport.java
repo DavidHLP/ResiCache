@@ -13,7 +13,6 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class PreRefreshSupport {
 
-    private final PreRefreshEvaluator evaluator;
     private final PreRefreshExecutor executor;
 
     public void submitAsyncRefresh(String key, Runnable refreshTask) {
