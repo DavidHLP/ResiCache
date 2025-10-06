@@ -26,6 +26,10 @@ public @interface RedisCacheable {
 
     String unless() default "";
 
+    /**
+     * Whether to guard cache miss/reload sections with a fine-grained synchronization lock.
+     * Only the critical regeneration path is locked, leaving cache hits unaffected.
+     */
     boolean sync() default false;
 
     /** Timeout for acquiring sync locks (seconds). */
@@ -51,4 +55,3 @@ public @interface RedisCacheable {
 
     boolean useSecondLevelCache() default false;
 }
-

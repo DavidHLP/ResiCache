@@ -8,10 +8,8 @@ import com.david.spring.cache.redis.core.writer.support.protect.nullvalue.NullVa
 import com.david.spring.cache.redis.core.writer.support.protect.ttl.TtlPolicy;
 import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
 import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -20,433 +18,473 @@ import org.springframework.util.Assert;
 
 import java.time.Duration;
 import java.util.Set;
+import java.util.function.Supplier;
 
-/** */
+/**  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ActualCacheHandler extends AbstractCacheHandler {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final ValueOperations<String, Object> valueOperations;
-    private final CacheStatisticsCollector statistics;
-    private final SyncSupport syncSupport;
-    private final TtlPolicy ttlPolicy;
-    private final NullValuePolicy nullValuePolicy;
-    private final PreRefreshSupport preRefreshSupport;
+	private final RedisTemplate<String, Object> redisTemplate;
+	private final ValueOperations<String, Object> valueOperations;
+	private final CacheStatisticsCollector statistics;
+	private final SyncSupport syncSupport;
+	private final TtlPolicy ttlPolicy;
+	private final NullValuePolicy nullValuePolicy;
+	private final PreRefreshSupport preRefreshSupport;
 
-    @Override
-    protected boolean shouldHandle(CacheContext context) {
-        return true;
-    }
+	@Override
+	protected boolean shouldHandle(CacheContext context) {
+		return true;
+	}
 
-    @Override
-    protected CacheResult doHandle(CacheContext context) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.notNull(context.getOperation(), "Cache operation must not be null");
+	@Override
+	protected CacheResult doHandle(CacheContext context) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.notNull(context.getOperation(), "Cache operation must not be null");
 
-        if (requiresLock(context)) {
-            return executeWithLock(context);
-        }
+		return dispatchOperation(context);
+	}
 
-        return dispatchOperation(context);
-    }
+	private boolean requiresLock(CacheContext context) {
+		LockContext lockContext = context.getLockContext();
+		return lockContext != null && lockContext.requiresLock();
+	}
 
-    private boolean requiresLock(CacheContext context) {
-        LockContext lockContext = context.getLockContext();
-        return lockContext != null && lockContext.requiresLock();
-    }
+	private CacheResult executeWithLock(CacheContext context, Supplier<CacheResult> criticalSection) {
+		LockContext lockContext = context.getLockContext();
+		Assert.notNull(lockContext, "LockContext must not be null when lock is required");
+		Assert.hasText(lockContext.lockKey(), "Lock key must not be empty when lock is required");
 
-    private CacheResult executeWithLock(CacheContext context) {
-        LockContext lockContext = context.getLockContext();
-        Assert.notNull(lockContext, "LockContext must not be null when lock is required");
-        Assert.hasText(lockContext.lockKey(), "Lock key must not be empty when lock is required");
+		log.debug(
+				"Executing critical cache section with sync lock: cacheName={}, key={}, operation={}, timeout={}s",
+				context.getCacheName(),
+				lockContext.lockKey(),
+				context.getOperation(),
+				lockContext.timeoutSeconds());
 
-        log.debug(
-                "Executing cache operation with sync lock: cacheName={}, key={}, operation={}, timeout={}s",
-                context.getCacheName(),
-                lockContext.lockKey(),
-                context.getOperation(),
-                lockContext.timeoutSeconds());
+		return syncSupport.executeSync(
+				lockContext.lockKey(),
+				criticalSection,
+				lockContext.timeoutSeconds());
+	}
 
-        return syncSupport.executeSync(
-                lockContext.lockKey(),
-                () -> dispatchOperation(context),
-                lockContext.timeoutSeconds());
-    }
+	private CacheResult dispatchOperation(CacheContext context) {
+		CacheOperation operation = context.getOperation();
 
-    private CacheResult dispatchOperation(CacheContext context) {
-        CacheOperation operation = context.getOperation();
+		return switch (operation) {
+			case GET -> handleGet(context);
+			case PUT -> handlePut(context);
+			case PUT_IF_ABSENT -> handlePutIfAbsent(context);
+			case REMOVE -> handleRemove(context);
+			case CLEAN -> handleClean(context);
+		};
+	}
 
-        return switch (operation) {
-            case GET -> handleGet(context);
-            case PUT -> handlePut(context);
-            case PUT_IF_ABSENT -> handlePutIfAbsent(context);
-            case REMOVE -> handleRemove(context);
-            case CLEAN -> handleClean(context);
-        };
-    }
+	private CacheResult handleGet(CacheContext context) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
+		Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
 
-    private CacheResult handleGet(CacheContext context) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.hasText(context.getCacheName(), "Cache name must not be empty");
-        Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
+		log.debug(
+				"Starting cache retrieval: cacheName={}, key={}, ttl={}",
+				context.getCacheName(),
+				context.getRedisKey(),
+				context.getTtl());
 
-        log.debug(
-                "Starting cache retrieval: cacheName={}, key={}, ttl={}",
-                context.getCacheName(),
-                context.getRedisKey(),
-                context.getTtl());
+		try {
+			statistics.incGets(context.getCacheName());
 
-        try {
-            CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
+			CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
 
-            statistics.incGets(context.getCacheName());
+			if (isCacheHit(cachedValue)) {
+				return processCacheHit(context, cachedValue);
+			}
 
-            if (cachedValue == null) {
-                log.debug(
-                        "Cache miss - data not found: cacheName={}, key={}",
-                        context.getCacheName(),
-                        context.getRedisKey());
-                statistics.incMisses(context.getCacheName());
-                return CacheResult.miss();
-            }
+			log.debug(
+					"Cache miss detected before lock: cacheName={}, key={}",
+					context.getCacheName(),
+					context.getRedisKey());
 
-            if (cachedValue.isExpired()) {
-                log.debug(
-                        "Cache miss - data expired: cacheName={}, key={}",
-                        context.getCacheName(),
-                        context.getRedisKey());
-                statistics.incMisses(context.getCacheName());
-                return CacheResult.miss();
-            }
+			if (!requiresLock(context)) {
+				statistics.incMisses(context.getCacheName());
+				return CacheResult.miss();
+			}
 
-            if (shouldPreRefresh(context, cachedValue)) {
-                CacheResult preRefreshResult = handlePreRefresh(context, cachedValue);
-                if (preRefreshResult != null) {
-                    return preRefreshResult;
-                }
-            }
+			return executeWithLock(
+					context,
+					() -> {
+						CachedValue lockedValue =
+								(CachedValue) valueOperations.get(context.getRedisKey());
 
-            log.debug(
-                    "Cache hit: cacheName={}, key={}, remainingTtl={}s",
-                    context.getCacheName(),
-                    context.getRedisKey(),
-                    cachedValue.getRemainingTtl());
+						if (isCacheHit(lockedValue)) {
+							return processCacheHit(context, lockedValue);
+						}
 
-            statistics.incHits(context.getCacheName());
+						log.debug(
+								"Cache miss confirmed after lock: cacheName={}, key={}",
+								context.getCacheName(),
+								context.getRedisKey());
+						statistics.incMisses(context.getCacheName());
+						return CacheResult.miss();
+					});
+		} catch (Exception e) {
+			log.error("Failed to get value from cache: {}", context.getCacheName(), e);
+			statistics.incMisses(context.getCacheName());
+			return CacheResult.failure(e);
+		}
+	}
 
-            cachedValue.updateAccess();
-            valueOperations.set(
-                    context.getRedisKey(),
-                    cachedValue,
-                    Duration.ofSeconds(cachedValue.getRemainingTtl()));
+	private boolean isCacheHit(CachedValue cachedValue) {
+		return cachedValue != null && !cachedValue.isExpired();
+	}
 
-            byte[] result =
-                    nullValuePolicy.toReturnValue(
-                            cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
+	private CacheResult processCacheHit(CacheContext context, CachedValue cachedValue) {
+		if (shouldPreRefresh(context, cachedValue)) {
+			CacheResult preRefreshResult = handlePreRefresh(context, cachedValue);
+			if (preRefreshResult != null) {
+				return preRefreshResult;
+			}
+		}
 
-            if (result != null && !nullValuePolicy.isNullValue(cachedValue.getValue())) {
-                log.debug(
-                        "Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
-                        context.getCacheName(),
-                        context.getRedisKey(),
-                        result.length);
-            }
+		log.debug(
+				"Cache hit: cacheName={}, key={}, remainingTtl={}s",
+				context.getCacheName(),
+				context.getRedisKey(),
+				cachedValue.getRemainingTtl());
 
-            return CacheResult.success(result);
-        } catch (Exception e) {
-            log.error("Failed to get value from cache: {}", context.getCacheName(), e);
-            statistics.incMisses(context.getCacheName());
-            return CacheResult.failure(e);
-        }
-    }
-    
-    private boolean shouldPreRefresh(CacheContext context, CachedValue cachedValue) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.notNull(cachedValue, "CachedValue must not be null");
+		statistics.incHits(context.getCacheName());
 
-        return context.getCacheOperation() != null
-                && context.getCacheOperation().isEnablePreRefresh()
-                && ttlPolicy.shouldPreRefresh(
-                        cachedValue.getCreatedTime(),
-                        cachedValue.getTtl(),
-                        context.getCacheOperation().getPreRefreshThreshold());
-    }
+		cachedValue.updateAccess();
+		valueOperations.set(
+				context.getRedisKey(),
+				cachedValue,
+				Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-    private CacheResult handlePreRefresh(CacheContext context, CachedValue cachedValue) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.notNull(cachedValue, "CachedValue must not be null");
-        Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
+		byte[] result =
+				nullValuePolicy.toReturnValue(
+						cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
 
-        if (context.getCacheOperation() != null) {
-            log.info(
-                    "Cache needs pre-refresh: cacheName={}, key={}, threshold={}, remainingTtl={}s",
-                    context.getCacheName(),
-                    context.getRedisKey(),
-                    context.getCacheOperation().getPreRefreshThreshold(),
-                    cachedValue.getRemainingTtl());
-        }
-        PreRefreshMode mode = null;
-        if (context.getCacheOperation() != null) {
-            mode = context.getCacheOperation().getPreRefreshMode();
-        }
-        if (mode == null) {
-            mode = PreRefreshMode.SYNC;
-        }
+		if (result != null && !nullValuePolicy.isNullValue(cachedValue.getValue())) {
+			log.debug(
+					"Successfully serialized cache data: cacheName={}, key={}, dataSize={} bytes",
+					context.getCacheName(),
+					context.getRedisKey(),
+					result.length);
+		}
 
-        if (mode == PreRefreshMode.SYNC) {
-            log.info(
-                    "Synchronous pre-refresh triggered, returning null to trigger cache miss: cacheName={}, key={}",
-                    context.getCacheName(),
-                    context.getRedisKey());
-            statistics.incMisses(context.getCacheName());
-            return CacheResult.miss();
-        } else {
-            log.info(
-                    "Asynchronous pre-refresh triggered, returning old value and refreshing cache in background: cacheName={}, key={}",
-                    context.getCacheName(),
-                    context.getRedisKey());
+		return CacheResult.success(result);
+	}
 
-            preRefreshSupport.submitAsyncRefresh(
-                    context.getRedisKey(),
-                    () -> {
-                        try {
-                            redisTemplate.delete(context.getRedisKey());
-                            log.debug(
-                                    "Asynchronous pre-refresh successfully deleted cache: cacheName={}, key={}",
-                                    context.getCacheName(),
-                                    context.getRedisKey());
-                        } catch (Exception e) {
-                            log.error(
-                                    "Asynchronous pre-refresh failed: cacheName={}, key={}",
-                                    context.getCacheName(),
-                                    context.getRedisKey(),
-                                    e);
-                        }
-                    });
-            return null;
-        }
-    }
+	private boolean shouldPreRefresh(CacheContext context, CachedValue cachedValue) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.notNull(cachedValue, "CachedValue must not be null");
 
-    /** 澶勭悊 PUT 鎿嶄綔 */
-    private CacheResult handlePut(CacheContext context) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.hasText(context.getCacheName(), "Cache name must not be empty");
-        Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
+		return context.getCacheOperation() != null
+				&& context.getCacheOperation().isEnablePreRefresh()
+				&& ttlPolicy.shouldPreRefresh(
+				cachedValue.getCreatedTime(),
+				cachedValue.getTtl(),
+				context.getCacheOperation().getPreRefreshThreshold());
+	}
 
-        log.debug(
-                "Starting cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes",
-                context.getCacheName(),
-                context.getRedisKey(),
-                context.getTtl(),
-                context.getValueBytes() != null ? context.getValueBytes().length : 0);
+	private CacheResult handlePreRefresh(CacheContext context, CachedValue cachedValue) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.notNull(cachedValue, "CachedValue must not be null");
+		Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
 
-        try {
+		if (context.getCacheOperation() != null) {
+			log.info(
+					"Cache needs pre-refresh: cacheName={}, key={}, threshold={}, remainingTtl={}s",
+					context.getCacheName(),
+					context.getRedisKey(),
+					context.getCacheOperation().getPreRefreshThreshold(),
+					cachedValue.getRemainingTtl());
+		}
+		PreRefreshMode mode = null;
+		if (context.getCacheOperation() != null) {
+			mode = context.getCacheOperation().getPreRefreshMode();
+		}
+		if (mode == null) {
+			mode = PreRefreshMode.SYNC;
+		}
 
-            Object storeValue =
-                    context.getStoreValue() != null
-                            ? context.getStoreValue()
-                            : context.getDeserializedValue();
+		if (mode == PreRefreshMode.SYNC) {
+			log.info(
+					"Synchronous pre-refresh triggered, returning null to trigger cache miss: cacheName={}, key={}",
+					context.getCacheName(),
+					context.getRedisKey());
+			statistics.incMisses(context.getCacheName());
+			return CacheResult.miss();
+		} else {
+			log.info(
+					"Asynchronous pre-refresh triggered, returning old value and refreshing cache in background: cacheName={}, key={}",
+					context.getCacheName(),
+					context.getRedisKey());
 
-            CachedValue cachedValue;
-            if (context.isShouldApplyTtl()) {
-                cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
-                valueOperations.set(
-                        context.getRedisKey(),
-                        cachedValue,
-                        Duration.ofSeconds(context.getFinalTtl()));
+			preRefreshSupport.submitAsyncRefresh(
+					context.getRedisKey(),
+					() -> {
+						try {
+							redisTemplate.delete(context.getRedisKey());
+							log.debug(
+									"Asynchronous pre-refresh successfully deleted cache: cacheName={}, key={}",
+									context.getCacheName(),
+									context.getRedisKey());
+						} catch (Exception e) {
+							log.error(
+									"Asynchronous pre-refresh failed: cacheName={}, key={}",
+									context.getCacheName(),
+									context.getRedisKey(),
+									e);
+						}
+					});
+			return null;
+		}
+	}
 
-                log.debug(
-                        "Successfully stored cache data with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
-                        context.getCacheName(),
-                        context.getRedisKey(),
-                        context.getFinalTtl(),
-                        context.isTtlFromContext(),
-                        context.getDeserializedValue() == null);
-            } else {
-                cachedValue = CachedValue.of(storeValue, -1);
-                valueOperations.set(context.getRedisKey(), cachedValue);
+	/** 澶勭悊 PUT 鎿嶄綔 */
+	private CacheResult handlePut(CacheContext context) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
+		Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
 
-                log.debug(
-                        "Successfully stored permanent cache data: cacheName={}, key={}, isNull={}",
-                        context.getCacheName(),
-                        context.getRedisKey(),
-                        context.getDeserializedValue() == null);
-            }
+		log.debug(
+				"Starting cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes",
+				context.getCacheName(),
+				context.getRedisKey(),
+				context.getTtl(),
+				context.getValueBytes() != null ? context.getValueBytes().length : 0);
 
-            statistics.incPuts(context.getCacheName());
-            return CacheResult.success();
+		try {
 
-        } catch (Exception e) {
-            log.error("Failed to put value to cache: {}", context.getCacheName(), e);
-            return CacheResult.failure(e);
-        }
-    }
+			Object storeValue =
+					context.getStoreValue() != null
+							? context.getStoreValue()
+							: context.getDeserializedValue();
 
-    /** 澶勭悊 PUT_IF_ABSENT 鎿嶄綔 */
-    private CacheResult handlePutIfAbsent(CacheContext context) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.hasText(context.getCacheName(), "Cache name must not be empty");
-        Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
+			CachedValue cachedValue;
+			if (context.isShouldApplyTtl()) {
+				cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
+				valueOperations.set(
+						context.getRedisKey(),
+						cachedValue,
+						Duration.ofSeconds(context.getFinalTtl()));
 
-        log.debug(
-                "Starting conditional cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes",
-                context.getCacheName(),
-                context.getRedisKey(),
-                context.getTtl(),
-                context.getValueBytes() != null ? context.getValueBytes().length : 0);
+				log.debug(
+						"Successfully stored cache data with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
+						context.getCacheName(),
+						context.getRedisKey(),
+						context.getFinalTtl(),
+						context.isTtlFromContext(),
+						context.getDeserializedValue() == null);
+			} else {
+				cachedValue = CachedValue.of(storeValue, -1);
+				valueOperations.set(context.getRedisKey(), cachedValue);
 
-        try {
-            CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
+				log.debug(
+						"Successfully stored permanent cache data: cacheName={}, key={}, isNull={}",
+						context.getCacheName(),
+						context.getRedisKey(),
+						context.getDeserializedValue() == null);
+			}
 
-            if (existingValue != null && !existingValue.isExpired()) {
-                log.debug(
-                        "Cache data exists and not expired, returning existing value: cacheName={}, key={}",
-                        context.getCacheName(),
-                        context.getRedisKey());
+			statistics.incPuts(context.getCacheName());
+			return CacheResult.success();
 
-                byte[] result =
-                        nullValuePolicy.toReturnValue(
-                                existingValue.getValue(),
-                                context.getCacheName(),
-                                context.getRedisKey());
-                return CacheResult.success(result);
-            }
+		} catch (Exception e) {
+			log.error("Failed to put value to cache: {}", context.getCacheName(), e);
+			return CacheResult.failure(e);
+		}
+	}
 
-            Object storeValue =
-                    context.getStoreValue() != null
-                            ? context.getStoreValue()
-                            : context.getDeserializedValue();
+	/** 澶勭悊 PUT_IF_ABSENT 鎿嶄綔 */
+	private CacheResult handlePutIfAbsent(CacheContext context) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
+		Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
 
-            // 鎵ц鏉′欢鍐欏叆
-            CachedValue cachedValue;
-            Boolean success;
+		log.debug(
+				"Starting conditional cache storage: cacheName={}, key={}, ttl={}, dataSize={} bytes",
+				context.getCacheName(),
+				context.getRedisKey(),
+				context.getTtl(),
+				context.getValueBytes() != null ? context.getValueBytes().length : 0);
 
-            if (context.isShouldApplyTtl()) {
-                cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
-                success =
-                        valueOperations.setIfAbsent(
-                                context.getRedisKey(),
-                                cachedValue,
-                                Duration.ofSeconds(context.getFinalTtl()));
+		try {
+			CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
+			CacheResult existingResult = handleExistingValue(context, existingValue);
+			if (existingResult != null) {
+				return existingResult;
+			}
 
-                log.debug(
-                        "Attempting conditional storage with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
-                        context.getCacheName(),
-                        context.getRedisKey(),
-                        context.getFinalTtl(),
-                        context.isTtlFromContext(),
-                        context.getDeserializedValue() == null);
-            } else {
-                cachedValue = CachedValue.of(storeValue, -1);
-                success = valueOperations.setIfAbsent(context.getRedisKey(), cachedValue);
+			if (requiresLock(context)) {
+				return executeWithLock(context, () -> performConditionalStore(context));
+			}
 
-                log.debug(
-                        "Attempting conditional storage without TTL: cacheName={}, key={}, isNull={}",
-                        context.getCacheName(),
-                        context.getRedisKey(),
-                        context.getDeserializedValue() == null);
-            }
+			return performConditionalStore(context);
 
-            if (Boolean.TRUE.equals(success)) {
-                log.debug(
-                        "Conditional storage succeeded: cacheName={}, key={}",
-                        context.getCacheName(),
-                        context.getRedisKey());
-                statistics.incPuts(context.getCacheName());
-            } else {
-                log.debug(
-                        "Conditional storage failed, retrieving existing value: cacheName={}, key={}",
-                        context.getCacheName(),
-                        context.getRedisKey());
+		} catch (Exception e) {
+			log.error("Failed to putIfAbsent value to cache: {}", context.getCacheName(), e);
+			return CacheResult.failure(e);
+		}
+	}
 
-                CachedValue actualValue = (CachedValue) valueOperations.get(context.getRedisKey());
-                if (actualValue != null) {
-                    byte[] result =
-                            nullValuePolicy.toReturnValue(
-                                    actualValue.getValue(),
-                                    context.getCacheName(),
-                                    context.getRedisKey());
-                    return CacheResult.success(result);
-                }
-            }
-            return CacheResult.success();
+	private CacheResult handleExistingValue(CacheContext context, CachedValue existingValue) {
+		if (!isCacheHit(existingValue)) {
+			return null;
+		}
 
-        } catch (Exception e) {
-            log.error("Failed to putIfAbsent value to cache: {}", context.getCacheName(), e);
-            return CacheResult.failure(e);
-        }
-    }
+		log.debug(
+				"Cache data exists and not expired, returning existing value: cacheName={}, key={}",
+				context.getCacheName(),
+				context.getRedisKey());
 
-    /** 澶勭悊 REMOVE 鎿嶄綔 */
-    private CacheResult handleRemove(CacheContext context) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.hasText(context.getCacheName(), "Cache name must not be empty");
-        Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
+		byte[] result =
+				nullValuePolicy.toReturnValue(
+						existingValue.getValue(),
+						context.getCacheName(),
+						context.getRedisKey());
+		return CacheResult.success(result);
+	}
 
-        log.debug(
-                "Starting cache data removal: cacheName={}, key={}",
-                context.getCacheName(),
-                context.getRedisKey());
+	private CacheResult performConditionalStore(CacheContext context) {
+		CachedValue recheckedValue = (CachedValue) valueOperations.get(context.getRedisKey());
+		CacheResult existingResult = handleExistingValue(context, recheckedValue);
+		if (existingResult != null) {
+			return existingResult;
+		}
 
-        try {
-            Boolean deleted = redisTemplate.delete(context.getRedisKey());
-            statistics.incDeletes(context.getCacheName());
+		Object storeValue =
+				context.getStoreValue() != null
+						? context.getStoreValue()
+						: context.getDeserializedValue();
 
-            log.debug(
-                    "Cache data removal completed: cacheName={}, key={}, deleted={}",
-                    context.getCacheName(),
-                    context.getRedisKey(),
-                    deleted);
+		CachedValue cachedValue;
+		Boolean success;
 
-            return CacheResult.success();
-        } catch (Exception e) {
-            log.error("Failed to remove value from cache: {}", context.getCacheName(), e);
-            return CacheResult.failure(e);
-        }
-    }
+		if (context.isShouldApplyTtl()) {
+			cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
+			success =
+					valueOperations.setIfAbsent(
+							context.getRedisKey(),
+							cachedValue,
+							Duration.ofSeconds(context.getFinalTtl()));
 
-    /** 澶勭悊 CLEAN 鎿嶄綔 */
-    private CacheResult handleClean(CacheContext context) {
-        Assert.notNull(context, "CacheContext must not be null");
-        Assert.hasText(context.getCacheName(), "Cache name must not be empty");
+			log.debug(
+					"Attempting conditional storage with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
+					context.getCacheName(),
+					context.getRedisKey(),
+					context.getFinalTtl(),
+					context.isTtlFromContext(),
+					context.getDeserializedValue() == null);
+		} else {
+			cachedValue = CachedValue.of(storeValue, -1);
+			success = valueOperations.setIfAbsent(context.getRedisKey(), cachedValue);
 
-        String keyPattern = context.getKeyPattern();
-        Assert.hasText(keyPattern, "Key pattern must not be empty");
-        log.debug(
-                "Starting batch cache cleanup: cacheName={}, pattern={}",
-                context.getCacheName(),
-                keyPattern);
+			log.debug(
+					"Attempting conditional storage without TTL: cacheName={}, key={}, isNull={}",
+					context.getCacheName(),
+					context.getRedisKey(),
+					context.getDeserializedValue() == null);
+		}
 
-        try {
-            Set<String> keys = redisTemplate.keys(keyPattern);
-            log.debug(
-                    "Found matching cache keys: cacheName={}, pattern={}, count={}",
-                    context.getCacheName(),
-                    keyPattern,
-                    keys.size());
+		if (Boolean.TRUE.equals(success)) {
+			log.debug(
+					"Conditional storage succeeded: cacheName={}, key={}",
+					context.getCacheName(),
+					context.getRedisKey());
+			statistics.incPuts(context.getCacheName());
+			return CacheResult.success();
+		}
 
-            if (!keys.isEmpty()) {
-                Long deleteCount = redisTemplate.delete(keys);
-                statistics.incDeletesBy(context.getCacheName(), deleteCount.intValue());
+		log.debug(
+				"Conditional storage failed, retrieving existing value: cacheName={}, key={}",
+				context.getCacheName(),
+				context.getRedisKey());
 
-                log.debug(
-                        "Batch cache cleanup completed: cacheName={}, pattern={}, deletedCount={}",
-                        context.getCacheName(),
-                        keyPattern,
-                        deleteCount);
-            } else {
-                log.debug(
-                        "No matching cache keys found: cacheName={}, pattern={}",
-                        context.getCacheName(),
-                        keyPattern);
-            }
+		CachedValue actualValue = (CachedValue) valueOperations.get(context.getRedisKey());
+		if (actualValue != null) {
+			byte[] result =
+					nullValuePolicy.toReturnValue(
+							actualValue.getValue(),
+							context.getCacheName(),
+							context.getRedisKey());
+			return CacheResult.success(result);
+		}
 
-            return CacheResult.success();
-        } catch (Exception e) {
-            log.error("Failed to clean cache: {}", context.getCacheName(), e);
-            return CacheResult.failure(e);
-        }
-    }
+		return CacheResult.success();
+	}
+
+	/** 澶勭悊 REMOVE 鎿嶄綔 */
+	private CacheResult handleRemove(CacheContext context) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
+		Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
+
+		log.debug(
+				"Starting cache data removal: cacheName={}, key={}",
+				context.getCacheName(),
+				context.getRedisKey());
+
+		try {
+			Boolean deleted = redisTemplate.delete(context.getRedisKey());
+			statistics.incDeletes(context.getCacheName());
+
+			log.debug(
+					"Cache data removal completed: cacheName={}, key={}, deleted={}",
+					context.getCacheName(),
+					context.getRedisKey(),
+					deleted);
+
+			return CacheResult.success();
+		} catch (Exception e) {
+			log.error("Failed to remove value from cache: {}", context.getCacheName(), e);
+			return CacheResult.failure(e);
+		}
+	}
+
+	/** 澶勭悊 CLEAN 鎿嶄綔 */
+	private CacheResult handleClean(CacheContext context) {
+		Assert.notNull(context, "CacheContext must not be null");
+		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
+
+		String keyPattern = context.getKeyPattern();
+		Assert.hasText(keyPattern, "Key pattern must not be empty");
+		log.debug(
+				"Starting batch cache cleanup: cacheName={}, pattern={}",
+				context.getCacheName(),
+				keyPattern);
+
+		try {
+			Set<String> keys = redisTemplate.keys(keyPattern);
+			log.debug(
+					"Found matching cache keys: cacheName={}, pattern={}, count={}",
+					context.getCacheName(),
+					keyPattern,
+					keys.size());
+
+			if (!keys.isEmpty()) {
+				Long deleteCount = redisTemplate.delete(keys);
+				statistics.incDeletesBy(context.getCacheName(), deleteCount.intValue());
+
+				log.debug(
+						"Batch cache cleanup completed: cacheName={}, pattern={}, deletedCount={}",
+						context.getCacheName(),
+						keyPattern,
+						deleteCount);
+			} else {
+				log.debug(
+						"No matching cache keys found: cacheName={}, pattern={}",
+						context.getCacheName(),
+						keyPattern);
+			}
+
+			return CacheResult.success();
+		} catch (Exception e) {
+			log.error("Failed to clean cache: {}", context.getCacheName(), e);
+			return CacheResult.failure(e);
+		}
+	}
 }
