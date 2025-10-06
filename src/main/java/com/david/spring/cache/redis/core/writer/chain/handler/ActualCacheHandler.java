@@ -87,7 +87,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         };
     }
 
-    /** 澶勭悊 GET 鎿嶄綔 */
     private CacheResult handleGet(CacheContext context) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -122,7 +121,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 return CacheResult.miss();
             }
 
-            // 妫€鏌ユ槸鍚﹂渶瑕侀鍒锋柊
             if (shouldPreRefresh(context, cachedValue)) {
                 CacheResult preRefreshResult = handlePreRefresh(context, cachedValue);
                 if (preRefreshResult != null) {
@@ -130,7 +128,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 }
             }
 
-            // 缂撳瓨鍛戒腑
             log.debug(
                     "Cache hit: cacheName={}, key={}, remainingTtl={}s",
                     context.getCacheName(),
@@ -164,8 +161,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.failure(e);
         }
     }
-
-    /** 鍒ゆ柇鏄惁闇€瑕侀鍒锋柊 */
+    
     private boolean shouldPreRefresh(CacheContext context, CachedValue cachedValue) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(cachedValue, "CachedValue must not be null");
@@ -178,7 +174,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                         context.getCacheOperation().getPreRefreshThreshold());
     }
 
-    /** 澶勭悊棰勫埛鏂伴€昏緫 */
     private CacheResult handlePreRefresh(CacheContext context, CachedValue cachedValue) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(cachedValue, "CachedValue must not be null");
@@ -208,7 +203,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             statistics.incMisses(context.getCacheName());
             return CacheResult.miss();
         } else {
-            // 寮傛妯″紡锛氳繑鍥炴棫鍊硷紝寮傛鍒犻櫎缂撳瓨
             log.info(
                     "Asynchronous pre-refresh triggered, returning old value and refreshing cache in background: cacheName={}, key={}",
                     context.getCacheName(),
