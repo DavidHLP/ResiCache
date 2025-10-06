@@ -53,4 +53,6 @@ public class CacheContext {
 
     /** 存储转换后的值（处理 null 值等） */
     private Object storeValue;
+
+    private LockContext lockContext;
 }

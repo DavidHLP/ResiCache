@@ -1,6 +1,7 @@
 package com.david.spring.cache.redis.core.writer.chain.handler;
 
 import com.david.spring.cache.redis.core.writer.chain.CacheResult;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -48,7 +49,9 @@ abstract class AbstractCacheHandler implements CacheHandler {
         if (shouldHandle(context)) {
             CacheResult result = doHandle(context);
             // 如果处理失败或明确返回结果，不再继续责任链
-            if (!result.isSuccess() || result.getResultBytes() != null || result.isRejectedByBloomFilter()) {
+            if (!result.isSuccess()
+                    || result.getResultBytes() != null
+                    || result.isRejectedByBloomFilter()) {
                 return result;
             }
         }

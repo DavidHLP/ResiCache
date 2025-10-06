@@ -2,23 +2,18 @@ package com.david.spring.cache.redis.core.writer.chain.handler;
 
 import com.david.spring.cache.redis.core.writer.chain.CacheOperation;
 import com.david.spring.cache.redis.core.writer.chain.CacheResult;
-import com.david.spring.cache.redis.core.writer.support.lock.SyncSupport;
 import com.david.spring.cache.redis.register.operation.RedisCacheableOperation;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Component;
+import org.springframework.util.Assert;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**
- * Sync lock handler guards hot key cache misses by leveraging multi-level locks.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class SyncLockHandler extends AbstractCacheHandler {
-
-    private final SyncSupport syncSupport;
 
     private static final long DEFAULT_LOCK_TIMEOUT = 10;
 
@@ -27,42 +22,22 @@ public class SyncLockHandler extends AbstractCacheHandler {
         return context.getCacheOperation() != null
                 && context.getCacheOperation().isSync()
                 && (context.getOperation() == CacheOperation.GET
-                        || context.getOperation() == CacheOperation.PUT_IF_ABSENT);
+                || context.getOperation() == CacheOperation.PUT_IF_ABSENT);
     }
 
     @Override
     protected CacheResult doHandle(CacheContext context) {
-        long timeoutSeconds = resolveTimeout(context.getCacheOperation());
-        String lockKey = context.getRedisKey();
+        LockContext lockContext = initializeLockContext(context);
+        context.setLockContext(lockContext);
 
         log.debug(
-                "Applying sync lock for cache operation: cacheName={}, key={}, operation={}, timeout={}s",
+                "Prepared lock context for cache operation: cacheName={}, key={}, operation={}, timeout={}s",
                 context.getCacheName(),
-                lockKey,
+                lockContext.lockKey(),
                 context.getOperation(),
-                timeoutSeconds);
+                lockContext.timeoutSeconds());
 
-        AtomicBoolean loaderInvoked = new AtomicBoolean(false);
-        try {
-            return syncSupport.executeSync(
-                    lockKey,
-                    () -> {
-                        loaderInvoked.set(true);
-                        return invokeNext(context);
-                    },
-                    timeoutSeconds);
-        } catch (RuntimeException ex) {
-            if (loaderInvoked.get()) {
-                throw ex;
-            }
-
-            log.error(
-                    "Sync lock execution failed before invoking downstream handler, falling back without lock: cacheName={}, key={}",
-                    context.getCacheName(),
-                    lockKey,
-                    ex);
-            return invokeNext(context);
-        }
+        return invokeNext(context);
     }
 
     private long resolveTimeout(RedisCacheableOperation operation) {
@@ -72,4 +47,17 @@ public class SyncLockHandler extends AbstractCacheHandler {
         long timeout = operation.getSyncTimeout();
         return timeout > 0 ? timeout : DEFAULT_LOCK_TIMEOUT;
     }
+
+    private LockContext initializeLockContext(CacheContext context) {
+        Assert.notNull(context.getCacheOperation(), "Cache operation must not be null");
+        String lockKey = context.getRedisKey();
+        Assert.hasText(lockKey, "Lock key must not be empty");
+
+        return LockContext.builder()
+                .syncLock(context.getCacheOperation().isSync())
+                .lockKey(lockKey)
+                .timeoutSeconds(resolveTimeout(context.getCacheOperation()))
+                .build();
+    }
 }
+

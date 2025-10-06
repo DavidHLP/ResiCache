@@ -1,7 +1,9 @@
 package com.david.spring.cache.redis.core.writer.chain.handler;
 
 import com.david.spring.cache.redis.core.writer.CachedValue;
+import com.david.spring.cache.redis.core.writer.chain.CacheOperation;
 import com.david.spring.cache.redis.core.writer.chain.CacheResult;
+import com.david.spring.cache.redis.core.writer.support.lock.SyncSupport;
 import com.david.spring.cache.redis.core.writer.support.protect.nullvalue.NullValuePolicy;
 import com.david.spring.cache.redis.core.writer.support.protect.ttl.TtlPolicy;
 import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
@@ -28,6 +30,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
     private final CacheStatisticsCollector statistics;
+    private final SyncSupport syncSupport;
     private final TtlPolicy ttlPolicy;
     private final NullValuePolicy nullValuePolicy;
     private final PreRefreshSupport preRefreshSupport;
@@ -42,7 +45,40 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(context.getOperation(), "Cache operation must not be null");
 
-        return switch (context.getOperation()) {
+        if (requiresLock(context)) {
+            return executeWithLock(context);
+        }
+
+        return dispatchOperation(context);
+    }
+
+    private boolean requiresLock(CacheContext context) {
+        LockContext lockContext = context.getLockContext();
+        return lockContext != null && lockContext.requiresLock();
+    }
+
+    private CacheResult executeWithLock(CacheContext context) {
+        LockContext lockContext = context.getLockContext();
+        Assert.notNull(lockContext, "LockContext must not be null when lock is required");
+        Assert.hasText(lockContext.lockKey(), "Lock key must not be empty when lock is required");
+
+        log.debug(
+                "Executing cache operation with sync lock: cacheName={}, key={}, operation={}, timeout={}s",
+                context.getCacheName(),
+                lockContext.lockKey(),
+                context.getOperation(),
+                lockContext.timeoutSeconds());
+
+        return syncSupport.executeSync(
+                lockContext.lockKey(),
+                () -> dispatchOperation(context),
+                lockContext.timeoutSeconds());
+    }
+
+    private CacheResult dispatchOperation(CacheContext context) {
+        CacheOperation operation = context.getOperation();
+
+        return switch (operation) {
             case GET -> handleGet(context);
             case PUT -> handlePut(context);
             case PUT_IF_ABSENT -> handlePutIfAbsent(context);
@@ -51,7 +87,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         };
     }
 
-    /** 处理 GET 操作 */
+    /** 澶勭悊 GET 鎿嶄綔 */
     private CacheResult handleGet(CacheContext context) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -86,7 +122,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 return CacheResult.miss();
             }
 
-            // 检查是否需要预刷新
+            // 妫€鏌ユ槸鍚﹂渶瑕侀鍒锋柊
             if (shouldPreRefresh(context, cachedValue)) {
                 CacheResult preRefreshResult = handlePreRefresh(context, cachedValue);
                 if (preRefreshResult != null) {
@@ -94,7 +130,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 }
             }
 
-            // 缓存命中
+            // 缂撳瓨鍛戒腑
             log.debug(
                     "Cache hit: cacheName={}, key={}, remainingTtl={}s",
                     context.getCacheName(),
@@ -109,8 +145,9 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                     cachedValue,
                     Duration.ofSeconds(cachedValue.getRemainingTtl()));
 
-            byte[] result = nullValuePolicy.toReturnValue(
-                    cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
+            byte[] result =
+                    nullValuePolicy.toReturnValue(
+                            cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
 
             if (result != null && !nullValuePolicy.isNullValue(cachedValue.getValue())) {
                 log.debug(
@@ -128,7 +165,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         }
     }
 
-    /** 判断是否需要预刷新 */
+    /** 鍒ゆ柇鏄惁闇€瑕侀鍒锋柊 */
     private boolean shouldPreRefresh(CacheContext context, CachedValue cachedValue) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(cachedValue, "CachedValue must not be null");
@@ -141,7 +178,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                         context.getCacheOperation().getPreRefreshThreshold());
     }
 
-    /** 处理预刷新逻辑 */
+    /** 澶勭悊棰勫埛鏂伴€昏緫 */
     private CacheResult handlePreRefresh(CacheContext context, CachedValue cachedValue) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(cachedValue, "CachedValue must not be null");
@@ -171,7 +208,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             statistics.incMisses(context.getCacheName());
             return CacheResult.miss();
         } else {
-            // 异步模式：返回旧值，异步删除缓存
+            // 寮傛妯″紡锛氳繑鍥炴棫鍊硷紝寮傛鍒犻櫎缂撳瓨
             log.info(
                     "Asynchronous pre-refresh triggered, returning old value and refreshing cache in background: cacheName={}, key={}",
                     context.getCacheName(),
@@ -198,7 +235,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         }
     }
 
-    /** 处理 PUT 操作 */
+    /** 澶勭悊 PUT 鎿嶄綔 */
     private CacheResult handlePut(CacheContext context) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -213,9 +250,10 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         try {
 
-            Object storeValue = context.getStoreValue() != null
-                    ? context.getStoreValue()
-                    : context.getDeserializedValue();
+            Object storeValue =
+                    context.getStoreValue() != null
+                            ? context.getStoreValue()
+                            : context.getDeserializedValue();
 
             CachedValue cachedValue;
             if (context.isShouldApplyTtl()) {
@@ -252,7 +290,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         }
     }
 
-    /** 处理 PUT_IF_ABSENT 操作 */
+    /** 澶勭悊 PUT_IF_ABSENT 鎿嶄綔 */
     private CacheResult handlePutIfAbsent(CacheContext context) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -274,27 +312,30 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                         context.getCacheName(),
                         context.getRedisKey());
 
-                byte[] result = nullValuePolicy.toReturnValue(
-                        existingValue.getValue(),
-                        context.getCacheName(),
-                        context.getRedisKey());
+                byte[] result =
+                        nullValuePolicy.toReturnValue(
+                                existingValue.getValue(),
+                                context.getCacheName(),
+                                context.getRedisKey());
                 return CacheResult.success(result);
             }
 
-            Object storeValue = context.getStoreValue() != null
-                    ? context.getStoreValue()
-                    : context.getDeserializedValue();
+            Object storeValue =
+                    context.getStoreValue() != null
+                            ? context.getStoreValue()
+                            : context.getDeserializedValue();
 
-            // 执行条件写入
+            // 鎵ц鏉′欢鍐欏叆
             CachedValue cachedValue;
             Boolean success;
 
             if (context.isShouldApplyTtl()) {
                 cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
-                success = valueOperations.setIfAbsent(
-                        context.getRedisKey(),
-                        cachedValue,
-                        Duration.ofSeconds(context.getFinalTtl()));
+                success =
+                        valueOperations.setIfAbsent(
+                                context.getRedisKey(),
+                                cachedValue,
+                                Duration.ofSeconds(context.getFinalTtl()));
 
                 log.debug(
                         "Attempting conditional storage with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
@@ -328,10 +369,11 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
                 CachedValue actualValue = (CachedValue) valueOperations.get(context.getRedisKey());
                 if (actualValue != null) {
-                    byte[] result = nullValuePolicy.toReturnValue(
-                            actualValue.getValue(),
-                            context.getCacheName(),
-                            context.getRedisKey());
+                    byte[] result =
+                            nullValuePolicy.toReturnValue(
+                                    actualValue.getValue(),
+                                    context.getCacheName(),
+                                    context.getRedisKey());
                     return CacheResult.success(result);
                 }
             }
@@ -343,7 +385,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         }
     }
 
-    /** 处理 REMOVE 操作 */
+    /** 澶勭悊 REMOVE 鎿嶄綔 */
     private CacheResult handleRemove(CacheContext context) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -371,7 +413,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         }
     }
 
-    /** 处理 CLEAN 操作 */
+    /** 澶勭悊 CLEAN 鎿嶄綔 */
     private CacheResult handleClean(CacheContext context) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
