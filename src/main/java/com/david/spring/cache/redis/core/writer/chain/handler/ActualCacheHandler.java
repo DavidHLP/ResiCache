@@ -11,20 +11,27 @@ import com.david.spring.cache.redis.core.writer.support.refresh.PreRefreshSuppor
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.*;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
 import java.time.Duration;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
-/**  */
+/**
+ * 实际缓存处理器，负责处理各种缓存操作，包括GET、PUT、PUT_IF_ABSENT、REMOVE和CLEAN操作
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ActualCacheHandler extends AbstractCacheHandler {
+
+	private static final int CLEAN_SCAN_COUNT = 512;
+	private static final int CLEAN_DELETE_BATCH_SIZE = 256;
 
 	private final RedisTemplate<String, Object> redisTemplate;
 	private final ValueOperations<String, Object> valueOperations;
@@ -34,11 +41,23 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 	private final NullValuePolicy nullValuePolicy;
 	private final PreRefreshSupport preRefreshSupport;
 
+	/**
+	 * 判断是否应该处理给定的缓存上下文
+	 *
+	 * @param context 缓存上下文
+	 * @return 始终返回true，表示总是处理
+	 */
 	@Override
 	protected boolean shouldHandle(CacheContext context) {
 		return true;
 	}
 
+	/**
+	 * 处理缓存操作的主要入口方法
+	 *
+	 * @param context 缓存上下文，包含操作类型和其他必要信息
+	 * @return 缓存操作结果
+	 */
 	@Override
 	protected CacheResult doHandle(CacheContext context) {
 		Assert.notNull(context, "CacheContext must not be null");
@@ -47,11 +66,24 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		return dispatchOperation(context);
 	}
 
+	/**
+	 * 判断给定的缓存上下文是否需要加锁执行
+	 *
+	 * @param context 缓存上下文
+	 * @return 如果需要加锁则返回true，否则返回false
+	 */
 	private boolean requiresLock(CacheContext context) {
 		LockContext lockContext = context.getLockContext();
 		return lockContext != null && lockContext.requiresLock();
 	}
 
+	/**
+	 * 在加锁环境下执行关键缓存操作
+	 *
+	 * @param context         缓存上下文
+	 * @param criticalSection 关键操作代码块
+	 * @return 缓存操作结果
+	 */
 	private CacheResult executeWithLock(CacheContext context, Supplier<CacheResult> criticalSection) {
 		LockContext lockContext = context.getLockContext();
 		Assert.notNull(lockContext, "LockContext must not be null when lock is required");
@@ -70,6 +102,12 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 				lockContext.timeoutSeconds());
 	}
 
+	/**
+	 * 根据操作类型分发到对应的处理方法
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果
+	 */
 	private CacheResult dispatchOperation(CacheContext context) {
 		CacheOperation operation = context.getOperation();
 
@@ -82,6 +120,12 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		};
 	}
 
+	/**
+	 * 处理GET操作，从缓存中获取数据
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果，包含获取到的数据
+	 */
 	private CacheResult handleGet(CacheContext context) {
 		Assert.notNull(context, "CacheContext must not be null");
 		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -136,10 +180,23 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		}
 	}
 
+	/**
+	 * 判断缓存值是否为有效命中
+	 *
+	 * @param cachedValue 缓存值
+	 * @return 如果是有效命中返回true，否则返回false
+	 */
 	private boolean isCacheHit(CachedValue cachedValue) {
 		return cachedValue != null && !cachedValue.isExpired();
 	}
 
+	/**
+	 * 处理缓存命中情况，包括预刷新逻辑
+	 *
+	 * @param context     缓存上下文
+	 * @param cachedValue 缓存值
+	 * @return 缓存操作结果
+	 */
 	private CacheResult processCacheHit(CacheContext context, CachedValue cachedValue) {
 		if (shouldPreRefresh(context, cachedValue)) {
 			CacheResult preRefreshResult = handlePreRefresh(context, cachedValue);
@@ -157,10 +214,24 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		statistics.incHits(context.getCacheName());
 
 		cachedValue.updateAccess();
-		valueOperations.set(
-				context.getRedisKey(),
-				cachedValue,
-				Duration.ofSeconds(cachedValue.getRemainingTtl()));
+		long remainingTtl = cachedValue.getRemainingTtl();
+		Boolean touched;
+		if (remainingTtl >= 0) {
+			touched =
+					valueOperations.setIfPresent(
+							context.getRedisKey(),
+							cachedValue,
+							Duration.ofSeconds(remainingTtl));
+		} else {
+			touched = valueOperations.setIfPresent(context.getRedisKey(), cachedValue);
+		}
+
+		if (!Boolean.TRUE.equals(touched)) {
+			log.debug(
+					"Skipped cache touch because key was removed concurrently: cacheName={}, key={}",
+					context.getCacheName(),
+					context.getRedisKey());
+		}
 
 		byte[] result =
 				nullValuePolicy.toReturnValue(
@@ -177,6 +248,13 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		return CacheResult.success(result);
 	}
 
+	/**
+	 * 判断是否需要进行预刷新
+	 *
+	 * @param context     缓存上下文
+	 * @param cachedValue 缓存值
+	 * @return 如果需要预刷新返回true，否则返回false
+	 */
 	private boolean shouldPreRefresh(CacheContext context, CachedValue cachedValue) {
 		Assert.notNull(context, "CacheContext must not be null");
 		Assert.notNull(cachedValue, "CachedValue must not be null");
@@ -189,6 +267,13 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 				context.getCacheOperation().getPreRefreshThreshold());
 	}
 
+	/**
+	 * 处理预刷新逻辑
+	 *
+	 * @param context     缓存上下文
+	 * @param cachedValue 缓存值
+	 * @return 缓存操作结果，如果需要同步预刷新则返回miss，否则返回null
+	 */
 	private CacheResult handlePreRefresh(CacheContext context, CachedValue cachedValue) {
 		Assert.notNull(context, "CacheContext must not be null");
 		Assert.notNull(cachedValue, "CachedValue must not be null");
@@ -223,28 +308,87 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 					context.getCacheName(),
 					context.getRedisKey());
 
-			preRefreshSupport.submitAsyncRefresh(
-					context.getRedisKey(),
-					() -> {
-						try {
-							redisTemplate.delete(context.getRedisKey());
-							log.debug(
-									"Asynchronous pre-refresh successfully deleted cache: cacheName={}, key={}",
-									context.getCacheName(),
-									context.getRedisKey());
-						} catch (Exception e) {
-							log.error(
-									"Asynchronous pre-refresh failed: cacheName={}, key={}",
-									context.getCacheName(),
-									context.getRedisKey(),
-									e);
-						}
-					});
+			scheduleAsyncPreRefresh(context, cachedValue);
 			return null;
 		}
 	}
 
-	/** 澶勭悊 PUT 鎿嶄綔 */
+	/**
+	 * 安排异步预刷新任务
+	 *
+	 * @param context     缓存上下文
+	 * @param cachedValue 缓存值
+	 */
+	private void scheduleAsyncPreRefresh(CacheContext context, CachedValue cachedValue) {
+		String redisKey = context.getRedisKey();
+		String cacheName = context.getCacheName();
+		LockContext lockContext = context.getLockContext();
+		long originalCreated = cachedValue.getCreatedTime();
+		long originalVersion = cachedValue.getVersion();
+
+		preRefreshSupport.submitAsyncRefresh(
+				redisKey,
+				() -> {
+					Runnable deleteTask = () -> {
+						try {
+							CachedValue liveValue = (CachedValue) valueOperations.get(redisKey);
+							if (liveValue == null) {
+								log.debug(
+										"Async pre-refresh found key already missing: cacheName={}, key={}",
+										cacheName,
+										redisKey);
+								return;
+							}
+
+							boolean matchesCreated = liveValue.getCreatedTime() == originalCreated;
+							boolean matchesVersion = liveValue.getVersion() == originalVersion;
+
+							if (matchesCreated && matchesVersion) {
+								Boolean deleted = redisTemplate.delete(redisKey);
+								log.debug(
+										"Async pre-refresh evicted stale entry: cacheName={}, key={}, deleted={}",
+										cacheName,
+										redisKey,
+										deleted);
+							} else {
+								log.debug(
+										"Async pre-refresh skipped delete because cache value changed: cacheName={}, key={}, originalVersion={}, liveVersion={}, originalCreated={}, liveCreated={}",
+										cacheName,
+										redisKey,
+										originalVersion,
+										liveValue.getVersion(),
+										originalCreated,
+										liveValue.getCreatedTime());
+							}
+						} catch (Exception ex) {
+							log.error(
+									"Async pre-refresh failed for cache: cacheName={}, key={}",
+									cacheName,
+									redisKey,
+									ex);
+						}
+					};
+
+					if (lockContext != null && lockContext.requiresLock()) {
+						syncSupport.executeSync(
+								lockContext.lockKey(),
+								() -> {
+									deleteTask.run();
+									return Boolean.TRUE;
+								},
+								lockContext.timeoutSeconds());
+					} else {
+						deleteTask.run();
+					}
+				});
+	}
+
+	/**
+	 * 处理PUT操作，向缓存中存储数据
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果
+	 */
 	private CacheResult handlePut(CacheContext context) {
 		Assert.notNull(context, "CacheContext must not be null");
 		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -258,48 +402,64 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 				context.getValueBytes() != null ? context.getValueBytes().length : 0);
 
 		try {
-
-			Object storeValue =
-					context.getStoreValue() != null
-							? context.getStoreValue()
-							: context.getDeserializedValue();
-
-			CachedValue cachedValue;
-			if (context.isShouldApplyTtl()) {
-				cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
-				valueOperations.set(
-						context.getRedisKey(),
-						cachedValue,
-						Duration.ofSeconds(context.getFinalTtl()));
-
-				log.debug(
-						"Successfully stored cache data with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
-						context.getCacheName(),
-						context.getRedisKey(),
-						context.getFinalTtl(),
-						context.isTtlFromContext(),
-						context.getDeserializedValue() == null);
-			} else {
-				cachedValue = CachedValue.of(storeValue, -1);
-				valueOperations.set(context.getRedisKey(), cachedValue);
-
-				log.debug(
-						"Successfully stored permanent cache data: cacheName={}, key={}, isNull={}",
-						context.getCacheName(),
-						context.getRedisKey(),
-						context.getDeserializedValue() == null);
+			if (requiresLock(context)) {
+				return executeWithLock(context, () -> doPut(context));
 			}
-
-			statistics.incPuts(context.getCacheName());
-			return CacheResult.success();
-
+			return doPut(context);
 		} catch (Exception e) {
 			log.error("Failed to put value to cache: {}", context.getCacheName(), e);
 			return CacheResult.failure(e);
 		}
 	}
 
-	/** 澶勭悊 PUT_IF_ABSENT 鎿嶄綔 */
+	/**
+	 * 执行实际的PUT操作
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果
+	 */
+	private CacheResult doPut(CacheContext context) {
+		preRefreshSupport.cancelAsyncRefresh(context.getRedisKey());
+
+		Object storeValue =
+				context.getStoreValue() != null ? context.getStoreValue() : context.getDeserializedValue();
+
+		CachedValue cachedValue;
+		if (context.isShouldApplyTtl()) {
+			cachedValue = CachedValue.of(storeValue, context.getFinalTtl());
+			valueOperations.set(
+					context.getRedisKey(),
+					cachedValue,
+					Duration.ofSeconds(context.getFinalTtl()));
+
+			log.debug(
+					"Successfully stored cache data with TTL: cacheName={}, key={}, ttl={}s, fromContext={}, isNull={}",
+					context.getCacheName(),
+					context.getRedisKey(),
+					context.getFinalTtl(),
+					context.isTtlFromContext(),
+					context.getDeserializedValue() == null);
+		} else {
+			cachedValue = CachedValue.of(storeValue, -1);
+			valueOperations.set(context.getRedisKey(), cachedValue);
+
+			log.debug(
+					"Successfully stored permanent cache data: cacheName={}, key={}, isNull={}",
+					context.getCacheName(),
+					context.getRedisKey(),
+					context.getDeserializedValue() == null);
+		}
+
+		statistics.incPuts(context.getCacheName());
+		return CacheResult.success();
+	}
+
+	/**
+	 * 处理PUT_IF_ABSENT操作，仅在键不存在时存储数据
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果
+	 */
 	private CacheResult handlePutIfAbsent(CacheContext context) {
 		Assert.notNull(context, "CacheContext must not be null");
 		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -331,6 +491,13 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		}
 	}
 
+	/**
+	 * 处理已存在的缓存值
+	 *
+	 * @param context       缓存上下文
+	 * @param existingValue 已存在的缓存值
+	 * @return 如果值存在且未过期则返回成功结果，否则返回null
+	 */
 	private CacheResult handleExistingValue(CacheContext context, CachedValue existingValue) {
 		if (!isCacheHit(existingValue)) {
 			return null;
@@ -349,6 +516,12 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		return CacheResult.success(result);
 	}
 
+	/**
+	 * 执行条件存储操作
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果
+	 */
 	private CacheResult performConditionalStore(CacheContext context) {
 		CachedValue recheckedValue = (CachedValue) valueOperations.get(context.getRedisKey());
 		CacheResult existingResult = handleExistingValue(context, recheckedValue);
@@ -417,7 +590,12 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		return CacheResult.success();
 	}
 
-	/** 澶勭悊 REMOVE 鎿嶄綔 */
+	/**
+	 * 处理REMOVE操作，从缓存中删除数据
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果
+	 */
 	private CacheResult handleRemove(CacheContext context) {
 		Assert.notNull(context, "CacheContext must not be null");
 		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -445,7 +623,12 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 		}
 	}
 
-	/** 澶勭悊 CLEAN 鎿嶄綔 */
+	/**
+	 * 处理CLEAN操作，批量清理匹配模式的缓存键
+	 *
+	 * @param context 缓存上下文
+	 * @return 缓存操作结果
+	 */
 	private CacheResult handleClean(CacheContext context) {
 		Assert.notNull(context, "CacheContext must not be null");
 		Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -458,25 +641,59 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 				keyPattern);
 
 		try {
-			Set<String> keys = redisTemplate.keys(keyPattern);
-			log.debug(
-					"Found matching cache keys: cacheName={}, pattern={}, count={}",
-					context.getCacheName(),
-					keyPattern,
-					keys.size());
+			LockContext lockContext = context.getLockContext();
+			boolean lockRequired = lockContext != null && lockContext.requiresLock();
+			AtomicLong totalDeleted = new AtomicLong();
 
-			if (!keys.isEmpty()) {
-				Long deleteCount = redisTemplate.delete(keys);
-				statistics.incDeletesBy(context.getCacheName(), deleteCount.intValue());
+			redisTemplate.execute(
+					(RedisCallback<Void>) connection -> {
+						ScanOptions scanOptions =
+								ScanOptions.scanOptions()
+										.match(keyPattern)
+										.count(CLEAN_SCAN_COUNT)
+										.build();
 
+						List<byte[]> batch = new ArrayList<>(CLEAN_DELETE_BATCH_SIZE);
+						try (Cursor<byte[]> cursor = connection.keyCommands().scan(scanOptions)) {
+							while (cursor.hasNext()) {
+								batch.add(cursor.next());
+								if (batch.size() >= CLEAN_DELETE_BATCH_SIZE) {
+									long removed =
+											deleteBatchWithPolicy(connection, batch, lockRequired, lockContext);
+									totalDeleted.addAndGet(removed);
+									batch.clear();
+								}
+							}
+							if (!batch.isEmpty()) {
+								long removed =
+										deleteBatchWithPolicy(connection, batch, lockRequired, lockContext);
+								totalDeleted.addAndGet(removed);
+								batch.clear();
+							}
+						} catch (Exception scanException) {
+							throw new IllegalStateException(
+									String.format(
+											"Failed to scan keys for cache cleanup: cacheName=%s, pattern=%s",
+											context.getCacheName(),
+											keyPattern),
+									scanException);
+						}
+						return null;
+					});
+
+			long deletedTotal = totalDeleted.get();
+			if (deletedTotal > 0) {
+				int reportedDeletes =
+						deletedTotal > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) deletedTotal;
+				statistics.incDeletesBy(context.getCacheName(), reportedDeletes);
 				log.debug(
 						"Batch cache cleanup completed: cacheName={}, pattern={}, deletedCount={}",
 						context.getCacheName(),
 						keyPattern,
-						deleteCount);
+						deletedTotal);
 			} else {
 				log.debug(
-						"No matching cache keys found: cacheName={}, pattern={}",
+						"No matching cache keys found during cleanup: cacheName={}, pattern={}",
 						context.getCacheName(),
 						keyPattern);
 			}
@@ -486,5 +703,52 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 			log.error("Failed to clean cache: {}", context.getCacheName(), e);
 			return CacheResult.failure(e);
 		}
+	}
+
+	/**
+	 * 根据锁策略删除一批缓存键
+	 *
+	 * @param connection   Redis连接
+	 * @param batch        要删除的键列表
+	 * @param lockRequired 是否需要加锁
+	 * @param lockContext  锁上下文
+	 * @return 删除的键数量
+	 */
+	private long deleteBatchWithPolicy(
+			RedisConnection connection, List<byte[]> batch, boolean lockRequired, LockContext lockContext) {
+		if (batch.isEmpty()) {
+			return 0L;
+		}
+		if (lockRequired && lockContext != null) {
+			return syncSupport.executeSync(
+					lockContext.lockKey(),
+					() -> removeBatch(connection, batch),
+					lockContext.timeoutSeconds());
+		}
+		return removeBatch(connection, batch);
+	}
+
+	/**
+	 * 删除一批缓存键
+	 *
+	 * @param connection Redis连接
+	 * @param batch      要删除的键列表
+	 * @return 删除的键数量
+	 */
+	private long removeBatch(RedisConnection connection, List<byte[]> batch) {
+		byte[][] keys = batch.toArray(new byte[batch.size()][]);
+		try {
+			Long removed = connection.keyCommands().unlink(keys);
+			if (removed != null) {
+				return removed;
+			}
+		} catch (Exception ex) {
+			log.trace(
+					"UNLINK not supported, falling back to DEL for batchSize={}",
+					batch.size(),
+					ex);
+		}
+		Long deleted = connection.keyCommands().del(keys);
+		return deleted != null ? deleted : 0L;
 	}
 }

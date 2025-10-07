@@ -23,6 +23,13 @@ public class PreRefreshSupport {
         executor.submit(key, refreshTask);
     }
 
+    public void cancelAsyncRefresh(String key) {
+        if (key == null) {
+            return;
+        }
+        executor.cancel(key);
+    }
+
     public String getThreadPoolStats() {
         return executor.getStats();
     }

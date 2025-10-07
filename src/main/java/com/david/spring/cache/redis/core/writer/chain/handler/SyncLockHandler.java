@@ -17,13 +17,16 @@ public class SyncLockHandler extends AbstractCacheHandler {
 
     private static final long DEFAULT_LOCK_TIMEOUT = 10;
 
-    @Override
-    protected boolean shouldHandle(CacheContext context) {
-        return context.getCacheOperation() != null
-                && context.getCacheOperation().isSync()
-                && (context.getOperation() == CacheOperation.GET
-                || context.getOperation() == CacheOperation.PUT_IF_ABSENT);
-    }
+	@Override
+	protected boolean shouldHandle(CacheContext context) {
+		if (context.getCacheOperation() == null || !context.getCacheOperation().isSync()) {
+			return false;
+		}
+		CacheOperation operation = context.getOperation();
+		return operation == CacheOperation.GET
+				|| operation == CacheOperation.PUT_IF_ABSENT
+				|| operation == CacheOperation.PUT;
+	}
 
     @Override
     protected CacheResult doHandle(CacheContext context) {
@@ -60,4 +63,3 @@ public class SyncLockHandler extends AbstractCacheHandler {
                 .build();
     }
 }
-

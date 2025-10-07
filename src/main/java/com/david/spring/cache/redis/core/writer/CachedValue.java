@@ -30,6 +30,7 @@ public class CachedValue {
                 .value(value)
                 .type(value != null ? value.getClass() : Object.class)
                 .ttl(ttl)
+                .version(System.nanoTime())
                 .build();
     }
 

@@ -35,7 +35,7 @@ import java.util.Objects;
             "spring.data.redis.password=Alone117",
             "logging.level.com.david.spring.cache.redis=DEBUG",
         })
-public class PreRefreCacheTest {
+public class PreRefreshCacheTest {
     @Resource private RedisTemplate<String, Object> redisTemplate;
     @Resource private PreRefreshCacheService preRefreshCacheService;
     @Resource private RedisProCacheWriterTestable redisCacheWriter;

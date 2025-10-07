@@ -5,15 +5,13 @@ package com.david.spring.cache.redis.core.writer.support.refresh;
  */
 public interface PreRefreshExecutor {
 
-    boolean isRefreshing(String key);
+	void submit(String key, Runnable task);
 
-    void submit(String key, Runnable task);
+	void cancel(String key);
 
-    String getStats();
+	String getStats();
 
-    int getActiveCount();
+	int getActiveCount();
 
-    void cleanup();
-
-    void shutdown();
+	void shutdown();
 }
