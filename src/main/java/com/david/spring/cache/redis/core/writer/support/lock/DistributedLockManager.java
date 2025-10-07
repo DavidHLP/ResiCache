@@ -50,7 +50,7 @@ class DistributedLockManager implements LockManager {
 
         private final RLock lock;
         private final String key;
-        private final AtomicBoolean released = new AtomicBoolean(false);
+        private final AtomicBoolean closed = new AtomicBoolean(false);
 
         private RedissonLockHandle(RLock lock, String key) {
             this.lock = lock;
@@ -58,8 +58,8 @@ class DistributedLockManager implements LockManager {
         }
 
         @Override
-        public void release() {
-            if (!released.compareAndSet(false, true)) {
+        public void close() {
+            if (!closed.compareAndSet(false, true)) {
                 return;
             }
 

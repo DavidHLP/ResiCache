@@ -1,18 +1,21 @@
-package com.david.spring.cache.redis.core.writer.support.protect.bloom;
+package com.david.spring.cache.redis.core.writer.support.protect.bloom.filter;
 
+import com.david.spring.cache.redis.core.writer.support.protect.bloom.BloomFilterConfig;
+import com.david.spring.cache.redis.core.writer.support.protect.bloom.strategy.BloomHashStrategy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 
-/** Redis-backed bloom filter implementation. */
+/**
+ * 基于Redis的布隆过滤器实现。
+ */
 @Slf4j
-@Component
+@Component("redisBloomFilter")
 @RequiredArgsConstructor
-public class RedisBloomFilter implements BloomFilter {
+public class RedisBloomIFilter implements BloomIFilter {
 
     private final HashOperations<String, String, String> hashOperations;
     private final BloomFilterConfig config;

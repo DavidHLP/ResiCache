@@ -1,7 +1,7 @@
-package com.david.spring.cache.redis.core.writer.support.protect.bloom;
+package com.david.spring.cache.redis.core.writer.support.protect.bloom.strategy;
 
+import com.david.spring.cache.redis.core.writer.support.protect.bloom.BloomFilterConfig;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -9,7 +9,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
-/** Message-digest based double hashing strategy. */
+/**
+ * 基于消息摘要的双重哈希策略。
+ */
 @Slf4j
 @Component
 public class MessageDigestBloomHashStrategy implements BloomHashStrategy {

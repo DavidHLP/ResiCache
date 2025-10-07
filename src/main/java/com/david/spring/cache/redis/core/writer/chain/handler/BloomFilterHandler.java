@@ -1,11 +1,9 @@
 package com.david.spring.cache.redis.core.writer.chain.handler;
 
 import com.david.spring.cache.redis.core.writer.chain.CacheResult;
-import com.david.spring.cache.redis.core.writer.support.protect.bloom.BloomFilter;
-
+import com.david.spring.cache.redis.core.writer.support.protect.bloom.BloomSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +13,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class BloomFilterHandler extends AbstractCacheHandler {
 
-    private final BloomFilter bloomFilter;
+    private final BloomSupport bloomSupport;
     private final CacheStatisticsCollector statistics;
 
     @Override
@@ -36,7 +34,7 @@ public class BloomFilterHandler extends AbstractCacheHandler {
 
     private CacheResult handleGet(CacheContext context) {
         boolean mightContain =
-                bloomFilter.mightContain(context.getCacheName(), context.getActualKey());
+                bloomSupport.mightContain(context.getCacheName(), context.getActualKey());
 
         if (!mightContain) {
             log.debug(
@@ -59,19 +57,11 @@ public class BloomFilterHandler extends AbstractCacheHandler {
         CacheResult result = invokeNext(context);
 
         if (result.isSuccess()) {
-            try {
-                bloomFilter.add(context.getCacheName(), context.getActualKey());
-                log.debug(
-                        "Added key to bloom filter: cacheName={}, key={}",
-                        context.getCacheName(),
-                        context.getRedisKey());
-            } catch (Exception e) {
-                log.error(
-                        "Failed to add key to bloom filter: cacheName={}, key={}",
-                        context.getCacheName(),
-                        context.getRedisKey(),
-                        e);
-            }
+            bloomSupport.add(context.getCacheName(), context.getActualKey());
+            log.debug(
+                    "Added key to bloom filter: cacheName={}, key={}",
+                    context.getCacheName(),
+                    context.getRedisKey());
         }
 
         return result;
@@ -83,14 +73,10 @@ public class BloomFilterHandler extends AbstractCacheHandler {
         if (result.isSuccess()
                 && context.getKeyPattern() != null
                 && context.getKeyPattern().endsWith("*")) {
-            try {
-                bloomFilter.clear(context.getCacheName());
-                log.debug(
-                        "Bloom filter cleared along with cache: cacheName={}",
-                        context.getCacheName());
-            } catch (Exception e) {
-                log.error("Failed to clear bloom filter: cacheName={}", context.getCacheName(), e);
-            }
+            bloomSupport.clear(context.getCacheName());
+            log.debug(
+                    "Bloom filter cleared along with cache: cacheName={}",
+                    context.getCacheName());
         }
 
         return result;

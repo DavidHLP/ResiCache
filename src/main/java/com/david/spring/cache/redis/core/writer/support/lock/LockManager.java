@@ -3,30 +3,24 @@ package com.david.spring.cache.redis.core.writer.support.lock;
 import java.util.Optional;
 
 /**
- * Abstraction for acquiring and releasing a cache level lock, typically backed by a distributed
- * store.
+ * 用于获取和释放缓存级别锁的抽象，通常由分布式存储支持。
  */
 public interface LockManager {
 
 	/**
-	 * Tries to acquire a lock for the given key within the timeout window.
+	 * 尝试在超时窗口内获取给定键的锁。
 	 *
-	 * @param key            cache key to lock
-	 * @param timeoutSeconds how long to wait for the lock
-	 * @return lock handle if acquired, empty otherwise
-	 * @throws InterruptedException if the current thread is interrupted while waiting
+	 * @param key            要锁定的缓存键
+	 * @param timeoutSeconds 等待锁的时长
+	 * @return 如果获取到锁则返回锁句柄，否则返回空
+	 * @throws InterruptedException 如果等待时当前线程被中断
 	 */
 	Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) throws InterruptedException;
 
-	/** Represents a held lock that must be released when processing completes. */
+	/** 表示一个已持有的锁，处理完成后必须释放。 */
 	interface LockHandle extends AutoCloseable {
 
-		/** Release the underlying lock. */
-		void release();
-
 		@Override
-		default void close() {
-			release();
-		}
+		void close();
 	}
 }

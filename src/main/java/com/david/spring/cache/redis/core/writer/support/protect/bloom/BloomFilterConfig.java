@@ -1,11 +1,12 @@
 package com.david.spring.cache.redis.core.writer.support.protect.bloom;
 
 import lombok.Getter;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/** Configuration holder for bloom filter behaviour. */
+/**
+ * 布隆过滤器行为的配置持有者。
+ */
 @Getter
 @Component
 public class BloomFilterConfig {
@@ -19,7 +20,7 @@ public class BloomFilterConfig {
             @Value("${cacheguard.bloom.bit-size:8388608}") int bitSize,
             @Value("${cacheguard.bloom.hash-functions:3}") int hashFunctions) {
         this.keyPrefix = keyPrefix;
-        this.bitSize = bitSize;
+        this.bitSize = Math.max(1, bitSize);
         this.hashFunctions = Math.max(1, hashFunctions);
     }
 }
