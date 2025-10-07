@@ -11,10 +11,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Distributed lock manager backed by Redisson. Keeps the distributed lock concerns out of SyncSupport.
+ * 基于 Redisson 的分布式锁管理器。将分布式锁相关的逻辑从 SyncSupport 中分离出来。
  */
 @Slf4j
-@Component
+@Component("distributedLockManager")
 @RequiredArgsConstructor
 class DistributedLockManager implements LockManager {
 
@@ -22,6 +22,14 @@ class DistributedLockManager implements LockManager {
 
     private final RedissonClient redissonClient;
 
+    /**
+     * 尝试获取指定键的分布式锁
+     *
+     * @param key            锁的键名
+     * @param timeoutSeconds 获取锁的超时时间（秒）
+     * @return 如果成功获取锁则返回包含锁句柄的Optional，否则返回空的Optional
+     * @throws InterruptedException 如果等待锁的过程中线程被中断
+     */
     @Override
     public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) throws InterruptedException {
         String lockKey = LOCK_PREFIX + key;
@@ -46,6 +54,14 @@ class DistributedLockManager implements LockManager {
         }
     }
 
+    @Override
+    public int getOrder() {
+        return 0;
+    }
+
+    /**
+     * 基于Redisson的锁句柄实现
+     */
     private static final class RedissonLockHandle implements LockHandle {
 
         private final RLock lock;
@@ -57,6 +73,10 @@ class DistributedLockManager implements LockManager {
             this.key = key;
         }
 
+        /**
+         * 释放分布式锁
+         * 只有持有锁的线程才能释放锁，且每个锁只能被释放一次
+         */
         @Override
         public void close() {
             if (!closed.compareAndSet(false, true)) {

@@ -13,12 +13,12 @@
     </parent>
 
     <groupId>io.github.davidhlp</groupId>
-    <artifactId>CacheGuard</artifactId>
+    <artifactId>ResiCache</artifactId>
     <version>3.2.4</version>
     <packaging>jar</packaging>
-    <name>CacheGuard</name>
-    <description>CacheGuard - 基于 Spring Cache 和 Redis 的高性能缓存防护工具包</description>
-    <url>https://github.com/davidhlp/CacheGuard</url>
+    <name>ResiCache</name>
+    <description>ResiCache - 基于 Spring Cache 和 Redis 的高性能缓存防护工具包</description>
+    <url>https://github.com/davidhlp/ResiCache</url>
 
     <licenses>
         <license>

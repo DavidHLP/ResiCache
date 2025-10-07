@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
@@ -27,6 +26,7 @@ public class SyncSupport {
      * @param lockManagers 锁管理器列表
      */
 	public SyncSupport(List<LockManager> lockManagers) {
+        lockManagers.sort((o1, o2) -> o2.getOrder() - o1.getOrder());
 		this.distributedManagers = List.copyOf(lockManagers);
     }
 
@@ -48,15 +48,10 @@ public class SyncSupport {
 
             try (LockStack lockStack = new LockStack()) {
 				for (LockManager manager : distributedManagers) {
-					Optional<LockManager.LockHandle> handle =
-							manager.tryAcquire(key, timeoutSeconds);
-					if (handle.isEmpty()) {
-						log.warn(
-								"Lock manager {} failed to acquire distributed lock for key: {}",
-								manager.getClass().getSimpleName(), key);
-                        return loader.get();
-                    }
-                    lockStack.push(handle.get());
+                    manager.tryAcquire(key, timeoutSeconds).ifPresentOrElse(lockStack::push, () -> {
+                        log.warn("Lock manager {} failed to acquire distributed lock for key: {}", manager.getClass().getSimpleName(), key);
+                        throw new RuntimeException("Failed to acquire distributed lock");
+                    });
                 }
 
                 log.debug("Acquired distributed lock(s) for cache key: {} (count={})", key, lockStack.size());

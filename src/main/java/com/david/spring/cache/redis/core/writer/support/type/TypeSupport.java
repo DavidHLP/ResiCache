@@ -118,28 +118,4 @@ public class TypeSupport {
             throw new SerializationException("Failed to deserialize Java serialized value", e);
         }
     }
-
-    /**
-     * 字节数组反序列化为指定类型对象
-     *
-     * @param bytes 字节数组
-     * @param clazz 目标类型
-     * @return 反序列化后的对象，失败返回null
-     */
-    @Nullable
-    public <T> T deserializeFromBytes(@NonNull byte[] bytes, @NonNull Class<T> clazz) {
-        try {
-            return objectMapper.readValue(bytes, clazz);
-        } catch (Exception e) {
-            throw new SerializationException(
-                    "Failed to deserialize value to type: " + clazz.getName(), e);
-        }
-    }
-
-    /** 序列化异常 */
-    public static class SerializationException extends RuntimeException {
-        public SerializationException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
 }
