@@ -14,7 +14,7 @@
 
     <groupId>io.github.davidhlp</groupId>
     <artifactId>CacheGuard</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>3.2.4</version>
     <packaging>jar</packaging>
     <name>CacheGuard</name>
     <description>CacheGuard - 基于 Spring Cache 和 Redis 的高性能缓存防护工具包</description>
