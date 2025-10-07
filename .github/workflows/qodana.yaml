@@ -1,12 +1,10 @@
 name: Qodana
-
 on:
   workflow_dispatch:
   pull_request:
   push:
     branches:
       - main
-      - master
       - 'releases/*'
 
 jobs:
@@ -19,10 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          # 如果是 PR 事件，使用 PR 的 head SHA；否则，使用触发事件的 SHA
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}  # to check out the actual pull request commit, not the merge commit
+          fetch-depth: 0  # a full history is required for pull request analysis
       - name: 'Qodana Scan'
-        uses: JetBrains/qodana-action@v2025.2.1
+        uses: JetBrains/qodana-action@v2025.2
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }} # read the steps about it below
