@@ -148,121 +148,15 @@
 
     <build>
         <plugins>
-
-            <!-- 生成并附带 sources JAR（Central 必需） -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar-no-fork</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- 生成并附带 javadoc JAR（Central 必需；Kotlin 项可生成空壳 Javadoc JAR 也被接受） -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.6.3</version>
-                <configuration>
-                    <doclint>none</doclint>
-                    <encoding>UTF-8</encoding>
-                    <charset>UTF-8</charset>
-                    <docencoding>UTF-8</docencoding>
-                    <!-- 防止 Javadoc 失败阻塞发布 -->
-                    <failOnError>false</failOnError>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>attach-javadocs</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- 为所有产物生成 .asc 签名（Central 必需） -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>3.2.8</version>
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
-                        </goals>
-                        <configuration>
-                            <gpgArguments>
-                                <arg>--pinentry-mode</arg>
-                                <arg>loopback</arg>
-                            </gpgArguments>
-                            <!-- 若需要，可在 CI 中通过 -Dgpg.keyname/-Dgpg.passphrase 传入 -->
-                            <!-- <keyname>${gpg.keyname}</keyname> -->
-                            <!-- <passphrase>${gpg.passphrase}</passphrase> -->
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- 使用新的 Central Publishing 流程上传（替代旧 nexus-staging-plugin） -->
             <plugin>
                 <groupId>org.sonatype.central</groupId>
                 <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.9.0</version>
+                <version>0.8.0</version>
                 <extensions>true</extensions>
                 <configuration>
-                    <!-- 对应 settings.xml 中的 <server id="central">（使用 User Token） -->
                     <publishingServerId>central</publishingServerId>
-                    <!-- 可选：校验通过后自动发布并等待发布完成 -->
-                    <!-- <autoPublish>true</autoPublish>
-                    <waitUntil>published</waitUntil> -->
                 </configuration>
             </plugin>
-
-            <!-- Kotlin 编译（如果你有 Kotlin 源码） -->
-            <plugin>
-                <groupId>org.jetbrains.kotlin</groupId>
-                <artifactId>kotlin-maven-plugin</artifactId>
-                <version>1.9.23</version>
-                <executions>
-                    <execution>
-                        <id>compile</id>
-                        <phase>process-sources</phase>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                        <configuration>
-                            <sourceDirs>
-                                <source>src/main/java</source>
-                                <source>src/main/kotlin</source>
-                                <source>target/generated-sources/annotations</source>
-                            </sourceDirs>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>test-compile</id>
-                        <phase>process-test-sources</phase>
-                        <goals>
-                            <goal>test-compile</goal>
-                        </goals>
-                        <configuration>
-                            <sourceDirs>
-                                <source>src/test/java</source>
-                                <source>src/test/kotlin</source>
-                            </sourceDirs>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
         </plugins>
     </build>
 
