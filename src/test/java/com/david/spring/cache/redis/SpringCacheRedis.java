@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 public class SpringCacheRedis {
-    public static void main(String[] args) {
-        SpringApplication.run(SpringCacheRedis.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(SpringCacheRedis.class, args);
+	}
 }
