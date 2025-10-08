@@ -15,7 +15,7 @@
 
     <groupId>io.github.davidhlp</groupId>
     <artifactId>ResiCache</artifactId>
-    <version>3.2.4</version>
+    <version>3.2.4-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>ResiCache</name>
@@ -43,7 +43,6 @@
             <id>davidhlp</id>
             <name>David H</name>
             <url>https://github.com/davidhlp</url>
-            <!-- 可留空邮箱或使用 noreply，以便在公开 POM 不暴露私人邮箱 -->
             <email>noreply@users.noreply.github.com</email>
         </developer>
     </developers>
@@ -55,13 +54,8 @@
         <project.reporting.outputEncoding>${encoding}</project.reporting.outputEncoding>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-
         <redisson.version>3.17.6</redisson.version>
         <hutool.version>5.8.22</hutool.version>
-
-        <!-- CI 中使用 gpg pinentry-mode loopback 时常用；值从环境变量注入更安全 -->
-        <!-- <gpg.keyname>${env.GPG_KEYNAME}</gpg.keyname> -->
-        <!-- <gpg.passphrase>${env.GPG_PASSPHRASE}</gpg.passphrase> -->
     </properties>
 
     <dependencies>
@@ -159,17 +153,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <!-- 可选：Issue/Ci 信息 -->
-    <!--
-    <issueManagement>
-      <system>GitHub Issues</system>
-      <url>https://github.com/davidhlp/ResiCache/issues</url>
-    </issueManagement>
-    <ciManagement>
-      <system>GitHub Actions</system>
-      <url>https://github.com/davidhlp/ResiCache/actions</url>
-    </ciManagement>
-    -->
-
 </project>
