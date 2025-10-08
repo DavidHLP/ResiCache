@@ -27,12 +27,13 @@ public @interface RedisCacheable {
     String unless() default "";
 
     /**
-     * Whether to guard cache miss/reload sections with a fine-grained synchronization lock.
-     * Only the critical regeneration path is locked, leaving cache hits unaffected.
+     * 是否使用细粒度同步锁保护缓存未命中/重新加载部分。
+     * 仅锁定关键的重新生成路径，缓存命中不受影响。
      */
     boolean sync() default false;
 
-    /** Timeout for acquiring sync locks (seconds). */
+
+    /** 获取同步锁的超时时间（秒）。 */
     long syncTimeout() default 10;
 
     long ttl() default 60;
