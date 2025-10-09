@@ -15,7 +15,7 @@
 
     <groupId>io.github.davidhlp</groupId>
     <artifactId>ResiCache</artifactId>
-    <version>3.2.4-SNAPSHOT</version>
+    <version>3.2.4</version>
     <packaging>jar</packaging>
 
     <name>ResiCache</name>
