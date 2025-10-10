@@ -1,1 +1,1 @@
-com.david.spring.cache.redis.config.RedisCacheAutoConfiguration
+io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration

@@ -1,6 +1,6 @@
 # ResiCache
 
-ResiCache 是一个 Spring Boot 3 的缓存扩展，用于增强基于 Redis 的缓存在穿透、击穿和雪崩场景下的防护能力。它用一个基于拦截器的处理管道替换了原生的 `RedisCacheManager`，并支持自定义的 [`@RedisCacheable`](src/main/java/com/david/spring/cache/redis/annotation/RedisCacheable.java)、[`@RedisCacheEvict`](src/main/java/com/david/spring/cache/redis/annotation/RedisCacheEvict.java) 和 [`@RedisCaching`](src/main/java/com/david/spring/cache/redis/annotation/RedisCaching.java) 注解。
+ResiCache 是一个 Spring Boot 3 的缓存扩展，用于增强基于 Redis 的缓存在穿透、击穿和雪崩场景下的防护能力。它用一个基于拦截器的处理管道替换了原生的 `RedisCacheManager`，并支持自定义的 [`@RedisCacheable`](src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheable.java)、[`@RedisCacheEvict`](src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheEvict.java) 和 [`@RedisCaching`](src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCaching.java) 注解。
 
 ## 核心特性
 - 使用布隆过滤器和空值控制防止缓存穿透。

@@ -1,6 +1,6 @@
 # ResiCache
 
-ResiCache is a Spring Boot 3 cache extension that hardens Redis-backed caches against penetration, breakdown, and avalanche scenarios. It replaces the stock `RedisCacheManager` with an interceptor-driven pipeline that understands custom [`@RedisCacheable`](src/main/java/com/david/spring/cache/redis/annotation/RedisCacheable.java), [`@RedisCacheEvict`](src/main/java/com/david/spring/cache/redis/annotation/RedisCacheEvict.java), and [`@RedisCaching`](src/main/java/com/david/spring/cache/redis/annotation/RedisCaching.java) annotations.
+ResiCache is a Spring Boot 3 cache extension that hardens Redis-backed caches against penetration, breakdown, and avalanche scenarios. It replaces the stock `RedisCacheManager` with an interceptor-driven pipeline that understands custom [`@RedisCacheable`](src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheable.java), [`@RedisCacheEvict`](src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheEvict.java), and [`@RedisCaching`](src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCaching.java) annotations.
 
 ## Key Features
 - Bloom filter guardrails and null-value controls to block cache penetration.
