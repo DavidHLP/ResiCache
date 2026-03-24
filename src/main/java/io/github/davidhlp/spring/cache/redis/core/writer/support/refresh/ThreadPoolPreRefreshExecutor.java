@@ -22,10 +22,19 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 执行器还通过统计和活动计数方法提供监控功能，
  * 并支持取消正在进行的刷新操作。
  * </p>
+ * <p>
+ * 失败的任务会自动重试，最多重试 {@value #MAX_RETRY_COUNT} 次。
+ * </p>
  */
 @Slf4j
 @Component
 public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
+
+    /** 预刷新任务最大重试次数 */
+    private static final int MAX_RETRY_COUNT = 3;
+    
+    /** 重试间隔（毫秒） */
+    private static final long RETRY_DELAY_MS = 1000;
 
     private final ExecutorService executorService;
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
@@ -48,7 +57,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
             ExecutorService executorService, ConcurrentHashMap<String, CompletableFuture<Void>> inFlight) {
         this.executorService = executorService;
         this.inFlight = inFlight;
-        log.info("ThreadPoolPreRefreshExecutor initialized with thread pool: core=2, max=10, queue=100");
+        log.info("ThreadPoolPreRefreshExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}", MAX_RETRY_COUNT);
     }
 
     /**
@@ -88,26 +97,14 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
                             scheduled.set(true);
                             CompletableFuture<Void> created =
                                     CompletableFuture.runAsync(
-                                            () -> {
-                                                try {
-                                                    log.debug("Starting async pre-refresh for key: {}", k);
-                                                    task.run();
-                                                    log.debug("Completed async pre-refresh for key: {}", k);
-                                                } catch (Exception ex) {
-                                                    log.error(
-                                                            "Failed to execute async pre-refresh for key: {}",
-                                                            k,
-                                                            ex);
-                                                    throw ex;
-                                                }
-                                            },
+                                            () -> executeWithRetry(k, task),
                                             executorService);
 
                             created.whenComplete(
                                     (result, throwable) -> {
                                         inFlight.remove(k, created);
                                         if (throwable != null) {
-                                            log.error("Async pre-refresh failed for key: {}", k, throwable);
+                                            log.error("Async pre-refresh failed after all retries for key: {}", k, throwable);
                                         }
                                     });
                             return created;
@@ -115,6 +112,47 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
 
         if (!scheduled.get() && !future.isDone()) {
             log.debug("Key {} is already being refreshed, skipping", key);
+        }
+    }
+
+    /**
+     * 带重试机制执行预刷新任务
+     *
+     * @param key  缓存键
+     * @param task 要执行的任务
+     */
+    private void executeWithRetry(String key, Runnable task) {
+        int attempt = 0;
+        Exception lastException = null;
+        
+        while (attempt < MAX_RETRY_COUNT) {
+            attempt++;
+            try {
+                log.debug("Starting async pre-refresh for key: {} (attempt {}/{})", key, attempt, MAX_RETRY_COUNT);
+                task.run();
+                log.debug("Completed async pre-refresh for key: {} (attempt {})", key, attempt);
+                return; // 成功，退出
+            } catch (Exception ex) {
+                lastException = ex;
+                log.warn("Async pre-refresh failed for key: {} (attempt {}/{}): {}", 
+                        key, attempt, MAX_RETRY_COUNT, ex.getMessage());
+                
+                if (attempt < MAX_RETRY_COUNT) {
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Retry interrupted for key: {}", key);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // 所有重试都失败
+        if (lastException != null) {
+            log.error("Async pre-refresh failed after {} attempts for key: {}", MAX_RETRY_COUNT, key, lastException);
+            throw new RuntimeException("Pre-refresh failed after " + MAX_RETRY_COUNT + " attempts", lastException);
         }
     }
 

@@ -1,18 +1,27 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.nullvalue.NullValuePolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Null value handler applying the configured null caching policy.
+ * 空值处理器
+ * 
+ * 职责：
+ * 1. 检查值是否为 null
+ * 2. 根据配置决定是否缓存 null 值
+ * 3. 转换 null 值为存储格式
+ * 
+ * 输出（设置到 CacheOutput）：
+ * - storeValue: 转换后的存储值
+ * - skipRemaining: 如果不缓存 null，标记跳过后续处理器
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@HandlerOrder(HandlerOrders.NULL_VALUE)
 public class NullValueHandler extends AbstractCacheHandler {
 
     private final NullValuePolicy nullValuePolicy;
@@ -24,7 +33,7 @@ public class NullValueHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected CacheResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context) {
         Object deserializedValue = context.getDeserializedValue();
 
         if (deserializedValue == null) {
@@ -33,8 +42,8 @@ public class NullValueHandler extends AbstractCacheHandler {
                         "Skipping null value caching (cacheNullValues=false): cacheName={}, key={}",
                         context.getCacheName(),
                         context.getRedisKey());
-                context.setSkipRemaining(true);
-                return CacheResult.success();
+                // 标记跳过后续处理器
+                return HandlerResult.skipAll();
             }
 
             log.debug(
@@ -43,10 +52,12 @@ public class NullValueHandler extends AbstractCacheHandler {
                     context.getRedisKey());
         }
 
+        // 转换值为存储格式
         Object storeValue =
                 nullValuePolicy.toStoreValue(deserializedValue, context.getCacheOperation());
-        context.setStoreValue(storeValue);
+        context.getOutput().setStoreValue(storeValue);
 
-        return invokeNext(context);
+        // 继续执行后续 Handler
+        return HandlerResult.continueChain();
     }
 }

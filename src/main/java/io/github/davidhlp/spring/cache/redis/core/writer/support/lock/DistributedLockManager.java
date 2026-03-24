@@ -19,6 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 class DistributedLockManager implements LockManager {
 
     private static final String LOCK_PREFIX = "cache:lock:";
+    
+    /** 锁持有超时倍数，leaseTime = timeoutSeconds * LEASE_TIMEOUT_MULTIPLIER */
+    private static final long LEASE_TIMEOUT_MULTIPLIER = 3;
+    
+    /** 最小锁持有时间（秒），确保即使 timeoutSeconds 很小也有足够的 lease time */
+    private static final long MIN_LEASE_TIME_SECONDS = 10;
 
     private final RedissonClient redissonClient;
 
@@ -34,9 +40,15 @@ class DistributedLockManager implements LockManager {
     public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) throws InterruptedException {
         String lockKey = LOCK_PREFIX + key;
         RLock lock = redissonClient.getLock(lockKey);
+        
+        // 计算合理的 lease time，确保即使持有者崩溃也能自动释放
+        long leaseTimeSeconds = Math.max(
+                MIN_LEASE_TIME_SECONDS,
+                timeoutSeconds * LEASE_TIMEOUT_MULTIPLIER
+        );
 
         try {
-            boolean acquired = lock.tryLock(timeoutSeconds, -1, TimeUnit.SECONDS);
+            boolean acquired = lock.tryLock(timeoutSeconds, leaseTimeSeconds, TimeUnit.SECONDS);
             if (!acquired) {
                 log.warn(
                         "Failed to acquire distributed lock for key within {} seconds: {}",
@@ -45,7 +57,7 @@ class DistributedLockManager implements LockManager {
                 return Optional.empty();
             }
 
-            log.debug("Acquired distributed lock for key: {}", key);
+            log.debug("Acquired distributed lock for key: {}, leaseTime: {}s", key, leaseTimeSeconds);
             return Optional.of(new RedissonLockHandle(lock, key));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

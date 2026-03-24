@@ -8,17 +8,20 @@ import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
  * 通过首先协调JVM内的线程，然后在可用时升级到分布式锁来处理同步执行。
+ * 
+ * 使用引用计数的 Monitor 来避免过早移除导致的同步问题。
  */
 @Slf4j
 @Component
 public class SyncSupport {
 
 	private final List<LockManager> distributedManagers;
-	private final ConcurrentMap<String, Object> localMonitors = new ConcurrentHashMap<>();
+	private final ConcurrentMap<String, MonitorHolder> localMonitors = new ConcurrentHashMap<>();
 
     /**
      * 构造函数
@@ -40,32 +43,67 @@ public class SyncSupport {
      * @return 执行结果
      */
 	public <T> T executeSync(String key, Supplier<T> loader, long timeoutSeconds) {
-		Object monitor = localMonitors.computeIfAbsent(key, k -> new Object());
-		synchronized (monitor) {
-			if (distributedManagers.isEmpty()) {
-                return loader.get();
-            }
+		MonitorHolder holder = acquireMonitor(key);
+		synchronized (holder.monitor) {
+			try {
+				if (distributedManagers.isEmpty()) {
+					return loader.get();
+				}
 
-            try (LockStack lockStack = new LockStack()) {
-				for (LockManager manager : distributedManagers) {
-                    manager.tryAcquire(key, timeoutSeconds).ifPresentOrElse(lockStack::push, () -> {
-                        log.warn("Lock manager {} failed to acquire distributed lock for key: {}", manager.getClass().getSimpleName(), key);
-                        throw new RuntimeException("Failed to acquire distributed lock");
-                    });
-                }
+				try (LockStack lockStack = new LockStack()) {
+					for (LockManager manager : distributedManagers) {
+						manager.tryAcquire(key, timeoutSeconds).ifPresentOrElse(lockStack::push, () -> {
+							log.warn("Lock manager {} failed to acquire distributed lock for key: {}", manager.getClass().getSimpleName(), key);
+							throw new RuntimeException("Failed to acquire distributed lock");
+						});
+					}
 
-                log.debug("Acquired distributed lock(s) for cache key: {} (count={})", key, lockStack.size());
+					log.debug("Acquired distributed lock(s) for cache key: {} (count={})", key, lockStack.size());
 
-				return loader.get();
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				log.error("Interrupted while acquiring distributed lock for key: {}", key, e);
-				return loader.get();
+					return loader.get();
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					log.error("Interrupted while acquiring distributed lock for key: {}", key, e);
+					return loader.get();
+				}
 			} finally {
-                localMonitors.remove(key, monitor);
-            }
-        }
+				releaseMonitor(key, holder);
+			}
+		}
     }
+
+	/**
+	 * 获取 Monitor，增加引用计数
+	 */
+	private MonitorHolder acquireMonitor(String key) {
+		MonitorHolder holder = localMonitors.compute(key, (k, existing) -> {
+			if (existing == null) {
+				return new MonitorHolder();
+			}
+			existing.refCount.incrementAndGet();
+			return existing;
+		});
+		holder.refCount.incrementAndGet();
+		return holder;
+	}
+
+	/**
+	 * 释放 Monitor，减少引用计数，当计数为0时移除
+	 */
+	private void releaseMonitor(String key, MonitorHolder holder) {
+		int count = holder.refCount.decrementAndGet();
+		if (count <= 0) {
+			localMonitors.remove(key, holder);
+		}
+	}
+
+	/**
+	 * 持有 Monitor 对象和引用计数
+	 */
+	private static final class MonitorHolder {
+		final Object monitor = new Object();
+		final AtomicInteger refCount = new AtomicInteger(0);
+	}
 
     /**
      * 锁堆栈类，用于管理多个锁的自动关闭

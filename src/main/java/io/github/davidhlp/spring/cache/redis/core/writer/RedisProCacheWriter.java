@@ -60,7 +60,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 构建上下文
         CacheContext context =
-                buildContext(CacheOperation.GET, name, redisKey, actualKey, null, ttl);
+                buildContext(CacheOperation.GET, name, redisKey, actualKey, null, null, ttl);
 
         // 执行责任链（使用缓存的 chain 实例）
         CacheResult result = getChain().execute(context);
@@ -138,8 +138,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 构建上下文
         CacheContext context =
-                buildContext(CacheOperation.PUT, name, redisKey, actualKey, value, ttl);
-        context.setDeserializedValue(deserializedValue);
+                buildContext(CacheOperation.PUT, name, redisKey, actualKey, value, deserializedValue, ttl);
 
         // 执行责任链（使用缓存的 chain 实例）
         getChain().execute(context);
@@ -170,8 +169,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 构建上下文
         CacheContext context =
-                buildContext(CacheOperation.PUT_IF_ABSENT, name, redisKey, actualKey, value, ttl);
-        context.setDeserializedValue(deserializedValue);
+                buildContext(CacheOperation.PUT_IF_ABSENT, name, redisKey, actualKey, value, deserializedValue, ttl);
 
         // 执行责任链（使用缓存的 chain 实例）
         CacheResult result = getChain().execute(context);
@@ -186,7 +184,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 构建上下文
         CacheContext context =
-                buildContext(CacheOperation.REMOVE, name, redisKey, actualKey, null, null);
+                buildContext(CacheOperation.REMOVE, name, redisKey, actualKey, null, null, null);
 
         // 执行责任链（使用缓存的 chain 实例）
         getChain().execute(context);
@@ -199,7 +197,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 构建上下文
         CacheContext context =
-                buildContext(CacheOperation.CLEAN, name, keyPattern, actualKey, null, null);
+                buildContext(CacheOperation.CLEAN, name, keyPattern, actualKey, null, null, null);
         context.setKeyPattern(keyPattern);
 
         // 执行责任链（使用缓存的 chain 实例）
@@ -240,6 +238,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
      * @param redisKey Redis完整key
      * @param actualKey 实际key
      * @param valueBytes 值字节数组
+     * @param deserializedValue 反序列化后的值
      * @param ttl TTL
      * @return 缓存上下文
      */
@@ -249,6 +248,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             String redisKey,
             String actualKey,
             @Nullable byte[] valueBytes,
+            @Nullable Object deserializedValue,
             @Nullable Duration ttl) {
 
         // 获取缓存操作配置
@@ -261,6 +261,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 .redisKey(redisKey)
                 .actualKey(actualKey)
                 .valueBytes(valueBytes)
+                .deserializedValue(deserializedValue)
                 .ttl(ttl)
                 .cacheOperation(cacheOperation)
                 .build();

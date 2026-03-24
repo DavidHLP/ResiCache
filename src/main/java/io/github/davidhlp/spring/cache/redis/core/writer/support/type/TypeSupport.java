@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.cache.support.NullValue;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
@@ -14,7 +15,15 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 
-/** 类型转换支持工具类 集中处理各类型转换逻辑，包括： - 字节数组与字符串的转换 - JSON序列化与反序列化 - 类型安全的类型转换 */
+/**
+ * 类型转换支持工具类
+ * 
+ * 集中处理各类型转换逻辑，包括：
+ * - 字节数组与字符串的转换
+ * - JSON序列化与反序列化
+ * - 类型安全的类型转换
+ * - Java序列化（用于 NullValue 兼容）
+ */
 @Component
 @RequiredArgsConstructor
 public class TypeSupport {
@@ -36,12 +45,13 @@ public class TypeSupport {
      * 对象序列化为字节数组
      *
      * @param value 待序列化的对象
-     * @return 序列化后的字节数组，失败返回null
+     * @return 序列化后的字节数组，失败抛出异常
      */
     @Nullable
     public byte[] serializeToBytes(@NonNull Object value) {
         // 对于Spring的NullValue，使用Java序列化以保证兼容性
-        if ("org.springframework.cache.support.NullValue".equals(value.getClass().getName())) {
+        // 使用 instanceof 而不是字符串比较，避免重构/包名变更问题
+        if (value instanceof NullValue) {
             return serializeToJava(value);
         }
 
@@ -108,9 +118,7 @@ public class TypeSupport {
                 ObjectInputStream ois = new ObjectInputStream(bis)) {
             Object obj = ois.readObject();
             // 如果是Spring的NullValue，返回null
-            if (obj != null
-                    && "org.springframework.cache.support.NullValue"
-                            .equals(obj.getClass().getName())) {
+            if (obj instanceof NullValue) {
                 return null;
             }
             return obj;
