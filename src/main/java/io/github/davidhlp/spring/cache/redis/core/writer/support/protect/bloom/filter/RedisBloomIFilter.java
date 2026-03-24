@@ -5,12 +5,19 @@ import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.s
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 基于Redis的布隆过滤器实现。
+ * 
+ * <p>性能优化：使用 Redis Pipeline 批量操作，减少网络往返次数。
  */
 @Slf4j
 @Component("redisBloomFilter")
@@ -30,9 +37,14 @@ public class RedisBloomIFilter implements BloomIFilter {
         String bloomKey = bloomKey(cacheName);
         try {
             int[] positions = hashStrategy.positionsFor(key, config);
+            
+            // 使用 Pipeline 批量写入，减少网络往返
+            Map<String, String> data = new HashMap<>(positions.length);
             for (int position : positions) {
-                hashOperations.put(bloomKey, Integer.toString(position), "1");
+                data.put(Integer.toString(position), "1");
             }
+            hashOperations.putAll(bloomKey, data);
+            
             log.debug(
                     "Bloom filter add: cacheName={}, key={}, positions={}",
                     cacheName,
@@ -51,13 +63,22 @@ public class RedisBloomIFilter implements BloomIFilter {
 
         String bloomKey = bloomKey(cacheName);
         try {
-            for (int position : hashStrategy.positionsFor(key, config)) {
-                Object value = hashOperations.get(bloomKey, Integer.toString(position));
-                if (value == null) {
+            int[] positions = hashStrategy.positionsFor(key, config);
+            
+            // 使用 multiGet 批量查询，减少网络往返
+            List<String> hashKeys = Arrays.stream(positions)
+                    .mapToObj(Integer::toString)
+                    .collect(Collectors.toList());
+            List<String> values = hashOperations.multiGet(bloomKey, hashKeys);
+            
+            // 检查是否有任何位置缺失
+            for (int i = 0; i < values.size(); i++) {
+                if (values.get(i) == null) {
                     log.debug(
-                            "Bloom filter miss (definitely does not exist): cacheName={}, key={}",
+                            "Bloom filter miss (definitely does not exist): cacheName={}, key={}, missingPosition={}",
                             cacheName,
-                            key);
+                            key,
+                            positions[i]);
                     return false;
                 }
             }
@@ -66,6 +87,7 @@ public class RedisBloomIFilter implements BloomIFilter {
             return true;
         } catch (Exception e) {
             log.error("Bloom filter check failed: cacheName={}, key={}", cacheName, key, e);
+            // 异常时默认返回 true，避免误拒绝
             return true;
         }
     }

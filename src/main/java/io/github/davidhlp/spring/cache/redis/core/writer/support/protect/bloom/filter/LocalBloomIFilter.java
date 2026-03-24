@@ -13,6 +13,12 @@ import java.util.concurrent.ConcurrentMap;
 
 /**
  * JVM 内存级别的布隆过滤器，用于降低 Redis 查询的频率。
+ * 
+ * <p>线程安全说明：
+ * <ul>
+ *   <li>BitSet 操作使用 synchronized 保护</li>
+ *   <li>clear() 操作清空 BitSet 而不是移除，避免竞态条件</li>
+ * </ul>
  */
 @Slf4j
 @Component("localBloomFilter")
@@ -70,7 +76,14 @@ public class LocalBloomIFilter implements BloomIFilter {
     @Override
     public void clear(String cacheName) {
         if (cacheName != null) {
-            localFilters.remove(cacheName);
+            BitSet bitSet = localFilters.get(cacheName);
+            if (bitSet != null) {
+                // 清空 BitSet 而不是移除，避免其他线程的竞态条件
+                synchronized (bitSet) {
+                    bitSet.clear();
+                }
+                log.debug("Local bloom filter cleared: cacheName={}", cacheName);
+            }
         }
     }
 
