@@ -54,5 +54,10 @@ public @interface RedisCacheable {
 
     PreRefreshMode preRefreshMode() default PreRefreshMode.SYNC;
 
+    /**
+     * @deprecated 此参数当前未实现，保留作为预留API。
+     *             计划在未来版本中实现多级缓存支持。
+     */
+    @Deprecated
     boolean useSecondLevelCache() default false;
 }
