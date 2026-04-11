@@ -74,7 +74,7 @@ public class PreRefreshHandler extends AbstractCacheHandler {
 
         if (decision.needsRefresh() && decision.isSync()) {
             // 同步预刷新：返回 skipAll，ActualCacheHandler 会返回 miss
-            context.setAttribute("preRefresh.skipped", true);
+            context.setAttribute(CacheContext.AttributeKey.PRE_REFRESH_SKIPPED, true);
             log.debug("Sync pre-refresh triggered, skipping actual cache: cacheName={}, key={}",
                       context.getCacheName(), context.getRedisKey());
             return HandlerResult.skipAll();

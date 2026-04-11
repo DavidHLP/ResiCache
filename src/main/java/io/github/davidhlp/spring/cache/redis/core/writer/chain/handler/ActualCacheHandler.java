@@ -63,7 +63,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         Assert.notNull(context.getOperation(), "Cache operation must not be null");
 
         // 检查是否已被预刷新处理跳过
-        if (context.getAttribute("preRefresh.skipped", false)) {
+        if (context.getAttribute(CacheContext.AttributeKey.PRE_REFRESH_SKIPPED, false)) {
             return HandlerResult.terminate(CacheResult.miss());
         }
 

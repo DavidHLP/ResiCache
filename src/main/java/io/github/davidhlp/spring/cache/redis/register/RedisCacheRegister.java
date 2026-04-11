@@ -61,7 +61,7 @@ public class RedisCacheRegister {
             return (RedisCacheableOperation) operation;
         }
 
-        // 如果直接匹配失败,遍历查找(性能较低,仅作为fallback)
+        // 直接匹配失败，返回 null（暂未实现 fallback 遍历查找）
         log.debug("Direct match failed for cacheable operation: name={}, key={}", name, key);
         return null;
     }
@@ -76,7 +76,7 @@ public class RedisCacheRegister {
             return (RedisCacheEvictOperation) operation;
         }
 
-        // 如果直接匹配失败,遍历查找(性能较低,仅作为fallback)
+        // 直接匹配失败，返回 null（暂未实现 fallback 遍历查找）
         log.debug("Direct match failed for evict operation: name={}, key={}", name, key);
         return null;
     }
