@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.support.NullValue;
 import org.springframework.lang.NonNull;
@@ -25,6 +26,7 @@ import java.nio.charset.StandardCharsets;
  * - 类型安全的类型转换
  * - Java序列化（用于 NullValue 兼容）
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TypeSupport {
@@ -94,9 +96,11 @@ public class TypeSupport {
             return null;
         }
 
-        // 检测是否为Java序列化数据（以 0xAC 0xED 开头）
-        if (bytes.length >= 2 && bytes[0] == (byte) 0xAC && bytes[1] == (byte) 0xED) {
-            // 安全风险：拒绝Java反序列化
+        // 检测是否为Java序列化数据（以 0xAC 0xED 0x00 0x05 开头）
+        if (isJavaSerialized(bytes)) {
+            // 安全风险：拒绝Java反序列化，记录警告日志
+            log.warn("Detected potential Java serialized data for key, rejecting for security. " +
+                     "Consider using JSON serialization instead. Data length: {}", bytes.length);
             throw new SecurityException("Java deserialization is not allowed due to security risks. Use JSON serialization instead.");
         }
 
@@ -106,6 +110,20 @@ public class TypeSupport {
         } catch (Exception e) {
             throw new SerializationException("Failed to deserialize value", e);
         }
+    }
+
+    /**
+     * 检测是否为 Java 序列化数据
+     * 使用完整的魔数检查（0xAC 0xED 0x00 0x05）
+     */
+    private boolean isJavaSerialized(byte[] bytes) {
+        if (bytes.length < 4) {
+            return false;
+        }
+        return bytes[0] == (byte) 0xAC &&
+               bytes[1] == (byte) 0xED &&
+               bytes[2] == 0x00 &&
+               bytes[3] == 0x05;
     }
 
     /**

@@ -10,4 +10,6 @@ public @interface RedisCaching {
 	RedisCacheable[] redisCacheable() default {};
 
 	RedisCacheEvict[] redisCacheEvict() default {};
+
+	RedisCachePut[] redisCachePut() default {};
 }

@@ -44,8 +44,22 @@ public class RedisProCacheProperties {
     /** 同步锁配置 */
     private SyncLockProperties syncLock = new SyncLockProperties();
 
-    /** 禁用的 Handler 列表（如 bloomFilter、preRefresh、syncLock） */
+    /** 禁用的 Handler 列表（如 bloom-filter、pre-refresh、sync-lock） */
     private java.util.List<String> disabledHandlers = new java.util.ArrayList<>();
+
+    /** Handler 配置（支持按 cacheName 细粒度禁用） */
+    private java.util.Map<String, HandlerConfig> handlerSettings = new java.util.HashMap<>();
+
+    /**
+     * Handler 配置类
+     * 支持按缓存名称细粒度禁用特定的 Handler
+     */
+    @Getter
+    @Setter
+    public static class HandlerConfig {
+        /** 禁用的 Handler 列表 */
+        private java.util.List<String> disabledHandlers = new java.util.ArrayList<>();
+    }
 
     @Getter
     @Setter
