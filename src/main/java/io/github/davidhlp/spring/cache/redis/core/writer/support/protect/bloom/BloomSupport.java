@@ -22,8 +22,8 @@ public class BloomSupport {
         try {
             return bloomIFilter.mightContain(cacheName, key);
         } catch (Exception ex) {
-            log.error("Bloom filter mightContain failed, fallback to allow: cacheName={}, key={}", cacheName, key, ex);
-            return true;
+            log.error("Bloom filter mightContain failed, throwing exception: cacheName={}, key={}", cacheName, key, ex);
+            throw new RuntimeException("Bloom filter check failed, cache protection unavailable", ex);
         }
     }
 

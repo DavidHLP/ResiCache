@@ -3,8 +3,8 @@ package io.github.davidhlp.spring.cache.redis.core.writer.support.lock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -110,7 +110,7 @@ public class SyncSupport {
      */
     private static final class LockStack implements AutoCloseable {
 
-        private final Deque<LockManager.LockHandle> handles = new ArrayDeque<>();
+        private final Deque<LockManager.LockHandle> handles = new ConcurrentLinkedDeque<>();
 
         /**
          * 将锁句柄压入堆栈
