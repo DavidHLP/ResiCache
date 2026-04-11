@@ -40,6 +40,9 @@ public class RedisProCacheProperties {
     /** 预刷新配置 */
     private PreRefreshProperties preRefresh = new PreRefreshProperties();
 
+    /** 禁用的 Handler 列表（如 bloomFilter、preRefresh、syncLock） */
+    private java.util.List<String> disabledHandlers = new java.util.ArrayList<>();
+
     @Getter
     @Setter
     public static class BloomFilterProperties {
