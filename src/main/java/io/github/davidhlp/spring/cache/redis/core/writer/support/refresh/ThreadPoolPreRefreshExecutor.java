@@ -6,7 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
+import org.springframework.lang.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -303,7 +303,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
          * @return 配置好的线程实例
          */
         @Override
-        public Thread newThread(@NotNull Runnable r) {
+        public Thread newThread(@NonNull Runnable r) {
             Thread thread = new Thread(r, THREAD_NAME_PREFIX + threadNumber.getAndIncrement());
             thread.setDaemon(true);
             thread.setPriority(Thread.NORM_PRIORITY);
