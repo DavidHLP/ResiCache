@@ -37,7 +37,7 @@ public class RedisProCacheConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(RedisCacheConfiguration.class)
     public RedisCacheConfiguration defaultRedisCacheConfiguration(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             RedisProCacheProperties properties) {

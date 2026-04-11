@@ -30,7 +30,7 @@ public class RedisCacheRegister {
         for (String cacheName : cacheOperation.getCacheNames()) {
             String key = buildKey(cacheName, cacheOperation.getKey(), "CACHE");
             operationStrategy.put(key, cacheOperation);
-            log.info(
+            log.debug(
                     "Registered cacheable operation: cacheName={}, key={}, stats={}",
                     cacheName,
                     cacheOperation.getKey(),
@@ -43,7 +43,7 @@ public class RedisCacheRegister {
         for (String cacheName : cacheOperation.getCacheNames()) {
             String key = buildKey(cacheName, cacheOperation.getKey(), "EVICT");
             operationStrategy.put(key, cacheOperation);
-            log.info(
+            log.debug(
                     "Registered CacheEvict operation: cacheName={}, key={}, stats={}",
                     cacheName,
                     cacheOperation.getKey(),
@@ -53,7 +53,6 @@ public class RedisCacheRegister {
 
     /** 获取Cacheable操作 */
     public RedisCacheableOperation getCacheableOperation(String name, String key) {
-        // 先尝试直接匹配
         String operationKey = buildKey(name, key, "CACHE");
         CacheOperation operation = operationStrategy.get(operationKey);
 
@@ -61,20 +60,12 @@ public class RedisCacheRegister {
             return cacheableOp;
         }
 
-        // fallback: 尝试按 cacheName 前缀匹配
-        RedisCacheableOperation fallback = findCacheableByCacheName(name, key);
-        if (fallback != null) {
-            log.debug("Fallback match found for cacheable operation: name={}, key={}", name, key);
-            return fallback;
-        }
-
-        log.debug("Direct match failed for cacheable operation: name={}, key={}", name, key);
+        log.debug("Cacheable operation not found: name={}, key={}", name, key);
         return null;
     }
 
     /** 获取CacheEvict操作 */
     public RedisCacheEvictOperation getCacheEvictOperation(String name, String key) {
-        // 先尝试直接匹配
         String operationKey = buildKey(name, key, "EVICT");
         CacheOperation operation = operationStrategy.get(operationKey);
 
@@ -82,41 +73,7 @@ public class RedisCacheRegister {
             return evictOp;
         }
 
-        // fallback: 尝试按 cacheName 前缀匹配
-        RedisCacheEvictOperation fallback = findEvictByCacheName(name, key);
-        if (fallback != null) {
-            log.debug("Fallback match found for evict operation: name={}, key={}", name, key);
-            return fallback;
-        }
-
-        log.debug("Direct match failed for evict operation: name={}, key={}", name, key);
-        return null;
-    }
-
-    /**
-     * fallback: 通过 cacheName 查找已注册的 CacheableOperation
-     *
-     * <p>注意：当前 EvictionStrategy 实现为 LRU 缓存结构，不支持遍历操作。
-     * 完整的 fallback 实现需要额外的索引结构（如 ConcurrentHashMap）来支持按 cacheName 查找。
-     * 此方法暂返回 null，待后续架构优化时实现。
-     *
-     * @param name 缓存名称
-     * @param keyPrefix key前缀（暂未使用）
-     * @return 始终返回 null（待实现）
-     */
-    private RedisCacheableOperation findCacheableByCacheName(String name, String keyPrefix) {
-        // TODO: 实现 fallback 遍历查找
-        // 需要在 EvictionStrategy 外层维护一个按 cacheName 的索引
-        return null;
-    }
-
-    /**
-     * fallback: 通过 cacheName 查找已注册的 CacheEvictOperation
-     *
-     * <p>同上，待后续架构优化时实现。
-     */
-    private RedisCacheEvictOperation findEvictByCacheName(String name, String keyPrefix) {
-        // TODO: 实现 fallback 遍历查找
+        log.debug("CacheEvict operation not found: name={}, key={}", name, key);
         return null;
     }
 

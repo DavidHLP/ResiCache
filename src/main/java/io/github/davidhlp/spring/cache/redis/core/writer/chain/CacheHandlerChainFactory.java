@@ -75,17 +75,19 @@ public class CacheHandlerChainFactory {
 
     /**
      * 获取 Handler 的禁用配置名称
-     * 根据类名映射到配置中的名称
+     * 根据类名映射到配置中的名称（kebab-case）
      */
     private String getHandlerDisableName(CacheHandler handler) {
         String className = handler.getClass().getSimpleName();
-        // BloomFilterHandler -> bloomFilter
-        // PreRefreshHandler -> preRefresh
-        // SyncLockHandler -> syncLock
-        // NullValueHandler -> nullValue
+        // BloomFilterHandler -> bloom-filter
+        // PreRefreshHandler -> pre-refresh
+        // SyncLockHandler -> sync-lock
+        // NullValueHandler -> null-value
         // TtlHandler -> ttl
-        // ActualCacheHandler -> actualCache (always enabled, cannot disable)
-        return className.replace("Handler", "").replace("Cache", "Cache").toLowerCase();
+        // ActualCacheHandler -> actual-cache (always enabled, cannot disable)
+        return className.replace("Handler", "")
+                        .replaceAll("([a-z])([A-Z])", "$1-$2")  // camelCase to kebab-case
+                        .toLowerCase();
     }
 
     /**

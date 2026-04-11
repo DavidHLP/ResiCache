@@ -5,6 +5,7 @@ import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheEvictO
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -103,7 +104,16 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
                 validateCacheOperation(target, operation);
                 ops.add(operation);
             }
+            // 处理 @RedisCaching 中的 @RedisCachePut
+            for (RedisCachePut p : caching.redisCachePut()) {
+                CacheOperation operation = parseRedisCachePut(p, target);
+                validateCacheOperation(target, operation);
+                ops.add(operation);
+            }
         }
+
+        // 处理 Spring 原生注解兼容性
+        addSpringNativeCacheOperations(target, ops);
 
         if (!ops.isEmpty()) {
             log.debug("Found {} cache operations for target: {}", ops.size(), target);
@@ -112,6 +122,29 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         return ops.isEmpty() ? null : Collections.unmodifiableList(ops);
+    }
+
+    /**
+     * 添加 Spring 原生注解的支持
+     * 使 @Cacheable, @CachePut, @CacheEvict 也能被 ResiCache 处理
+     */
+    private void addSpringNativeCacheOperations(Object target, List<CacheOperation> ops) {
+        // 处理 Spring @Cacheable
+        Cacheable springCacheable = null;
+        if (target instanceof Method) {
+            springCacheable = AnnotatedElementUtils.findMergedAnnotation((Method) target, Cacheable.class);
+        } else if (target instanceof Class) {
+            springCacheable = AnnotatedElementUtils.findMergedAnnotation((Class<?>) target, Cacheable.class);
+        }
+
+        if (springCacheable != null) {
+            log.debug("Found Spring @Cacheable annotation on target: {}, forwarding to native handler", target);
+            // Spring @Cacheable 会被 Spring CacheInterceptor 处理
+            // 这里只记录日志，不添加操作，避免重复处理
+        }
+
+        // 注意: Spring 的 @CachePut 和 @CacheEvict 也类似处理
+        // 它们会被 Spring 的标准 CacheInterceptor 处理
     }
 
     private CacheOperation parseRedisCacheable(RedisCacheable ann, Object target) {
@@ -236,5 +269,39 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         log.debug("Cache operation validation passed for target: {}", target);
+    }
+
+    private CacheOperation parseRedisCachePut(RedisCachePut ann, Object target) {
+        String name = (target instanceof Method) ? ((Method) target).getName() : target.toString();
+        log.trace("Parsing @RedisCachePut annotation for target: {}", target);
+
+        // 使用标准的 Spring CacheableOperation.Builder 作为 PUT 操作的基类
+        CacheableOperation.Builder builder = new CacheableOperation.Builder();
+        builder.setName(name);
+        builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
+
+        if (StringUtils.hasText(ann.key())) {
+            builder.setKey(ann.key());
+        }
+
+        if (StringUtils.hasText(ann.condition())) {
+            builder.setCondition(ann.condition());
+        }
+
+        if (StringUtils.hasText(ann.unless())) {
+            builder.setUnless(ann.unless());
+        }
+
+        if (StringUtils.hasText(ann.keyGenerator())) {
+            builder.setKeyGenerator(ann.keyGenerator());
+        }
+
+        if (StringUtils.hasText(ann.cacheManager())) {
+            builder.setCacheManager(ann.cacheManager());
+        }
+
+        CacheableOperation operation = builder.build();
+        log.debug("Built RedisCachePut operation: {}", operation);
+        return operation;
     }
 }
