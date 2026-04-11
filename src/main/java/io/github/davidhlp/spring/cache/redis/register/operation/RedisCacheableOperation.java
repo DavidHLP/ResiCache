@@ -15,6 +15,7 @@ public class RedisCacheableOperation extends CacheOperation {
     private final long syncTimeout;
     private final long ttl;
     private final Class<?> type;
+    @Deprecated
     private final boolean useSecondLevelCache;
     private final boolean cacheNullValues;
     private final boolean useBloomFilter;

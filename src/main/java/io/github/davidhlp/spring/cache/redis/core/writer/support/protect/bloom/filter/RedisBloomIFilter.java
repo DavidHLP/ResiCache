@@ -4,14 +4,12 @@ import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.B
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.strategy.BloomHashStrategy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.HashOperations;
-import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -24,7 +22,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RedisBloomIFilter implements BloomIFilter {
 
-    private final HashOperations<String, String, String> hashOperations;
+    private final RedisTemplate<String, String> redisTemplate;
     private final BloomFilterConfig config;
     private final BloomHashStrategy hashStrategy;
 
@@ -37,14 +35,18 @@ public class RedisBloomIFilter implements BloomIFilter {
         String bloomKey = bloomKey(cacheName);
         try {
             int[] positions = hashStrategy.positionsFor(key, config);
-            
-            // 使用 Pipeline 批量写入，减少网络往返
-            Map<String, String> data = new HashMap<>(positions.length);
-            for (int position : positions) {
-                data.put(Integer.toString(position), "1");
-            }
-            hashOperations.putAll(bloomKey, data);
-            
+
+            // 使用 Redis Pipeline 批量写入，减少网络往返
+            redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+                for (int position : positions) {
+                    connection.hashCommands().hSet(
+                            bloomKey.getBytes(),
+                            String.valueOf(position).getBytes(),
+                            "1".getBytes());
+                }
+                return null;
+            });
+
             log.debug(
                     "Bloom filter add: cacheName={}, key={}, positions={}",
                     cacheName,
@@ -64,16 +66,22 @@ public class RedisBloomIFilter implements BloomIFilter {
         String bloomKey = bloomKey(cacheName);
         try {
             int[] positions = hashStrategy.positionsFor(key, config);
-            
-            // 使用 multiGet 批量查询，减少网络往返
-            List<String> hashKeys = Arrays.stream(positions)
-                    .mapToObj(Integer::toString)
+
+            // 使用 Pipeline 批量查询，减少网络往返
+            List<byte[]> hashKeys = Arrays.stream(positions)
+                    .mapToObj(p -> String.valueOf(p).getBytes())
                     .collect(Collectors.toList());
-            List<String> values = hashOperations.multiGet(bloomKey, hashKeys);
-            
+
+            List<Object> rawValues = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+                for (byte[] hKey : hashKeys) {
+                    connection.hashCommands().hGet(bloomKey.getBytes(), hKey);
+                }
+                return null;
+            });
+
             // 检查是否有任何位置缺失
-            for (int i = 0; i < values.size(); i++) {
-                if (values.get(i) == null) {
+            for (int i = 0; i < rawValues.size(); i++) {
+                if (rawValues.get(i) == null) {
                     log.debug(
                             "Bloom filter miss (definitely does not exist): cacheName={}, key={}, missingPosition={}",
                             cacheName,
@@ -100,7 +108,7 @@ public class RedisBloomIFilter implements BloomIFilter {
 
         String bloomKey = bloomKey(cacheName);
         try {
-            hashOperations.getOperations().delete(bloomKey);
+            redisTemplate.delete(bloomKey);
             log.debug("Bloom filter deleted: cacheName={}", cacheName);
         } catch (Exception e) {
             log.error("Bloom filter delete failed: cacheName={}", cacheName, e);

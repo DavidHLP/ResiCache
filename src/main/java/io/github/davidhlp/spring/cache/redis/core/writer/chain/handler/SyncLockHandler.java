@@ -31,7 +31,7 @@ import org.springframework.util.Assert;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@HandlerOrder(HandlerOrders.SYNC_LOCK)
+@HandlerPriority(HandlerOrder.SYNC_LOCK)
 public class SyncLockHandler extends AbstractCacheHandler {
 
     /** 上下文属性键：标记锁已获取 */

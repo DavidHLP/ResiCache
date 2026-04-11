@@ -36,7 +36,7 @@ import java.time.Duration;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@HandlerOrder(HandlerOrders.PRE_REFRESH)
+@HandlerPriority(HandlerOrder.PRE_REFRESH)
 public class PreRefreshHandler extends AbstractCacheHandler {
 
     /** 上下文属性键：预刷新决策 */

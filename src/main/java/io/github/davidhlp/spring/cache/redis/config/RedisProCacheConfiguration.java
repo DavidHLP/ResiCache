@@ -5,6 +5,7 @@ import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheHandlerChain
 import io.github.davidhlp.spring.cache.redis.core.writer.support.type.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.manager.RedisProCacheManager;
 import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.cache.CacheManager;
@@ -46,8 +47,8 @@ public class RedisProCacheConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(CacheManager.class)
-    public RedisProCacheManager cacheManager(RedisProCacheWriter redisProCacheWriter, RedisCacheConfiguration defaultRedisCacheConfiguration) {
-        RedisProCacheManager manager = new RedisProCacheManager(redisProCacheWriter, defaultRedisCacheConfiguration);
+    public RedisProCacheManager cacheManager(RedisProCacheWriter redisProCacheWriter, RedisCacheConfiguration defaultRedisCacheConfiguration, MeterRegistry meterRegistry) {
+        RedisProCacheManager manager = new RedisProCacheManager(redisProCacheWriter, defaultRedisCacheConfiguration, meterRegistry);
         log.debug("Created RedisProCacheManager");
         return manager;
     }

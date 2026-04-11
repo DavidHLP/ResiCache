@@ -1,20 +1,32 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 
-import java.lang.annotation.*;
-
 /**
- * 标注 Handler 的执行顺序
- * 
- * 数值越小，越先执行。
- * 允许运行时通过配置调整顺序，也便于新增 Handler。
+ * Handler 执行顺序枚举
+ *
+ * 定义标准顺序，确保责任链按正确顺序执行。
+ * 间隔 100，便于插入新的 Handler。
  */
-@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-public @interface HandlerOrder {
-    /**
-     * 执行顺序值
-     * @return 顺序值，数值越小越先执行
-     */
-    int value();
+public enum HandlerOrder {
+    BLOOM_FILTER(100, "布隆过滤器-防穿透"),
+    SYNC_LOCK(200, "分布式锁-防击穿"),
+    PRE_REFRESH(250, "预刷新-热key保护"),
+    TTL(300, "TTL计算"),
+    NULL_VALUE(400, "空值处理"),
+    ACTUAL_CACHE(500, "实际缓存操作");
+
+    private final int order;
+    private final String description;
+
+    HandlerOrder(int order, String description) {
+        this.order = order;
+        this.description = description;
+    }
+
+    public int getOrder() {
+        return order;
+    }
+
+    public String getDescription() {
+        return description;
+    }
 }

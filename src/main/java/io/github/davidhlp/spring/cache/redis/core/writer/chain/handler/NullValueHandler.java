@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@HandlerOrder(HandlerOrders.NULL_VALUE)
+@HandlerPriority(HandlerOrder.NULL_VALUE)
 public class NullValueHandler extends AbstractCacheHandler {
 
     private final NullValuePolicy nullValuePolicy;

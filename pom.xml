@@ -54,8 +54,8 @@
         <project.reporting.outputEncoding>${encoding}</project.reporting.outputEncoding>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-        <redisson.version>3.17.6</redisson.version>
-        <hutool.version>5.8.22</hutool.version>
+        <redisson.version>3.27.0</redisson.version>
+        <hutool.version>5.8.25</hutool.version>
     </properties>
 
     <dependencies>
@@ -104,22 +104,9 @@
         </dependency>
 
         <dependency>
-            <groupId>com.google.code.findbugs</groupId>
-            <artifactId>jsr305</artifactId>
-            <version>3.0.2</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-stdlib</artifactId>
-            <version>1.9.23</version>
         </dependency>
 
         <dependency>

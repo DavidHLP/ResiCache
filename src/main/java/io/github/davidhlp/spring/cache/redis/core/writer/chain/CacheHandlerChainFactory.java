@@ -9,10 +9,10 @@ import java.util.*;
 
 /**
  * 缓存处理器责任链工厂
- * 
+ *
  * 职责：
  * 1. 自动发现所有 CacheHandler 实现
- * 2. 按 @HandlerOrder 注解排序
+ * 2. 按 @HandlerPriority 注解排序
  * 3. 构建责任链
  * 
  * 设计改进：
@@ -35,7 +35,7 @@ public class CacheHandlerChainFactory {
     public CacheHandlerChain createChain() {
         CacheHandlerChain chain = new CacheHandlerChain();
 
-        // 按 @HandlerOrder 注解排序
+        // 按 @HandlerPriority 注解排序
         List<CacheHandler> sortedHandlers = handlers.stream()
             .sorted(Comparator.comparingInt(this::getOrder))
             .toList();
@@ -61,7 +61,7 @@ public class CacheHandlerChainFactory {
      * @return 顺序值，未标注则返回 Integer.MAX_VALUE
      */
     private int getOrder(CacheHandler handler) {
-        HandlerOrder annotation = handler.getClass().getAnnotation(HandlerOrder.class);
-        return annotation != null ? annotation.value() : Integer.MAX_VALUE;
+        HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
+        return annotation != null ? annotation.value().getOrder() : Integer.MAX_VALUE;
     }
 }
