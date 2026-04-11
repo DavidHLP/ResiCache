@@ -5,11 +5,9 @@ import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOp
 import io.github.davidhlp.spring.cache.redis.strategy.eviction.EvictionStrategy;
 import io.github.davidhlp.spring.cache.redis.strategy.eviction.EvictionStrategyFactory;
 
-import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.interceptor.CacheOperation;
-import org.springframework.lang.NonNull;
 
 /** Redis缓存注册器 使用通用淘汰策略管理缓存操作,防止内存占用过多 */
 @Slf4j
@@ -86,29 +84,5 @@ public class RedisCacheRegister {
     /** 构建操作key */
     private String buildKey(String name, String key, String type) {
         return String.format("%s:%s:%s", type, name, key);
-    }
-}
-
-@Builder
-record Key(String name, String key, OperationType operationType) {
-
-    @Override
-    @NonNull
-    public String toString() {
-        return "Key{"
-                + "name='"
-                + name
-                + '\''
-                + ", key='"
-                + key
-                + '\''
-                + ", operationType="
-                + operationType
-                + '}';
-    }
-
-    public enum OperationType {
-        EVICT,
-        CACHE
     }
 }

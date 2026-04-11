@@ -15,7 +15,7 @@ ResiCache is a Spring Boot 3 cache extension that hardens Redis-backed caches ag
 <dependency>
   <groupId>io.github.davidhlp</groupId>
   <artifactId>ResiCache</artifactId>
-  <version>3.2.4</version>
+  <version>0.0.2</version>
 </dependency>
 ```
 With Gradle (Kotlin DSL):

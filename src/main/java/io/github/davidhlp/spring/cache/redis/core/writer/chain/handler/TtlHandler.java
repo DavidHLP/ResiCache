@@ -24,7 +24,7 @@ import java.time.Duration;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@HandlerOrder(HandlerOrders.TTL)
+@HandlerPriority(HandlerOrder.TTL)
 public class TtlHandler extends AbstractCacheHandler {
 
     private final TtlPolicy ttlPolicy;

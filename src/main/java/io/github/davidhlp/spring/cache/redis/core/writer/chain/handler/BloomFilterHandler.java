@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@HandlerOrder(HandlerOrders.BLOOM_FILTER)
+@HandlerPriority(HandlerOrder.BLOOM_FILTER)
 public class BloomFilterHandler extends AbstractCacheHandler
         implements PostProcessHandler {
 

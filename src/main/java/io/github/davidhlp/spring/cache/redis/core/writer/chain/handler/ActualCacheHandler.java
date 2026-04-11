@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@HandlerOrder(HandlerOrders.ACTUAL_CACHE)
+@HandlerPriority(HandlerOrder.ACTUAL_CACHE)
 public class ActualCacheHandler extends AbstractCacheHandler {
 
     private static final int CLEAN_SCAN_COUNT = 512;

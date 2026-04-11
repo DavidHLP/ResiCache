@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.manager;
 import io.github.davidhlp.spring.cache.redis.core.RedisProCache;
 import io.github.davidhlp.spring.cache.redis.core.writer.RedisProCacheWriter;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.Cache;
@@ -17,12 +18,16 @@ public class RedisProCacheManager extends RedisCacheManager {
 
     private final RedisProCacheWriter redisProCacheWriter;
     private final RedisCacheConfiguration defaultConfiguration;
+    private final MeterRegistry meterRegistry;
 
     public RedisProCacheManager(
-            RedisProCacheWriter cacheWriter, RedisCacheConfiguration defaultCacheConfiguration) {
+            RedisProCacheWriter cacheWriter,
+            RedisCacheConfiguration defaultCacheConfiguration,
+            MeterRegistry meterRegistry) {
         super(cacheWriter, defaultCacheConfiguration);
         this.redisProCacheWriter = cacheWriter;
         this.defaultConfiguration = defaultCacheConfiguration;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -31,7 +36,10 @@ public class RedisProCacheManager extends RedisCacheManager {
             @NonNull String name, RedisCacheConfiguration cacheConfiguration) {
         log.debug("Creating RedisProCache for cache name: {}", name);
         return new RedisProCache(
-                name, redisProCacheWriter, resolveCacheConfiguration(cacheConfiguration));
+                name,
+                redisProCacheWriter,
+                resolveCacheConfiguration(cacheConfiguration),
+                meterRegistry);
     }
 
     private RedisCacheConfiguration resolveCacheConfiguration(
