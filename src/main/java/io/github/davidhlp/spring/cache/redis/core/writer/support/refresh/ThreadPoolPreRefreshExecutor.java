@@ -1,8 +1,13 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.support.refresh;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -40,11 +45,16 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
     private static final String THREAD_NAME_PREFIX = "pre-refresh-";
 
+    /** Micrometer 计数器 */
+    private final Counter submittedCounter;
+    private final Counter completedCounter;
+    private final Counter cancelledCounter;
+
     /**
      * 默认构造函数，创建具有默认配置的线程池执行器
      */
     public ThreadPoolPreRefreshExecutor() {
-        this(createExecutor(), new ConcurrentHashMap<>());
+        this(createExecutor(), new ConcurrentHashMap<>(), null);
     }
 
     /**
@@ -52,11 +62,45 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
      *
      * @param executorService 线程池执行器服务
      * @param inFlight        正在进行中的任务映射
+     * @param meterRegistry   Micrometer meter注册表（可选，为null时不注册指标）
      */
     ThreadPoolPreRefreshExecutor(
-            ExecutorService executorService, ConcurrentHashMap<String, CompletableFuture<Void>> inFlight) {
+            ExecutorService executorService,
+            ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
+            MeterRegistry meterRegistry) {
         this.executorService = executorService;
         this.inFlight = inFlight;
+
+        // 初始化 Micrometer 指标
+        if (meterRegistry != null) {
+            this.submittedCounter = Counter.builder("prerefresh.submitted")
+                    .description("Number of pre-refresh tasks submitted")
+                    .register(meterRegistry);
+            this.completedCounter = Counter.builder("prerefresh.completed")
+                    .description("Number of pre-refresh tasks completed")
+                    .register(meterRegistry);
+            this.cancelledCounter = Counter.builder("prerefresh.cancelled")
+                    .description("Number of pre-refresh tasks cancelled")
+                    .register(meterRegistry);
+
+            // Gauge: 活跃任务数
+            Gauge.builder("prerefresh.active", inFlight, map -> map.size())
+                    .description("Number of active pre-refresh tasks")
+                    .register(meterRegistry);
+
+            // Gauge: 队列大小
+            if (executorService instanceof ThreadPoolExecutor tpe) {
+                Gauge.builder("prerefresh.queue.size", tpe, tpe2 -> tpe2.getQueue().size())
+                        .tag("component", "prerefresh")
+                        .description("Size of the pre-refresh task queue")
+                        .register(meterRegistry);
+            }
+        } else {
+            this.submittedCounter = null;
+            this.completedCounter = null;
+            this.cancelledCounter = null;
+        }
+
         log.info("ThreadPoolPreRefreshExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}", MAX_RETRY_COUNT);
     }
 
@@ -103,6 +147,9 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
                             created.whenComplete(
                                     (result, throwable) -> {
                                         inFlight.remove(k, created);
+                                        if (completedCounter != null) {
+                                            completedCounter.increment();
+                                        }
                                         if (throwable != null) {
                                             log.error("Async pre-refresh failed after all retries for key: {}", k, throwable);
                                         }
@@ -168,6 +215,9 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
         }
         CompletableFuture<Void> future = inFlight.remove(key);
         if (future != null) {
+            if (cancelledCounter != null) {
+                cancelledCounter.increment();
+            }
             boolean cancelled = future.cancel(true);
             log.debug(
                     "Cancelled async pre-refresh for key: {} (cancelled={}, done={})",
