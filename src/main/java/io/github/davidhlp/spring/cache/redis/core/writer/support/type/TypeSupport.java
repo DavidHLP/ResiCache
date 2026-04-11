@@ -14,6 +14,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 类型转换支持工具类
@@ -38,7 +39,7 @@ public class TypeSupport {
      */
     @NonNull
     public String bytesToString(@NonNull byte[] bytes) {
-        return new String(bytes);
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     /**
@@ -95,7 +96,8 @@ public class TypeSupport {
 
         // 检测是否为Java序列化数据（以 0xAC 0xED 开头）
         if (bytes.length >= 2 && bytes[0] == (byte) 0xAC && bytes[1] == (byte) 0xED) {
-            return deserializeFromJava(bytes);
+            // 安全风险：拒绝Java反序列化
+            throw new SecurityException("Java deserialization is not allowed due to security risks. Use JSON serialization instead.");
         }
 
         // 尝试JSON反序列化
