@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.lock.SyncSupport;
@@ -40,6 +41,8 @@ public class SyncLockHandler extends AbstractCacheHandler {
     private static final long DEFAULT_LOCK_TIMEOUT = 10;
 
     private final SyncSupport syncSupport;
+
+    private final RedisProCacheProperties properties;
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
@@ -125,9 +128,22 @@ public class SyncLockHandler extends AbstractCacheHandler {
      */
     private long resolveTimeout(RedisCacheableOperation operation) {
         if (operation == null) {
-            return DEFAULT_LOCK_TIMEOUT;
+            return getGlobalTimeoutSeconds();
         }
         long timeout = operation.getSyncTimeout();
+        if (timeout < 0) {
+            return getGlobalTimeoutSeconds();
+        }
         return timeout > 0 ? timeout : DEFAULT_LOCK_TIMEOUT;
+    }
+
+    /**
+     * 获取全局配置的锁超时时间
+     */
+    private long getGlobalTimeoutSeconds() {
+        long timeout = properties.getSyncLock().getTimeout();
+        java.util.concurrent.TimeUnit unit = properties.getSyncLock().getUnit();
+        long seconds = unit.toSeconds(timeout);
+        return seconds > 0 ? seconds : DEFAULT_LOCK_TIMEOUT;
     }
 }

@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ResiCache 配置属性类
@@ -40,6 +41,9 @@ public class RedisProCacheProperties {
     /** 预刷新配置 */
     private PreRefreshProperties preRefresh = new PreRefreshProperties();
 
+    /** 同步锁配置 */
+    private SyncLockProperties syncLock = new SyncLockProperties();
+
     /** 禁用的 Handler 列表（如 bloomFilter、preRefresh、syncLock） */
     private java.util.List<String> disabledHandlers = new java.util.ArrayList<>();
 
@@ -65,5 +69,14 @@ public class RedisProCacheProperties {
         private int maxPoolSize = 10;
         /** 队列容量 */
         private int queueCapacity = 100;
+    }
+
+    @Getter
+    @Setter
+    public static class SyncLockProperties {
+        /** 同步锁超时时间 */
+        private long timeout = 3000;
+        /** 超时时间单位 */
+        private TimeUnit unit = TimeUnit.MILLISECONDS;
     }
 }

@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.lock.SyncSupport;
@@ -28,11 +29,20 @@ class SyncLockHandlerTest {
     @Mock
     private SyncSupport syncSupport;
 
+    @Mock
+    private RedisProCacheProperties properties;
+
+    @Mock
+    private RedisProCacheProperties.SyncLockProperties syncLockProperties;
+
     private SyncLockHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new SyncLockHandler(syncSupport);
+        lenient().when(properties.getSyncLock()).thenReturn(syncLockProperties);
+        lenient().when(syncLockProperties.getTimeout()).thenReturn(3000L);
+        lenient().when(syncLockProperties.getUnit()).thenReturn(java.util.concurrent.TimeUnit.MILLISECONDS);
+        handler = new SyncLockHandler(syncSupport, properties);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
@@ -198,8 +208,8 @@ class SyncLockHandlerTest {
         }
 
         @Test
-        @DisplayName("uses default timeout when operation timeout is negative")
-        void doHandle_negativeTimeout_usesDefaultTimeout() {
+        @DisplayName("uses global config timeout when operation timeout is negative")
+        void doHandle_negativeTimeout_usesGlobalConfigTimeout() {
             RedisCacheableOperation operation = createSyncOperation(true, -5);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CacheResult expectedResult = CacheResult.success();
@@ -207,7 +217,7 @@ class SyncLockHandlerTest {
 
             handler.doHandle(context);
 
-            verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
+            verify(syncSupport).executeSync(eq("test:key"), any(), eq(3L));
         }
 
         @Test
