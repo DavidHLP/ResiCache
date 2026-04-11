@@ -30,6 +30,22 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CacheContext {
 
+    /**
+     * 属性键常量 - 避免 Magic Strings
+     */
+    public static final class AttributeKey {
+        private AttributeKey() {}
+
+        /** 预刷新跳过标记 */
+        public static final String PRE_REFRESH_SKIPPED = "preRefresh.skipped";
+
+        /** 缓存命中标记 */
+        public static final String CACHE_HIT = "cache.hit";
+
+        /** 异步刷新任务ID */
+        public static final String ASYNC_REFRESH_TASK_ID = "async.refresh.taskId";
+    }
+
     /** 输入参数（不可变） */
     @Getter
     private final CacheInput input;
