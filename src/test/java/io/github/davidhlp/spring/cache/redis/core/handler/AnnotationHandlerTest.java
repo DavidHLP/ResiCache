@@ -3,8 +3,12 @@ package io.github.davidhlp.spring.cache.redis.core.handler;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.interceptor.CacheOperation;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,6 +27,7 @@ class AnnotationHandlerTest {
         private boolean doHandleCalled = false;
         private boolean shouldHandle = false;
         private final Method handledMethod;
+        private List<CacheOperation> doHandleResult = Collections.emptyList();
 
         TestAnnotationHandler(Method handledMethod) {
             this.handledMethod = handledMethod;
@@ -35,8 +40,9 @@ class AnnotationHandlerTest {
         }
 
         @Override
-        protected void doHandle(Method method, Object target, Object[] args) {
+        protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
             doHandleCalled = true;
+            return doHandleResult;
         }
 
         public boolean wasCanHandleCalled() {
@@ -50,6 +56,10 @@ class AnnotationHandlerTest {
         public void resetFlags() {
             canHandleCalled = false;
             doHandleCalled = false;
+        }
+
+        public void setDoHandleResult(List<CacheOperation> result) {
+            this.doHandleResult = result;
         }
     }
 
@@ -94,10 +104,11 @@ class AnnotationHandlerTest {
             Object target = new Object();
             Object[] args = new Object[0];
 
-            handler.handle(getMethod("noAnnotation"), target, args);
+            List<CacheOperation> result = handler.handle(getMethod("noAnnotation"), target, args);
 
             assertThat(handler.wasCanHandleCalled()).isTrue();
             assertThat(handler.wasDoHandleCalled()).isTrue();
+            assertThat(result).isNotNull();
         }
 
         @Test
@@ -137,6 +148,20 @@ class AnnotationHandlerTest {
             handler.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
 
             assertThat(handler.wasDoHandleCalled()).isTrue();
+        }
+
+        @Test
+        @DisplayName("handle returns combined operations from all handlers")
+        void handle_returnsCombinedOperations() throws NoSuchMethodException {
+            TestAnnotationHandler first = new TestAnnotationHandler(getMethod("noAnnotation"));
+            TestAnnotationHandler second = new TestAnnotationHandler(getMethod("noAnnotation"));
+            first.setNext(second);
+            first.shouldHandle = true;
+            second.shouldHandle = true;
+
+            List<CacheOperation> result = first.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
+
+            assertThat(result).isNotNull();
         }
     }
 

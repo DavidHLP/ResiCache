@@ -1,6 +1,10 @@
 package io.github.davidhlp.spring.cache.redis.core.handler;
 
+import org.springframework.cache.interceptor.CacheOperation;
+
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 /** 注解处理器责任链 采用责任链模式处理不同类型的缓存注解 */
 public abstract class AnnotationHandler {
@@ -25,15 +29,26 @@ public abstract class AnnotationHandler {
      * @param method 方法
      * @param target 目标对象
      * @param args 方法参数
+     * @return 处理过程中产生的缓存操作列表
      */
-    public void handle(Method method, Object target, Object[] args) {
+    public List<CacheOperation> handle(Method method, Object target, Object[] args) {
+        List<CacheOperation> operations = new ArrayList<>();
+
         if (canHandle(method)) {
-            doHandle(method, target, args);
+            List<CacheOperation> result = doHandle(method, target, args);
+            if (result != null) {
+                operations.addAll(result);
+            }
         }
 
         if (next != null) {
-            next.handle(method, target, args);
+            List<CacheOperation> nextResult = next.handle(method, target, args);
+            if (nextResult != null) {
+                operations.addAll(nextResult);
+            }
         }
+
+        return operations;
     }
 
     /**
@@ -50,6 +65,7 @@ public abstract class AnnotationHandler {
      * @param method 方法
      * @param target 目标对象
      * @param args 方法参数
+     * @return 处理过程中产生的缓存操作列表
      */
-    protected abstract void doHandle(Method method, Object target, Object[] args);
+    protected abstract List<CacheOperation> doHandle(Method method, Object target, Object[] args);
 }

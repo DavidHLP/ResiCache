@@ -7,10 +7,13 @@ import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheEvictO
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -35,15 +38,21 @@ public class EvictAnnotationHandler extends AnnotationHandler {
     }
 
     @Override
-    protected void doHandle(Method method, Object target, Object[] args) {
+    protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCacheEvict[] evicts = method.getAnnotationsByType(RedisCacheEvict.class);
+        List<CacheOperation> operations = new ArrayList<>();
 
         for (RedisCacheEvict evict : evicts) {
-            registerCacheEvictOperation(method, target, args, evict);
+            RedisCacheEvictOperation operation = registerCacheEvictOperation(method, target, args, evict);
+            if (operation != null) {
+                operations.add(operation);
+            }
         }
+
+        return operations;
     }
 
-    private void registerCacheEvictOperation(
+    private RedisCacheEvictOperation registerCacheEvictOperation(
             Method method, Object target, Object[] args, RedisCacheEvict cacheEvict) {
         try {
             String key = generateKey(target, method, args);
@@ -56,8 +65,10 @@ public class EvictAnnotationHandler extends AnnotationHandler {
                     method.getName(),
                     key,
                     String.join(",", operation.getCacheNames()));
+            return operation;
         } catch (Exception e) {
             log.error("Failed to register cache evict operation", e);
+            return null;
         }
     }
 

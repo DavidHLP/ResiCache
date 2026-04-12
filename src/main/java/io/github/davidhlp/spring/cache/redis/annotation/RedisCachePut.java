@@ -1,5 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+
 import java.lang.annotation.*;
 
 /**
@@ -14,8 +16,9 @@ import java.lang.annotation.*;
  *   <li>@RedisCachePut：每次都执行方法并更新缓存</li>
  * </ul>
  */
-@Target({ElementType.METHOD})
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
+@Inherited
 @Documented
 public @interface RedisCachePut {
 
@@ -61,6 +64,23 @@ public @interface RedisCachePut {
     String unless() default "";
 
     /**
+     * 缓存过期时间（秒）
+     * <p>设置该值后，缓存将在指定时间后过期
+     */
+    long ttl() default 60;
+
+    /**
+     * 缓存值的类型
+     * <p>用于反序列化时的类型检查
+     */
+    Class<?> type() default Object.class;
+
+    /**
+     * 是否缓存空值防止缓存穿透
+     */
+    boolean cacheNullValues() default false;
+
+    /**
      * 是否使用布隆过滤器防缓存穿透
      */
     boolean useBloomFilter() default false;
@@ -81,35 +101,39 @@ public @interface RedisCachePut {
     boolean sync() default false;
 
     /**
-     * 同步锁超时时间（毫秒）
+     * 同步锁超时时间（秒）
      * <p>-1 表示使用全局配置
      */
     long syncTimeout() default -1;
 
     /**
-     * 是否启用 TTL 随机化防缓存雪崩
+     * 是否使用 TTL 随机化防缓存雪崩
      */
     boolean randomTtl() default false;
 
     /**
-     * TTL 随机化范围（秒）
-     * <p>例如：60 表示 TTL 范围为 [original-60, original+60]
+     * TTL 随机化范围
+     * <p>实际 TTL = originalTtl * (1 ± variance)
+     * <p>例如：variance=0.2 表示 TTL 范围为 [original*0.8, original*1.2]
      */
-    int randomTtlRange() default 60;
-
-    /**
-     * 缓存空值防止缓存穿透
-     */
-    boolean cacheNullValue() default true;
+    float variance() default 0.2F;
 
     /**
      * 是否启用预刷新
+     * <p>在缓存过期前主动刷新，避免缓存雪崩
      */
-    boolean preRefresh() default false;
+    boolean enablePreRefresh() default false;
 
     /**
-     * 预刷新提前时间（秒）
-     * <p>当缓存剩余 TTL 低于此值时触发预刷新
+     * 预刷新阈值
+     * <p>当缓存剩余 TTL 低于 (ttl * preRefreshThreshold) 时触发预刷新
+     * <p>例如：0.3 表示剩余 30% TTL 时触发
      */
-    int preRefreshAdvance() default 60;
+    double preRefreshThreshold() default 0.3;
+
+    /**
+     * 预刷新模式
+     * <p>SYNC: 同步刷新，ASYNC: 异步刷新
+     */
+    PreRefreshMode preRefreshMode() default PreRefreshMode.SYNC;
 }
