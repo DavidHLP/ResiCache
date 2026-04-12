@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheEvictOperation;
+import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -152,7 +153,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         log.trace("Parsing @RedisCacheable annotation for target: {}", target);
 
         // 使用标准的 Spring CacheableOperation. Builder
-        CacheableOperation.Builder builder = new CacheableOperation.Builder();
+        RedisCacheableOperation.Builder builder = RedisCacheableOperation.builder();
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
@@ -168,10 +169,10 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
 
         // 只在有值时设置unless
         if (StringUtils.hasText(ann.unless())) {
-            builder.setUnless(ann.unless());
+            builder.unless(ann.unless());
         }
 
-        builder.setSync(ann.sync());
+        builder.sync(ann.sync());
 
         // 只有当keyGenerator有值时才设置
         if (StringUtils.hasText(ann.keyGenerator())) {
@@ -183,7 +184,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
             builder.setCacheManager(ann.cacheManager());
         }
 
-        CacheableOperation operation = builder.build();
+        RedisCacheableOperation operation = builder.build();
         log.debug("Built CacheableOperation: {}", operation);
         return operation;
     }
@@ -276,7 +277,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         log.trace("Parsing @RedisCachePut annotation for target: {}", target);
 
         // 使用标准的 Spring CacheableOperation.Builder 作为 PUT 操作的基类
-        CacheableOperation.Builder builder = new CacheableOperation.Builder();
+        RedisCacheableOperation.Builder builder = RedisCacheableOperation.builder();
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
@@ -289,7 +290,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         if (StringUtils.hasText(ann.unless())) {
-            builder.setUnless(ann.unless());
+            builder.unless(ann.unless());
         }
 
         if (StringUtils.hasText(ann.keyGenerator())) {
@@ -300,7 +301,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
             builder.setCacheManager(ann.cacheManager());
         }
 
-        CacheableOperation operation = builder.build();
+        RedisCacheableOperation operation = builder.build();
         log.debug("Built RedisCachePut operation: {}", operation);
         return operation;
     }
