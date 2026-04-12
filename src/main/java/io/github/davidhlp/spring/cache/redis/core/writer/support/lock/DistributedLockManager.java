@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 @Component("distributedLockManager")
 @RequiredArgsConstructor
-class DistributedLockManager implements LockManager {
+public class DistributedLockManager implements LockManager {
 
     private static final String LOCK_PREFIX = "cache:lock:";
     

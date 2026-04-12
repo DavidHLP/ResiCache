@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.config;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheOperationSource;
 import io.github.davidhlp.spring.cache.redis.core.RedisCacheInterceptor;
+import io.github.davidhlp.spring.cache.redis.core.handler.CachePutAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.core.handler.CacheableAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.core.handler.CachingAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.core.handler.EvictAnnotationHandler;
@@ -55,14 +56,16 @@ public class RedisProxyCachingConfiguration {
             RedisCacheRegister redisCacheRegister,
             CacheableAnnotationHandler cacheableAnnotationHandler,
             EvictAnnotationHandler evictAnnotationHandler,
-            CachingAnnotationHandler cachingAnnotationHandler) {
+            CachingAnnotationHandler cachingAnnotationHandler,
+            CachePutAnnotationHandler cachePutAnnotationHandler) {
 
         // 创建带调试信息的 CacheInterceptor
         RedisCacheInterceptor interceptor =
                 new RedisCacheInterceptor(
                         cacheableAnnotationHandler,
                         evictAnnotationHandler,
-                        cachingAnnotationHandler);
+                        cachingAnnotationHandler,
+                        cachePutAnnotationHandler);
 
         interceptor.setCacheOperationSource(redisCacheOperationSource);
         interceptor.setCacheManager(cacheManager);
