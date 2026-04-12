@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.register;
 
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheEvictOperation;
+import io.github.davidhlp.spring.cache.redis.register.operation.RedisCachePutOperation;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 import io.github.davidhlp.spring.cache.redis.strategy.eviction.EvictionStrategy;
 import io.github.davidhlp.spring.cache.redis.strategy.eviction.EvictionStrategyFactory;
@@ -51,6 +52,19 @@ public class RedisCacheRegister {
         }
     }
 
+    /** 注册CachePut操作 */
+    public void registerCachePutOperation(RedisCachePutOperation cacheOperation) {
+        for (String cacheName : cacheOperation.getCacheNames()) {
+            String key = buildKey(cacheName, cacheOperation.getKey(), "PUT");
+            operationStrategy.put(key, cacheOperation);
+            log.debug(
+                    "Registered CachePut operation: cacheName={}, key={}, stats={}",
+                    cacheName,
+                    cacheOperation.getKey(),
+                    operationStrategy.getStats());
+        }
+    }
+
     /** 获取Cacheable操作 */
     public RedisCacheableOperation getCacheableOperation(String name, String key) {
         String operationKey = buildKey(name, key, "CACHE");
@@ -74,6 +88,19 @@ public class RedisCacheRegister {
         }
 
         log.debug("CacheEvict operation not found: name={}, key={}", name, key);
+        return null;
+    }
+
+    /** 获取CachePut操作 */
+    public RedisCachePutOperation getCachePutOperation(String name, String key) {
+        String operationKey = buildKey(name, key, "PUT");
+        CacheOperation operation = operationStrategy.get(operationKey);
+
+        if (operation instanceof RedisCachePutOperation putOp) {
+            return putOp;
+        }
+
+        log.debug("CachePut operation not found: name={}, key={}", name, key);
         return null;
     }
 

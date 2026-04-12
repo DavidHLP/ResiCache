@@ -24,6 +24,12 @@ import org.springframework.stereotype.Component;
  *   <li>通过 markPostProcess 标记请求后置处理</li>
  *   <li>在责任链执行完成后执行后置逻辑</li>
  * </ul>
+ *
+ * <p>假阳性处理：
+ * <ul>
+ *   <li>当 bloom filter 返回 positive 但 cache 实际 miss 时，在 post-processing 时
+ *       将 key 添加到 bloom filter，避免对不存在的 key 重复进行缓存查找</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -34,6 +40,9 @@ public class BloomFilterHandler extends AbstractCacheHandler
 
     /** 上下文属性键：标记需要后置处理 */
     private static final String POST_PROCESS_KEY = "bloom.postProcess";
+
+    /** 上下文属性键：bloom filter 对 GET 返回 positive（可能存在） */
+    private static final String BLOOM_POSITIVE_GET_KEY = "bloom.get.positive";
 
     private final BloomSupport bloomSupport;
     private final CacheStatisticsCollector statistics;
@@ -59,6 +68,8 @@ public class BloomFilterHandler extends AbstractCacheHandler
      * 处理 GET 操作
      *
      * <p>检查布隆过滤器，如果 key 不可能存在，直接返回 miss。
+     * 如果 key 可能存在（假阳性），继续执行但标记 post-processing，
+     * 后续根据 cache 结果决定是否添加到 bloom filter。
      */
     private HandlerResult handleGet(CacheContext context) {
         boolean mightContain =
@@ -78,6 +89,10 @@ public class BloomFilterHandler extends AbstractCacheHandler
                 "Bloom filter passed (key might exist): cacheName={}, key={}",
                 context.getCacheName(),
                 context.getRedisKey());
+
+        // 标记该 GET 请求的 bloom filter 返回了 positive
+        // 在 post-processing 时，如果 cache miss，则添加 key 到 bloom filter
+        context.setAttribute(BLOOM_POSITIVE_GET_KEY, true);
 
         // 继续执行后续 Handler
         return HandlerResult.continueChain();
@@ -148,7 +163,33 @@ public class BloomFilterHandler extends AbstractCacheHandler
         switch (context.getOperation()) {
             case PUT, PUT_IF_ABSENT -> addToBloomFilter(context);
             case CLEAN -> clearBloomFilter(context);
-            default -> { /* GET 等操作无需后置处理 */ }
+            case GET -> handleGetPostProcessing(context, result);
+            default -> { /* 其他操作无需后置处理 */ }
+        }
+    }
+
+    /**
+     * 处理 GET 操作的后置处理
+     *
+     * <p>当 bloom filter 返回 positive 但 cache miss 时，将 key 添加到 bloom filter，
+     * 避免对不存在的 key 重复进行缓存查找。
+     */
+    private void handleGetPostProcessing(CacheContext context, CacheResult result) {
+        // 检查该 GET 请求是否 bloom filter 返回了 positive
+        Boolean bloomPositive = context.getAttribute(BLOOM_POSITIVE_GET_KEY);
+        if (bloomPositive == null || !bloomPositive) {
+            // bloom filter 未返回 positive，无需处理
+            return;
+        }
+
+        // 如果 cache miss（bloom 返回 positive 但实际不存在）
+        // 添加 key 到 bloom filter，避免后续重复查询
+        if (!result.isHit()) {
+            bloomSupport.add(context.getCacheName(), context.getActualKey());
+            log.debug(
+                    "Added false positive key to bloom filter: cacheName={}, key={}",
+                    context.getCacheName(),
+                    context.getRedisKey());
         }
     }
 

@@ -1,0 +1,20 @@
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ""
+      database: 0
+
+resi-cache:
+  default-ttl: 30m
+  bloom-filter:
+    enabled: false
+  pre-refresh:
+    enabled: false
+  sync-lock:
+    enabled: false
+  disabled-handlers:
+    - bloom-filter
+    - pre-refresh
+    - sync-lock
