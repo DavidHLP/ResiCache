@@ -7,10 +7,13 @@ import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOp
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -35,15 +38,21 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
     }
 
     @Override
-    protected void doHandle(Method method, Object target, Object[] args) {
+    protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCacheable[] cacheables = method.getAnnotationsByType(RedisCacheable.class);
+        List<CacheOperation> operations = new ArrayList<>();
 
         for (RedisCacheable cacheable : cacheables) {
-            registerCacheableOperation(method, target, args, cacheable);
+            RedisCacheableOperation operation = registerCacheableOperation(method, target, args, cacheable);
+            if (operation != null) {
+                operations.add(operation);
+            }
         }
+
+        return operations;
     }
 
-    private void registerCacheableOperation(
+    private RedisCacheableOperation registerCacheableOperation(
             Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
         try {
             String key = generateKey(target, method, args);
@@ -56,8 +65,10 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
                     method.getName(),
                     key,
                     String.join(",", operation.getCacheNames()));
+            return operation;
         } catch (Exception e) {
             log.error("Failed to register cacheable operation", e);
+            return null;
         }
     }
 

@@ -11,10 +11,13 @@ import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOp
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -42,21 +45,30 @@ public class CachingAnnotationHandler extends AnnotationHandler {
     }
 
     @Override
-    protected void doHandle(Method method, Object target, Object[] args) {
+    protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCaching caching = method.getAnnotation(RedisCaching.class);
+        List<CacheOperation> operations = new ArrayList<>();
 
         // 处理组合注解中的 @RedisCacheable
         for (RedisCacheable cacheable : caching.redisCacheable()) {
-            registerCacheableOperation(method, target, args, cacheable);
+            RedisCacheableOperation operation = registerCacheableOperation(method, target, args, cacheable);
+            if (operation != null) {
+                operations.add(operation);
+            }
         }
 
         // 处理组合注解中的 @RedisCacheEvict
         for (RedisCacheEvict evict : caching.redisCacheEvict()) {
-            registerCacheEvictOperation(method, target, args, evict);
+            RedisCacheEvictOperation operation = registerCacheEvictOperation(method, target, args, evict);
+            if (operation != null) {
+                operations.add(operation);
+            }
         }
+
+        return operations;
     }
 
-    private void registerCacheableOperation(
+    private RedisCacheableOperation registerCacheableOperation(
             Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
         try {
             String key = generateKey(target, method, args);
@@ -69,12 +81,14 @@ public class CachingAnnotationHandler extends AnnotationHandler {
                     method.getName(),
                     key,
                     String.join(",", operation.getCacheNames()));
+            return operation;
         } catch (Exception e) {
             log.error("Failed to register cacheable operation from @RedisCaching", e);
+            return null;
         }
     }
 
-    private void registerCacheEvictOperation(
+    private RedisCacheEvictOperation registerCacheEvictOperation(
             Method method, Object target, Object[] args, RedisCacheEvict cacheEvict) {
         try {
             String key = generateKey(target, method, args);
@@ -87,8 +101,10 @@ public class CachingAnnotationHandler extends AnnotationHandler {
                     method.getName(),
                     key,
                     String.join(",", operation.getCacheNames()));
+            return operation;
         } catch (Exception e) {
             log.error("Failed to register cache evict operation from @RedisCaching", e);
+            return null;
         }
     }
 
