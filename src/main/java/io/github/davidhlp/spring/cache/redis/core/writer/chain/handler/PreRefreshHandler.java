@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 预刷新处理器，防止缓存雪崩
@@ -145,10 +146,17 @@ public class PreRefreshHandler extends AbstractCacheHandler {
                 if (liveValue.getCreatedTime() == originalCreated
                     && liveValue.getVersion() == originalVersion) {
                     // 缩短 TTL 而非直接删除，避免缓存穿透
-                    Boolean expired = redisTemplate.expire(
-                        redisKey, Duration.ofSeconds(REFRESH_GRACE_PERIOD_SECONDS));
-                    log.debug("Async pre-refresh shortened TTL: key={}, gracePeriod={}s, success={}",
-                              redisKey, REFRESH_GRACE_PERIOD_SECONDS, expired);
+                    // 使用异步执行避免阻塞刷新线程池
+                    CompletableFuture.supplyAsync(() ->
+                        redisTemplate.expire(redisKey, Duration.ofSeconds(REFRESH_GRACE_PERIOD_SECONDS))
+                    ).whenComplete((expired, ex) -> {
+                        if (ex != null) {
+                            log.warn("Async pre-refresh TTL shorten failed: key={}", redisKey, ex);
+                        } else {
+                            log.debug("Async pre-refresh shortened TTL: key={}, gracePeriod={}s, success={}",
+                                      redisKey, REFRESH_GRACE_PERIOD_SECONDS, expired);
+                        }
+                    });
                 } else {
                     log.debug("Async pre-refresh skipped: value changed: {}", redisKey);
                 }
