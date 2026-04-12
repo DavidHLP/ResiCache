@@ -65,6 +65,7 @@ public class RedisProCache extends RedisCache {
         long start = System.nanoTime();
         try {
             super.put(key, value);
+            size.incrementAndGet();
         } finally {
             putTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }

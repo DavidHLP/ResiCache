@@ -24,7 +24,6 @@ public class CacheableOperationFactory
                 .key(key)
                 .ttl(annotation.ttl())
                 .type(annotation.type())
-                .useSecondLevelCache(annotation.useSecondLevelCache())
                 .cacheNullValues(annotation.cacheNullValues())
                 .useBloomFilter(annotation.useBloomFilter())
                 .randomTtl(annotation.randomTtl())

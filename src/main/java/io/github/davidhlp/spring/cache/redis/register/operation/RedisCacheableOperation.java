@@ -15,8 +15,6 @@ public class RedisCacheableOperation extends CacheOperation {
     private final long syncTimeout;
     private final long ttl;
     private final Class<?> type;
-    @Deprecated
-    private final boolean useSecondLevelCache;
     private final boolean cacheNullValues;
     private final boolean useBloomFilter;
     private final boolean randomTtl;
@@ -32,7 +30,6 @@ public class RedisCacheableOperation extends CacheOperation {
         this.syncTimeout = b.syncTimeout;
         this.ttl = b.ttl;
         this.type = b.type;
-        this.useSecondLevelCache = b.useSecondLevelCache;
         this.cacheNullValues = b.cacheNullValues;
         this.useBloomFilter = b.useBloomFilter;
         this.randomTtl = b.randomTtl;
@@ -53,7 +50,6 @@ public class RedisCacheableOperation extends CacheOperation {
         private long syncTimeout = 10;
         private long ttl;
         private Class<?> type;
-        private boolean useSecondLevelCache;
         private boolean cacheNullValues;
         private boolean useBloomFilter;
         private boolean randomTtl;
@@ -119,11 +115,6 @@ public class RedisCacheableOperation extends CacheOperation {
 
         public Builder type(Class<?> type) {
             this.type = type;
-            return this;
-        }
-
-        public Builder useSecondLevelCache(boolean useSecondLevelCache) {
-            this.useSecondLevelCache = useSecondLevelCache;
             return this;
         }
 
