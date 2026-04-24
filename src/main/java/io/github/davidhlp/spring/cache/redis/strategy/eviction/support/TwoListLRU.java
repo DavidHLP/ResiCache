@@ -19,6 +19,9 @@ public class TwoListLRU<K, V> {
     /** 默认Inactive List最大容量 */
     private static final int DEFAULT_MAX_INACTIVE_SIZE = 512;
 
+    /** 默认Stripe数量，用于减少写锁竞争 */
+    private static final int DEFAULT_STRIPE_COUNT = 16;
+
     private final int maxActiveSize;
     private final int maxInactiveSize;
 
@@ -37,8 +40,14 @@ public class TwoListLRU<K, V> {
     /** Inactive List尾哨兵节点 */
     private final Node<K, V> inactiveTail;
 
-    /** 读写锁，保证链表操作的线程安全 */
-    private final ReadWriteLock listLock;
+    /** Striped locks数组，用于减少写锁竞争 */
+    private final ReadWriteLock[] stripes;
+
+    /** Stripe掩码，用于快速取模: index = hash & mask */
+    private final int stripeMask;
+
+    /** Stripe数量 */
+    private final int stripeCount;
 
     /** 当前Active List大小 — 使用AtomicInteger支持无锁读取 */
     private final AtomicInteger activeSizeCounter = new AtomicInteger(0);
@@ -58,15 +67,22 @@ public class TwoListLRU<K, V> {
     }
 
     public TwoListLRU(int maxActiveSize, int maxInactiveSize) {
-        this(maxActiveSize, maxInactiveSize, null);
+        this(maxActiveSize, maxInactiveSize, null, DEFAULT_STRIPE_COUNT);
     }
 
     public TwoListLRU(int maxActiveSize, int maxInactiveSize, Predicate<V> evictionPredicate) {
+        this(maxActiveSize, maxInactiveSize, evictionPredicate, DEFAULT_STRIPE_COUNT);
+    }
+
+    public TwoListLRU(int maxActiveSize, int maxInactiveSize, Predicate<V> evictionPredicate, int stripeCount) {
         if (maxActiveSize <= 0) {
             throw new IllegalArgumentException("maxActiveSize must be positive");
         }
         if (maxInactiveSize <= 0) {
             throw new IllegalArgumentException("maxInactiveSize must be positive");
+        }
+        if (stripeCount <= 0) {
+            throw new IllegalArgumentException("stripeCount must be positive");
         }
 
         this.maxActiveSize = maxActiveSize;
@@ -74,7 +90,19 @@ public class TwoListLRU<K, V> {
         this.evictionPredicate = evictionPredicate;
 
         this.nodeMap = new ConcurrentHashMap<>();
-        this.listLock = new ReentrantReadWriteLock();
+
+        // 初始化Striped locks
+        this.stripeCount = stripeCount;
+        // 确保stripeCount是2的幂
+        int actualStripeCount = 1;
+        while (actualStripeCount < stripeCount) {
+            actualStripeCount <<= 1;
+        }
+        this.stripes = new ReentrantReadWriteLock[actualStripeCount];
+        for (int i = 0; i < actualStripeCount; i++) {
+            this.stripes[i] = new ReentrantReadWriteLock();
+        }
+        this.stripeMask = actualStripeCount - 1;
 
         // 初始化Active List双向链表
         this.activeHead = new Node<>(null, null);
@@ -92,6 +120,27 @@ public class TwoListLRU<K, V> {
     }
 
     /**
+     * 获取指定key对应的stripe锁
+     *
+     * @param key 键
+     * @return 对应的ReadWriteLock
+     */
+    private ReadWriteLock lockFor(K key) {
+        int hash = spread(key.hashCode());
+        return stripes[hash & stripeMask];
+    }
+
+    /**
+     * Kafka-style spreader函数，用于减少hash碰撞
+     *
+     * @param h 原始hash值
+     * @return 扩散后的hash值
+     */
+    private static int spread(int h) {
+        return (h ^ (h >>> 16)) & 0x7fffffff;
+    }
+
+    /**
      * 添加元素
      *
      * @param key 键
@@ -103,7 +152,7 @@ public class TwoListLRU<K, V> {
             throw new IllegalArgumentException("Key cannot be null");
         }
 
-        listLock.writeLock().lock();
+        lockFor(key).writeLock().lock();
         try {
             Node<K, V> existingNode = nodeMap.get(key);
             if (existingNode != null) {
@@ -134,7 +183,7 @@ public class TwoListLRU<K, V> {
                 return false;
             }
         } finally {
-            listLock.writeLock().unlock();
+            lockFor(key).writeLock().unlock();
         }
     }
 
@@ -170,7 +219,7 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        listLock.writeLock().lock();
+        lockFor(key).writeLock().lock();
         try {
             Node<K, V> node = nodeMap.remove(key);
             if (node == null) {
@@ -193,7 +242,7 @@ public class TwoListLRU<K, V> {
             }
             return node.value;
         } finally {
-            listLock.writeLock().unlock();
+            lockFor(key).writeLock().unlock();
         }
     }
 
@@ -240,17 +289,15 @@ public class TwoListLRU<K, V> {
      * @return 淘汰次数
      */
     public long getTotalEvictions() {
-        listLock.readLock().lock();
-        try {
-            return totalEvictions;
-        } finally {
-            listLock.readLock().unlock();
-        }
+        return totalEvictions;
     }
 
     /** 清空所有元素 */
     public void clear() {
-        listLock.writeLock().lock();
+        // 按顺序获取所有stripe写锁，防止死锁
+        for (int i = 0; i < stripeCount; i++) {
+            stripes[i].writeLock().lock();
+        }
         try {
             nodeMap.clear();
 
@@ -268,7 +315,10 @@ public class TwoListLRU<K, V> {
                 log.debug("Cleared all entries");
             }
         } finally {
-            listLock.writeLock().unlock();
+            // 逆序释放所有stripe写锁
+            for (int i = stripeCount - 1; i >= 0; i--) {
+                stripes[i].writeLock().unlock();
+            }
         }
     }
 
@@ -278,11 +328,11 @@ public class TwoListLRU<K, V> {
      * @param node 待提升的节点
      */
     private void promoteNodeSafe(Node<K, V> node) {
-        listLock.writeLock().lock();
+        lockFor(node.key).writeLock().lock();
         try {
             promoteNodeUnsafe(node);
         } finally {
-            listLock.writeLock().unlock();
+            lockFor(node.key).writeLock().unlock();
         }
     }
 
