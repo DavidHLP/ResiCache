@@ -70,6 +70,8 @@ public class RedisProCacheProperties {
         private long expectedInsertions = 100000;
         /** 期望的误判率 */
         private double falseProbability = 0.01;
+        /** 本地哈希缓存最大条目数（每个缓存实例） */
+        private int hashCacheSize = 10_000;
     }
 
     @Getter
