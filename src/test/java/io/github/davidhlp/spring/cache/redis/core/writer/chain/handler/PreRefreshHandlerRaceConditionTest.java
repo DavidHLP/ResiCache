@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 /**
  * PreRefreshHandler race condition tests verifying correct behavior under concurrent access.
@@ -102,8 +103,8 @@ class PreRefreshHandlerRaceConditionTest {
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
         AtomicBoolean exceptionThrown = new AtomicBoolean(false);
 
-        when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue);
+        lenient().when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             executor.submit(() -> {
@@ -147,11 +148,11 @@ class PreRefreshHandlerRaceConditionTest {
         CountDownLatch refreshStarted = new CountDownLatch(1);
         CountDownLatch testComplete = new CountDownLatch(1);
 
-        when(valueOperations.get("test:key")).thenAnswer(invocation -> {
+        lenient().when(valueOperations.get("test:key")).thenAnswer(invocation -> {
             capturedValue.set(invocation.getMock());
             return originalValue;
         });
-        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        lenient().when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
@@ -177,7 +178,7 @@ class PreRefreshHandlerRaceConditionTest {
 
         // User puts new value while async refresh is pending
         assertThat(refreshStarted.await(5, TimeUnit.SECONDS)).isTrue();
-        when(valueOperations.get("test:key")).thenReturn(newValue);
+        lenient().when(valueOperations.get("test:key")).thenReturn(newValue);
 
         testComplete.countDown();
 
@@ -200,8 +201,8 @@ class PreRefreshHandlerRaceConditionTest {
         CountDownLatch allRefreshesSubmitted = new CountDownLatch(3);
         AtomicReference<String> capturedKey = new AtomicReference<>();
 
-        when(valueOperations.get("test:key")).thenReturn(cachedValue1);
-        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue1);
+        lenient().when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             capturedKey.set(invocation.getArgument(0));
@@ -211,9 +212,9 @@ class PreRefreshHandlerRaceConditionTest {
 
         // Submit multiple refreshes
         handler.doHandle(context1);
-        when(valueOperations.get("test:key")).thenReturn(cachedValue2);
+        lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue2);
         handler.doHandle(context2);
-        when(valueOperations.get("test:key")).thenReturn(cachedValue3);
+        lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue3);
         handler.doHandle(context3);
 
         assertThat(allRefreshesSubmitted.await(5, TimeUnit.SECONDS)).isTrue();
