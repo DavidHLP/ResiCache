@@ -5,6 +5,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
@@ -39,11 +40,11 @@ public class TwoListLRU<K, V> {
     /** 读写锁，保证链表操作的线程安全 */
     private final ReadWriteLock listLock;
 
-    /** 当前Active List大小 */
-    private int activeSize;
+    /** 当前Active List大小 — 使用AtomicInteger支持无锁读取 */
+    private final AtomicInteger activeSizeCounter = new AtomicInteger(0);
 
-    /** 当前Inactive List大小 */
-    private int inactiveSize;
+    /** 当前Inactive List大小 — 使用AtomicInteger支持无锁读取 */
+    private final AtomicInteger inactiveSizeCounter = new AtomicInteger(0);
 
     /** 总淘汰次数 */
     private long totalEvictions;
@@ -87,8 +88,6 @@ public class TwoListLRU<K, V> {
         inactiveHead.next = inactiveTail;
         inactiveTail.prev = inactiveHead;
 
-        this.activeSize = 0;
-        this.inactiveSize = 0;
         this.totalEvictions = 0;
     }
 
@@ -126,8 +125,8 @@ public class TwoListLRU<K, V> {
                     log.debug(
                             "Added new entry: key={}, activeSize={}, inactiveSize={}",
                             key,
-                            activeSize,
-                            inactiveSize);
+                            activeSizeCounter.get(),
+                            inactiveSizeCounter.get());
                 }
                 return true;
             } else {
@@ -180,17 +179,17 @@ public class TwoListLRU<K, V> {
 
             removeNodeUnsafe(node);
             if (node.isActive) {
-                activeSize--;
+                activeSizeCounter.decrementAndGet();
             } else {
-                inactiveSize--;
+                inactiveSizeCounter.decrementAndGet();
             }
 
             if (log.isDebugEnabled()) {
                 log.debug(
                         "Removed entry: key={}, activeSize={}, inactiveSize={}",
                         key,
-                        activeSize,
-                        inactiveSize);
+                        activeSizeCounter.get(),
+                        inactiveSizeCounter.get());
             }
             return node.value;
         } finally {
@@ -223,12 +222,7 @@ public class TwoListLRU<K, V> {
      * @return 活跃列表大小
      */
     public int getActiveSize() {
-        listLock.readLock().lock();
-        try {
-            return activeSize;
-        } finally {
-            listLock.readLock().unlock();
-        }
+        return activeSizeCounter.get();
     }
 
     /**
@@ -237,12 +231,7 @@ public class TwoListLRU<K, V> {
      * @return 不活跃列表大小
      */
     public int getInactiveSize() {
-        listLock.readLock().lock();
-        try {
-            return inactiveSize;
-        } finally {
-            listLock.readLock().unlock();
-        }
+        return inactiveSizeCounter.get();
     }
 
     /**
@@ -268,12 +257,12 @@ public class TwoListLRU<K, V> {
             // 重置Active List
             activeHead.next = activeTail;
             activeTail.prev = activeHead;
-            activeSize = 0;
+            activeSizeCounter.set(0);
 
             // 重置Inactive List
             inactiveHead.next = inactiveTail;
             inactiveTail.prev = inactiveHead;
-            inactiveSize = 0;
+            inactiveSizeCounter.set(0);
 
             if (log.isDebugEnabled()) {
                 log.debug("Cleared all entries");
@@ -314,15 +303,15 @@ public class TwoListLRU<K, V> {
         } else {
             // 在Inactive List，提升到Active List
             removeNodeUnsafe(node);
-            inactiveSize--;
+            inactiveSizeCounter.decrementAndGet();
 
             // 尝试添加到Active List头部
-            if (activeSize >= maxActiveSize) {
+            if (activeSizeCounter.get() >= maxActiveSize) {
                 // Active List已满，先降级或淘汰最老的节点
                 if (demoteOrEvictOldestActiveUnsafe()) {
                     // 无法腾出空间，将节点重新放回Inactive List头部
                     insertAfterUnsafe(inactiveHead, node);
-                    inactiveSize++;
+                    inactiveSizeCounter.incrementAndGet();
                     node.isActive = false;
                     log.warn("Failed to promote entry from inactive to active: key={}", node.key);
                     return;
@@ -331,7 +320,7 @@ public class TwoListLRU<K, V> {
 
             insertAfterUnsafe(activeHead, node);
             node.isActive = true;
-            activeSize++;
+            activeSizeCounter.incrementAndGet();
 
             if (log.isDebugEnabled()) {
                 log.debug("Promoted entry from inactive to active: key={}", node.key);
@@ -347,14 +336,14 @@ public class TwoListLRU<K, V> {
      */
     private boolean addToActiveHeadUnsafe(Node<K, V> node) {
         // Active List满时，先降级或淘汰最老的节点
-        if (activeSize >= maxActiveSize && demoteOrEvictOldestActiveUnsafe()) {
+        if (activeSizeCounter.get() >= maxActiveSize && demoteOrEvictOldestActiveUnsafe()) {
             // 无法腾出空间
             return false;
         }
 
         insertAfterUnsafe(activeHead, node);
         node.isActive = true;
-        activeSize++;
+        activeSizeCounter.incrementAndGet();
         return true;
     }
 
@@ -370,10 +359,10 @@ public class TwoListLRU<K, V> {
             // 如果没有淘汰判断器，或者判断器允许操作
             if (evictionPredicate == null || evictionPredicate.test(candidate.value)) {
                 removeNodeUnsafe(candidate);
-                activeSize--;
+                activeSizeCounter.decrementAndGet();
 
                 // 尝试降级到Inactive List或淘汰
-                if (inactiveSize < maxInactiveSize) {
+                if (inactiveSizeCounter.get() < maxInactiveSize) {
                     // Inactive List有空间，直接降级
                     demoteToInactive(candidate);
                 } else if (evictOldestInactiveUnsafe()) {
@@ -401,7 +390,7 @@ public class TwoListLRU<K, V> {
         // 所有节点都受保护
         log.warn(
                 "All entries in active list are protected, cannot free space. activeSize={}, maxActiveSize={}",
-                activeSize,
+                activeSizeCounter.get(),
                 maxActiveSize);
         return true;
     }
@@ -410,7 +399,7 @@ public class TwoListLRU<K, V> {
     private void demoteToInactive(Node<K, V> node) {
         insertAfterUnsafe(inactiveHead, node);
         node.isActive = false;
-        inactiveSize++;
+        inactiveSizeCounter.incrementAndGet();
         if (log.isDebugEnabled()) {
             log.debug("Demoted entry from active to inactive: key={}", node.key);
         }
@@ -439,7 +428,7 @@ public class TwoListLRU<K, V> {
             // 如果没有淘汰判断器，或者判断器允许淘汰
             if (evictionPredicate == null || evictionPredicate.test(candidate.value)) {
                 removeNodeUnsafe(candidate);
-                inactiveSize--;
+                inactiveSizeCounter.decrementAndGet();
                 evictNode(candidate);
 
                 if (log.isDebugEnabled()) {
@@ -461,7 +450,7 @@ public class TwoListLRU<K, V> {
         // 所有节点都受保护
         log.warn(
                 "All entries in inactive list are protected, cannot evict. inactiveSize={}, maxInactiveSize={}",
-                inactiveSize,
+                inactiveSizeCounter.get(),
                 maxInactiveSize);
         return false;
     }
