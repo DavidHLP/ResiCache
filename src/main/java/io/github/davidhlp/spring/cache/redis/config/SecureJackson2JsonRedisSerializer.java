@@ -26,12 +26,55 @@ import java.util.List;
  * <p>Default allowed package: {@code io.github.davidhlp}
  * <p>To add custom packages, configure in application.yml:
  * <pre>{@code
+ * # application.yml
+ * spring:
+ *   data:
+ *     redis:
+ *       host: localhost
+ *       port: 6379
+ *
  * resi-cache:
  *   serializer:
  *     allowed-package-prefixes:
- *       - io.github.davidhlp        # default, required
- *       - com.example.business      # your domain objects
- *       - com.acme.domain          # another package
+ *       - io.github.davidhlp        # default, required for ResiCache internals
+ *       - com.example.business      # your domain objects (add this)
+ *       - com.acme.domain           # another package (add as needed)
+ *       - com.example.dto           # DTOs and value objects (add as needed)
+ * }</pre>
+ *
+ * <h2>Full Spring Boot 3.x Configuration Example</h2>
+ * <pre>{@code
+ * # application.yml - Complete ResiCache Configuration
+ * spring:
+ *   application:
+ *     name: my-application
+ *   data:
+ *     redis:
+ *       host: ${REDIS_HOST:localhost}
+ *       port: ${REDIS_PORT:6379}
+ *       password: ${REDIS_PASSWORD:}
+ *       timeout: 5000ms
+ *
+ * resi-cache:
+ *   default-ttl: 30m
+ *   serializer:
+ *     allowed-package-prefixes:
+ *       - io.github.davidhlp        # REQUIRED: ResiCache internal classes
+ *       - com.example.business       # Your business domain objects
+ *       - com.example.dto            # Data transfer objects
+ *       - com.acme.domain           # Additional domain packages
+ *   bloom-filter:
+ *     enabled: true
+ *     expected-insertions: 100000
+ *     false-probability: 0.01
+ *   lock:
+ *     enabled: true
+ *     wait-time: 5
+ *     lease-time: 30
+ *   pre-refresh:
+ *     enabled: true
+ *     threshold: 0.8
+ *     core-pool-size: 4
  * }</pre>
  *
  * <h2>Common Pitfalls</h2>
