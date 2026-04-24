@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
@@ -45,6 +46,12 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
     private static final String THREAD_NAME_PREFIX = "pre-refresh-";
 
+    /** 独立调度器用于定期清理已完成任务 */
+    private final ScheduledExecutorService cleanupScheduler;
+
+    /** 清理间隔（毫秒） */
+    private final long cleanupIntervalMs;
+
     /** Micrometer 计数器 */
     private final Counter submittedCounter;
     private final Counter completedCounter;
@@ -54,7 +61,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
      * 默认构造函数，创建具有默认配置的线程池执行器
      */
     public ThreadPoolPreRefreshExecutor() {
-        this(createExecutor(), new ConcurrentHashMap<>(), null);
+        this(createExecutor(), new ConcurrentHashMap<>(), null, 30_000L);
     }
 
     /**
@@ -67,9 +74,18 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     ThreadPoolPreRefreshExecutor(
             ExecutorService executorService,
             ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            long cleanupIntervalMs) {
         this.executorService = executorService;
         this.inFlight = inFlight;
+        this.cleanupIntervalMs = cleanupIntervalMs;
+
+        // 创建独立的清理调度器
+        this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "pre-refresh-cleanup");
+            t.setDaemon(true);
+            return t;
+        });
 
         // 初始化 Micrometer 指标
         if (meterRegistry != null) {
@@ -246,13 +262,25 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     }
 
     /**
+     * 启动定期清理调度器
+     */
+    @PostConstruct
+    public void initCleanupScheduler() {
+        cleanupScheduler.scheduleAtFixedRate(
+                this::cleanFinished,
+                cleanupIntervalMs,
+                cleanupIntervalMs,
+                TimeUnit.MILLISECONDS);
+        log.info("Pre-refresh cleanup scheduler started with interval={}ms", cleanupIntervalMs);
+    }
+
+    /**
      * 获取当前正在进行的预刷新任务数量
      *
      * @return 正在进行的任务数量
      */
     @Override
     public int getActiveCount() {
-        cleanFinished();
         return inFlight.size();
     }
 
@@ -287,6 +315,17 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
             executorService.shutdownNow();
             Thread.currentThread().interrupt();
             log.error("Pre-refresh executor shutdown interrupted", e);
+        }
+
+        // 关闭清理调度器
+        cleanupScheduler.shutdown();
+        try {
+            if (!cleanupScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                cleanupScheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            cleanupScheduler.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 
