@@ -99,7 +99,8 @@ public class SpelConditionEvaluator {
             Object value = unlessField.get(operation);
             return value != null ? value.toString() : "";
         } catch (Exception e) {
-            log.trace("Could not access unless field directly: {}", e.getMessage());
+            log.warn("Failed to access 'unless' field via reflection for {}. Using empty condition. Error: {}",
+                    operation.getClass().getName(), e.getMessage());
             return "";
         }
     }
