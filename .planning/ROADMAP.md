@@ -53,9 +53,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — StripedReadWriteLock 分段锁实现
-- [ ] 03-02-PLAN.md — Bloom Filter 哈希缓存实现
-- [ ] 03-03-PLAN.md — PERF-03 验证（已实现）
+- [x] 03-01-PLAN.md — StripedReadWriteLock 分段锁实现
+- [x] 03-02-PLAN.md — Bloom Filter 哈希缓存实现
+- [x] 03-03-PLAN.md — PERF-03 验证（已实现）
 
 ### Requirements
 - PERF-01: TwoListLRU put() 写锁优化
