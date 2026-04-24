@@ -42,6 +42,7 @@ public class RedisConnectionConfiguration {
 
         template.setDefaultSerializer(jsonSerializer);
         template.setEnableDefaultSerializer(true);
+        // Timeout is configured via spring.data.redis.timeout in application.yml
         template.afterPropertiesSet();
 
         log.debug(

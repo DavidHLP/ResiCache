@@ -17,24 +17,32 @@ import java.util.List;
  * GenericJackson2JsonRedisSerializer by restricting type information to only allow
  * classes from configured package hierarchies.
  *
- * <p>Usage:
- * <pre>{@code
- * RedisTemplate<String, Object> template = new RedisTemplate<>();
- * template.setValueSerializer(new SecureJackson2JsonRedisSerializer(objectMapper));
- * }</pre>
+ * <h2>Why Package Whitelist?</h2>
+ * <p>Without whitelist validation, Jackson's default typing can deserialize arbitrary classes
+ * from the classpath, enabling remote code execution (RCE) attacks if Redis is compromised.
+ * This serializer restricts deserialization to explicitly allowed package prefixes only.
  *
- * <p>Custom package prefixes can be configured via:
+ * <h2>Configuration</h2>
+ * <p>Default allowed package: {@code io.github.davidhlp}
+ * <p>To add custom packages, configure in application.yml:
  * <pre>{@code
  * resi-cache:
  *   serializer:
  *     allowed-package-prefixes:
- *       - io.github.davidhlp
- *       - com.example.business
- *       - com.acme.domain
+ *       - io.github.davidhlp        # default, required
+ *       - com.example.business      # your domain objects
+ *       - com.acme.domain          # another package
  * }</pre>
  *
+ * <h2>Common Pitfalls</h2>
+ * <ul>
+ *   <li>If your cached objects are in a package <strong>not</strong> in the whitelist,
+ *       deserialization will fail silently and return {@code null}.</li>
+ *   <li>Ensure all cached domain object packages are listed before first deployment.</li>
+ * </ul>
+ *
  * @see PolymorphicTypeValidator
- * @see GenericJackson2JsonRedisSerializer
+ * @see BasicPolymorphicTypeValidator
  */
 public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object> {
 
