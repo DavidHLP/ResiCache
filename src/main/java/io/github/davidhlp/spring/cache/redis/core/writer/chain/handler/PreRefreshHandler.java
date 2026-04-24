@@ -143,6 +143,14 @@ public class PreRefreshHandler extends AbstractCacheHandler {
                     return;
                 }
 
+                // 检查 TTL 是否即将过期（避免刷新已过期数据）
+                long remainingTtl = liveValue.getRemainingTtl();
+                if (remainingTtl > 0 && remainingTtl < REFRESH_GRACE_PERIOD_SECONDS) {
+                    log.debug("Async pre-refresh skipped: key={} remainingTtl={}s is below grace period {}s",
+                              redisKey, remainingTtl, REFRESH_GRACE_PERIOD_SECONDS);
+                    return;
+                }
+
                 if (liveValue.getCreatedTime() == originalCreated
                     && liveValue.getVersion() == originalVersion) {
                     // 缩短 TTL 而非直接删除，避免缓存穿透
