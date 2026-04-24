@@ -1,7 +1,10 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.filter;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.BloomFilterConfig;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.strategy.BloomHashStrategy;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisCallback;
@@ -25,6 +28,14 @@ public class RedisBloomIFilter implements BloomIFilter {
     private final RedisTemplate<String, String> redisTemplate;
     private final BloomFilterConfig config;
     private final BloomHashStrategy hashStrategy;
+    private Cache<String, int[]> hashPositionCache;
+
+    @PostConstruct
+    public void initHashCache() {
+        this.hashPositionCache = Caffeine.newBuilder()
+                .maximumSize(config.getHashCacheSize())
+                .build();
+    }
 
     @Override
     public void add(String cacheName, String key) {
@@ -33,8 +44,10 @@ public class RedisBloomIFilter implements BloomIFilter {
         }
 
         String bloomKey = bloomKey(cacheName);
+        String cacheEntryKey = cacheName + "::" + key;
         try {
-            int[] positions = hashStrategy.positionsFor(key, config);
+            int[] positions = hashPositionCache.get(cacheEntryKey,
+                    k -> hashStrategy.positionsFor(key, config));
 
             // 使用 Redis Pipeline 批量写入，减少网络往返
             redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
@@ -64,8 +77,10 @@ public class RedisBloomIFilter implements BloomIFilter {
         }
 
         String bloomKey = bloomKey(cacheName);
+        String cacheEntryKey = cacheName + "::" + key;
         try {
-            int[] positions = hashStrategy.positionsFor(key, config);
+            int[] positions = hashPositionCache.get(cacheEntryKey,
+                    k -> hashStrategy.positionsFor(key, config));
 
             // 使用 Pipeline 批量查询，减少网络往返
             List<byte[]> hashKeys = Arrays.stream(positions)
