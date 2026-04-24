@@ -76,9 +76,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — TwoListLRU + PreRefreshHandler 并发测试
-- [ ] 04-02-PLAN.md — Handler Chain 异常处理测试
-- [ ] 04-03-PLAN.md — Bloom Filter + SpEL 安全测试
+- [x] 04-01-PLAN.md — TwoListLRU + PreRefreshHandler 并发测试
+- [x] 04-02-PLAN.md — Handler Chain 异常处理测试
+- [x] 04-03-PLAN.md — Bloom Filter + SpEL 安全测试
 
 ### Requirements
 - TEST-01: TwoListLRU 并发访问测试
