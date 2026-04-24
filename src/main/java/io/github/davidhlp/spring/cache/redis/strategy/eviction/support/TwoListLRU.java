@@ -417,7 +417,18 @@ public class TwoListLRU<K, V> {
                     demoteToInactive(candidate);
                 } else if (evictOldestInactiveUnsafe()) {
                     // Inactive List已满，尝试淘汰后降级
-                    demoteToInactive(candidate);
+                    // 需要重新检查空间，因为其他线程可能同时添加了元素
+                    if (inactiveSizeCounter.get() < maxInactiveSize) {
+                        demoteToInactive(candidate);
+                    } else {
+                        // 确实无法腾出空间，直接淘汰当前节点
+                        evictNode(candidate);
+                        if (log.isDebugEnabled()) {
+                            log.debug(
+                                    "Evicted entry from active list (inactive full): key={}",
+                                    candidate.key);
+                        }
+                    }
                 } else {
                     // 无法淘汰Inactive节点，直接淘汰当前节点
                     evictNode(candidate);
