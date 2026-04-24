@@ -43,8 +43,16 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     private final TypeSupport typeSupport;
     private final CacheHandlerChainFactory chainFactory;
 
-    /** 缓存的责任链实例（单例，避免每次创建） */
-    private volatile CacheHandlerChain cachedChain;
+    /** 缓存的责任链实例（饿汉式单例，构造时初始化） */
+    private final CacheHandlerChain cachedChain = buildChain();
+
+    /**
+     * 构建缓存责任链（供饿汉式初始化调用）
+     */
+    private CacheHandlerChain buildChain() {
+        log.debug("Initializing handler chain for RedisProCacheWriter");
+        return chainFactory.createChain();
+    }
 
     @Override
     @Nullable
@@ -296,19 +304,11 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 获取缓存的责任链实例（懒加载 + 双重检查锁）
+     * 获取缓存的责任链实例（饿汉式单例）
      *
      * @return 责任链实例
      */
     private CacheHandlerChain getChain() {
-        if (cachedChain == null) {
-            synchronized (this) {
-                if (cachedChain == null) {
-                    cachedChain = chainFactory.createChain();
-                    log.debug("Initialized cached handler chain for RedisProCacheWriter");
-                }
-            }
-        }
         return cachedChain;
     }
 }
