@@ -4,6 +4,12 @@
 
 **Goal:** 修复高优先级的技术债务问题
 
+**Plans:** 2 plans
+
+Plans:
+- [x] 01-01-PLAN.md — TwoListLRU + ThreadPoolPreRefreshExecutor 修复
+- [x] 01-02-PLAN.md — PreRefreshHandler + RedisProCacheWriter 修复
+
 ### Requirements
 - TECH-01: TwoListLRU 读锁竞争优化
 - TECH-02: ThreadPoolPreRefreshExecutor 清理机制修复
@@ -22,6 +28,12 @@
 
 **Goal:** 解决安全考虑中的风险点
 
+**Plans:** 2 plans
+
+Plans:
+- [x] 02-01-PLAN.md — SpelConditionEvaluator + RedisBloomIFilter 增强
+- [x] 02-02-PLAN.md — SecureJackson2JsonRedisSerializer 文档完善
+
 ### Requirements
 - SEC-01: SpelConditionEvaluator 反射访问重构
 - SEC-02: Bloom Filter Redis 操作添加超时
@@ -37,6 +49,13 @@
 ## Phase 3: 性能优化
 
 **Goal:** 优化关键路径性能
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — StripedReadWriteLock 分段锁实现
+- [ ] 03-02-PLAN.md — Bloom Filter 哈希缓存实现
+- [ ] 03-03-PLAN.md — PERF-03 验证（已实现）
 
 ### Requirements
 - PERF-01: TwoListLRU put() 写锁优化
