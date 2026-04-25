@@ -76,6 +76,7 @@ public class RedisProCache extends RedisCache {
         long start = System.nanoTime();
         try {
             super.evict(key);
+            size.decrementAndGet();
         } finally {
             evictTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
