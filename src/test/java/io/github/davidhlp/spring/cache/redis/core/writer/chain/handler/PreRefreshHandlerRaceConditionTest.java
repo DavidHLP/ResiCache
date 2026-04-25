@@ -103,8 +103,9 @@ class PreRefreshHandlerRaceConditionTest {
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
         AtomicBoolean exceptionThrown = new AtomicBoolean(false);
 
-        lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        lenient().when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        // Stub both valueOperations.get and shouldPreRefresh
+        when(valueOperations.get("test:key")).thenReturn(cachedValue);
+        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             executor.submit(() -> {

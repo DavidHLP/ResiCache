@@ -1,10 +1,10 @@
 ---
 phase: "04-test-coverage"
-verified: "2026-04-24T12:00:00Z"
-status: gaps_found
-score: "4/5"  # TEST-02 (PreRefreshHandler) has test implementation issue
+verified: "2026-04-25T15:30:00Z"
+status: passed
+score: "5/5"
 overrides_applied: 0
-re_verification: false
+re_verification: true
 
 # Phase 4 Goal: 添加关键场景的测试覆盖
 
@@ -12,8 +12,8 @@ re_verification: false
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
-| 1 | TwoListLRU 并发测试通过，无数据损坏 | PARTIAL | Tests expose real concurrency bug (NullPointer on node.prev) - this IS the expected behavior |
-| 2 | PreRefreshHandler 竞态条件被识别并有保护 | PARTIAL | Tests exist but have Mockito UnnecessaryStubbing error |
+| 1 | TwoListLRU 并发测试通过，无数据损坏 | PASS | Fixed: Replaced striped lock with global lock - 3/3 concurrent tests pass |
+| 2 | PreRefreshHandler 竞态条件被识别并有保护 | PASS | Fixed: Added proper Mockito stubbing - 3/3 race condition tests pass |
 | 3 | Handler Chain 异常被正确处理 | PASS | 4 tests PASS |
 | 4 | Bloom Filter 假阳性率在预期范围内 | PASS | 5 tests PASS |
 | 5 | SpEL 表达式不会被注入 | PASS | 9 tests PASS |

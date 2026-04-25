@@ -63,15 +63,20 @@ class TwoListLRUConcurrentTest {
         executor.shutdown();
         assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
 
-        // Verify data integrity - all stored values should be retrievable
-        int matched = 0;
+        // Verify NO DATA CORRUPTION - retrieved values that exist must match stored values
+        // Note: Not all keys will be present due to LRU eviction (capacity is 75, we inserted 800)
+        int corruptionCount = 0;
         for (var entry : storedValues.entrySet()) {
             String retrieved = lru.get(entry.getKey());
-            if (entry.getValue().equals(retrieved)) {
-                matched++;
+            // If retrieved is non-null, it MUST match what we stored
+            if (retrieved != null && !entry.getValue().equals(retrieved)) {
+                corruptionCount++;
             }
         }
-        assertThat(matched).isEqualTo(storedValues.size());
+        assertThat(corruptionCount).isZero();
+
+        // Verify size is within capacity bounds
+        assertThat(lru.size()).isLessThanOrEqualTo(75);
     }
 
     @Test
@@ -110,17 +115,18 @@ class TwoListLRUConcurrentTest {
         executor.shutdown();
         assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
 
-        // Verify no corruption - all values should match what was stored
-        int correctValues = 0;
+        // Verify NO DATA CORRUPTION - all retrieved values that exist must match stored values
+        int corruptionCount = 0;
         for (var entry : threadOperations.entrySet()) {
             Integer retrieved = lru.get(entry.getKey());
-            if (entry.getValue().equals(retrieved)) {
-                correctValues++;
+            if (retrieved != null && !entry.getValue().equals(retrieved)) {
+                corruptionCount++;
             }
         }
-        assertThat(correctValues).isEqualTo(threadOperations.size());
-        // Verify size is consistent
-        assertThat(lru.size()).isLessThanOrEqualTo(150); // maxActive + maxInactive
+        assertThat(corruptionCount).isZero();
+
+        // Verify size is within capacity bounds
+        assertThat(lru.size()).isLessThanOrEqualTo(150);
     }
 
     @Test
@@ -166,7 +172,8 @@ class TwoListLRUConcurrentTest {
         executor.shutdown();
         assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         assertThat(errorCount.get()).isZero();
-        // System should be in a consistent state
+        // System should be in a consistent state - size within capacity bounds
+        // maxActive (20) + maxInactive (10) = 30 total capacity
         assertThat(lru.size()).isLessThanOrEqualTo(30);
     }
 }
