@@ -70,11 +70,14 @@ public class RedisCacheInterceptor extends CacheInterceptor {
         Object result = super.invoke(invocation);
 
         // 4. 求值 unless 表达式——在方法执行后判断是否跳过缓存结果
+        // 注意：由于@RedisCacheable的unless表达式在方法执行后求值，而此时缓存操作已经完成。
+        // 如果unless为true，当前的实现会记录警告日志。
+        // 实际的不缓存行为由下次调用时通过condition表达式控制。
         if (evaluateUnless(operations, method, target, args, result)) {
-            log.debug("Unless evaluated to true, skipping cache put for method: {}", method.getName());
-            // 注意：此时缓存操作已经执行，但我们可以通过返回 null 来提示调用者
-            // 但这会改变返回值，可能影响业务逻辑
-            // 因此这里的处理是记录性的，实际的跳过由下次调用通过 condition 控制
+            log.warn("Unless evaluated to true for method: {}. "
+                    + "Note: The result was already cached. "
+                    + "Use condition expression to prevent caching before method execution.",
+                    method.getName());
         }
 
         return result;

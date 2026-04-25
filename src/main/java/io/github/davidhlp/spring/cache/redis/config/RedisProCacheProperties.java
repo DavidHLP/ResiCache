@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import jakarta.validation.constraints.Min;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +44,9 @@ public class RedisProCacheProperties {
 
     /** 同步锁配置 */
     private SyncLockProperties syncLock = new SyncLockProperties();
+
+    /** Redisson 连接池配置 */
+    private RedissonProperties redisson = new RedissonProperties();
 
     /** 禁用的 Handler 列表（如 bloom-filter、pre-refresh、sync-lock） */
     private java.util.List<String> disabledHandlers = new java.util.ArrayList<>();
@@ -94,5 +98,31 @@ public class RedisProCacheProperties {
         private long timeout = 3000;
         /** 超时时间单位 */
         private TimeUnit unit = TimeUnit.MILLISECONDS;
+    }
+
+    @Getter
+    @Setter
+    public static class RedissonProperties {
+        /** 连接池大小 */
+        @Min(1)
+        private int connectionPoolSize = 64;
+        /** 最小空闲连接数 */
+        @Min(0)
+        private int connectionMinimumIdleSize = 10;
+        /** 空闲连接超时时间（毫秒） */
+        @Min(1)
+        private int idleConnectionTimeout = 10000;
+        /** 连接超时时间（毫秒） */
+        @Min(1)
+        private int connectTimeout = 10000;
+        /** 命令超时时间（毫秒） */
+        @Min(1)
+        private int timeout = 3000;
+        /** 重试次数 */
+        @Min(1)
+        private int retryAttempts = 3;
+        /** 重试间隔（毫秒） */
+        @Min(1)
+        private int retryInterval = 1500;
     }
 }

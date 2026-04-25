@@ -87,37 +87,44 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
             return t;
         });
 
-        // 初始化 Micrometer 指标
-        if (meterRegistry != null) {
-            this.submittedCounter = Counter.builder("prerefresh.submitted")
-                    .description("Number of pre-refresh tasks submitted")
-                    .register(meterRegistry);
-            this.completedCounter = Counter.builder("prerefresh.completed")
-                    .description("Number of pre-refresh tasks completed")
-                    .register(meterRegistry);
-            this.cancelledCounter = Counter.builder("prerefresh.cancelled")
-                    .description("Number of pre-refresh tasks cancelled")
-                    .register(meterRegistry);
-
-            // Gauge: 活跃任务数
-            Gauge.builder("prerefresh.active", inFlight, map -> map.size())
-                    .description("Number of active pre-refresh tasks")
-                    .register(meterRegistry);
-
-            // Gauge: 队列大小
-            if (executorService instanceof ThreadPoolExecutor tpe) {
-                Gauge.builder("prerefresh.queue.size", tpe, tpe2 -> tpe2.getQueue().size())
-                        .tag("component", "prerefresh")
-                        .description("Size of the pre-refresh task queue")
+        try {
+            // 初始化 Micrometer 指标
+            if (meterRegistry != null) {
+                this.submittedCounter = Counter.builder("prerefresh.submitted")
+                        .description("Number of pre-refresh tasks submitted")
                         .register(meterRegistry);
-            }
-        } else {
-            this.submittedCounter = null;
-            this.completedCounter = null;
-            this.cancelledCounter = null;
-        }
+                this.completedCounter = Counter.builder("prerefresh.completed")
+                        .description("Number of pre-refresh tasks completed")
+                        .register(meterRegistry);
+                this.cancelledCounter = Counter.builder("prerefresh.cancelled")
+                        .description("Number of pre-refresh tasks cancelled")
+                        .register(meterRegistry);
 
-        log.info("ThreadPoolPreRefreshExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}", MAX_RETRY_COUNT);
+                // Gauge: 活跃任务数
+                Gauge.builder("prerefresh.active", inFlight, map -> map.size())
+                        .description("Number of active pre-refresh tasks")
+                        .register(meterRegistry);
+
+                // Gauge: 队列大小
+                if (executorService instanceof ThreadPoolExecutor tpe) {
+                    Gauge.builder("prerefresh.queue.size", tpe, tpe2 -> tpe2.getQueue().size())
+                            .tag("component", "prerefresh")
+                            .description("Size of the pre-refresh task queue")
+                            .register(meterRegistry);
+                }
+            } else {
+                this.submittedCounter = null;
+                this.completedCounter = null;
+                this.cancelledCounter = null;
+            }
+
+            log.info("ThreadPoolPreRefreshExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}", MAX_RETRY_COUNT);
+        } catch (RuntimeException e) {
+            // 初始化失败时，确保清理已创建的资源
+            cleanupScheduler.shutdownNow();
+            executorService.shutdownNow();
+            throw e;
+        }
     }
 
     /**
@@ -288,11 +295,10 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
      * 清理已完成的任务，从进行中的映射中移除已完成的任务
      */
 	private void cleanFinished() {
-        for (Map.Entry<String, CompletableFuture<Void>> entry : inFlight.entrySet()) {
-            if (entry.getValue().isDone()) {
-                inFlight.remove(entry.getKey(), entry.getValue());
-            }
-        }
+        inFlight.keySet().removeIf(key -> {
+            CompletableFuture<Void> future = inFlight.get(key);
+            return future != null && future.isDone();
+        });
     }
 
     /**

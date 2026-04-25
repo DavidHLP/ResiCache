@@ -82,13 +82,22 @@ public class SyncSupport {
 	}
 
 	/**
-	 * 释放 Monitor，减少引用计数，当计数为0时移除
+	 * 释放 Monitor，减少引用计数，当计数为0时移除。
+	 * 使用 compute 原子性地完成检查和删除，避免 TOCTOU 竞态条件。
 	 */
 	private void releaseMonitor(String key, MonitorHolder holder) {
-		int count = holder.refCount.decrementAndGet();
-		if (count <= 0) {
-			localMonitors.remove(key, holder);
-		}
+		localMonitors.compute(key, (k, existingHolder) -> {
+			if (existingHolder != holder) {
+				// 键已被其他 MonitorHolder 替换，保持现有引用
+				return existingHolder;
+			}
+			if (holder.refCount.decrementAndGet() <= 0) {
+				// 引用计数归零，移除该条目
+				return null;
+			}
+			// 仍有引用，保持该条目
+			return holder;
+		});
 	}
 
 	/**

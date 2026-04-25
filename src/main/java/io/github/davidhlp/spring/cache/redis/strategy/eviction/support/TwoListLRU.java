@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 
@@ -51,10 +52,10 @@ public class TwoListLRU<K, V> {
     /** 当前Inactive List大小 — 使用AtomicInteger支持无锁读取 */
     private final AtomicInteger inactiveSizeCounter = new AtomicInteger(0);
 
-    /** 总淘汰次数 */
-    private long totalEvictions;
+    /** 总淘汰次数 — 使用AtomicLong保证线程安全 */
+    private final AtomicLong totalEvictions = new AtomicLong(0);
 
-    @Setter private EvictionCallback<K, V> evictionCallback;
+    @Setter private volatile EvictionCallback<K, V> evictionCallback;
 
     @Setter private volatile Predicate<V> evictionPredicate;
 
@@ -91,17 +92,24 @@ public class TwoListLRU<K, V> {
         this.inactiveTail = new Node<>(null, null);
         inactiveHead.next = inactiveTail;
         inactiveTail.prev = inactiveHead;
-
-        this.totalEvictions = 0;
     }
 
     /**
-     * 获取指定key对应的stripe锁
+     * 获取指定key对应的读锁，用于并发读取
+     *
+     * @return 对应的ReadLock
+     */
+    private ReentrantReadWriteLock.ReadLock readLockForKey() {
+        return globalLock.readLock();
+    }
+
+    /**
+     * 获取指定key对应的写锁，用于修改操作
      *
      * @param key 键
-     * @return 对应的ReadWriteLock
+     * @return 对应的WriteLock
      */
-    private ReentrantReadWriteLock.WriteLock lockForKey() {
+    private ReentrantReadWriteLock.WriteLock writeLockForKey() {
         return globalLock.writeLock();
     }
 
@@ -117,7 +125,7 @@ public class TwoListLRU<K, V> {
             throw new IllegalArgumentException("Key cannot be null");
         }
 
-        lockForKey().lock();
+        writeLockForKey().lock();
         try {
             Node<K, V> existingNode = nodeMap.get(key);
             if (existingNode != null) {
@@ -148,7 +156,7 @@ public class TwoListLRU<K, V> {
                 return false;
             }
         } finally {
-            lockForKey().unlock();
+            writeLockForKey().unlock();
         }
     }
 
@@ -168,23 +176,32 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        // 只有在需要移动节点时才获取锁
-        if (!node.isActive || activeHead.next != node) {
-            lockForKey().lock();
-            try {
-                // 再次检查节点是否仍是map中的同一个节点（防止在锁等待期间被移除并重新添加）
-                Node<K, V> currentNode = nodeMap.get(key);
-                if (currentNode == null) {
-                    return null;
-                }
-                if (currentNode != node) {
-                    // 节点已被替换，直接返回新节点的值（不需要提升）
-                    return currentNode.value;
-                }
-                promoteNodeSafe(node);
-            } finally {
-                lockForKey().unlock();
+        // 使用读锁允许并发读取，只在需要提升时才获取写锁
+        readLockForKey().lock();
+        try {
+            // 如果节点不需要提升（已经在Active List头部），直接返回
+            if (node.isActive && activeHead.next == node) {
+                return node.value;
             }
+        } finally {
+            readLockForKey().unlock();
+        }
+
+        // 需要提升节点，获取写锁
+        writeLockForKey().lock();
+        try {
+            // 再次检查节点是否仍是map中的同一个节点（防止在锁等待期间被移除并重新添加）
+            Node<K, V> currentNode = nodeMap.get(key);
+            if (currentNode == null) {
+                return null;
+            }
+            if (currentNode != node) {
+                // 节点已被替换，直接返回新节点的值（不需要提升）
+                return currentNode.value;
+            }
+            promoteNodeSafe(node);
+        } finally {
+            writeLockForKey().unlock();
         }
         return node.value;
     }
@@ -200,7 +217,7 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        lockForKey().lock();
+        writeLockForKey().lock();
         try {
             Node<K, V> node = nodeMap.remove(key);
             if (node == null) {
@@ -223,7 +240,7 @@ public class TwoListLRU<K, V> {
             }
             return node.value;
         } finally {
-            lockForKey().unlock();
+            writeLockForKey().unlock();
         }
     }
 
@@ -270,12 +287,12 @@ public class TwoListLRU<K, V> {
      * @return 淘汰次数
      */
     public long getTotalEvictions() {
-        return totalEvictions;
+        return totalEvictions.get();
     }
 
     /** 清空所有元素 */
     public void clear() {
-        lockForKey().lock();
+        writeLockForKey().lock();
         try {
             nodeMap.clear();
 
@@ -293,7 +310,7 @@ public class TwoListLRU<K, V> {
                 log.debug("Cleared all entries");
             }
         } finally {
-            lockForKey().unlock();
+            writeLockForKey().unlock();
         }
     }
 
@@ -374,13 +391,15 @@ public class TwoListLRU<K, V> {
      * @return 是否成功腾出空间
      */
     private boolean demoteOrEvictOldestActiveUnsafe() {
+        // 缓存 volatile 引用到局部变量，避免多次读取时的竞态
+        final Predicate<V> predicate = evictionPredicate;
         // 查找可以降级的节点（从最老的开始）
         Node<K, V> candidate = activeTail.prev;
         while (candidate != activeHead) {
             // 保存 prev 引用用于遍历（removeNodeUnsafe 会将其置 null）
             Node<K, V> prev = candidate.prev;
             // 如果没有淘汰判断器，或者判断器允许操作
-            if (evictionPredicate == null || evictionPredicate.test(candidate.value)) {
+            if (predicate == null || predicate.test(candidate.value)) {
                 removeNodeUnsafe(candidate);
                 activeSizeCounter.decrementAndGet();
 
@@ -449,11 +468,12 @@ public class TwoListLRU<K, V> {
     /** 淘汰节点 */
     private void evictNode(Node<K, V> node) {
         nodeMap.remove(node.key);
-        totalEvictions++;
+        totalEvictions.incrementAndGet();
 
         // 触发回调
-        if (evictionCallback != null) {
-            evictionCallback.onEviction(node.key, node.value);
+        EvictionCallback<K, V> callback = evictionCallback;
+        if (callback != null) {
+            callback.onEviction(node.key, node.value);
         }
     }
 
@@ -463,11 +483,13 @@ public class TwoListLRU<K, V> {
      * @return 是否淘汰成功
      */
     private boolean evictOldestInactiveUnsafe() {
+        // 缓存 volatile 引用到局部变量，避免多次读取时的竞态
+        final Predicate<V> predicate = evictionPredicate;
         // 查找可以淘汰的节点（从最老的开始）
         Node<K, V> candidate = inactiveTail.prev;
         while (candidate != inactiveHead) {
             // 如果没有淘汰判断器，或者判断器允许淘汰
-            if (evictionPredicate == null || evictionPredicate.test(candidate.value)) {
+            if (predicate == null || predicate.test(candidate.value)) {
                 // Save prev BEFORE removeNodeUnsafe sets it to null
                 Node<K, V> prev = candidate.prev;
                 removeNodeUnsafe(candidate);

@@ -10,6 +10,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * 缓存处理器责任链管理器
@@ -26,7 +28,9 @@ public class CacheHandlerChain {
     /** 所有处理器列表（用于调试和后置处理） */
     private final List<CacheHandler> handlers = new ArrayList<>();
     /** 责任链头节点 */
-    private CacheHandler head;
+    private volatile CacheHandler head;
+    /** 读写锁，保证线程安全 */
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     /**
      * 添加处理器到责任链末尾
@@ -35,19 +39,24 @@ public class CacheHandlerChain {
      * @return 当前链（支持链式调用）
      */
     public CacheHandlerChain addHandler(CacheHandler handler) {
-        if (head == null) {
-            head = handler;
-        } else {
-            // 找到链尾
-            CacheHandler current = head;
-            while (current.getNext() != null) {
-                current = current.getNext();
+        lock.writeLock().lock();
+        try {
+            if (head == null) {
+                head = handler;
+            } else {
+                // 找到链尾
+                CacheHandler current = head;
+                while (current.getNext() != null) {
+                    current = current.getNext();
+                }
+                current.setNext(handler);
             }
-            current.setNext(handler);
+            handlers.add(handler);
+            log.debug("Added handler to chain: {}", handler.getClass().getSimpleName());
+            return this;
+        } finally {
+            lock.writeLock().unlock();
         }
-        handlers.add(handler);
-        log.debug("Added handler to chain: {}", handler.getClass().getSimpleName());
-        return this;
     }
 
     /**
@@ -64,9 +73,19 @@ public class CacheHandlerChain {
      * @return 处理结果
      */
     public CacheResult execute(CacheContext context) {
-        if (head == null) {
-            log.warn("Handler chain is empty!");
-            return CacheResult.success();
+        // 获取 head 的快照并在执行期间持有读锁，防止 clear() 修改链
+        lock.readLock().lock();
+        CacheHandler currentHead;
+        List<CacheHandler> handlersSnapshot;
+        try {
+            currentHead = head;
+            if (currentHead == null) {
+                log.warn("Handler chain is empty!");
+                return CacheResult.success();
+            }
+            handlersSnapshot = List.copyOf(handlers);
+        } finally {
+            lock.readLock().unlock();
         }
 
         log.debug(
@@ -75,13 +94,13 @@ public class CacheHandlerChain {
                 context.getCacheName(),
                 context.getRedisKey());
 
-        // 执行责任链
-        HandlerResult handlerResult = head.handle(context);
+        // 执行责任链（注意：此时仍持有 head 的引用快照，clear() 无法修改链）
+        HandlerResult handlerResult = currentHead.handle(context);
         CacheResult result = handlerResult.result();
         CacheResult finalResult = result != null ? result : CacheResult.success();
 
         // 执行后置处理
-        executePostProcess(context, finalResult);
+        executePostProcess(handlersSnapshot, context, finalResult);
 
         return finalResult;
     }
@@ -94,10 +113,11 @@ public class CacheHandlerChain {
      *
      * <p>执行顺序与责任链顺序一致，确保后置处理按照预期顺序执行。
      *
+     * @param handlers 后置处理器列表快照
      * @param context 缓存上下文
      * @param result 责任链执行结果
      */
-    private void executePostProcess(CacheContext context, CacheResult result) {
+    private void executePostProcess(List<CacheHandler> handlers, CacheContext context, CacheResult result) {
         for (CacheHandler handler : handlers) {
             if (handler instanceof PostProcessHandler postHandler) {
                 if (postHandler.requiresPostProcess(context)) {
@@ -123,16 +143,26 @@ public class CacheHandlerChain {
      * @return 处理器数量
      */
     public int size() {
-        return handlers.size();
+        lock.readLock().lock();
+        try {
+            return handlers.size();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     /**
      * 清空责任链
      */
     public void clear() {
-        head = null;
-        handlers.clear();
-        log.debug("Handler chain cleared");
+        lock.writeLock().lock();
+        try {
+            head = null;
+            handlers.clear();
+            log.debug("Handler chain cleared");
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
