@@ -523,9 +523,12 @@ public class TwoListLRU<K, V> {
      * @param node 待插入的节点
      */
     private void insertAfterUnsafe(Node<K, V> prev, Node<K, V> node) {
-        node.next = prev.next;
+        Node<K, V> next = prev.next;
+        node.next = next;
         node.prev = prev;
-        prev.next.prev = node;
+        if (next != null) {
+            next.prev = node;
+        }
         prev.next = node;
     }
 
@@ -535,8 +538,14 @@ public class TwoListLRU<K, V> {
      * @param node 待移除的节点
      */
     private void removeNodeUnsafe(Node<K, V> node) {
+        // Guard: if node was already removed by another thread, this is a no-op
+        if (node.prev == null) {
+            return;
+        }
         node.prev.next = node.next;
-        node.next.prev = node.prev;
+        if (node.next != null) {
+            node.next.prev = node.prev;
+        }
         // 清空节点的链表引用，帮助GC
         node.prev = null;
         node.next = null;
