@@ -65,7 +65,9 @@ public class RedisProCache extends RedisCache {
         long start = System.nanoTime();
         try {
             super.put(key, value);
-            size.incrementAndGet();
+            // 注意：这里不维护 size 计数器，因为 put 可能更新已存在的 key，
+            // 而我们无法在不加锁的情况下准确判断 key 是否已存在。
+            // size 只在 evict 时递减，在 clear 时重置，能够反映缓存变化的趋势但不会精确。
         } finally {
             putTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
@@ -76,7 +78,10 @@ public class RedisProCache extends RedisCache {
         long start = System.nanoTime();
         try {
             super.evict(key);
-            size.decrementAndGet();
+            // size 不会变成负数（evict 已存在的 key 时才会递减）
+            if (size.get() > 0) {
+                size.decrementAndGet();
+            }
         } finally {
             evictTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }

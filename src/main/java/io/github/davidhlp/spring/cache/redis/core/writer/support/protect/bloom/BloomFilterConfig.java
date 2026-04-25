@@ -17,10 +17,10 @@ public class BloomFilterConfig {
 	private final int hashCacheSize;
 
 	public BloomFilterConfig(
-			@Value("${spring.resiCache.bloom.prefix:bf:}") String keyPrefix,
-			@Value("${spring.resiCache.bloom.bit-size:8388608}") int bitSize,
-			@Value("${spring.resiCache.bloom.hash-functions:3}") int hashFunctions,
-			@Value("${spring.resiCache.bloom.hash-cache-size:10000}") int hashCacheSize) {
+			@Value("${resi-cache.bloom.prefix:bf:}") String keyPrefix,
+			@Value("${resi-cache.bloom.bit-size:8388608}") int bitSize,
+			@Value("${resi-cache.bloom.hash-functions:3}") int hashFunctions,
+			@Value("${resi-cache.bloom.hash-cache-size:10000}") int hashCacheSize) {
 		this.keyPrefix = keyPrefix;
 		this.bitSize = Math.max(1, bitSize);
 		this.hashFunctions = Math.max(1, hashFunctions);

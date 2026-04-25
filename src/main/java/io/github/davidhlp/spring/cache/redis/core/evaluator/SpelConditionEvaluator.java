@@ -2,7 +2,6 @@ package io.github.davidhlp.spring.cache.redis.core.evaluator;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.cache.Cache;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.context.expression.MapAccessor;
@@ -16,7 +15,9 @@ import org.springframework.util.StringUtils;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 /**
  * SpEL 条件表达式求值器 用于对 @RedisCacheable、@RedisCachePut 等注解的 condition 和 unless
@@ -28,10 +29,15 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class SpelConditionEvaluator {
 
+    /** 最大表达式缓存数量，防止内存泄漏 */
+    private static final int MAX_EXPRESSION_CACHE_SIZE = 1000;
+
     private static final SpelConditionEvaluator INSTANCE = new SpelConditionEvaluator();
 
     private final SpelExpressionParser parser = new SpelExpressionParser();
-    private final Map<String, Expression> expressionCache = new ConcurrentHashMap<>();
+    private final Cache<String, Expression> expressionCache = Caffeine.newBuilder()
+            .maximumSize(MAX_EXPRESSION_CACHE_SIZE)
+            .build();
 
     private SpelConditionEvaluator() {}
 
@@ -65,7 +71,7 @@ public class SpelConditionEvaluator {
     /**
      * 判断方法结果是否应该被缓存（基于 unless 表达式）
      *
-     * @param operation 缓存操作（必须是 CacheableOperation）
+     * @param operation 缓存操作
      * @param method 被调用的方法
      * @param args 方法参数
      * @param target 目标对象
@@ -89,20 +95,17 @@ public class SpelConditionEvaluator {
 
     /**
      * 从操作对象中获取 unless 表达式
-     * 支持 RedisCacheableOperation、RedisCachePutOperation 和 Spring CacheableOperation
+     * 支持 RedisCacheableOperation 和 RedisCachePutOperation（直接字段访问）
      */
     private String getUnlessFromOperation(CacheOperation operation) {
-        // 直接访问 unless 字段，绕过 Spring 的类型检查
-        try {
-            java.lang.reflect.Field unlessField = operation.getClass().getDeclaredField("unless");
-            unlessField.setAccessible(true);
-            Object value = unlessField.get(operation);
-            return value != null ? value.toString() : "";
-        } catch (Exception e) {
-            log.warn("Failed to access 'unless' field via reflection for {}. Using empty condition. Error: {}",
-                    operation.getClass().getName(), e.getMessage());
-            return "";
+        if (operation instanceof io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation cacheableOp) {
+            return cacheableOp.getUnless() != null ? cacheableOp.getUnless() : "";
         }
+        if (operation instanceof io.github.davidhlp.spring.cache.redis.register.operation.RedisCachePutOperation putOp) {
+            return putOp.getUnless() != null ? putOp.getUnless() : "";
+        }
+        // Fallback for other CacheOperation types - return empty (no unless)
+        return "";
     }
 
     /**
@@ -165,8 +168,7 @@ public class SpelConditionEvaluator {
      * @return 编译后的表达式
      */
     private Expression getExpression(String expressionString) {
-        return expressionCache.computeIfAbsent(
-                expressionString, key -> parser.parseExpression(key));
+        return expressionCache.get(expressionString, key -> parser.parseExpression(key));
     }
 
     /**
