@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 
@@ -19,13 +18,10 @@ public class TwoListLRU<K, V> {
     /** 默认Inactive List最大容量 */
     private static final int DEFAULT_MAX_INACTIVE_SIZE = 512;
 
-    /** 默认Stripe数量，用于减少写锁竞争 */
-    private static final int DEFAULT_STRIPE_COUNT = 16;
-
     private final int maxActiveSize;
     private final int maxInactiveSize;
 
-    /** 元素映射表，用于快速查找节点 */
+    /** 元素映射表，用于快速查找节点 - ConcurrentHashMap本身就是线程安全的 */
     private final ConcurrentHashMap<K, Node<K, V>> nodeMap;
 
     /** Active List头哨兵节点 */
@@ -40,14 +36,8 @@ public class TwoListLRU<K, V> {
     /** Inactive List尾哨兵节点 */
     private final Node<K, V> inactiveTail;
 
-    /** Striped locks数组，用于减少写锁竞争 */
-    private final ReadWriteLock[] stripes;
-
-    /** Stripe掩码，用于快速取模: index = hash & mask */
-    private final int stripeMask;
-
-    /** Stripe数量 */
-    private final int stripeCount;
+    /** 全局写锁，保护所有链表操作 */
+    private final ReentrantReadWriteLock globalLock = new ReentrantReadWriteLock();
 
     /** 当前Active List大小 — 使用AtomicInteger支持无锁读取 */
     private final AtomicInteger activeSizeCounter = new AtomicInteger(0);
@@ -67,22 +57,15 @@ public class TwoListLRU<K, V> {
     }
 
     public TwoListLRU(int maxActiveSize, int maxInactiveSize) {
-        this(maxActiveSize, maxInactiveSize, null, DEFAULT_STRIPE_COUNT);
+        this(maxActiveSize, maxInactiveSize, null);
     }
 
     public TwoListLRU(int maxActiveSize, int maxInactiveSize, Predicate<V> evictionPredicate) {
-        this(maxActiveSize, maxInactiveSize, evictionPredicate, DEFAULT_STRIPE_COUNT);
-    }
-
-    public TwoListLRU(int maxActiveSize, int maxInactiveSize, Predicate<V> evictionPredicate, int stripeCount) {
         if (maxActiveSize <= 0) {
             throw new IllegalArgumentException("maxActiveSize must be positive");
         }
         if (maxInactiveSize <= 0) {
             throw new IllegalArgumentException("maxInactiveSize must be positive");
-        }
-        if (stripeCount <= 0) {
-            throw new IllegalArgumentException("stripeCount must be positive");
         }
 
         this.maxActiveSize = maxActiveSize;
@@ -90,19 +73,6 @@ public class TwoListLRU<K, V> {
         this.evictionPredicate = evictionPredicate;
 
         this.nodeMap = new ConcurrentHashMap<>();
-
-        // 初始化Striped locks
-        this.stripeCount = stripeCount;
-        // 确保stripeCount是2的幂
-        int actualStripeCount = 1;
-        while (actualStripeCount < stripeCount) {
-            actualStripeCount <<= 1;
-        }
-        this.stripes = new ReentrantReadWriteLock[actualStripeCount];
-        for (int i = 0; i < actualStripeCount; i++) {
-            this.stripes[i] = new ReentrantReadWriteLock();
-        }
-        this.stripeMask = actualStripeCount - 1;
 
         // 初始化Active List双向链表
         this.activeHead = new Node<>(null, null);
@@ -125,19 +95,8 @@ public class TwoListLRU<K, V> {
      * @param key 键
      * @return 对应的ReadWriteLock
      */
-    private ReadWriteLock lockFor(K key) {
-        int hash = spread(key.hashCode());
-        return stripes[hash & stripeMask];
-    }
-
-    /**
-     * Kafka-style spreader函数，用于减少hash碰撞
-     *
-     * @param h 原始hash值
-     * @return 扩散后的hash值
-     */
-    private static int spread(int h) {
-        return (h ^ (h >>> 16)) & 0x7fffffff;
+    private ReentrantReadWriteLock.WriteLock lockForKey() {
+        return globalLock.writeLock();
     }
 
     /**
@@ -152,7 +111,7 @@ public class TwoListLRU<K, V> {
             throw new IllegalArgumentException("Key cannot be null");
         }
 
-        lockFor(key).writeLock().lock();
+        lockForKey().lock();
         try {
             Node<K, V> existingNode = nodeMap.get(key);
             if (existingNode != null) {
@@ -183,7 +142,7 @@ public class TwoListLRU<K, V> {
                 return false;
             }
         } finally {
-            lockFor(key).writeLock().unlock();
+            lockForKey().unlock();
         }
     }
 
@@ -198,14 +157,17 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        Node<K, V> node = nodeMap.get(key);
-        if (node == null) {
-            return null;
+        lockForKey().lock();
+        try {
+            Node<K, V> node = nodeMap.get(key);
+            if (node == null) {
+                return null;
+            }
+            promoteNodeSafe(node);
+            return node.value;
+        } finally {
+            lockForKey().unlock();
         }
-
-        // 提升访问优先级
-        promoteNodeSafe(node);
-        return node.value;
     }
 
     /**
@@ -219,7 +181,7 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        lockFor(key).writeLock().lock();
+        lockForKey().lock();
         try {
             Node<K, V> node = nodeMap.remove(key);
             if (node == null) {
@@ -242,7 +204,7 @@ public class TwoListLRU<K, V> {
             }
             return node.value;
         } finally {
-            lockFor(key).writeLock().unlock();
+            lockForKey().unlock();
         }
     }
 
@@ -294,10 +256,7 @@ public class TwoListLRU<K, V> {
 
     /** 清空所有元素 */
     public void clear() {
-        // 按顺序获取所有stripe写锁，防止死锁
-        for (int i = 0; i < stripeCount; i++) {
-            stripes[i].writeLock().lock();
-        }
+        lockForKey().lock();
         try {
             nodeMap.clear();
 
@@ -315,25 +274,18 @@ public class TwoListLRU<K, V> {
                 log.debug("Cleared all entries");
             }
         } finally {
-            // 逆序释放所有stripe写锁
-            for (int i = stripeCount - 1; i >= 0; i--) {
-                stripes[i].writeLock().unlock();
-            }
+            lockForKey().unlock();
         }
     }
 
     /**
-     * 提升节点优先级（线程安全版本）
+     * 提升节点优先级（调用者必须持有全局写锁）
      *
      * @param node 待提升的节点
      */
     private void promoteNodeSafe(Node<K, V> node) {
-        lockFor(node.key).writeLock().lock();
-        try {
-            promoteNodeUnsafe(node);
-        } finally {
-            lockFor(node.key).writeLock().unlock();
-        }
+        // Caller holds global lock, no additional locking needed
+        promoteNodeUnsafe(node);
     }
 
     /**
@@ -406,6 +358,8 @@ public class TwoListLRU<K, V> {
         // 查找可以降级的节点（从最老的开始）
         Node<K, V> candidate = activeTail.prev;
         while (candidate != activeHead) {
+            // 保存 prev 引用用于遍历（removeNodeUnsafe 会将其置 null）
+            Node<K, V> prev = candidate.prev;
             // 如果没有淘汰判断器，或者判断器允许操作
             if (evictionPredicate == null || evictionPredicate.test(candidate.value)) {
                 removeNodeUnsafe(candidate);
@@ -415,28 +369,35 @@ public class TwoListLRU<K, V> {
                 if (inactiveSizeCounter.get() < maxInactiveSize) {
                     // Inactive List有空间，直接降级
                     demoteToInactive(candidate);
-                } else if (evictOldestInactiveUnsafe()) {
-                    // Inactive List已满，尝试淘汰后降级
-                    // 需要重新检查空间，因为其他线程可能同时添加了元素
+                    return false;
+                }
+
+                // Inactive List已满，尝试淘汰后降级
+                if (evictOldestInactiveUnsafe()) {
+                    // 成功淘汰了一个Inactive节点，尝试降级
                     if (inactiveSizeCounter.get() < maxInactiveSize) {
                         demoteToInactive(candidate);
-                    } else {
-                        // 确实无法腾出空间，直接淘汰当前节点
-                        evictNode(candidate);
-                        if (log.isDebugEnabled()) {
-                            log.debug(
-                                    "Evicted entry from active list (inactive full): key={}",
-                                    candidate.key);
-                        }
+                        return false;
                     }
-                } else {
-                    // 无法淘汰Inactive节点，直接淘汰当前节点
+                    // 仍然无法降级，直接淘汰
                     evictNode(candidate);
                     if (log.isDebugEnabled()) {
                         log.debug(
                                 "Evicted entry from active list (inactive full): key={}",
                                 candidate.key);
                     }
+                    return false;
+                }
+
+                // 无法淘汰Inactive节点（所有都被保护），直接将节点放回active list原位置
+                // 注意：节点已被removeNodeUnsafe从链表中移除，但node.prev和node.next已被清空
+                // 我们需要重新插入到activeHead之后（作为最新的活跃节点）
+                insertAfterUnsafe(activeHead, candidate);
+                activeSizeCounter.incrementAndGet();
+                if (log.isDebugEnabled()) {
+                    log.debug(
+                            "Failed to evict - returned to active list: key={}",
+                            candidate.key);
                 }
                 return false;
             }
@@ -445,7 +406,7 @@ public class TwoListLRU<K, V> {
             if (log.isDebugEnabled()) {
                 log.debug("Skipping protected entry in active list: key={}", candidate.key);
             }
-            candidate = candidate.prev;
+            candidate = prev;
         }
 
         // 所有节点都受保护
@@ -488,6 +449,8 @@ public class TwoListLRU<K, V> {
         while (candidate != inactiveHead) {
             // 如果没有淘汰判断器，或者判断器允许淘汰
             if (evictionPredicate == null || evictionPredicate.test(candidate.value)) {
+                // Save prev BEFORE removeNodeUnsafe sets it to null
+                Node<K, V> prev = candidate.prev;
                 removeNodeUnsafe(candidate);
                 inactiveSizeCounter.decrementAndGet();
                 evictNode(candidate);
@@ -538,14 +501,20 @@ public class TwoListLRU<K, V> {
      * @param node 待移除的节点
      */
     private void removeNodeUnsafe(Node<K, V> node) {
-        // Guard: if node was already removed by another thread, this is a no-op
-        if (node.prev == null) {
+        // Capture references atomically - if prev is already null, node was already removed
+        Node<K, V> prev = node.prev;
+        if (prev == null) {
             return;
         }
-        node.prev.next = node.next;
-        if (node.next != null) {
-            node.next.prev = node.prev;
+        Node<K, V> next = node.next;
+
+        // Now perform removal using captured references
+        // This ensures atomicity of the removal operation
+        prev.next = next;
+        if (next != null) {
+            next.prev = prev;
         }
+
         // 清空节点的链表引用，帮助GC
         node.prev = null;
         node.next = null;
