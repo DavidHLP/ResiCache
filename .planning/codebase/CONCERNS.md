@@ -4,11 +4,11 @@
 
 ## Tech Debt
 
-**[RedisProCache.size() Counter Inaccuracy]**
+**[RedisProCache.size() Counter Inaccuracy]** ✅ FIXED
 - Issue: The `size` field in `RedisProCache` only increments on `put()` (line 68 in `RedisProCache.java`) but never decrements on `evict()`. The `evict()` method does not call `size.decrementAndGet()`.
 - Files: `src/main/java/io/github/davidhlp/spring/cache/redis/core/RedisProCache.java`
 - Impact: `getSize()` returns an inflated count. Actual Redis size may differ significantly from reported size after evictions.
-- Fix approach: Decrement size on evict, or track actual Redis size instead of maintaining a counter.
+- Fix: Added `size.decrementAndGet()` in `evict()` method (line 80).
 
 **[TwoListLRU getActiveSize/getInactiveSize Read Lock Contention]**
 - Issue: `getActiveSize()` and `getInactiveSize()` acquire read locks on every call. Under high concurrency with many size checks, this creates lock contention.
@@ -22,19 +22,19 @@
 - Impact: Low risk - volatile makes DCL correct in Java 5+. However, the pattern is confusing and could be simplified.
 - Fix approach: Consider using synchronized only or a more idiomatic lazy initialization pattern.
 
-**[CachedValue TTL Expiry Check Potential Overflow]**
+**[CachedValue TTL Expiry Check Potential Overflow]** ✅ FIXED
 - Issue: `isExpired()` in `CachedValue` uses `System.nanoTime()` for relative time calculation, but the TTL comparison at line 86 converts nanoseconds to milliseconds with integer division: `elapsedMs >= ttl * 1000`. For TTLs > ~2.1 million seconds, this could overflow.
 - Files: `src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/CachedValue.java` (lines 73-92)
 - Impact: Theoretical only - overflow would only occur for TTLs > ~24 days when using nanosecond precision. Default TTL is 30 minutes.
-- Fix approach: Use `TimeUnit.SECONDS.toMillis(ttl)` to avoid overflow.
+- Fix: Replaced `ttl * 1000` with `TimeUnit.SECONDS.toMillis(ttl)` in both `isExpired()` and `getRemainingTtl()` methods.
 
 ## Known Bugs
 
-**[RedisProCache.evict() Does Not Decrement Size]**
+**[RedisProCache.evict() Does Not Decrement Size]** ✅ FIXED
 - Symptoms: `getSize()` returns values higher than actual cache entries after evictions occur.
 - Files: `src/main/java/io/github/davidhlp/spring/cache/redis/core/RedisProCache.java` (lines 74-82)
 - Trigger: Call `evict()` on any cache entry, then check `getSize()`.
-- Workaround: Use Redis `DBSIZE` command to get actual key count.
+- Fix: Added `size.decrementAndGet()` after `super.evict(key)` call.
 
 **[ThreadPoolPreRefreshExecutor.cleanFinished() Only Runs on getActiveCount()]**
 - Symptoms: `getActiveCount()` may return counts that include completed but not-yet-removed futures.

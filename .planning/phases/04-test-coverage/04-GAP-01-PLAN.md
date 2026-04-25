@@ -51,6 +51,7 @@ Use `lenient()` on stubs that may not be reached due to early returns, or restru
 <task type="auto">
   <name>Fix Mockito UnnecessaryStubbing in PreRefreshHandlerRaceConditionTest</name>
   <files>src/test/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/PreRefreshHandlerRaceConditionTest.java</files>
+  <read_first>src/test/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/PreRefreshHandlerRaceConditionTest.java</read_first>
   <action>
     Apply `lenient()` to the stub at line 105 that causes UnnecessaryStubbing error:
 
@@ -75,6 +76,11 @@ Use `lenient()` on stubs that may not be reached due to early returns, or restru
     <automated>mvn test -Dtest=PreRefreshHandlerRaceConditionTest -q 2>&1 | tail -20</automated>
   </verify>
   <done>PreRefreshHandlerRaceConditionTest runs without UnnecessaryStubbing errors</done>
+  <acceptance_criteria>
+  - "grep -n 'lenient()' PreRefreshHandlerRaceConditionTest.java returns line with lenient stub"
+  - "grep -n 'import.*lenient' PreRefreshHandlerRaceConditionTest.java returns import statement"
+  - "mvn test -Dtest=PreRefreshHandlerRaceConditionTest -q 2>&1 | grep -i 'unnecessary' returns empty (no stubbing errors)"
+  </acceptance_criteria>
 </task>
 
 </tasks>

@@ -78,16 +78,16 @@ public class CachedValue {
         if (ttl <= 0) {
             return false;
         }
-        
+
         if (startNanoTime > 0) {
             // 新版本：使用单调时钟计算经过的纳秒数
             long elapsedNanos = System.nanoTime() - startNanoTime;
             long elapsedMs = elapsedNanos / 1_000_000;
-            return elapsedMs >= ttl * 1000;
+            return elapsedMs >= java.util.concurrent.TimeUnit.SECONDS.toMillis(ttl);
         } else {
             // 旧数据兼容：使用 createdTime（可能受时钟回拨影响）
             long elapsedMs = System.currentTimeMillis() - createdTime;
-            return elapsedMs >= ttl * 1000;
+            return elapsedMs >= java.util.concurrent.TimeUnit.SECONDS.toMillis(ttl);
         }
     }
 
@@ -119,7 +119,7 @@ public class CachedValue {
             elapsedMs = System.currentTimeMillis() - createdTime;
         }
         
-        long remainingMs = (ttl * 1000) - elapsedMs;
+        long remainingMs = (java.util.concurrent.TimeUnit.SECONDS.toMillis(ttl)) - elapsedMs;
         return Math.max(0, remainingMs / 1000);
     }
 

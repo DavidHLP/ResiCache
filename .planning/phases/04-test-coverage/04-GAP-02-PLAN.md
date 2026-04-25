@@ -84,6 +84,7 @@ The fix needs to ensure proper synchronization when demoting/evicting nodes:
 <task type="auto">
   <name>Fix TwoListLRU concurrency bug in demoteOrEvictOldestActiveUnsafe</name>
   <files>src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/support/TwoListLRU.java</files>
+  <read_first>src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/support/TwoListLRU.java</read_first>
   <action>
     Fix the concurrency bug in `demoteOrEvictOldestActiveUnsafe()` method (around line 405).
 
@@ -129,6 +130,11 @@ The fix needs to ensure proper synchronization when demoting/evicting nodes:
     <automated>mvn test -Dtest=TwoListLRUConcurrentTest -q 2>&1 | tail -30</automated>
   </verify>
   <done>TwoListLRU concurrent access tests pass without NullPointerException on node.prev</done>
+  <acceptance_criteria>
+  - "grep -n 'inactiveSizeCounter.get() < maxInactiveSize' TwoListLRU.java returns re-check logic after evictOldestInactiveUnsafe"
+  - "mvn test -Dtest=TwoListLRUConcurrentTest -q 2>&1 | grep -i 'nullpointer' returns empty"
+  - "mvn test -Dtest=TwoListLRUConcurrentTest -q 2>&1 | tail -5 shows BUILD SUCCESS"
+  </acceptance_criteria>
 </task>
 
 </tasks>
