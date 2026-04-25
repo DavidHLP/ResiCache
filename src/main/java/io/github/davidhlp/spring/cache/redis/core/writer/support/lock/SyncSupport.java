@@ -76,13 +76,7 @@ public class SyncSupport {
 	 * 获取 Monitor，增加引用计数
 	 */
 	private MonitorHolder acquireMonitor(String key) {
-		MonitorHolder holder = localMonitors.compute(key, (k, existing) -> {
-			if (existing == null) {
-				return new MonitorHolder();
-			}
-			existing.refCount.incrementAndGet();
-			return existing;
-		});
+		MonitorHolder holder = localMonitors.computeIfAbsent(key, k -> new MonitorHolder());
 		holder.refCount.incrementAndGet();
 		return holder;
 	}

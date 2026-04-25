@@ -10,13 +10,17 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * JVM 内存级别的布隆过滤器，用于降低 Redis 查询的频率。
- * 
+ *
  * <p>线程安全说明：
  * <ul>
- *   <li>BitSet 操作使用 synchronized 保护</li>
+ *   <li>每个 cacheName 对应一个独立的 BitSet 和 ReadWriteLock</li>
+ *   <li>读操作获取读锁，支持并发读</li>
+ *   <li>写操作获取写锁，独占访问</li>
  *   <li>clear() 操作清空 BitSet 而不是移除，避免竞态条件</li>
  * </ul>
  */
@@ -28,6 +32,11 @@ public class LocalBloomIFilter implements BloomIFilter {
     private final BloomFilterConfig config;
     private final BloomHashStrategy hashStrategy;
     private final ConcurrentMap<String, BitSet> localFilters = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ReadWriteLock> locks = new ConcurrentHashMap<>();
+
+    private ReadWriteLock lockFor(String cacheName) {
+        return locks.computeIfAbsent(cacheName, name -> new ReentrantReadWriteLock());
+    }
 
     @Override
     public void add(String cacheName, String key) {
@@ -36,10 +45,13 @@ public class LocalBloomIFilter implements BloomIFilter {
         }
         BitSet bitSet = bitSetFor(cacheName);
         int[] positions = hashStrategy.positionsFor(key, config);
-        synchronized (bitSet) {
+        lockFor(cacheName).writeLock().lock();
+        try {
             for (int position : positions) {
                 bitSet.set(position);
             }
+        } finally {
+            lockFor(cacheName).writeLock().unlock();
         }
         log.debug(
                 "Local bloom add: cacheName={}, key={}, positions={}",
@@ -58,7 +70,8 @@ public class LocalBloomIFilter implements BloomIFilter {
             return false;
         }
         int[] positions = hashStrategy.positionsFor(key, config);
-        synchronized (bitSet) {
+        lockFor(cacheName).readLock().lock();
+        try {
             for (int position : positions) {
                 if (!bitSet.get(position)) {
                     log.debug(
@@ -69,6 +82,8 @@ public class LocalBloomIFilter implements BloomIFilter {
                     return false;
                 }
             }
+        } finally {
+            lockFor(cacheName).readLock().unlock();
         }
         return true;
     }
@@ -79,8 +94,11 @@ public class LocalBloomIFilter implements BloomIFilter {
             BitSet bitSet = localFilters.get(cacheName);
             if (bitSet != null) {
                 // 清空 BitSet 而不是移除，避免其他线程的竞态条件
-                synchronized (bitSet) {
+                lockFor(cacheName).writeLock().lock();
+                try {
                     bitSet.clear();
+                } finally {
+                    lockFor(cacheName).writeLock().unlock();
                 }
                 log.debug("Local bloom filter cleared: cacheName={}", cacheName);
             }

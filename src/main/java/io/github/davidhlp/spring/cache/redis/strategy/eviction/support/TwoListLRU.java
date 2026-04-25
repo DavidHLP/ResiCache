@@ -36,7 +36,13 @@ public class TwoListLRU<K, V> {
     /** Inactive List尾哨兵节点 */
     private final Node<K, V> inactiveTail;
 
-    /** 全局写锁，保护所有链表操作 */
+    /**
+     * 全局写锁，保护所有链表操作。
+     *
+     * <p>注意：此LRU算法需要同时操作active和inactive两个链表，
+     * 节点在两个链表之间移动时需要保证原子性，因此全局锁是正确性要求而非性能瓶颈。
+     * 节点查找本身是线程安全的（ConcurrentHashMap），锁仅在链表结构修改时需要。
+     */
     private final ReentrantReadWriteLock globalLock = new ReentrantReadWriteLock();
 
     /** 当前Active List大小 — 使用AtomicInteger支持无锁读取 */
@@ -157,17 +163,30 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        lockForKey().lock();
-        try {
-            Node<K, V> node = nodeMap.get(key);
-            if (node == null) {
-                return null;
-            }
-            promoteNodeSafe(node);
-            return node.value;
-        } finally {
-            lockForKey().unlock();
+        Node<K, V> node = nodeMap.get(key);
+        if (node == null) {
+            return null;
         }
+
+        // 只有在需要移动节点时才获取锁
+        if (!node.isActive || activeHead.next != node) {
+            lockForKey().lock();
+            try {
+                // 再次检查节点是否仍是map中的同一个节点（防止在锁等待期间被移除并重新添加）
+                Node<K, V> currentNode = nodeMap.get(key);
+                if (currentNode == null) {
+                    return null;
+                }
+                if (currentNode != node) {
+                    // 节点已被替换，直接返回新节点的值（不需要提升）
+                    return currentNode.value;
+                }
+                promoteNodeSafe(node);
+            } finally {
+                lockForKey().unlock();
+            }
+        }
+        return node.value;
     }
 
     /**
