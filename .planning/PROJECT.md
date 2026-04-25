@@ -16,9 +16,14 @@ ResiCache provides a production-ready Redis caching solution for Spring applicat
 - TTL-aware pre-refresh mechanism
 - Distributed locking for cache stampede prevention
 
-## Current Milestone: v1.1 (Planning)
+## Current Milestone: v1.1 修复项目缺陷
 
-**Status:** v1.0 缺陷修复已完成，下一里程碑规划中
+**Goal:** 调研并修复 ResiCache 项目中已知的并发访问缺陷
+
+**Target features:**
+- TwoListLRU 并发访问数据完整性（775/800 测试问题）
+- PreRefreshHandler 竞态条件
+- 其他测试中发现的问题
 
 ## Validated Requirements (v1.0)
 
