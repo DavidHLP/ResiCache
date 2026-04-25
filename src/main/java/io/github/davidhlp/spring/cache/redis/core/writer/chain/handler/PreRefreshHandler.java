@@ -64,7 +64,7 @@ public class PreRefreshHandler extends AbstractCacheHandler {
         // 先尝试获取缓存值
         CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
 
-        if (cachedValue == null || cachedValue.isExpired()) {
+        if (cachedValue == null || cachedValue.checkExpired()) {
             // 缓存不存在或已过期，继续执行后续 Handler
             return HandlerResult.continueChain();
         }
@@ -154,17 +154,14 @@ public class PreRefreshHandler extends AbstractCacheHandler {
                 if (liveValue.getCreatedTime() == originalCreated
                     && liveValue.getVersion() == originalVersion) {
                     // 缩短 TTL 而非直接删除，避免缓存穿透
-                    // 使用异步执行避免阻塞刷新线程池
-                    CompletableFuture.supplyAsync(() ->
-                        redisTemplate.expire(redisKey, Duration.ofSeconds(REFRESH_GRACE_PERIOD_SECONDS))
-                    ).whenComplete((expired, ex) -> {
-                        if (ex != null) {
-                            log.warn("Async pre-refresh TTL shorten failed: key={}", redisKey, ex);
-                        } else {
-                            log.debug("Async pre-refresh shortened TTL: key={}, gracePeriod={}s, success={}",
-                                      redisKey, REFRESH_GRACE_PERIOD_SECONDS, expired);
-                        }
-                    });
+                    // 注意：此操作是尽力而为的，如果失败会被静默忽略
+                    try {
+                        redisTemplate.expire(redisKey, Duration.ofSeconds(REFRESH_GRACE_PERIOD_SECONDS));
+                        log.debug("Async pre-refresh shortened TTL: key={}, gracePeriod={}s",
+                                  redisKey, REFRESH_GRACE_PERIOD_SECONDS);
+                    } catch (Exception ex) {
+                        log.warn("Async pre-refresh TTL shorten failed: key={}", redisKey, ex);
+                    }
                 } else {
                     log.debug("Async pre-refresh skipped: value changed: {}", redisKey);
                 }

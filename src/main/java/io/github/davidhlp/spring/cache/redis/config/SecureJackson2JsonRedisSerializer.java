@@ -1,8 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.cfg.MapperConfig;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
@@ -115,17 +116,27 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
     }
 
     private Jackson2JsonRedisSerializer<Object> createSecureSerializer(ObjectMapper objectMapper, List<String> allowedPackagePrefixes) {
-        // Build type validator with allowed package prefixes
-        BasicPolymorphicTypeValidator.Builder validatorBuilder =
-                BasicPolymorphicTypeValidator.builder()
-                        .allowIfBaseType(Object.class);
+        // Create a custom type validator that only allows deserialization of types
+        // from explicitly specified package prefixes - this prevents RCE attacks via Redis
+        PolymorphicTypeValidator typeValidator = new PolymorphicTypeValidator.Base() {
+            private final String[] allowedPrefixes = allowedPackagePrefixes.toArray(new String[0]);
 
-        // Add each allowed package prefix
-        for (String prefix : allowedPackagePrefixes) {
-            validatorBuilder.allowIfBaseType(prefix);
-        }
-
-        PolymorphicTypeValidator typeValidator = validatorBuilder.build();
+            @Override
+            public Validity validateSubType(MapperConfig<?> config, JavaType baseType, JavaType subType) {
+                // Check if the subtype's class is in an allowed package
+                Class<?> subClass = subType.getRawClass();
+                if (subClass == null) {
+                    return Validity.DENIED;
+                }
+                String className = subClass.getName();
+                for (String prefix : allowedPrefixes) {
+                    if (className.startsWith(prefix)) {
+                        return Validity.ALLOWED;
+                    }
+                }
+                return Validity.DENIED;
+            }
+        };
 
         // Clone the object mapper to avoid modifying the original
         ObjectMapper secureObjectMapper = objectMapper.copy();

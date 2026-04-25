@@ -131,13 +131,13 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         statistics.incHits(context.getCacheName());
 
-        // 更新访问时间
-        cachedValue.updateAccess();
-        updateTtlIfExists(context, cachedValue);
+        // 更新访问时间和访问次数
+        CachedValue updatedValue = cachedValue.withAccessUpdate();
+        updateTtlIfExists(context, updatedValue);
 
         // 转换返回值
         byte[] result = nullValuePolicy.toReturnValue(
-            cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
+            updatedValue.getValue(), context.getCacheName(), context.getRedisKey());
 
         return CacheResult.success(result);
     }
@@ -163,7 +163,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
      * 判断是否为有效的缓存命中
      */
     private boolean isCacheHit(CachedValue cachedValue) {
-        return cachedValue != null && !cachedValue.isExpired();
+        return cachedValue != null && !cachedValue.checkExpired();
     }
 
     // ==================== PUT 操作 ====================

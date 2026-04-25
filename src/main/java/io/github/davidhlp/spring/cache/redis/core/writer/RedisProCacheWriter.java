@@ -9,7 +9,6 @@ import io.github.davidhlp.spring.cache.redis.core.writer.support.type.TypeSuppor
 import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.redis.cache.CacheStatistics;
@@ -33,7 +32,6 @@ import java.util.concurrent.CompletableFuture;
  * ActualCacheHandler
  */
 @Slf4j
-@RequiredArgsConstructor
 public class RedisProCacheWriter implements RedisCacheWriter {
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -43,15 +41,26 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     private final TypeSupport typeSupport;
     private final CacheHandlerChainFactory chainFactory;
 
-    /** 缓存的责任链实例（饿汉式单例，构造时初始化） */
-    private final CacheHandlerChain cachedChain = buildChain();
+    /** 缓存的责任链实例 */
+    private final CacheHandlerChain cachedChain;
 
     /**
-     * 构建缓存责任链（供饿汉式初始化调用）
+     * 构造函数，初始化缓存责任链
      */
-    private CacheHandlerChain buildChain() {
+    public RedisProCacheWriter(RedisTemplate<String, Object> redisTemplate,
+                               ValueOperations<String, Object> valueOperations,
+                               CacheStatisticsCollector statistics,
+                               RedisCacheRegister redisCacheRegister,
+                               TypeSupport typeSupport,
+                               CacheHandlerChainFactory chainFactory) {
+        this.redisTemplate = redisTemplate;
+        this.valueOperations = valueOperations;
+        this.statistics = statistics;
+        this.redisCacheRegister = redisCacheRegister;
+        this.typeSupport = typeSupport;
+        this.chainFactory = chainFactory;
         log.debug("Initializing handler chain for RedisProCacheWriter");
-        return chainFactory.createChain();
+        this.cachedChain = chainFactory.createChain();
     }
 
     @Override
@@ -292,8 +301,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     // 以下方法用于向后兼容，如果有其他地方调用
     protected long getTtl(String redisKey) {
-        CachedValue cachedValue = (CachedValue) valueOperations.get(redisKey);
-        if (cachedValue != null) {
+        Object value = valueOperations.get(redisKey);
+        if (value instanceof CachedValue cachedValue) {
             return cachedValue.getTtl();
         }
         return -1;
