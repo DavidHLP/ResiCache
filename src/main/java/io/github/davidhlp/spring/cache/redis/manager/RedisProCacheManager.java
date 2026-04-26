@@ -49,13 +49,14 @@ public class RedisProCacheManager extends RedisCacheManager {
 
     @Override
     public Cache getCache(@NonNull String name) {
+        // 先尝试从父类获取缓存
         Cache cache = super.getCache(name);
-        if (cache == null) {
-            log.debug("Cache '{}' not found, creating new RedisProCache", name);
-            cache = createRedisCache(name, defaultConfiguration);
-            // 注册新创建的缓存
-            getMissingCache(name);
+        if (cache != null) {
+            return cache;
         }
-        return cache;
+
+        // 父类没有缓存，创建新的 RedisProCache
+        log.debug("Cache '{}' not found, creating new RedisProCache", name);
+        return createRedisCache(name, defaultConfiguration);
     }
 }
