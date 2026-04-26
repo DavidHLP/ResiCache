@@ -386,73 +386,67 @@ public class TwoListLRU<K, V> {
     }
 
     /**
+     * 查找第一个符合驱逐条件的节点（从最老的开始）
+     *
+     * @param head 链表头哨兵
+     * @param tail 链表尾哨兵
+     * @return 符合驱逐条件的节点，如果都受保护则返回null
+     */
+    private Node<K, V> findEvictableNode(Node<K, V> head, Node<K, V> tail) {
+        final Predicate<V> pred = evictionPredicate;
+        Node<K, V> candidate = tail.prev;
+        while (candidate != head) {
+            Node<K, V> prev = candidate.prev;
+            if (pred == null || pred.test(candidate.value)) {
+                return candidate;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping protected entry: key={}", candidate.key);
+            }
+            candidate = prev;
+        }
+        return null;
+    }
+
+    /**
      * 降级或淘汰Active List中最老的节点（非线程安全，需要持有写锁）
      *
      * @return 是否成功腾出空间
      */
     private boolean demoteOrEvictOldestActiveUnsafe() {
-        // 缓存 volatile 引用到局部变量，避免多次读取时的竞态
-        final Predicate<V> predicate = evictionPredicate;
-        // 查找可以降级的节点（从最老的开始）
-        Node<K, V> candidate = activeTail.prev;
-        while (candidate != activeHead) {
-            // 保存 prev 引用用于遍历（removeNodeUnsafe 会将其置 null）
-            Node<K, V> prev = candidate.prev;
-            // 如果没有淘汰判断器，或者判断器允许操作
-            if (predicate == null || predicate.test(candidate.value)) {
-                removeNodeUnsafe(candidate);
-                activeSizeCounter.decrementAndGet();
-
-                // 尝试降级到Inactive List或淘汰
-                if (inactiveSizeCounter.get() < maxInactiveSize) {
-                    // Inactive List有空间，直接降级
-                    demoteToInactive(candidate);
-                    return false;
-                }
-
-                // Inactive List已满，尝试淘汰后降级
-                if (evictOldestInactiveUnsafe()) {
-                    // 成功淘汰了一个Inactive节点，尝试降级
-                    if (inactiveSizeCounter.get() < maxInactiveSize) {
-                        demoteToInactive(candidate);
-                        return false;
-                    }
-                    // 仍然无法降级，直接淘汰
-                    evictNode(candidate);
-                    if (log.isDebugEnabled()) {
-                        log.debug(
-                                "Evicted entry from active list (inactive full): key={}",
-                                candidate.key);
-                    }
-                    return false;
-                }
-
-                // 无法淘汰Inactive节点（所有都被保护），直接将节点放回active list原位置
-                // 注意：节点已被removeNodeUnsafe从链表中移除，但node.prev和node.next已被清空
-                // 我们需要重新插入到activeHead之后（作为最新的活跃节点）
-                insertAfterUnsafe(activeHead, candidate);
-                activeSizeCounter.incrementAndGet();
-                if (log.isDebugEnabled()) {
-                    log.debug(
-                            "Failed to evict - returned to active list: key={}",
-                            candidate.key);
-                }
-                return false;
-            }
-
-            // 受保护的节点，尝试下一个
-            if (log.isDebugEnabled()) {
-                log.debug("Skipping protected entry in active list: key={}", candidate.key);
-            }
-            candidate = prev;
+        Node<K, V> candidate = findEvictableNode(activeHead, activeTail);
+        if (candidate == null) {
+            log.warn("All entries in active list are protected, cannot free space. activeSize={}, maxActiveSize={}",
+                    activeSizeCounter.get(), maxActiveSize);
+            return true;
         }
 
-        // 所有节点都受保护
-        log.warn(
-                "All entries in active list are protected, cannot free space. activeSize={}, maxActiveSize={}",
-                activeSizeCounter.get(),
-                maxActiveSize);
-        return true;
+        removeNodeUnsafe(candidate);
+        activeSizeCounter.decrementAndGet();
+
+        if (inactiveSizeCounter.get() < maxInactiveSize) {
+            demoteToInactive(candidate);
+            return false;
+        }
+
+        if (evictOldestInactiveUnsafe()) {
+            if (inactiveSizeCounter.get() < maxInactiveSize) {
+                demoteToInactive(candidate);
+                return false;
+            }
+            evictNode(candidate);
+            if (log.isDebugEnabled()) {
+                log.debug("Evicted entry from active list (inactive full): key={}", candidate.key);
+            }
+            return false;
+        }
+
+        insertAfterUnsafe(activeHead, candidate);
+        activeSizeCounter.incrementAndGet();
+        if (log.isDebugEnabled()) {
+            log.debug("Failed to evict - returned to active list: key={}", candidate.key);
+        }
+        return false;
     }
 
     /** 将节点降级到Inactive List */
@@ -483,41 +477,22 @@ public class TwoListLRU<K, V> {
      * @return 是否淘汰成功
      */
     private boolean evictOldestInactiveUnsafe() {
-        // 缓存 volatile 引用到局部变量，避免多次读取时的竞态
-        final Predicate<V> predicate = evictionPredicate;
-        // 查找可以淘汰的节点（从最老的开始）
-        Node<K, V> candidate = inactiveTail.prev;
-        while (candidate != inactiveHead) {
-            // 如果没有淘汰判断器，或者判断器允许淘汰
-            if (predicate == null || predicate.test(candidate.value)) {
-                // Save prev BEFORE removeNodeUnsafe sets it to null
-                Node<K, V> prev = candidate.prev;
-                removeNodeUnsafe(candidate);
-                inactiveSizeCounter.decrementAndGet();
-                evictNode(candidate);
-
-                if (log.isDebugEnabled()) {
-                    log.debug(
-                            "Evicted entry from inactive list: key={}, totalEvictions={}",
-                            candidate.key,
-                            totalEvictions);
-                }
-                return true;
-            }
-
-            // 受保护的节点，尝试下一个
-            if (log.isDebugEnabled()) {
-                log.debug("Skipping protected entry in inactive list: key={}", candidate.key);
-            }
-            candidate = candidate.prev;
+        Node<K, V> candidate = findEvictableNode(inactiveHead, inactiveTail);
+        if (candidate == null) {
+            log.warn("All entries in inactive list are protected, cannot evict. inactiveSize={}, maxInactiveSize={}",
+                    inactiveSizeCounter.get(), maxInactiveSize);
+            return false;
         }
 
-        // 所有节点都受保护
-        log.warn(
-                "All entries in inactive list are protected, cannot evict. inactiveSize={}, maxInactiveSize={}",
-                inactiveSizeCounter.get(),
-                maxInactiveSize);
-        return false;
+        removeNodeUnsafe(candidate);
+        inactiveSizeCounter.decrementAndGet();
+        evictNode(candidate);
+
+        if (log.isDebugEnabled()) {
+            log.debug("Evicted entry from inactive list: key={}, totalEvictions={}",
+                    candidate.key, totalEvictions);
+        }
+        return true;
     }
 
     /**
@@ -537,26 +512,30 @@ public class TwoListLRU<K, V> {
     }
 
     /**
+     * 修复链表链接（非线程安全，需要持有写锁）
+     *
+     * @param prev 前驱节点
+     * @param next 后继节点
+     */
+    private void repairChainLinks(Node<K, V> prev, Node<K, V> next) {
+        prev.next = next;
+        if (next != null) {
+            next.prev = prev;
+        }
+    }
+
+    /**
      * 从链表中移除节点（非线程安全，需要持有写锁）
      *
      * @param node 待移除的节点
      */
     private void removeNodeUnsafe(Node<K, V> node) {
-        // Capture references atomically - if prev is already null, node was already removed
         Node<K, V> prev = node.prev;
         if (prev == null) {
             return;
         }
         Node<K, V> next = node.next;
-
-        // Now perform removal using captured references
-        // This ensures atomicity of the removal operation
-        prev.next = next;
-        if (next != null) {
-            next.prev = prev;
-        }
-
-        // 清空节点的链表引用，帮助GC
+        repairChainLinks(prev, next);
         node.prev = null;
         node.next = null;
     }

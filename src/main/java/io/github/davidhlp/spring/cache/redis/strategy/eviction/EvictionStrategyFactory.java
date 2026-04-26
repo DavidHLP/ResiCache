@@ -4,7 +4,13 @@ import io.github.davidhlp.spring.cache.redis.strategy.eviction.impl.TwoListEvict
 
 import java.util.function.Predicate;
 
-/** 淘汰策略工厂 */
+/**
+ * 淘汰策略工厂
+ *
+ * @deprecated since 0.0.2 — This factory is a static utility, not a Spring bean.
+ *             StrategyType enum has only ONE entry (TWO_LIST); no SPI abstraction needed.
+ *             If multiple strategies are added in the future, this will be revisited.
+ */
 public class EvictionStrategyFactory {
 
     /**

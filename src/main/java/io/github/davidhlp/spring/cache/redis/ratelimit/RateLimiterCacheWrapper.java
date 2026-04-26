@@ -15,6 +15,12 @@ public class RateLimiterCacheWrapper extends RedisProCache {
 
     private static final double DEFAULT_QPS = 1000.0;
 
+    /**
+     * Rate limiting is applied to get() and put() operations only.
+     * Evict() and clear() operations bypass rate limiting intentionally,
+     * as they are maintenance operations that must complete quickly.
+     */
+
     private final RedisProCache delegate;
     private final ConcurrentHashMap<String, RateLimiter> limiters = new ConcurrentHashMap<>();
     private final double defaultQps;
@@ -40,6 +46,10 @@ public class RateLimiterCacheWrapper extends RedisProCache {
             MeterRegistry meterRegistry,
             double defaultQps) {
         super(name, cacheWriter, cacheConfiguration, meterRegistry);
+        if (delegate instanceof RateLimiterCacheWrapper) {
+            throw new IllegalStateException(
+                    "Circular delegation detected: RateLimiterCacheWrapper cannot wrap another RateLimiterCacheWrapper");
+        }
         this.delegate = delegate;
         this.defaultQps = defaultQps;
     }
@@ -135,8 +145,10 @@ public class RateLimiterCacheWrapper extends RedisProCache {
                 if (tokensToAdd > 0) {
                     long current = tokens.get();
                     long newTokens = Math.min((long) qps, current + tokensToAdd);
-                    tokens.compareAndSet(current, newTokens);
-                    lastUpdate.set(now);
+                    // Only update lastUpdate when tokens were successfully updated
+                    if (tokens.compareAndSet(current, newTokens)) {
+                        lastUpdate.set(now);
+                    }
                 }
                 while (true) {
                     long current = tokens.get();

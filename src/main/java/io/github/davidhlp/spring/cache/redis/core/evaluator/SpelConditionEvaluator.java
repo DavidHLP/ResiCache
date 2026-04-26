@@ -139,6 +139,9 @@ public class SpelConditionEvaluator {
             return Boolean.TRUE.equals(result);
         } catch (Exception e) {
             // 求值失败时，默认为继续执行（不跳过）
+            log.warn("SpEL condition evaluation failed, proceeding with cache: expression={}, error={}",
+                    expression, e.getMessage());
+            log.debug("SpEL condition evaluation stack trace", e);
             return true;
         }
     }
@@ -157,6 +160,9 @@ public class SpelConditionEvaluator {
             return Boolean.TRUE.equals(result);
         } catch (Exception e) {
             // 求值失败时，默认为不排除（缓存）
+            log.warn("SpEL unless evaluation failed, caching result: expression={}, error={}",
+                    expression, e.getMessage());
+            log.debug("SpEL unless evaluation stack trace", e);
             return false;
         }
     }
