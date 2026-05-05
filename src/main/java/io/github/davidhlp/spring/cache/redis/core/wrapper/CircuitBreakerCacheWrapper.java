@@ -122,22 +122,22 @@ public class CircuitBreakerCacheWrapper {
         private final AtomicLong stateChangeTime = new AtomicLong(System.currentTimeMillis());
         private volatile CircuitState currentState = CircuitState.CLOSED;
 
-        CircuitState getCurrentState() {
+        synchronized CircuitState getCurrentState() {
             return currentState;
         }
 
-        boolean shouldTryHalfOpen(long now) {
+        synchronized boolean shouldTryHalfOpen(long now) {
             return now - stateChangeTime.get() >= HALF_OPEN_TIMEOUT_MS;
         }
 
-        void transitionToHalfOpen(long now) {
+        synchronized void transitionToHalfOpen(long now) {
             currentState = CircuitState.HALF_OPEN;
             stateChangeTime.set(now);
             failureCount.set(0);
             failureTimestamps.clear();
         }
 
-        void recordFailure(long now) {
+        synchronized void recordFailure(long now) {
             // 清理旧失败记录
             cleanupOldFailures(now);
 
@@ -157,7 +157,7 @@ public class CircuitBreakerCacheWrapper {
             }
         }
 
-        void recordSuccess(long now) {
+        synchronized void recordSuccess(long now) {
             if (currentState == CircuitState.HALF_OPEN) {
                 // 成功，恢复到CLOSED
                 currentState = CircuitState.CLOSED;
@@ -171,7 +171,7 @@ public class CircuitBreakerCacheWrapper {
             }
         }
 
-        private void cleanupOldFailures(long now) {
+        private synchronized void cleanupOldFailures(long now) {
             Long oldest;
             while ((oldest = failureTimestamps.peek()) != null) {
                 if (now - oldest > SLIDING_WINDOW_MS) {

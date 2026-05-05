@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1777030131023,
+  "lastScanned": 1777164431753,
   "projectRoot": "/home/davidhlp/project/ResiCache",
   "techStack": {
     "languages": [
@@ -47,236 +47,299 @@
     "docs": {
       "path": "docs",
       "purpose": "Documentation",
-      "fileCount": 0,
-      "lastAccessed": 1777030131021,
-      "keyFiles": []
+      "fileCount": 2,
+      "lastAccessed": 1777164431751,
+      "keyFiles": [
+        "actuator-endpoints.md",
+        "cache-event-listeners.md"
+      ]
     },
     "plan": {
       "path": "plan",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1777030131022,
+      "lastAccessed": 1777164431752,
       "keyFiles": []
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1777030131022,
+      "lastAccessed": 1777164431752,
       "keyFiles": []
     },
     "target": {
       "path": "target",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1777030131022,
+      "lastAccessed": 1777164431752,
       "keyFiles": []
     },
     "src/test": {
       "path": "src/test",
       "purpose": "Test files",
       "fileCount": 0,
-      "lastAccessed": 1777030131022,
+      "lastAccessed": 1777164431753,
       "keyFiles": []
     }
   },
   "hotPaths": [
     {
       "path": "src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/support/TwoListLRU.java",
-      "accessCount": 44,
-      "lastAccessed": 1777085367226,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisConnectionConfiguration.java",
-      "accessCount": 21,
-      "lastAccessed": 1777040486071,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/support/refresh/ThreadPoolPreRefreshExecutor.java",
-      "accessCount": 17,
-      "lastAccessed": 1777041664819,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/SecureJackson2JsonRedisSerializer.java",
-      "accessCount": 12,
-      "lastAccessed": 1777048566474,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/support/protect/bloom/filter/RedisBloomIFilter.java",
-      "accessCount": 11,
-      "lastAccessed": 1777044136463,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/evaluator/SpelConditionEvaluator.java",
-      "accessCount": 11,
-      "lastAccessed": 1777044479754,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java",
-      "accessCount": 11,
-      "lastAccessed": 1777048414682,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/RedisProCacheWriter.java",
-      "accessCount": 9,
-      "lastAccessed": 1777039611287,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/CachedValue.java",
-      "accessCount": 8,
-      "lastAccessed": 1777039534616,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/PreRefreshHandler.java",
-      "accessCount": 8,
-      "lastAccessed": 1777046791014,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/RedisProCache.java",
-      "accessCount": 7,
-      "lastAccessed": 1777031355439,
+      "accessCount": 92,
+      "lastAccessed": 1777194403073,
       "type": "file"
     },
     {
       "path": "pom.xml",
-      "accessCount": 7,
-      "lastAccessed": 1777044138828,
+      "accessCount": 44,
+      "lastAccessed": 1777194552332,
       "type": "file"
     },
     {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/RedisCacheInterceptor.java",
-      "accessCount": 5,
-      "lastAccessed": 1777030492323,
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/evaluator/SpelConditionEvaluator.java",
+      "accessCount": 42,
+      "lastAccessed": 1777192999533,
       "type": "file"
     },
     {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisCacheAutoConfiguration.java",
-      "accessCount": 5,
-      "lastAccessed": 1777048101373,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/RedissonLockProvider.java",
-      "accessCount": 4,
-      "lastAccessed": 1777030492344,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/handler/CacheableAnnotationHandler.java",
-      "accessCount": 4,
-      "lastAccessed": 1777030504824,
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/SecureJackson2JsonRedisSerializer.java",
+      "accessCount": 31,
+      "lastAccessed": 1777194360818,
       "type": "file"
     },
     {
       "path": "src/main/java/io/github/davidhlp/spring/cache/redis/manager/RedisProCacheManager.java",
-      "accessCount": 4,
-      "lastAccessed": 1777031124825,
+      "accessCount": 29,
+      "lastAccessed": 1777187268244,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/support/protect/bloom/filter/RedisBloomIFilter.java",
+      "accessCount": 25,
+      "lastAccessed": 1777194806847,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisConnectionConfiguration.java",
+      "accessCount": 22,
+      "lastAccessed": 1777164501055,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/support/refresh/ThreadPoolPreRefreshExecutor.java",
+      "accessCount": 22,
+      "lastAccessed": 1777194812719,
       "type": "file"
     },
     {
       "path": "src/test/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/CacheHandlerChainTest.java",
-      "accessCount": 4,
-      "lastAccessed": 1777044125224,
+      "accessCount": 21,
+      "lastAccessed": 1777195018692,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/RedisProCacheWriter.java",
+      "accessCount": 20,
+      "lastAccessed": 1777193014097,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java",
+      "accessCount": 20,
+      "lastAccessed": 1777194812780,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/RedisProCache.java",
+      "accessCount": 18,
+      "lastAccessed": 1777187268269,
       "type": "file"
     },
     {
       "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/CacheHandlerChain.java",
-      "accessCount": 4,
-      "lastAccessed": 1777044125238,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/SyncLockHandler.java",
-      "accessCount": 3,
-      "lastAccessed": 1777030498478,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/ActualCacheHandler.java",
-      "accessCount": 3,
-      "lastAccessed": 1777030504798,
+      "accessCount": 18,
+      "lastAccessed": 1777194812773,
       "type": "file"
     },
     {
       "path": "src/main/java/io/github/davidhlp/spring/cache/redis/register/RedisCacheRegister.java",
-      "accessCount": 3,
-      "lastAccessed": 1777030516500,
+      "accessCount": 15,
+      "lastAccessed": 1777191660710,
       "type": "file"
     },
     {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/CacheHandler.java",
-      "accessCount": 3,
-      "lastAccessed": 1777044125182,
-      "type": "file"
-    },
-    {
-      "path": "src/test/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/impl/TwoListEvictionStrategyTest.java",
-      "accessCount": 3,
-      "lastAccessed": 1777044133476,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/BloomFilterHandler.java",
-      "accessCount": 3,
-      "lastAccessed": 1777044158599,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/BloomFilterProvider.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030186450,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheable.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030186535,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/BloomFilter.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030191751,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/LockProvider.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030191803,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/EvictionStrategy.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030197324,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/register/operation/RedisCacheableOperation.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030207062,
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/RedissonLockProvider.java",
+      "accessCount": 13,
+      "lastAccessed": 1777172015981,
       "type": "file"
     },
     {
       "path": "src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheEvict.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030241241,
+      "accessCount": 13,
+      "lastAccessed": 1777194294425,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheable.java",
+      "accessCount": 13,
+      "lastAccessed": 1777195629508,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/RedisCacheInterceptor.java",
+      "accessCount": 11,
+      "lastAccessed": 1777171509823,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/PreRefreshHandler.java",
+      "accessCount": 11,
+      "lastAccessed": 1777172022969,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/EvictionStrategyFactory.java",
+      "accessCount": 9,
+      "lastAccessed": 1777169230409,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/CacheHandler.java",
+      "accessCount": 9,
+      "lastAccessed": 1777172015881,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/CacheHandlerChainFactory.java",
+      "accessCount": 9,
+      "lastAccessed": 1777172022963,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/CachedValue.java",
+      "accessCount": 9,
+      "lastAccessed": 1777172033003,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/register/operation/RedisCacheableOperation.java",
+      "accessCount": 9,
+      "lastAccessed": 1777195527559,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisCacheAutoConfiguration.java",
+      "accessCount": 8,
+      "lastAccessed": 1777172015891,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/impl/TwoListEvictionStrategy.java",
+      "accessCount": 7,
+      "lastAccessed": 1777171519269,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/ActualCacheHandler.java",
+      "accessCount": 7,
+      "lastAccessed": 1777172023068,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/SyncLockHandler.java",
+      "accessCount": 7,
+      "lastAccessed": 1777187268294,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCachePut.java",
+      "accessCount": 7,
+      "lastAccessed": 1777194319228,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/EvictionStrategy.java",
+      "accessCount": 6,
+      "lastAccessed": 1777166653424,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/handler/CacheableAnnotationHandler.java",
+      "accessCount": 5,
+      "lastAccessed": 1777164501110,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/BloomFilterHandler.java",
+      "accessCount": 5,
+      "lastAccessed": 1777172023014,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/BloomFilter.java",
+      "accessCount": 5,
+      "lastAccessed": 1777195416988,
       "type": "file"
     },
     {
       "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/CachingEnablementValidation.java",
-      "accessCount": 2,
-      "lastAccessed": 1777030504808,
+      "accessCount": 5,
+      "lastAccessed": 1777195708123,
+      "type": "file"
+    },
+    {
+      "path": "src/test/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/impl/TwoListEvictionStrategyTest.java",
+      "accessCount": 4,
+      "lastAccessed": 1777164507158,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/HandlerOrder.java",
+      "accessCount": 4,
+      "lastAccessed": 1777169499494,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/LockManager.java",
+      "accessCount": 4,
+      "lastAccessed": 1777187268358,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheConfiguration.java",
+      "accessCount": 4,
+      "lastAccessed": 1777194562376,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/TtlHandler.java",
+      "accessCount": 3,
+      "lastAccessed": 1777169221004,
+      "type": "file"
+    },
+    {
+      "path": "src/test/java/io/github/davidhlp/spring/cache/redis/core/handler/CacheableAnnotationHandlerTest.java",
+      "accessCount": 3,
+      "lastAccessed": 1777169234934,
+      "type": "file"
+    },
+    {
+      "path": "src/test/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/ActualCacheHandlerTest.java",
+      "accessCount": 3,
+      "lastAccessed": 1777169237016,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/LockProvider.java",
+      "accessCount": 3,
+      "lastAccessed": 1777172015878,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/BloomFilterProvider.java",
+      "accessCount": 3,
+      "lastAccessed": 1777195388223,
       "type": "file"
     },
     {
@@ -286,99 +349,39 @@
       "type": "file"
     },
     {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/TtlHandler.java",
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/factory/CacheableOperationFactory.java",
       "accessCount": 2,
-      "lastAccessed": 1777030537065,
+      "lastAccessed": 1777169230394,
       "type": "file"
     },
     {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/impl/TwoListEvictionStrategy.java",
+      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/handler/AnnotationHandler.java",
       "accessCount": 2,
-      "lastAccessed": 1777030555151,
+      "lastAccessed": 1777169736328,
       "type": "file"
     },
     {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheConfiguration.java",
+      "path": "src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
       "accessCount": 2,
-      "lastAccessed": 1777040063164,
+      "lastAccessed": 1777171519278,
       "type": "file"
     },
     {
-      "path": "src/test/java/io/github/davidhlp/spring/cache/redis/core/handler/CacheableAnnotationHandlerTest.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030178756,
+      "path": ".planning/codebase/STACK.md",
+      "accessCount": 2,
+      "lastAccessed": 1777191643948,
       "type": "file"
     },
     {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/spi/LockManager.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030180390,
+      "path": ".planning/codebase/INTEGRATIONS.md",
+      "accessCount": 2,
+      "lastAccessed": 1777191650614,
       "type": "file"
     },
     {
       "path": "src/test/resources/application-test.yml",
       "accessCount": 1,
       "lastAccessed": 1777030182142,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/CacheHandlerChainFactory.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030186555,
-      "type": "file"
-    },
-    {
-      "path": "src/test/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/ActualCacheHandlerTest.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030192080,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/factory/CacheableOperationFactory.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030192127,
-      "type": "file"
-    },
-    {
-      "path": "src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports",
-      "accessCount": 1,
-      "lastAccessed": 1777030195902,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/handler/AnnotationHandler.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030203233,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/strategy/eviction/EvictionStrategyFactory.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030207026,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/core/writer/chain/handler/HandlerOrder.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030236344,
-      "type": "file"
-    },
-    {
-      "path": ".planning/codebase/STACK.md",
-      "accessCount": 1,
-      "lastAccessed": 1777030239365,
-      "type": "file"
-    },
-    {
-      "path": "src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCachePut.java",
-      "accessCount": 1,
-      "lastAccessed": 1777030241244,
-      "type": "file"
-    },
-    {
-      "path": ".planning/codebase/INTEGRATIONS.md",
-      "accessCount": 1,
-      "lastAccessed": 1777030286222,
       "type": "file"
     }
   ],

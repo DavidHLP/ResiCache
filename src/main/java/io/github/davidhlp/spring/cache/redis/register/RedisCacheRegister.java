@@ -106,6 +106,8 @@ public class RedisCacheRegister {
 
     /** 构建操作key */
     private String buildKey(String name, String key, String type) {
-        return String.format("%s:%s:%s", type, name, key);
+        StringBuilder sb = new StringBuilder(type.length() + name.length() + key.length() + 2);
+        sb.append(type).append(':').append(name).append(':').append(key);
+        return sb.toString();
     }
 }

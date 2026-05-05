@@ -57,7 +57,8 @@ public class RedisProxyCachingConfiguration {
             CacheableAnnotationHandler cacheableAnnotationHandler,
             EvictAnnotationHandler evictAnnotationHandler,
             CachingAnnotationHandler cachingAnnotationHandler,
-            CachePutAnnotationHandler cachePutAnnotationHandler) {
+            CachePutAnnotationHandler cachePutAnnotationHandler,
+            RedisProCacheProperties redisProCacheProperties) {
 
         // 创建带调试信息的 CacheInterceptor
         RedisCacheInterceptor interceptor =
@@ -65,7 +66,8 @@ public class RedisProxyCachingConfiguration {
                         cacheableAnnotationHandler,
                         evictAnnotationHandler,
                         cachingAnnotationHandler,
-                        cachePutAnnotationHandler);
+                        cachePutAnnotationHandler,
+                        redisProCacheProperties.isFailOnSpelError());
 
         interceptor.setCacheOperationSource(redisCacheOperationSource);
         interceptor.setCacheManager(cacheManager);

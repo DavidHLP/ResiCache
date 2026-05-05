@@ -64,7 +64,7 @@ public class SyncSupport {
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 					log.error("Interrupted while acquiring distributed lock for key: {}", key, e);
-					return loader.get();
+					throw new IllegalStateException("Thread interrupted while acquiring distributed lock for key: " + key, e);
 				}
 			} finally {
 				releaseMonitor(key, holder);

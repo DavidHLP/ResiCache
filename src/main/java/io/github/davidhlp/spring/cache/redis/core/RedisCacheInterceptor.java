@@ -41,11 +41,33 @@ public class RedisCacheInterceptor extends CacheInterceptor {
             EvictAnnotationHandler evictHandler,
             CachingAnnotationHandler cachingHandler,
             CachePutAnnotationHandler cachePutHandler) {
+        this(cacheableHandler, evictHandler, cachingHandler, cachePutHandler, true);
+    }
+
+    /**
+     * 构造函数，构建注解处理器责任链，支持配置 SpEL 错误处理行为
+     *
+     * @param cacheableHandler @RedisCacheable 注解处理器
+     * @param evictHandler @RedisCacheEvict 注解处理器
+     * @param cachingHandler @RedisCaching 组合注解处理器
+     * @param cachePutHandler @RedisCachePut 注解处理器
+     * @param failOnSpelError SpEL 运行时求值失败时是否抛出异常（默认 true）。
+     *                        配置错误（语法错误）始终抛出，不受此设置影响。
+     */
+    public RedisCacheInterceptor(
+            CacheableAnnotationHandler cacheableHandler,
+            EvictAnnotationHandler evictHandler,
+            CachingAnnotationHandler cachingHandler,
+            CachePutAnnotationHandler cachePutHandler,
+            boolean failOnSpelError) {
         // 构建责任链: Cacheable -> Evict -> Caching -> CachePut
         cacheableHandler.setNext(evictHandler).setNext(cachingHandler).setNext(cachePutHandler);
         this.handlerChain = cacheableHandler;
 
-        log.debug("Redis cache interceptor initialized with handler chain");
+        // 配置 SpEL 求值失败时的行为
+        conditionEvaluator.setFailOnSpelError(failOnSpelError);
+
+        log.debug("Redis cache interceptor initialized with handler chain, failOnSpelError={}", failOnSpelError);
     }
 
     @Override

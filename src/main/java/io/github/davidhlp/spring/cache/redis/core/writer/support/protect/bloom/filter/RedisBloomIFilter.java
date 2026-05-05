@@ -4,9 +4,11 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.BloomFilterConfig;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.strategy.BloomHashStrategy;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -17,24 +19,48 @@ import java.util.stream.Collectors;
 
 /**
  * 基于Redis的布隆过滤器实现。
- * 
+ *
  * <p>性能优化：使用 Redis Pipeline 批量操作，减少网络往返次数。
+ * <p>异常处理：所有异常都会被记录并通过 Micrometer 指标监控。
  */
 @Slf4j
 @Component("redisBloomFilter")
-@RequiredArgsConstructor
 public class RedisBloomIFilter implements BloomIFilter {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final BloomFilterConfig config;
     private final BloomHashStrategy hashStrategy;
+    private final MeterRegistry meterRegistry;
+
     private Cache<String, int[]> hashPositionCache;
+    private Counter checkFailureCounter;
+    private Counter addFailureCounter;
+
+    @Autowired
+    public RedisBloomIFilter(
+            RedisTemplate<String, String> redisTemplate,
+            BloomFilterConfig config,
+            BloomHashStrategy hashStrategy,
+            @Autowired(required = false) MeterRegistry meterRegistry) {
+        this.redisTemplate = redisTemplate;
+        this.config = config;
+        this.hashStrategy = hashStrategy;
+        this.meterRegistry = meterRegistry;
+    }
 
     @PostConstruct
-    public void initHashCache() {
+    public void init() {
         this.hashPositionCache = Caffeine.newBuilder()
                 .maximumSize(config.getHashCacheSize())
                 .build();
+        if (meterRegistry != null) {
+            this.checkFailureCounter = Counter.builder("bloomsift.check.failures")
+                    .description("Number of bloom filter check failures")
+                    .register(meterRegistry);
+            this.addFailureCounter = Counter.builder("bloomsift.add.failures")
+                    .description("Number of bloom filter add failures")
+                    .register(meterRegistry);
+        }
     }
 
     @Override
@@ -67,6 +93,9 @@ public class RedisBloomIFilter implements BloomIFilter {
                     Arrays.toString(positions));
         } catch (Exception e) {
             log.error("Bloom filter add failed: cacheName={}, key={}", cacheName, key, e);
+            if (addFailureCounter != null) {
+                addFailureCounter.increment();
+            }
         }
     }
 
@@ -110,7 +139,10 @@ public class RedisBloomIFilter implements BloomIFilter {
             return true;
         } catch (Exception e) {
             log.error("Bloom filter check failed: cacheName={}, key={}", cacheName, key, e);
-            // 异常时默认返回 true，避免误拒绝
+            if (checkFailureCounter != null) {
+                checkFailureCounter.increment();
+            }
+            // 异常时默认返回 true，避免误拒绝（安全侧）
             return true;
         }
     }

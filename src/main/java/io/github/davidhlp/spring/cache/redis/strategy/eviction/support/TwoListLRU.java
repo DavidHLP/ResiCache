@@ -171,39 +171,23 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        Node<K, V> node = nodeMap.get(key);
-        if (node == null) {
-            return null;
-        }
-
-        // 使用读锁允许并发读取，只在需要提升时才获取写锁
-        readLockForKey().lock();
+        writeLockForKey().lock();
         try {
+            Node<K, V> node = nodeMap.get(key);
+            if (node == null) {
+                return null;
+            }
+
             // 如果节点不需要提升（已经在Active List头部），直接返回
             if (node.isActive && activeHead.next == node) {
                 return node.value;
             }
-        } finally {
-            readLockForKey().unlock();
-        }
 
-        // 需要提升节点，获取写锁
-        writeLockForKey().lock();
-        try {
-            // 再次检查节点是否仍是map中的同一个节点（防止在锁等待期间被移除并重新添加）
-            Node<K, V> currentNode = nodeMap.get(key);
-            if (currentNode == null) {
-                return null;
-            }
-            if (currentNode != node) {
-                // 节点已被替换，直接返回新节点的值（不需要提升）
-                return currentNode.value;
-            }
             promoteNodeSafe(node);
+            return node.value;
         } finally {
             writeLockForKey().unlock();
         }
-        return node.value;
     }
 
     /**
@@ -569,7 +553,7 @@ public class TwoListLRU<K, V> {
         V value;
         Node<K, V> prev;
         Node<K, V> next;
-        boolean isActive; // true=Active List, false=Inactive List
+        volatile boolean isActive; // true=Active List, false=Inactive List
 
         Node(K key, V value) {
             this.key = key;

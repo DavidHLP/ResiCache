@@ -1,11 +1,15 @@
 package io.github.davidhlp.spring.cache.redis.core.evaluator;
 
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.expression.EvaluationException;
+import org.springframework.expression.ParseException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * SpEL Condition Evaluator Security Tests
@@ -17,6 +21,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SpelConditionEvaluatorTest {
 
     private SpelConditionEvaluator evaluator = SpelConditionEvaluator.getInstance();
+
+    @BeforeEach
+    void setUp() {
+        // Reset to default for each test to avoid singleton state pollution
+        evaluator.setFailOnSpelError(true);
+    }
 
     private RedisCacheableOperation createOperation(String condition, String unless) {
         return RedisCacheableOperation.builder()
@@ -56,10 +66,10 @@ class SpelConditionEvaluatorTest {
         @DisplayName("evaluates normal condition expression correctly")
         void normalExpression_evaluatesCorrectly() throws Exception {
             // Given: A valid SpEL condition expression
-            String condition = "#args[0] > 0";
+            String condition = "#root.target != null";
             RedisCacheableOperation operation = createOperation(condition, "");
 
-            // When: Evaluating with positive argument
+            // When: Evaluating with non-null target
             boolean proceed = evaluator.shouldProceed(
                     operation,
                     SpelConditionEvaluatorTest.class.getDeclaredMethod("dummyMethod", int.class),
@@ -86,16 +96,102 @@ class SpelConditionEvaluatorTest {
     }
 
     @Nested
-    @DisplayName("Malicious Expression Blocking")
-    class MaliciousExpressionTests {
+    @DisplayName("SpEL Syntax Error Handling (Configuration Errors)")
+    class SyntaxErrorTests {
 
         @Test
-        @DisplayName("handles Runtime.getRuntime access safely")
-        void runtimeGetRuntime_handledSafely() throws Exception {
-            // Given: Expression attempting to access Runtime
+        @DisplayName("syntax error always throws ParseException regardless of failOnSpelError")
+        void syntaxError_alwaysThrows() throws Exception {
+            // Given: Invalid SpEL syntax (unclosed string)
+            String invalidSyntax = "'unclosed string";
+
+            // When/Then: Should throw ParseException
+            assertThatThrownBy(() -> evaluateCondition(invalidSyntax))
+                    .isInstanceOf(ParseException.class);
+        }
+
+        @Test
+        @DisplayName("syntax error with failOnSpelError=false still throws")
+        void syntaxError_failOnSpelErrorFalse_stillThrows() throws Exception {
+            // Given: Invalid SpEL syntax and failOnSpelError=false
+            evaluator.setFailOnSpelError(false);
+            String invalidSyntax = "'unclosed string";
+
+            // When/Then: Should still throw ParseException (config errors always throw)
+            assertThatThrownBy(() -> evaluateCondition(invalidSyntax))
+                    .isInstanceOf(ParseException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("Runtime Error Handling with failOnSpelError=true")
+    class RuntimeErrorFailOnErrorTests {
+
+        @Test
+        @DisplayName("runtime error throws EvaluationException when failOnSpelError=true")
+        void runtimeError_throwsWhenFailOnSpelErrorTrue() throws Exception {
+            // Given: Expression that fails at runtime (unknown property) and failOnSpelError=true
+            String runtimeErrorCondition = "#root.unknown.property.deep.path";
+
+            // When/Then: Should throw EvaluationException
+            assertThatThrownBy(() -> evaluateCondition(runtimeErrorCondition))
+                    .isInstanceOf(EvaluationException.class);
+        }
+
+        @Test
+        @DisplayName("malicious expression throws when failOnSpelError=true")
+        void maliciousExpression_throwsWhenFailOnSpelErrorTrue() throws Exception {
+            // Given: Expression attempting to access Runtime with failOnSpelError=true
             String maliciousCondition = "T(java.lang.Runtime).getRuntime()";
 
-            // When: Evaluating - should not throw unhandled exception
+            // When/Then: Should throw EvaluationException
+            assertThatThrownBy(() -> evaluateCondition(maliciousCondition))
+                    .isInstanceOf(EvaluationException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("Runtime Error Handling with failOnSpelError=false")
+    class RuntimeErrorFailOpenTests {
+
+        @BeforeEach
+        void setUp() {
+            evaluator.setFailOnSpelError(false);
+        }
+
+        @Test
+        @DisplayName("runtime error returns default true for condition when failOnSpelError=false")
+        void runtimeError_returnsDefaultTrue() throws Exception {
+            // Given: Expression that fails at runtime and failOnSpelError=false
+            String runtimeErrorCondition = "#root.unknown.property.deep.path";
+
+            // When: Evaluating
+            boolean proceed = evaluateCondition(runtimeErrorCondition);
+
+            // Then: Returns safe default (true - proceed with cache)
+            assertThat(proceed).isTrue();
+        }
+
+        @Test
+        @DisplayName("runtime error returns default false for unless when failOnSpelError=false")
+        void runtimeErrorUnless_returnsDefaultFalse() throws Exception {
+            // Given: Expression that fails at runtime and failOnSpelError=false
+            String runtimeErrorUnless = "#result.unknown.field";
+
+            // When: Evaluating
+            boolean skipCache = evaluateUnless(runtimeErrorUnless);
+
+            // Then: Returns safe default (false - do not skip cache)
+            assertThat(skipCache).isFalse();
+        }
+
+        @Test
+        @DisplayName("malicious expression returns default true when failOnSpelError=false")
+        void maliciousExpression_returnsDefault() throws Exception {
+            // Given: Expression attempting to access Runtime with failOnSpelError=false
+            String maliciousCondition = "T(java.lang.Runtime).getRuntime()";
+
+            // When: Evaluating
             boolean proceed = evaluateCondition(maliciousCondition);
 
             // Then: Fail-open - returns true (safe default)
@@ -103,53 +199,39 @@ class SpelConditionEvaluatorTest {
         }
 
         @Test
-        @DisplayName("handles reflection-based property access safely")
-        void reflectionBasedAttack_handledSafely() throws Exception {
-            // Given: Attempting to access system properties via reflection
+        @DisplayName("reflection-based access returns default when failOnSpelError=false")
+        void reflectionBasedAttack_returnsDefault() throws Exception {
+            // Given: Attempting to access system properties with failOnSpelError=false
             String attackCondition = "T(java.lang.System).getProperty('user.dir')";
 
-            // When: Evaluating - should handle safely
+            // When: Evaluating
             boolean proceed = evaluateCondition(attackCondition);
 
             // Then: Fail-open - returns true (safe default)
             assertThat(proceed).isTrue();
         }
-
-        @Test
-        @DisplayName("handles malformed expression gracefully")
-        void malformedExpression_failOpen() throws Exception {
-            // Given: Malformed SpEL expression referencing unknown property
-            String malformedCondition = "#root.unknown.property.deep.path";
-
-            // When: Evaluating - should not throw
-            boolean proceed = evaluateCondition(malformedCondition);
-
-            // Then: Fail-open - returns true when expression cannot be evaluated
-            assertThat(proceed).isTrue();
-        }
-
-        @Test
-        @DisplayName("handles arithmetic attack expression safely")
-        void arithmeticAttack_handledSafely() throws Exception {
-            // Given: Attempting division by zero via SpEL
-            String attackCondition = "T(java.lang.Integer).divideUnsigned(1, 0)";
-
-            // When: Evaluating
-            boolean proceed = evaluateCondition(attackCondition);
-
-            // Then: Fail-open - returns true
-            assertThat(proceed).isTrue();
-        }
     }
 
     @Nested
-    @DisplayName("Unless Expression Security")
+    @DisplayName("Unless Expression Handling")
     class UnlessExpressionTests {
 
         @Test
-        @DisplayName("handles malicious unless expression safely")
-        void maliciousUnless_handledSafely() throws Exception {
+        @DisplayName("malicious unless expression throws when failOnSpelError=true")
+        void maliciousUnless_throwsWhenFailOnSpelErrorTrue() throws Exception {
             // Given: Attempt to access Runtime via unless expression
+            String maliciousUnless = "T(java.lang.Runtime).getRuntime()";
+
+            // When/Then: Should throw EvaluationException
+            assertThatThrownBy(() -> evaluateUnless(maliciousUnless))
+                    .isInstanceOf(EvaluationException.class);
+        }
+
+        @Test
+        @DisplayName("malicious unless expression returns default when failOnSpelError=false")
+        void maliciousUnless_returnsDefaultWhenFailOnSpelErrorFalse() throws Exception {
+            // Given: Attempt to access Runtime with failOnSpelError=false
+            evaluator.setFailOnSpelError(false);
             String maliciousUnless = "T(java.lang.Runtime).getRuntime()";
 
             // When: Evaluating
@@ -160,28 +242,15 @@ class SpelConditionEvaluatorTest {
         }
 
         @Test
-        @DisplayName("handles malformed unless expression gracefully")
-        void malformedUnless_failOpen() throws Exception {
-            // Given: Malformed unless expression
-            String malformedUnless = "#result.unknown.field";
-
-            // When: Evaluating
-            boolean skipCache = evaluateUnless(malformedUnless);
-
-            // Then: Fail-open - returns false (do not skip cache)
-            assertThat(skipCache).isFalse();
-        }
-
-        @Test
-        @DisplayName("handles empty unless expression gracefully")
-        void emptyUnless_failsOpen() throws Exception {
+        @DisplayName("empty unless expression returns false")
+        void emptyUnless_returnsFalse() throws Exception {
             // Given: Empty unless expression
             String emptyUnless = "";
 
             // When: Evaluating
             boolean skipCache = evaluateUnless(emptyUnless);
 
-            // Then: Fail-open - returns false (do not skip cache)
+            // Then: Returns false (do not skip cache)
             assertThat(skipCache).isFalse();
         }
     }

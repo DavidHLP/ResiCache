@@ -44,8 +44,8 @@ class RedisBloomIFilterTest {
     void setUp() {
         config = new BloomFilterConfig("bf:", 1024, 3, 100);
         hashStrategy = new MessageDigestBloomHashStrategy();
-        filter = new RedisBloomIFilter(redisTemplate, config, hashStrategy);
-        filter.initHashCache();
+        filter = new RedisBloomIFilter(redisTemplate, config, hashStrategy, null);
+        filter.init();
     }
 
     private void resetMock() {

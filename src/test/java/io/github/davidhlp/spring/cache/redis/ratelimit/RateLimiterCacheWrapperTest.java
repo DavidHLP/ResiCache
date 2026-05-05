@@ -300,4 +300,131 @@ class RateLimiterCacheWrapperTest {
             // (exact count depends on timing)
         }
     }
+
+    @Nested
+    @DisplayName("concurrent QPS accuracy tests")
+    class QpsAccuracyTests {
+
+        @Test
+        @DisplayName("QPS accuracy under concurrency is within 5% error")
+        void qpsAccuracy_underConcurrency_withinFivePercent() throws InterruptedException {
+            int targetQps = 100;
+            RateLimiterCacheWrapper qpsWrapper = new RateLimiterCacheWrapper(
+                    delegate,
+                    "qps-test-cache",
+                    cacheWriter,
+                    cacheConfiguration,
+                    meterRegistry,
+                    targetQps
+            );
+
+            int threadCount = 2;
+            int requestsPerThread = 100;
+            int requestIntervalMs = 20;
+            ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+            CountDownLatch startLatch = new CountDownLatch(1);
+            CountDownLatch completeLatch = new CountDownLatch(threadCount);
+            AtomicLong allowedCount = new AtomicLong();
+
+            for (int t = 0; t < threadCount; t++) {
+                executor.submit(() -> {
+                    try {
+                        startLatch.await();
+                        for (int i = 0; i < requestsPerThread; i++) {
+                            long beforeSkip = qpsWrapper.getRateLimitSkipCount();
+                            qpsWrapper.put("key-" + i, "value");
+                            long afterSkip = qpsWrapper.getRateLimitSkipCount();
+                            if (afterSkip == beforeSkip) {
+                                allowedCount.incrementAndGet();
+                            }
+                            Thread.sleep(requestIntervalMs);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        completeLatch.countDown();
+                    }
+                });
+            }
+
+            long measureStart = System.nanoTime();
+            startLatch.countDown();
+            assertThat(completeLatch.await(30, TimeUnit.SECONDS)).isTrue();
+            long measureEnd = System.nanoTime();
+            executor.shutdown();
+
+            double durationSeconds = (measureEnd - measureStart) / 1_000_000_000.0;
+            double actualQps = allowedCount.get() / durationSeconds;
+            double expectedQps = targetQps;
+            double errorPercent = Math.abs(actualQps - expectedQps) / expectedQps * 100.0;
+
+            assertThat(errorPercent)
+                    .as("QPS accuracy error should be within 5%%. Allowed: %d, Duration: %.3fs, Actual QPS: %.2f, Target QPS: %d, Error: %.2f%%",
+                            allowedCount.get(), durationSeconds, actualQps, targetQps, errorPercent)
+                    .isLessThan(5.0);
+        }
+
+        @Test
+        @DisplayName("token bucket refills correctly under concurrent load")
+        void tokenBucketRefill_underConcurrency_maintainsConsistency() throws InterruptedException {
+            RateLimiterCacheWrapper refillWrapper = new RateLimiterCacheWrapper(
+                    delegate,
+                    "refill-test-cache",
+                    cacheWriter,
+                    cacheConfiguration,
+                    meterRegistry,
+                    50.0
+            );
+
+            int threadCount = 5;
+            ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+            CountDownLatch firstWaveLatch = new CountDownLatch(threadCount);
+            CountDownLatch secondWaveLatch = new CountDownLatch(threadCount);
+
+            AtomicLong firstWaveAllowed = new AtomicLong();
+            for (int t = 0; t < threadCount; t++) {
+                executor.submit(() -> {
+                    try {
+                        for (int i = 0; i < 20; i++) {
+                            long beforeSkip = refillWrapper.getRateLimitSkipCount();
+                            refillWrapper.put("key-" + i, "value");
+                            long afterSkip = refillWrapper.getRateLimitSkipCount();
+                            if (afterSkip == beforeSkip) {
+                                firstWaveAllowed.incrementAndGet();
+                            }
+                        }
+                    } finally {
+                        firstWaveLatch.countDown();
+                    }
+                });
+            }
+
+            assertThat(firstWaveLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+            Thread.sleep(200);
+
+            AtomicLong secondWaveAllowed = new AtomicLong();
+            for (int t = 0; t < threadCount; t++) {
+                executor.submit(() -> {
+                    try {
+                        for (int i = 0; i < 10; i++) {
+                            long beforeSkip = refillWrapper.getRateLimitSkipCount();
+                            refillWrapper.put("key-" + i, "value");
+                            long afterSkip = refillWrapper.getRateLimitSkipCount();
+                            if (afterSkip == beforeSkip) {
+                                secondWaveAllowed.incrementAndGet();
+                            }
+                        }
+                    } finally {
+                        secondWaveLatch.countDown();
+                    }
+                });
+            }
+
+            assertThat(secondWaveLatch.await(10, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+
+            assertThat(secondWaveAllowed.get()).isGreaterThan(0);
+        }
+    }
 }

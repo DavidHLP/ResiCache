@@ -13,8 +13,11 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Component;
 
+import org.springframework.data.redis.connection.ReturnType;
+import org.springframework.data.redis.serializer.RedisSerializer;
+
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * 预刷新处理器，防止缓存雪崩
@@ -44,6 +47,15 @@ public class PreRefreshHandler extends AbstractCacheHandler {
     private static final String DECISION_KEY = "preRefresh.decision";
 
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
+
+    private static final String ATOMIC_TTL_SHORTEN_SCRIPT =
+        "local current = redis.call('get', KEYS[1]) " +
+        "if current == ARGV[1] then " +
+        "    redis.call('expire', KEYS[1], ARGV[2]) " +
+        "    return 1 " +
+        "else " +
+        "    return 0 " +
+        "end";
 
     private final TtlPolicy ttlPolicy;
     private final PreRefreshSupport preRefreshSupport;
@@ -131,8 +143,6 @@ public class PreRefreshHandler extends AbstractCacheHandler {
     private void scheduleAsyncRefresh(CacheContext context, CachedValue cachedValue) {
         String redisKey = context.getRedisKey();
         String cacheName = context.getCacheName();
-        long originalCreated = cachedValue.getCreatedTime();
-        long originalVersion = cachedValue.getVersion();
 
         preRefreshSupport.submitAsyncRefresh(redisKey, () -> {
             try {
@@ -151,17 +161,10 @@ public class PreRefreshHandler extends AbstractCacheHandler {
                     return;
                 }
 
-                if (liveValue.getCreatedTime() == originalCreated
-                    && liveValue.getVersion() == originalVersion) {
-                    // 缩短 TTL 而非直接删除，避免缓存穿透
-                    // 注意：此操作是尽力而为的，如果失败会被静默忽略
-                    try {
-                        redisTemplate.expire(redisKey, Duration.ofSeconds(REFRESH_GRACE_PERIOD_SECONDS));
-                        log.debug("Async pre-refresh shortened TTL: key={}, gracePeriod={}s",
-                                  redisKey, REFRESH_GRACE_PERIOD_SECONDS);
-                    } catch (Exception ex) {
-                        log.warn("Async pre-refresh TTL shorten failed: key={}", redisKey, ex);
-                    }
+                boolean shortened = atomicShortenTtlIfValueUnchanged(redisKey, cachedValue);
+                if (shortened) {
+                    log.debug("Async pre-refresh shortened TTL: key={}, gracePeriod={}s",
+                              redisKey, REFRESH_GRACE_PERIOD_SECONDS);
                 } else {
                     log.debug("Async pre-refresh skipped: value changed: {}", redisKey);
                 }
@@ -171,6 +174,26 @@ public class PreRefreshHandler extends AbstractCacheHandler {
         });
 
         log.info("Async pre-refresh scheduled: cacheName={}, key={}", cacheName, redisKey);
+    }
+
+    private boolean atomicShortenTtlIfValueUnchanged(String redisKey, CachedValue expectedValue) {
+        return Boolean.TRUE.equals(redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Boolean>) connection -> {
+            RedisSerializer<String> keySerializer = redisTemplate.getStringSerializer();
+            @SuppressWarnings("unchecked")
+            RedisSerializer<Object> valueSerializer = (RedisSerializer<Object>) redisTemplate.getValueSerializer();
+
+            byte[] keyBytes = keySerializer.serialize(redisKey);
+            byte[] expectedValueBytes = valueSerializer.serialize(expectedValue);
+            byte[] ttlBytes = String.valueOf(REFRESH_GRACE_PERIOD_SECONDS).getBytes(StandardCharsets.UTF_8);
+
+            Long result = connection.eval(
+                ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
+                ReturnType.INTEGER,
+                1,
+                keyBytes, expectedValueBytes, ttlBytes
+            );
+            return result != null && result == 1;
+        }));
     }
 
     /**

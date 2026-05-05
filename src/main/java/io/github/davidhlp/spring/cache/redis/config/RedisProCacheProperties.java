@@ -36,6 +36,9 @@ public class RedisProCacheProperties {
     /** 默认缓存TTL */
     private Duration defaultTtl = Duration.ofMinutes(30);
 
+    /** SpEL 求值失败时是否抛出异常（默认 true）。配置错误（语法错误）始终抛出。 */
+    private boolean failOnSpelError = true;
+
     /** 布隆过滤器配置 */
     private BloomFilterProperties bloomFilter = new BloomFilterProperties();
 
@@ -98,6 +101,8 @@ public class RedisProCacheProperties {
         private long timeout = 3000;
         /** 超时时间单位 */
         private TimeUnit unit = TimeUnit.MILLISECONDS;
+        /** 锁键前缀 */
+        private String prefix = "cache:lock:";
     }
 
     @Getter

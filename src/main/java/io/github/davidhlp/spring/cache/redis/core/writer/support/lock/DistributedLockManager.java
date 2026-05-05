@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.support.lock;
 
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -18,15 +19,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 public class DistributedLockManager implements LockManager {
 
-    private static final String LOCK_PREFIX = "cache:lock:";
-    
     /** 锁持有超时倍数，leaseTime = timeoutSeconds * LEASE_TIMEOUT_MULTIPLIER */
     private static final long LEASE_TIMEOUT_MULTIPLIER = 3;
-    
+
     /** 最小锁持有时间（秒），确保即使 timeoutSeconds 很小也有足够的 lease time */
     private static final long MIN_LEASE_TIME_SECONDS = 10;
 
+    /** 锁释放重试最大次数 */
+    private static final int MAX_UNLOCK_RETRIES = 3;
+
+    /** 锁释放重试间隔（毫秒） */
+    private static final long UNLOCK_RETRY_INTERVAL_MS = 100;
+
     private final RedissonClient redissonClient;
+    private final RedisProCacheProperties properties;
 
     /**
      * 尝试获取指定键的分布式锁
@@ -38,9 +44,9 @@ public class DistributedLockManager implements LockManager {
      */
     @Override
     public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) throws InterruptedException {
-        String lockKey = LOCK_PREFIX + key;
+        String lockKey = properties.getSyncLock().getPrefix() + key;
         RLock lock = redissonClient.getLock(lockKey);
-        
+
         // 计算合理的 lease time，确保即使持有者崩溃也能自动释放
         long leaseTimeSeconds = Math.max(
                 MIN_LEASE_TIME_SECONDS,
@@ -62,7 +68,7 @@ public class DistributedLockManager implements LockManager {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Interrupted while waiting for distributed lock on key: {}", key, e);
-            throw e;
+            throw new RuntimeException("Interrupted while waiting for distributed lock on key: " + key, e);
         }
     }
 
@@ -99,11 +105,25 @@ public class DistributedLockManager implements LockManager {
                 return;
             }
 
-            try {
-                lock.unlock();
-                log.debug("Released distributed lock for key: {}", key);
-            } catch (Exception e) {
-                log.error("Failed to release distributed lock for key: {}", key, e);
+            for (int attempt = 1; attempt <= MAX_UNLOCK_RETRIES; attempt++) {
+                try {
+                    lock.unlock();
+                    log.debug("Released distributed lock for key: {} on attempt {}", key, attempt);
+                    return;
+                } catch (Exception e) {
+                    if (attempt == MAX_UNLOCK_RETRIES) {
+                        log.error("Failed to release distributed lock for key: {} after {} attempts", key, MAX_UNLOCK_RETRIES, e);
+                        return;
+                    }
+                    log.warn("Failed to release distributed lock for key: {} on attempt {}, retrying in {}ms", key, attempt, UNLOCK_RETRY_INTERVAL_MS);
+                    try {
+                        Thread.sleep(UNLOCK_RETRY_INTERVAL_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.error("Interrupted while retrying lock release for key: {}", key, ie);
+                        return;
+                    }
+                }
             }
         }
     }

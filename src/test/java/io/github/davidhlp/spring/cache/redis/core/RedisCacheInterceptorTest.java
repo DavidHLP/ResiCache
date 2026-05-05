@@ -55,7 +55,7 @@ class RedisCacheInterceptorTest {
         when(cachingHandler.setNext(cachePutHandler)).thenReturn(cachePutHandler);
 
         interceptor = new RedisCacheInterceptor(
-                cacheableHandler, evictHandler, cachingHandler, cachePutHandler);
+                cacheableHandler, evictHandler, cachingHandler, cachePutHandler, true);
     }
 
     private Method getMethod(String name) throws NoSuchMethodException {
