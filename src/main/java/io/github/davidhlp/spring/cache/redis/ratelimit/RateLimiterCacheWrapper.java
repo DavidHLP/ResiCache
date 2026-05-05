@@ -145,20 +145,15 @@ public class RateLimiterCacheWrapper extends RedisProCache {
                 if (tokensToAdd > 0) {
                     long current = tokens.get();
                     long newTokens = Math.min((long) qps, current + tokensToAdd);
-                    // Only update lastUpdate when tokens were successfully updated
-                    if (tokens.compareAndSet(current, newTokens)) {
-                        lastUpdate.set(now);
-                    }
+                    tokens.set(newTokens);
+                    lastUpdate.set(now);
                 }
-                while (true) {
-                    long current = tokens.get();
-                    if (current <= 0) {
-                        return false;
-                    }
-                    if (tokens.compareAndSet(current, current - 1)) {
-                        return true;
-                    }
+                long current = tokens.get();
+                if (current <= 0) {
+                    return false;
                 }
+                tokens.set(current - 1);
+                return true;
             } finally {
                 lock.unlock();
             }

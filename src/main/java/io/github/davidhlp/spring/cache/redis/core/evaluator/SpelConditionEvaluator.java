@@ -6,13 +6,16 @@ import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.context.expression.MapAccessor;
 import org.springframework.expression.EvaluationContext;
+import org.springframework.expression.EvaluationException;
 import org.springframework.expression.Expression;
+import org.springframework.expression.ParseException;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -37,12 +40,34 @@ public class SpelConditionEvaluator {
     private final SpelExpressionParser parser = new SpelExpressionParser();
     private final Cache<String, Expression> expressionCache = Caffeine.newBuilder()
             .maximumSize(MAX_EXPRESSION_CACHE_SIZE)
+            .expireAfterWrite(Duration.ofMinutes(30))
             .build();
+
+    /** SpEL 求值失败时是否抛出异常（默认 true）。配置错误（语法错误）始终抛出。 */
+    private volatile boolean failOnSpelError = true;
 
     private SpelConditionEvaluator() {}
 
     public static SpelConditionEvaluator getInstance() {
         return INSTANCE;
+    }
+
+    /**
+     * 设置 SpEL 求值失败时的行为。
+     *
+     * @param failOnSpelError true 表示运行时求值失败时抛出异常；
+     *                        false 表示运行时求值失败时返回默认值（不抛出）。
+     *                        注意：SpEL 语法错误（配置错误）始终会抛出异常，不受此设置影响。
+     */
+    public void setFailOnSpelError(boolean failOnSpelError) {
+        this.failOnSpelError = failOnSpelError;
+    }
+
+    /**
+     * 获取当前 SpEL 求值失败时的行为设置。
+     */
+    public boolean isFailOnSpelError() {
+        return failOnSpelError;
     }
 
     /**
@@ -131,14 +156,25 @@ public class SpelConditionEvaluator {
      * @param expression SpEL 表达式字符串
      * @param context 求值上下文
      * @return 求值结果
+     * @throws ParseException SpEL 语法错误（配置错误），始终抛出
+     * @throws EvaluationException 运行时求值失败且 failOnSpelError=true 时抛出
      */
     private boolean evaluateCondition(String expression, EvaluationContext context) {
         try {
             Expression exp = getExpression(expression);
             Boolean result = exp.getValue(context, Boolean.class);
             return Boolean.TRUE.equals(result);
-        } catch (Exception e) {
-            // 求值失败时，默认为继续执行（不跳过）
+        } catch (ParseException e) {
+            // 配置错误（SpEL 语法错误）始终抛出，帮助开发者及时发现配置问题
+            log.error("SpEL syntax error in condition expression (configuration error): expression={}", expression, e);
+            throw e;
+        } catch (EvaluationException e) {
+            // 运行时错误（如 null 值、属性不存在）根据 failOnSpelError 决定行为
+            if (failOnSpelError) {
+                log.error("SpEL condition evaluation failed (runtime error): expression={}", expression, e);
+                throw e;
+            }
+            // failOnSpelError=false 时，记录警告并返回安全默认值
             log.warn("SpEL condition evaluation failed, proceeding with cache: expression={}, error={}",
                     expression, e.getMessage());
             log.debug("SpEL condition evaluation stack trace", e);
@@ -152,14 +188,25 @@ public class SpelConditionEvaluator {
      * @param expression SpEL 表达式字符串
      * @param context 求值上下文
      * @return true 表示结果应被排除（不缓存）
+     * @throws ParseException SpEL 语法错误（配置错误），始终抛出
+     * @throws EvaluationException 运行时求值失败且 failOnSpelError=true 时抛出
      */
     private boolean evaluateUnless(String expression, EvaluationContext context) {
         try {
             Expression exp = getExpression(expression);
             Boolean result = exp.getValue(context, Boolean.class);
             return Boolean.TRUE.equals(result);
-        } catch (Exception e) {
-            // 求值失败时，默认为不排除（缓存）
+        } catch (ParseException e) {
+            // 配置错误（SpEL 语法错误）始终抛出，帮助开发者及时发现配置问题
+            log.error("SpEL syntax error in unless expression (configuration error): expression={}", expression, e);
+            throw e;
+        } catch (EvaluationException e) {
+            // 运行时错误（如 null 值、属性不存在）根据 failOnSpelError 决定行为
+            if (failOnSpelError) {
+                log.error("SpEL unless evaluation failed (runtime error): expression={}", expression, e);
+                throw e;
+            }
+            // failOnSpelError=false 时，记录警告并返回安全默认值
             log.warn("SpEL unless evaluation failed, caching result: expression={}, error={}",
                     expression, e.getMessage());
             log.debug("SpEL unless evaluation stack trace", e);

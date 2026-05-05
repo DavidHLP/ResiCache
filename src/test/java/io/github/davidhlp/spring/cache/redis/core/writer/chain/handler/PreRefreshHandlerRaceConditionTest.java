@@ -223,4 +223,49 @@ class PreRefreshHandlerRaceConditionTest {
         // All three should have been submitted
         verify(preRefreshSupport, times(3)).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
     }
+
+    @Test
+    @DisplayName("atomicLuaScript_preventsRaceBetweenVersionCheckAndTtlShorten")
+    void atomicLuaScript_preventsRaceBetweenVersionCheckAndTtlShorten() {
+        RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+        CacheContext context = createContext(CacheOperation.GET, operation);
+        CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
+
+        when(valueOperations.get("test:key")).thenReturn(cachedValue);
+        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+
+        doAnswer(invocation -> {
+            Runnable runnable = invocation.getArgument(1);
+            runnable.run();
+            return null;
+        }).when(preRefreshSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+
+        handler.doHandle(context);
+
+        verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+    }
+
+    @Test
+    @DisplayName("atomicLuaScript_valueChanged_skipsTtlShorten")
+    void atomicLuaScript_valueChanged_skipsTtlShorten() {
+        RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+        CacheContext context = createContext(CacheOperation.GET, operation);
+        CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
+
+        when(valueOperations.get("test:key")).thenReturn(cachedValue);
+        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+
+        when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
+            .thenReturn(false);
+
+        doAnswer(invocation -> {
+            Runnable runnable = invocation.getArgument(1);
+            runnable.run();
+            return null;
+        }).when(preRefreshSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+
+        handler.doHandle(context);
+
+        verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+    }
 }

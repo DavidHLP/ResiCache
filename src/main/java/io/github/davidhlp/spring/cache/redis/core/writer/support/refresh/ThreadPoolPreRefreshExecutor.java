@@ -212,8 +212,8 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
                         Thread.sleep(RETRY_DELAY_MS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.warn("Retry interrupted for key: {}", key);
-                        break;
+                        log.warn("Retry interrupted for key: {}, continuing with next attempt", key);
+                        continue; // Continue to next retry attempt instead of exiting loop
                     }
                 }
             }
@@ -309,6 +309,21 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     @PreDestroy
     public void shutdown() {
         log.info("Shutting down pre-refresh executor thread pool...");
+
+        cleanupScheduler.shutdown();
+        try {
+            if (!cleanupScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                cleanupScheduler.shutdownNow();
+                log.warn("Pre-refresh cleanup scheduler did not terminate gracefully, forced shutdown");
+            } else {
+                log.info("Pre-refresh cleanup scheduler shut down successfully");
+            }
+        } catch (InterruptedException e) {
+            cleanupScheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+            log.error("Pre-refresh cleanup scheduler shutdown interrupted", e);
+        }
+
         executorService.shutdown();
         try {
             if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
@@ -321,17 +336,6 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
             executorService.shutdownNow();
             Thread.currentThread().interrupt();
             log.error("Pre-refresh executor shutdown interrupted", e);
-        }
-
-        // 关闭清理调度器
-        cleanupScheduler.shutdown();
-        try {
-            if (!cleanupScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                cleanupScheduler.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            cleanupScheduler.shutdownNow();
-            Thread.currentThread().interrupt();
         }
     }
 

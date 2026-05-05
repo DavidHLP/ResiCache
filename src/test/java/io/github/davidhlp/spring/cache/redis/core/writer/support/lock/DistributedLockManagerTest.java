@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.support.lock;
 
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -10,6 +11,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 
@@ -26,6 +29,7 @@ import static org.mockito.Mockito.*;
  * DistributedLockManager 单元测试
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("DistributedLockManager Tests")
 class DistributedLockManagerTest {
 
@@ -35,11 +39,19 @@ class DistributedLockManagerTest {
     @Mock
     private RLock rLock;
 
+    @Mock
+    private RedisProCacheProperties properties;
+
+    @Mock
+    private RedisProCacheProperties.SyncLockProperties syncLockProperties;
+
     private DistributedLockManager lockManager;
 
     @BeforeEach
     void setUp() {
-        lockManager = new DistributedLockManager(redissonClient);
+        when(properties.getSyncLock()).thenReturn(syncLockProperties);
+        when(syncLockProperties.getPrefix()).thenReturn("cache:lock:");
+        lockManager = new DistributedLockManager(redissonClient, properties);
     }
 
     private void mockGetLock(String lockKey) {
@@ -79,8 +91,8 @@ class DistributedLockManagerTest {
         }
 
         @Test
-        @DisplayName("throws InterruptedException when thread is interrupted during wait")
-        void tryAcquire_interrupted_throwsException() throws InterruptedException {
+        @DisplayName("wraps InterruptedException in RuntimeException when thread is interrupted during wait")
+        void tryAcquire_interrupted_throwsRuntimeExceptionWithCause() throws InterruptedException {
             String key = "test-key";
             String lockKey = "cache:lock:" + key;
             mockGetLock(lockKey);
@@ -88,8 +100,10 @@ class DistributedLockManagerTest {
                     .thenThrow(new InterruptedException("Thread interrupted"));
 
             assertThatThrownBy(() -> lockManager.tryAcquire(key, 5))
-                    .isInstanceOf(InterruptedException.class)
-                    .hasMessage("Thread interrupted");
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("Interrupted while waiting for distributed lock on key: " + key)
+                    .hasCauseInstanceOf(InterruptedException.class)
+                    .hasRootCauseMessage("Thread interrupted");
         }
 
         @Test
@@ -232,7 +246,43 @@ class DistributedLockManagerTest {
             Optional<LockManager.LockHandle> result = lockManager.tryAcquire(key, 5);
             result.get().close();
 
-            verify(rLock).unlock();
+            verify(rLock, times(3)).unlock();
+        }
+
+        @Test
+        @DisplayName("close retries unlock on failure up to 3 times")
+        void close_unlockFails_retriesUpToThreeTimes() throws InterruptedException {
+            String key = "test-key";
+            String lockKey = "cache:lock:" + key;
+            mockGetLock(lockKey);
+            when(rLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+            when(rLock.isHeldByCurrentThread()).thenReturn(true);
+            doThrow(new RuntimeException("Unlock failed"))
+                    .doThrow(new RuntimeException("Unlock failed again"))
+                    .doNothing()
+                    .when(rLock).unlock();
+
+            Optional<LockManager.LockHandle> result = lockManager.tryAcquire(key, 5);
+            result.get().close();
+
+            verify(rLock, times(3)).unlock();
+        }
+
+        @Test
+        @DisplayName("close retries unlock and gives up after max retries")
+        void close_unlockFails_givesUpAfterMaxRetries() throws InterruptedException {
+            String key = "test-key";
+            String lockKey = "cache:lock:" + key;
+            mockGetLock(lockKey);
+            when(rLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+            when(rLock.isHeldByCurrentThread()).thenReturn(true);
+            doThrow(new RuntimeException("Unlock failed"))
+                    .when(rLock).unlock();
+
+            Optional<LockManager.LockHandle> result = lockManager.tryAcquire(key, 5);
+            result.get().close();
+
+            verify(rLock, times(3)).unlock();
         }
     }
 

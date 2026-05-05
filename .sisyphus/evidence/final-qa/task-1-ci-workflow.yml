@@ -1,0 +1,5 @@
+=== T1 Evidence ===
+        uses: actions/setup-java@v4
+          cache: 'maven'
+        run: mvn test
+          use-caches: true

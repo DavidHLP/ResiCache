@@ -1,0 +1,16 @@
+spring:
+  data:
+    redis:
+      password: ""
+      database: 0
+
+resi-cache:
+  default-ttl: 30m
+  bloom-filter:
+    enabled: true
+    expected-insertions: 100000
+    false-probability: 0.01
+  pre-refresh:
+    enabled: false
+  sync-lock:
+    enabled: true

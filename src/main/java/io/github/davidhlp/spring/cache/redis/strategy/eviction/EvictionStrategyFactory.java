@@ -11,6 +11,7 @@ import java.util.function.Predicate;
  *             StrategyType enum has only ONE entry (TWO_LIST); no SPI abstraction needed.
  *             If multiple strategies are added in the future, this will be revisited.
  */
+@Deprecated
 public class EvictionStrategyFactory {
 
     /**

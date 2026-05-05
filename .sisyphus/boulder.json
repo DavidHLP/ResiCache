@@ -1,0 +1,67 @@
+{
+  "active_plan": "/home/davidhlp/project/ResiCache/.sisyphus/plans/resicache-20-issues-fix.md",
+  "started_at": "2026-05-05T00:52:02.711Z",
+  "session_ids": [
+    "ses_20a61223cffe49mEhL13zWGViz"
+  ],
+  "session_origins": {
+    "ses_20a61223cffe49mEhL13zWGViz": "direct"
+  },
+  "plan_name": "resicache-20-issues-fix",
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "CI/CD 添加 `mvn test` 执行步骤",
+      "session_id": "ses_20a603037ffey6WQYjHKSJ2F4z",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-05T00:53:36.895Z"
+    },
+    "todo:6": {
+      "task_key": "todo:6",
+      "task_label": "6",
+      "task_title": "TwoListLRU 并发缺陷修复",
+      "session_id": "ses_20a5e12a9ffeNSPV16aT0rx2k4",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-05-05T00:58:27.364Z"
+    },
+    "todo:10": {
+      "task_key": "todo:10",
+      "task_label": "10",
+      "task_title": "CircuitBreakerCacheWrapper 状态竞争修复",
+      "session_id": "ses_20a526d4effeQ1oKMzM6jKgIBs",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-05T01:14:53.773Z"
+    },
+    "todo:13": {
+      "task_key": "todo:13",
+      "task_label": "13",
+      "task_title": "ThreadPoolPreRefreshExecutor 关闭顺序修复",
+      "session_id": "ses_20a3e7125ffeHINjHmTbzY6KQd",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-05T01:32:14.023Z"
+    },
+    "todo:17": {
+      "task_key": "todo:17",
+      "task_label": "17",
+      "task_title": "@Deprecated 注解添加",
+      "session_id": "ses_20a345cf2ffeCDhAPXvWQvEZd3",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-05T01:41:24.004Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_20a2e48ceffeEui8sClmkgDUtr",
+      "agent": "oracle",
+      "updated_at": "2026-05-05T01:56:37.655Z"
+    }
+  }
+}

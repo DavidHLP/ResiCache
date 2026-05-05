@@ -29,8 +29,19 @@ public class RedisProCacheConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public RedisProCacheWriter redisProCacheWriter(RedisTemplate<String, Object> redisCacheTemplate, RedisCacheRegister redisCacheRegister, TypeSupport typeSupport, CacheHandlerChainFactory chainFactory, CacheStatisticsCollector cacheStatisticsCollector) {
-        RedisProCacheWriter writer = new RedisProCacheWriter(redisCacheTemplate, redisCacheTemplate.opsForValue(), cacheStatisticsCollector, redisCacheRegister, typeSupport, chainFactory);
+    public RedisProCacheWriter redisProCacheWriter(
+            RedisTemplate<String, Object> redisCacheTemplate,
+            RedisCacheRegister redisCacheRegister,
+            TypeSupport typeSupport,
+            CacheHandlerChainFactory chainFactory,
+            CacheStatisticsCollector cacheStatisticsCollector) {
+        RedisProCacheWriter writer = new RedisProCacheWriter(
+                redisCacheTemplate,
+                redisCacheTemplate.opsForValue(),
+                cacheStatisticsCollector,
+                redisCacheRegister,
+                typeSupport,
+                chainFactory);
         log.info("Created RedisProCacheWriter with handler chain pattern");
         return writer;
     }

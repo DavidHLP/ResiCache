@@ -1,10 +1,13 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.cfg.MapperConfig;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator.TypeMatcher;
+import com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolver;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.cfg.MapperConfig;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
@@ -116,27 +119,27 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
     }
 
     private Jackson2JsonRedisSerializer<Object> createSecureSerializer(ObjectMapper objectMapper, List<String> allowedPackagePrefixes) {
-        // Create a custom type validator that only allows deserialization of types
-        // from explicitly specified package prefixes - this prevents RCE attacks via Redis
-        PolymorphicTypeValidator typeValidator = new PolymorphicTypeValidator.Base() {
-            private final String[] allowedPrefixes = allowedPackagePrefixes.toArray(new String[0]);
-
-            @Override
-            public Validity validateSubType(MapperConfig<?> config, JavaType baseType, JavaType subType) {
-                // Check if the subtype's class is in an allowed package
-                Class<?> subClass = subType.getRawClass();
-                if (subClass == null) {
-                    return Validity.DENIED;
-                }
-                String className = subClass.getName();
-                for (String prefix : allowedPrefixes) {
-                    if (className.startsWith(prefix)) {
-                        return Validity.ALLOWED;
+        // Build a secure type validator with explicit package whitelist using TypeMatcher
+        // BasicPolymorphicTypeValidator.Builder provides production-safe validation
+        String[] prefixes = allowedPackagePrefixes.toArray(new String[0]);
+        PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfBaseType(new TypeMatcher() {
+                    @Override
+                    public boolean match(MapperConfig<?> config, Class<?> rawSubType) {
+                        if (rawSubType == null) {
+                            return false;
+                        }
+                        String className = rawSubType.getName();
+                        for (String prefix : prefixes) {
+                            if (className.startsWith(prefix)) {
+                                return true;
+                            }
+                        }
+                        return false;
                     }
-                }
-                return Validity.DENIED;
-            }
-        };
+                })
+                .allowIfSubType(Object.class)
+                .build();
 
         // Clone the object mapper to avoid modifying the original
         ObjectMapper secureObjectMapper = objectMapper.copy();

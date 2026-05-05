@@ -236,6 +236,38 @@ class ThreadPoolPreRefreshExecutorTest {
             // Should terminate within reasonable time
             assertThat(executor.getActiveCount()).isEqualTo(0);
         }
+
+        @Test
+        @DisplayName("shutdown properly cleans up all resources")
+        void shutdown_properlyCleansUpResources() throws Exception {
+            ThreadPoolPreRefreshExecutor testExecutor = new ThreadPoolPreRefreshExecutor(
+                    Executors.newCachedThreadPool(),
+                    new ConcurrentHashMap<>(),
+                    null,
+                    100L
+            );
+            testExecutor.initCleanupScheduler();
+
+            CountDownLatch latch = new CountDownLatch(1);
+            testExecutor.submit("cleanup-key", latch::countDown);
+            assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+
+            testExecutor.shutdown();
+
+            java.lang.reflect.Field executorField = ThreadPoolPreRefreshExecutor.class.getDeclaredField("executorService");
+            executorField.setAccessible(true);
+            ExecutorService executorService = (ExecutorService) executorField.get(testExecutor);
+
+            java.lang.reflect.Field schedulerField = ThreadPoolPreRefreshExecutor.class.getDeclaredField("cleanupScheduler");
+            schedulerField.setAccessible(true);
+            ExecutorService cleanupScheduler = (ExecutorService) schedulerField.get(testExecutor);
+
+            assertThat(executorService.isShutdown()).isTrue();
+            assertThat(cleanupScheduler.isShutdown()).isTrue();
+            assertThat(executorService.isTerminated()).isTrue();
+            assertThat(cleanupScheduler.isTerminated()).isTrue();
+            assertThat(testExecutor.getActiveCount()).isEqualTo(0);
+        }
     }
 
     @Nested
