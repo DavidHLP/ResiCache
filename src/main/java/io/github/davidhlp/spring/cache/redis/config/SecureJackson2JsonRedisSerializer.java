@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator.TypeMatcher;
-import com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolver;
-import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.cfg.MapperConfig;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;

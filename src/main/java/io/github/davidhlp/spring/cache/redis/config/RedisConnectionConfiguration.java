@@ -16,7 +16,6 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /** Redis连接和模板配置 负责： 1. RedisTemplate配置和序列化策略 2. RedissonClient连接配置 3. 连接池参数优化 */

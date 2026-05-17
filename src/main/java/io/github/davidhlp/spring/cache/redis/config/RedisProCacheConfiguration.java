@@ -20,7 +20,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Clock;
-import java.time.Duration;
 
 @Slf4j
 @Configuration(proxyBeanMethods = false)

@@ -1,7 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 
 import io.github.davidhlp.spring.cache.redis.core.writer.CachedValue;
-import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.nullvalue.NullValuePolicy;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
