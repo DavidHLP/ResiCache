@@ -17,7 +17,6 @@ import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.serializer.RedisSerializer;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 
 /**
  * 预刷新处理器，防止缓存雪崩

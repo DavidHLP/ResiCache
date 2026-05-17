@@ -3,7 +3,6 @@ package io.github.davidhlp.spring.cache.redis.core.evaluator;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.interceptor.CacheOperation;
-import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.context.expression.MapAccessor;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.EvaluationException;

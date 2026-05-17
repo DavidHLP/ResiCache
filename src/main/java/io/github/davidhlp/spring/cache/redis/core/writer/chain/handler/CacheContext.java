@@ -5,7 +5,6 @@ import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOp
 import lombok.Getter;
 
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 

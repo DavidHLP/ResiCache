@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.BloomSupport;
 import lombok.RequiredArgsConstructor;

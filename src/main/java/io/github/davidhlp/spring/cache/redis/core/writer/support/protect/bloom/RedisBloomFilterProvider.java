@@ -2,7 +2,6 @@ package io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom;
 
 import io.github.davidhlp.spring.cache.redis.spi.BloomFilter;
 import io.github.davidhlp.spring.cache.redis.spi.BloomFilterProvider;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
