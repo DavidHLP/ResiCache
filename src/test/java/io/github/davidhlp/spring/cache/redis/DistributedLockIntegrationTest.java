@@ -21,6 +21,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @SpringBootTest(classes = TestApplication.class)
@@ -152,9 +153,23 @@ class DistributedLockIntegrationTest extends AbstractRedisIntegrationTest {
             Optional<LockManager.LockHandle> mainHandle = lockManager.tryAcquire(lockKey, 5);
             assertThat(mainHandle).isPresent();
 
-            Optional<LockManager.LockHandle> secondHandle = lockManager.tryAcquire(lockKey, 1);
-            assertThat(secondHandle).isEmpty();
+            AtomicBoolean secondAcquired = new AtomicBoolean(false);
+            Thread otherThread = new Thread(() -> {
+                try {
+                    Optional<LockManager.LockHandle> handle = lockManager.tryAcquire(lockKey, 1);
+                    secondAcquired.set(handle.isPresent());
+                    if (handle.isPresent()) {
+                        handle.get().close();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
 
+            otherThread.start();
+            otherThread.join();
+
+            assertThat(secondAcquired.get()).isFalse();
             mainHandle.get().close();
         }
     }
