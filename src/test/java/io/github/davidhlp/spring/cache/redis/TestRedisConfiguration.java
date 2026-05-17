@@ -23,9 +23,8 @@ public class TestRedisConfiguration {
     @Bean
     @Primary
     public RedisConnectionFactory redisConnectionFactory() {
-        String host = AbstractRedisIntegrationTest.REDIS_CONTAINER.getHost();
-        int port = AbstractRedisIntegrationTest.REDIS_CONTAINER.getFirstMappedPort();
-        LettuceConnectionFactory factory = new LettuceConnectionFactory(host, port);
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(
+                RedisTestContainer.getHost(), RedisTestContainer.getPort());
         factory.afterPropertiesSet();
         return factory;
     }
@@ -69,8 +68,8 @@ public class TestRedisConfiguration {
     @Primary
     public RedissonClient redissonClient(RedisProCacheProperties properties) {
         Config config = new Config();
-        String address = "redis://" + AbstractRedisIntegrationTest.REDIS_CONTAINER.getHost()
-                + ":" + AbstractRedisIntegrationTest.REDIS_CONTAINER.getFirstMappedPort();
+        String address = "redis://" + RedisTestContainer.getHost()
+                + ":" + RedisTestContainer.getPort();
 
         RedisProCacheProperties.RedissonProperties redissonProps = properties.getRedisson();
 
