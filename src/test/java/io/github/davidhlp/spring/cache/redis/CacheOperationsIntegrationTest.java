@@ -8,17 +8,17 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.ContextConfiguration;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
-@SpringBootTest
+@SpringBootTest(classes = TestApplication.class)
 @ActiveProfiles("integration-test")
-@ContextConfiguration(classes = TestRedisConfiguration.class)
+@Import(TestRedisConfiguration.class)
 @DisplayName("Cache Operations Integration Tests")
 class CacheOperationsIntegrationTest extends AbstractRedisIntegrationTest {
 
