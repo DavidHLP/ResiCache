@@ -1,0 +1,53 @@
+name: PR Quality Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master]
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  pr-checks:
+    name: PR Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run All Checks
+        run: ./mvnw clean verify checkstyle:check -B
+        env:
+          MAVEN_OPTS: -Xmx1024m
+
+      - name: Check Dependency Converge
+        run: ./mvnw dependency:analyze -B
+        continue-on-error: true
+
+      - name: Qodana Scan
+        uses: JetBrains/qodana-action@v2025.2
+        with:
+          args: --fail-threshold=0
+          cache-dir: .qodana/cache
+        continue-on-error: true
+
+      - name: Add PR Comment on Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ PR quality checks failed. Please review the logs and fix any issues before merging.'
+            })
