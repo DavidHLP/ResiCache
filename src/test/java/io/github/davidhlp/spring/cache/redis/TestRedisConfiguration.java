@@ -7,7 +7,6 @@ import io.github.davidhlp.spring.cache.redis.config.SecureJackson2JsonRedisSeria
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
@@ -68,15 +67,16 @@ public class TestRedisConfiguration {
 
     @Bean
     @Primary
-    public RedissonClient redissonClient(RedisProperties redisProperties, RedisProCacheProperties properties) {
+    public RedissonClient redissonClient(RedisProCacheProperties properties) {
         Config config = new Config();
-        String address = "redis://" + redisProperties.getHost() + ":" + redisProperties.getPort();
+        String address = "redis://" + AbstractRedisIntegrationTest.REDIS_CONTAINER.getHost()
+                + ":" + AbstractRedisIntegrationTest.REDIS_CONTAINER.getFirstMappedPort();
 
         RedisProCacheProperties.RedissonProperties redissonProps = properties.getRedisson();
 
         config.useSingleServer()
                 .setAddress(address)
-                .setDatabase(redisProperties.getDatabase())
+                .setDatabase(0)
                 .setConnectionPoolSize(redissonProps.getConnectionPoolSize())
                 .setConnectionMinimumIdleSize(redissonProps.getConnectionMinimumIdleSize())
                 .setIdleConnectionTimeout(redissonProps.getIdleConnectionTimeout())
@@ -84,11 +84,6 @@ public class TestRedisConfiguration {
                 .setTimeout(redissonProps.getTimeout())
                 .setRetryAttempts(redissonProps.getRetryAttempts())
                 .setRetryInterval(redissonProps.getRetryInterval());
-
-        String password = redisProperties.getPassword();
-        if (password != null && !password.isEmpty()) {
-            config.useSingleServer().setPassword(password);
-        }
 
         return Redisson.create(config);
     }

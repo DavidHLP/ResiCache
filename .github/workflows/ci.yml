@@ -88,6 +88,10 @@ jobs:
         with:
           args: --fail-threshold=0
           cache-dir: .qodana/cache
+          use-caches: true
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+        continue-on-error: true
 
       - name: Upload Qodana Report
         if: always()
