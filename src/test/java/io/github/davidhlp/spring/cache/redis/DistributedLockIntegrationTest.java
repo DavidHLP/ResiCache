@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.ContextConfiguration;
 
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -23,9 +23,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-@SpringBootTest
+@SpringBootTest(classes = TestApplication.class)
 @ActiveProfiles("integration-test")
-@ContextConfiguration(classes = TestRedisConfiguration.class)
+@Import(TestRedisConfiguration.class)
 @DisplayName("Distributed Lock Integration Tests")
 class DistributedLockIntegrationTest extends AbstractRedisIntegrationTest {
 
