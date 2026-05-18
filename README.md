@@ -82,10 +82,9 @@ public class UserService {
 ### 布隆过滤器配置
 
 ```yaml
-resicache:
+resi-cache:
   bloom-filter:
     enabled: true
-    key-prefix: "bf:"
     expected-insertions: 100000
     false-probability: 0.01
 ```
@@ -93,29 +92,29 @@ resicache:
 ### 分布式锁配置
 
 ```yaml
-resicache:
-  lock:
-    enabled: true
-    wait-time: 5
-    lease-time: 30
+resi-cache:
+  sync-lock:
+    timeout: 3000
+    unit: MILLISECONDS
+    prefix: "cache:lock:"
 ```
 
 ### TTL 变异配置
 
 ```yaml
-resicache:
-  ttl:
-    variance: 0.2
+# TTL variation is configured per-annotation (variance attribute)
+@RedisCacheable(variance = 0.2)
 ```
 
 ### 预刷新配置
 
 ```yaml
-resicache:
+resi-cache:
   pre-refresh:
     enabled: true
-    threshold: 0.8
-    core-pool-size: 4
+    pool-size: 2
+    max-pool-size: 10
+    queue-capacity: 100
 ```
 
 ## 📖 工作原理
@@ -151,23 +150,24 @@ TTL 随机化避免大量缓存同时过期：
 
 ```
 src/main/java/io/github/davidhlp/spring/cache/redis/
+├── annotation/               # @RedisCacheable, @RedisCacheEvict, @RedisCachePut
+├── config/                   # Spring Boot 自动配置
 ├── core/
-│   ├── handler/              # 注解处理器
-│   │   ├── AnnotationHandler.java
-│   │   ├── CacheableAnnotationHandler.java
-│   │   └── ...
+│   ├── handler/             # 注解处理器链
+│   │   └── AnnotationHandler (抽象类)
 │   └── writer/
 │       └── chain/
-│           └── handler/       # 责任链处理器
-│               ├── BloomFilterHandler.java
-│               ├── SyncLockHandler.java
-│               ├── TtlHandler.java
-│               └── ...
+│           └── handler/      # 责任链处理器 (按顺序100-500)
+│               ├── BloomFilterHandler (100)
+│               ├── SyncLockHandler (200)
+│               ├── PreRefreshHandler (250)
+│               ├── TtlHandler (300)
+│               ├── NullValueHandler (400)
+│               └── ActualCacheHandler (500)
 ├── register/                 # 缓存注册
-│   └── RedisCacheRegister.java
-└── config/                   # 配置类
-    ├── ResiCacheProperties.java
-    └── ...
+├── spi/                      # SPI 接口 (BloomFilterProvider, LockProvider)
+├── strategy/                 # 淘汰策略
+└── event/                    # 缓存事件
 ```
 
 ## 🔧 依赖版本

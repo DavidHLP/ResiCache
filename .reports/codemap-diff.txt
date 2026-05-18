@@ -1,0 +1,66 @@
+Codemap Analysis Report
+Generated: 2026-05-18
+
+================================================================================
+OVERVIEW
+================================================================================
+Project: ResiCache
+Type: Java Library (Spring Boot Starter)
+Files scanned: 102 Java source files
+Project root: /home/davidhlp/project/ResiCache
+
+================================================================================
+FILES ADDED/MODIFIED
+================================================================================
+First codemap generation - no previous baseline for comparison.
+
+New codemaps created:
+- docs/CODEMAPS/architecture.md
+- docs/CODEMAPS/backend.md
+
+================================================================================
+ARCHITECTURE SUMMARY
+================================================================================
+The project implements a Spring Cache abstraction over Redis with protections
+against common cache failure modes:
+
+  Cache Penetration  → BloomFilterHandler + NullValueHandler
+  Cache Breakdown    → SyncLockHandler (distributed lock)
+  Cache Avalanche    → TtlHandler (TTL variation)
+  Hot Keys           → PreRefreshHandler (async refresh)
+
+Chain of Responsibility pattern used for handler execution with support for
+post-processing callbacks.
+
+================================================================================
+NEW DEPENDENCIES DETECTED
+================================================================================
+None - this is a new project creation.
+
+================================================================================
+ARCHITECTURE CHANGES
+================================================================================
+None - first scan.
+
+================================================================================
+STALENESS WARNINGS
+================================================================================
+None - codemaps just generated.
+
+================================================================================
+CODEMAP FILE DETAILS
+================================================================================
+docs/CODEMAPS/architecture.md  (~600 tokens)
+  - High-level system diagram
+  - Cache handler chain order and responsibilities
+  - Data flow description
+  - SPI providers location
+  - Configuration properties prefix
+
+docs/CODEMAPS/backend.md  (~800 tokens)
+  - All 4 annotations documented
+  - Handler interface hierarchy
+  - 6 cache handler implementations with order numbers
+  - 5 configuration classes
+  - SPI implementations (BloomFilter, Lock)
+  - Key supporting classes
