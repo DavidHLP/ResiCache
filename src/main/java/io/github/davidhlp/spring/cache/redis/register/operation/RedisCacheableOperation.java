@@ -3,16 +3,18 @@ package io.github.davidhlp.spring.cache.redis.register.operation;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.springframework.cache.interceptor.CacheOperation;
+import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.lang.NonNull;
 
+/**
+ * Redis cacheable operation that extends Spring's {@link CacheableOperation}
+ * to participate in the standard cacheable execution path while carrying
+ * ResiCache-specific metadata.
+ */
 @Getter
 @EqualsAndHashCode(callSuper = true)
-public class RedisCacheableOperation extends CacheOperation {
+public class RedisCacheableOperation extends CacheableOperation {
 
-    private final String unless;
-    private final boolean sync;
-    private final long syncTimeout;
     private final long ttl;
     private final Class<?> type;
     private final boolean cacheNullValues;
@@ -22,12 +24,10 @@ public class RedisCacheableOperation extends CacheOperation {
     private final boolean enablePreRefresh;
     private final double preRefreshThreshold;
     private final PreRefreshMode preRefreshMode;
+    private final long syncTimeout;
 
     protected RedisCacheableOperation(Builder b) {
         super(b);
-        this.unless = b.unless;
-        this.sync = b.sync;
-        this.syncTimeout = b.syncTimeout;
         this.ttl = b.ttl;
         this.type = b.type;
         this.cacheNullValues = b.cacheNullValues;
@@ -37,6 +37,7 @@ public class RedisCacheableOperation extends CacheOperation {
         this.enablePreRefresh = b.enablePreRefresh;
         this.preRefreshThreshold = b.preRefreshThreshold;
         this.preRefreshMode = b.preRefreshMode;
+        this.syncTimeout = b.syncTimeout;
     }
 
     public static Builder builder() {
@@ -44,62 +45,60 @@ public class RedisCacheableOperation extends CacheOperation {
     }
 
     @EqualsAndHashCode(callSuper = true)
-    public static class Builder extends CacheOperation.Builder {
-        private String unless;
-        private boolean sync;
-        private long syncTimeout = 10;
-        private long ttl;
-        private Class<?> type;
+    public static class Builder extends CacheableOperation.Builder {
+        private long ttl = 0;
+        private Class<?> type = Object.class;
         private boolean cacheNullValues;
         private boolean useBloomFilter;
         private boolean randomTtl;
-        private float variance;
+        private float variance = 0.2F;
         private boolean enablePreRefresh;
-        private double preRefreshThreshold;
-        private PreRefreshMode preRefreshMode;
+        private double preRefreshThreshold = 0.3;
+        private PreRefreshMode preRefreshMode = PreRefreshMode.SYNC;
+        private long syncTimeout = 10;
 
         public Builder name(String name) {
-            super.setName(name);
+            setName(name);
             return this;
         }
 
         public Builder cacheNames(String... cacheNames) {
-            super.setCacheNames(cacheNames);
+            setCacheNames(cacheNames);
             return this;
         }
 
         public Builder key(String key) {
-            super.setKey(key);
+            setKey(key);
             return this;
         }
 
         public Builder keyGenerator(String keyGenerator) {
-            super.setKeyGenerator(keyGenerator);
+            setKeyGenerator(keyGenerator);
             return this;
         }
 
         public Builder cacheManager(String cacheManager) {
-            super.setCacheManager(cacheManager);
-            return this;
-        }
-
-        public Builder condition(String condition) {
-            super.setCondition(condition);
+            setCacheManager(cacheManager);
             return this;
         }
 
         public Builder cacheResolver(String cacheResolver) {
-            super.setCacheResolver(cacheResolver);
+            setCacheResolver(cacheResolver);
+            return this;
+        }
+
+        public Builder condition(String condition) {
+            setCondition(condition);
             return this;
         }
 
         public Builder unless(String unless) {
-            this.unless = unless;
+            setUnless(unless);
             return this;
         }
 
         public Builder sync(boolean sync) {
-            this.sync = sync;
+            setSync(sync);
             return this;
         }
 

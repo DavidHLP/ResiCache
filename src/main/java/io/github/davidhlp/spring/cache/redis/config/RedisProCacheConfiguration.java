@@ -50,10 +50,15 @@ public class RedisProCacheConfiguration {
     public RedisCacheConfiguration defaultRedisCacheConfiguration(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             RedisProCacheProperties properties) {
+        SecureJackson2JsonRedisSerializer valueSerializer =
+                new SecureJackson2JsonRedisSerializer(
+                        objectMapper,
+                        properties.getSerializer().getAllowedPackagePrefixes());
+
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(properties.getDefaultTtl())
                 .serializeKeysWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair.fromSerializer(new SecureJackson2JsonRedisSerializer(objectMapper)));
+                .serializeValuesWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer));
 
         log.debug("Created default RedisCacheConfiguration with TTL: {}", properties.getDefaultTtl());
         return config;

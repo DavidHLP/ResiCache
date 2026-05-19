@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis;
 
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -15,7 +16,8 @@ public final class RedisTestContainer {
     private static final GenericContainer<?> INSTANCE = new GenericContainer<>(
             DockerImageName.parse(REDIS_IMAGE))
             .withExposedPorts(REDIS_PORT)
-            .withReuse(true);
+            .withReuse(true)
+            .waitingFor(Wait.forLogMessage(".*Ready to accept connections.*", 1));
 
     private RedisTestContainer() {}
 

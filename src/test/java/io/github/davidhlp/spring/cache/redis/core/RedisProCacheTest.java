@@ -95,16 +95,15 @@ class RedisProCacheTest {
         }
 
         @Test
-        @DisplayName("evict does not decrement size below zero")
-        void evict_withZeroSize_doesNotGoNegative() {
+        @DisplayName("evict increments evict counter")
+        void evict_incrementsCounter() {
             String key = "key1";
 
             doNothing().when(cacheWriter).remove(anyString(), any(byte[].class));
 
             cache.evict(key);
-            cache.evict(key);
 
-            assertThat(cache.getSize()).isEqualTo(0);
+            assertThat(meterRegistry.find("resicache.cache.evict.count").counter()).isNotNull();
         }
 
         @Test
@@ -127,14 +126,13 @@ class RedisProCacheTest {
     class ClearTests {
 
         @Test
-        @DisplayName("clear delegates to cache writer and resets size")
-        void clear_delegatesToWriterAndResetsSize() {
+        @DisplayName("clear delegates to cache writer")
+        void clear_delegatesToWriter() {
             doNothing().when(cacheWriter).clean(anyString(), any(byte[].class));
 
             cache.clear();
 
             verify(cacheWriter).clean(anyString(), any(byte[].class));
-            assertThat(cache.getSize()).isEqualTo(0);
         }
     }
 
@@ -183,9 +181,9 @@ class RedisProCacheTest {
         }
 
         @Test
-        @DisplayName("initial size is zero")
-        void initialSize_isZero() {
-            assertThat(cache.getSize()).isEqualTo(0);
+        @DisplayName("initial put count is zero")
+        void initialPutCount_isZero() {
+            assertThat(cache.getPutCount()).isEqualTo(0);
         }
     }
 }

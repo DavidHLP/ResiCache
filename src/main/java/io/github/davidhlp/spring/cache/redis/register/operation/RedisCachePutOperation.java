@@ -3,14 +3,18 @@ package io.github.davidhlp.spring.cache.redis.register.operation;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.springframework.cache.interceptor.CacheOperation;
+import org.springframework.cache.interceptor.CachePutOperation;
 import org.springframework.lang.NonNull;
 
+/**
+ * Redis cache put operation that extends Spring's {@link CachePutOperation}
+ * to participate in the standard cache put execution path while carrying
+ * ResiCache-specific metadata.
+ */
 @Getter
 @EqualsAndHashCode(callSuper = true)
-public class RedisCachePutOperation extends CacheOperation {
+public class RedisCachePutOperation extends CachePutOperation {
 
-    private final String unless;
     private final long ttl;
     private final Class<?> type;
     private final boolean cacheNullValues;
@@ -27,7 +31,6 @@ public class RedisCachePutOperation extends CacheOperation {
 
     protected RedisCachePutOperation(Builder b) {
         super(b);
-        this.unless = b.unless;
         this.ttl = b.ttl;
         this.type = b.type;
         this.cacheNullValues = b.cacheNullValues;
@@ -48,8 +51,7 @@ public class RedisCachePutOperation extends CacheOperation {
     }
 
     @EqualsAndHashCode(callSuper = true)
-    public static class Builder extends CacheOperation.Builder {
-        private String unless = "";
+    public static class Builder extends CachePutOperation.Builder {
         private long ttl = 60;
         private Class<?> type = Object.class;
         private boolean cacheNullValues;
@@ -57,7 +59,7 @@ public class RedisCachePutOperation extends CacheOperation {
         private long expectedInsertions = 100000;
         private double falseProbability = 0.01;
         private boolean sync;
-        private long syncTimeout = -1;
+        private long syncTimeout = 10;
         private boolean randomTtl;
         private float variance = 0.2F;
         private boolean enablePreRefresh;
@@ -65,42 +67,42 @@ public class RedisCachePutOperation extends CacheOperation {
         private PreRefreshMode preRefreshMode = PreRefreshMode.SYNC;
 
         public Builder name(String name) {
-            super.setName(name);
+            setName(name);
             return this;
         }
 
         public Builder cacheNames(String... cacheNames) {
-            super.setCacheNames(cacheNames);
+            setCacheNames(cacheNames);
             return this;
         }
 
         public Builder key(String key) {
-            super.setKey(key);
+            setKey(key);
             return this;
         }
 
         public Builder keyGenerator(String keyGenerator) {
-            super.setKeyGenerator(keyGenerator);
+            setKeyGenerator(keyGenerator);
             return this;
         }
 
         public Builder cacheManager(String cacheManager) {
-            super.setCacheManager(cacheManager);
+            setCacheManager(cacheManager);
             return this;
         }
 
         public Builder cacheResolver(String cacheResolver) {
-            super.setCacheResolver(cacheResolver);
+            setCacheResolver(cacheResolver);
             return this;
         }
 
         public Builder condition(String condition) {
-            super.setCondition(condition);
+            setCondition(condition);
             return this;
         }
 
         public Builder unless(String unless) {
-            this.unless = unless;
+            setUnless(unless);
             return this;
         }
 

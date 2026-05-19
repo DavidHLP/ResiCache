@@ -2,6 +2,8 @@ package io.github.davidhlp.spring.cache.redis.spi;
 
 import io.github.davidhlp.spring.cache.redis.core.writer.support.lock.DistributedLockManager;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RedissonClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Component;
 
 /**
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
+@ConditionalOnClass(RedissonClient.class)
 public class RedissonLockProvider {
 
     private final DistributedLockManager distributedLockManager;
