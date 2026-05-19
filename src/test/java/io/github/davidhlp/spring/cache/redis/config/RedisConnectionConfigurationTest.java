@@ -57,6 +57,9 @@ class RedisConnectionConfigurationTest {
         @Test
         @DisplayName("当 ResiCache 属性未设置时，回退到 Spring RedisProperties")
         void singleMode_fallsBackToRedisProperties() {
+            // 显式设置 ResiCache 属性为 null/0，触发回退逻辑
+            properties.getRedis().setHost(null);
+            properties.getRedis().setPort(0);
             redisProperties.setHost("spring-redis.example.com");
             redisProperties.setPort(7000);
 
