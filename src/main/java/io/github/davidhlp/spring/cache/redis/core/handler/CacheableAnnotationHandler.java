@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.cache.interceptor.SimpleKey;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Component;

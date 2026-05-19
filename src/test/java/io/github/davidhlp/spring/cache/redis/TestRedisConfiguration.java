@@ -7,27 +7,25 @@ import io.github.davidhlp.spring.cache.redis.config.SecureJackson2JsonRedisSeria
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+/**
+ * Test configuration for Redis integration tests.
+ *
+ * <p>This configuration uses Spring Boot's auto-configured RedisConnectionFactory
+ * which is populated with dynamic properties from the Testcontainers-managed
+ * Redis container via @DynamicPropertySource in AbstractRedisIntegrationTest.
+ */
 @TestConfiguration
 public class TestRedisConfiguration {
-
-    @Bean
-    @Primary
-    public RedisConnectionFactory redisConnectionFactory() {
-        LettuceConnectionFactory factory = new LettuceConnectionFactory(
-                RedisTestContainer.getHost(), RedisTestContainer.getPort());
-        factory.afterPropertiesSet();
-        return factory;
-    }
 
     @Bean
     @Primary
@@ -66,10 +64,12 @@ public class TestRedisConfiguration {
 
     @Bean
     @Primary
-    public RedissonClient redissonClient(RedisProCacheProperties properties) {
+    public RedissonClient redissonClient(
+            RedisProCacheProperties properties,
+            @Value("${spring.data.redis.host}") String host,
+            @Value("${spring.data.redis.port}") int port) {
         Config config = new Config();
-        String address = "redis://" + RedisTestContainer.getHost()
-                + ":" + RedisTestContainer.getPort();
+        String address = "redis://" + host + ":" + port;
 
         RedisProCacheProperties.RedissonProperties redissonProps = properties.getRedisson();
 
