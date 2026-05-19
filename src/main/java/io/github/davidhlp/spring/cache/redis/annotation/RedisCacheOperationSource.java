@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheEvictOperation;
+import io.github.davidhlp.spring.cache.redis.register.operation.RedisCachePutOperation;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 
 import lombok.extern.slf4j.Slf4j;
@@ -173,7 +174,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
 
         final RedisCacheableOperation.Builder builder =
                 RedisCacheableOperation.builder();
-        builder.setName(name);
+        builder.name(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
@@ -186,10 +187,11 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         if (StringUtils.hasText(ann.unless())) {
-            builder.unless(ann.unless());
+            builder.setUnless(ann.unless());
         }
 
-        builder.sync(ann.sync());
+        builder.setSync(ann.sync());
+        builder.syncTimeout(ann.syncTimeout());
 
         if (StringUtils.hasText(ann.keyGenerator())) {
             builder.setKeyGenerator(ann.keyGenerator());
@@ -198,6 +200,20 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         if (StringUtils.hasText(ann.cacheManager())) {
             builder.setCacheManager(ann.cacheManager());
         }
+
+        if (StringUtils.hasText(ann.cacheResolver())) {
+            builder.setCacheResolver(ann.cacheResolver());
+        }
+
+        builder.ttl(ann.ttl());
+        builder.type(ann.type());
+        builder.cacheNullValues(ann.cacheNullValues());
+        builder.useBloomFilter(ann.useBloomFilter());
+        builder.randomTtl(ann.randomTtl());
+        builder.variance(ann.variance());
+        builder.enablePreRefresh(ann.enablePreRefresh());
+        builder.preRefreshThreshold(ann.preRefreshThreshold());
+        builder.preRefreshMode(ann.preRefreshMode());
 
         final RedisCacheableOperation operation = builder.build();
         log.debug("Built CacheableOperation: {}", operation);
@@ -218,34 +234,43 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         log.trace("Parsing @RedisCacheEvict annotation for target: {}", target);
 
         final RedisCacheEvictOperation.Builder builder =
-                new RedisCacheEvictOperation.Builder()
-                        .name(name)
-                        .cacheNames(ann.value().length > 0
-                                ? ann.value() : ann.cacheNames());
+                RedisCacheEvictOperation.builder();
+        builder.name(name);
+        builder.setCacheNames(
+                ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
         if (StringUtils.hasText(ann.key())) {
-            builder.key(ann.key());
+            builder.setKey(ann.key());
         }
 
         if (StringUtils.hasText(ann.cacheResolver())) {
-            builder.cacheResolver(ann.cacheResolver());
+            builder.setCacheResolver(ann.cacheResolver());
         }
 
         if (StringUtils.hasText(ann.condition())) {
-            builder.condition(ann.condition());
+            builder.setCondition(ann.condition());
         }
 
-        builder.sync(ann.sync())
-                .allEntries(ann.allEntries())
-                .beforeInvocation(ann.beforeInvocation());
+        builder.setCacheWide(ann.allEntries());
+        builder.setBeforeInvocation(ann.beforeInvocation());
+        builder.sync(ann.sync());
+        builder.syncTimeout(ann.syncTimeout());
 
         if (StringUtils.hasText(ann.keyGenerator())) {
-            builder.keyGenerator(ann.keyGenerator());
+            builder.setKeyGenerator(ann.keyGenerator());
         }
 
         if (StringUtils.hasText(ann.cacheManager())) {
-            builder.cacheManager(ann.cacheManager());
+            builder.setCacheManager(ann.cacheManager());
         }
+
+        builder.ttl(ann.ttl());
+        builder.useBloomFilter(ann.useBloomFilter());
+        builder.expectedInsertions(ann.expectedInsertions());
+        builder.falseProbability(ann.falseProbability());
+        builder.enablePreRefresh(ann.enablePreRefresh());
+        builder.preRefreshThreshold(ann.preRefreshThreshold());
+        builder.preRefreshMode(ann.preRefreshMode());
 
         final RedisCacheEvictOperation operation = builder.build();
         log.debug("Built RedisCacheEvictOperation: {}", operation);
@@ -304,9 +329,9 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
                 ? ((Method) target).getName() : target.toString();
         log.trace("Parsing @RedisCachePut annotation for target: {}", target);
 
-        final RedisCacheableOperation.Builder builder =
-                RedisCacheableOperation.builder();
-        builder.setName(name);
+        final RedisCachePutOperation.Builder builder =
+                RedisCachePutOperation.builder();
+        builder.name(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
@@ -319,7 +344,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         if (StringUtils.hasText(ann.unless())) {
-            builder.unless(ann.unless());
+            builder.setUnless(ann.unless());
         }
 
         if (StringUtils.hasText(ann.keyGenerator())) {
@@ -330,8 +355,26 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
             builder.setCacheManager(ann.cacheManager());
         }
 
-        final RedisCacheableOperation operation = builder.build();
-        log.debug("Built RedisCachePut operation: {}", operation);
+        if (StringUtils.hasText(ann.cacheResolver())) {
+            builder.setCacheResolver(ann.cacheResolver());
+        }
+
+        builder.ttl(ann.ttl());
+        builder.type(ann.type());
+        builder.cacheNullValues(ann.cacheNullValues());
+        builder.useBloomFilter(ann.useBloomFilter());
+        builder.expectedInsertions(ann.expectedInsertions());
+        builder.falseProbability(ann.falseProbability());
+        builder.sync(ann.sync());
+        builder.syncTimeout(ann.syncTimeout());
+        builder.randomTtl(ann.randomTtl());
+        builder.variance(ann.variance());
+        builder.enablePreRefresh(ann.enablePreRefresh());
+        builder.preRefreshThreshold(ann.preRefreshThreshold());
+        builder.preRefreshMode(ann.preRefreshMode());
+
+        final RedisCachePutOperation operation = builder.build();
+        log.debug("Built RedisCachePutOperation: {}", operation);
         return operation;
     }
 }

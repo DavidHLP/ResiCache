@@ -60,14 +60,17 @@ public class RedisProxyCachingConfiguration {
             CachePutAnnotationHandler cachePutAnnotationHandler,
             RedisProCacheProperties redisProCacheProperties) {
 
+        // 配置 Handler 的 SpEL 错误行为
+        cacheableAnnotationHandler.setFailOnSpelError(
+                redisProCacheProperties.isFailOnSpelError());
+
         // 创建带调试信息的 CacheInterceptor
         RedisCacheInterceptor interceptor =
                 new RedisCacheInterceptor(
                         cacheableAnnotationHandler,
                         evictAnnotationHandler,
                         cachingAnnotationHandler,
-                        cachePutAnnotationHandler,
-                        redisProCacheProperties.isFailOnSpelError());
+                        cachePutAnnotationHandler);
 
         interceptor.setCacheOperationSource(redisCacheOperationSource);
         interceptor.setCacheManager(cacheManager);

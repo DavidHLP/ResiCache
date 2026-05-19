@@ -7,6 +7,10 @@ import org.springframework.stereotype.Component;
 import jakarta.validation.constraints.Min;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -39,6 +43,12 @@ public class RedisProCacheProperties {
     /** SpEL 求值失败时是否抛出异常（默认 true）。配置错误（语法错误）始终抛出。 */
     private boolean failOnSpelError = true;
 
+    /** 是否启用事务感知缓存 */
+    private boolean transactionAware = false;
+
+    /** 全局缓存键前缀 */
+    private String keyPrefix = "";
+
     /** 布隆过滤器配置 */
     private BloomFilterProperties bloomFilter = new BloomFilterProperties();
 
@@ -51,11 +61,83 @@ public class RedisProCacheProperties {
     /** Redisson 连接池配置 */
     private RedissonProperties redisson = new RedissonProperties();
 
+    /** Redis 部署配置 */
+    private RedisDeploymentProperties redis = new RedisDeploymentProperties();
+
+    /** 序列化器配置 */
+    private SerializerProperties serializer = new SerializerProperties();
+
+    /** 按缓存名称细粒度配置 */
+    private Map<String, CacheConfig> caches = new HashMap<>();
+
     /** 禁用的 Handler 列表（如 bloom-filter、pre-refresh、sync-lock） */
-    private java.util.List<String> disabledHandlers = new java.util.ArrayList<>();
+    private List<String> disabledHandlers = new ArrayList<>();
 
     /** Handler 配置（支持按 cacheName 细粒度禁用） */
-    private java.util.Map<String, HandlerConfig> handlerSettings = new java.util.HashMap<>();
+    private Map<String, HandlerConfig> handlerSettings = new HashMap<>();
+
+    /**
+     * Per-cache configuration.
+     */
+    @Getter
+    @Setter
+    public static class CacheConfig {
+        /** 缓存过期时间 */
+        private Duration ttl;
+        /** 是否缓存空值 */
+        private Boolean cacheNullValues;
+        /** 缓存键前缀 */
+        private String keyPrefix;
+        /** 是否启用布隆过滤器 */
+        private Boolean enableBloomFilter;
+        /** 是否启用预刷新 */
+        private Boolean enablePreRefresh;
+    }
+
+    /**
+     * Serializer configuration.
+     */
+    @Getter
+    @Setter
+    public static class SerializerProperties {
+        /** 允许的反序列化包前缀列表 */
+        private List<String> allowedPackagePrefixes = new ArrayList<>(
+                List.of("io.github.davidhlp"));
+        /** 遇到未知类型时是否失败 */
+        private boolean failOnUnknownType = true;
+        /** Jackson 类型属性名 */
+        private String typeProperty = "@class";
+    }
+
+    /**
+     * Redis deployment configuration.
+     */
+    @Getter
+    @Setter
+    public static class RedisDeploymentProperties {
+        /** 部署模式: single, cluster, sentinel */
+        private String mode = "single";
+        /** 主机地址（单节点模式） */
+        private String host = "localhost";
+        /** 端口（单节点模式） */
+        private int port = 6379;
+        /** 用户名（ACL） */
+        private String username;
+        /** 密码 */
+        private String password;
+        /** 数据库索引 */
+        private int database = 0;
+        /** 是否启用 TLS */
+        private boolean tlsEnabled = false;
+        /** 集群节点地址列表 */
+        private List<String> clusterNodes = new ArrayList<>();
+        /** Sentinel 主节点名称 */
+        private String sentinelMaster;
+        /** Sentinel 节点地址列表 */
+        private List<String> sentinelNodes = new ArrayList<>();
+        /** Redisson YAML 配置文件路径（高级配置） */
+        private String redissonConfigPath;
+    }
 
     /**
      * Handler 配置类
@@ -65,7 +147,7 @@ public class RedisProCacheProperties {
     @Setter
     public static class HandlerConfig {
         /** 禁用的 Handler 列表 */
-        private java.util.List<String> disabledHandlers = new java.util.ArrayList<>();
+        private List<String> disabledHandlers = new ArrayList<>();
     }
 
     @Getter

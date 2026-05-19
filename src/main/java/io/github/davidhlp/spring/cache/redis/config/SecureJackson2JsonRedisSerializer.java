@@ -128,15 +128,19 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
                             return false;
                         }
                         String className = rawSubType.getName();
+                        // Allow configured domain packages
                         for (String prefix : prefixes) {
                             if (className.startsWith(prefix)) {
                                 return true;
                             }
                         }
-                        return false;
+                        // Allow safe JDK value types
+                        return className.startsWith("java.lang.")
+                                || className.startsWith("java.util.")
+                                || className.startsWith("java.time.")
+                                || className.startsWith("java.math.");
                     }
                 })
-                .allowIfSubType(Object.class)
                 .build();
 
         // Clone the object mapper to avoid modifying the original

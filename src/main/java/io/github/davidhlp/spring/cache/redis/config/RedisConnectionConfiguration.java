@@ -6,7 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import org.redisson.config.BaseMasterSlaveServersConfig;
+import org.redisson.config.ClusterServersConfig;
 import org.redisson.config.Config;
+import org.redisson.config.SentinelServersConfig;
+import org.redisson.config.SingleServerConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
@@ -17,6 +21,9 @@ import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+import java.io.File;
+import java.io.IOException;
 
 /** Redis连接和模板配置 负责： 1. RedisTemplate配置和序列化策略 2. RedissonClient连接配置 3. 连接池参数优化 */
 @Slf4j
@@ -66,29 +73,140 @@ public class RedisConnectionConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnClass(RedissonClient.class)
-    public RedissonClient redissonClient(RedisProperties redisProperties, RedisProCacheProperties properties) {
-        Config config = new Config();
-        String address = "redis://" + redisProperties.getHost() + ":" + redisProperties.getPort();
+    public RedissonClient redissonClient(RedisProperties redisProperties, RedisProCacheProperties properties)
+            throws IOException {
 
-        RedisProCacheProperties.RedissonProperties redissonProps = properties.getRedisson();
+        RedisProCacheProperties.RedisDeploymentProperties redis = properties.getRedis();
 
-        config.useSingleServer()
-                .setAddress(address)
-                .setDatabase(redisProperties.getDatabase())
-                .setConnectionPoolSize(redissonProps.getConnectionPoolSize())
-                .setConnectionMinimumIdleSize(redissonProps.getConnectionMinimumIdleSize())
-                .setIdleConnectionTimeout(redissonProps.getIdleConnectionTimeout())
-                .setConnectTimeout(redissonProps.getConnectTimeout())
-                .setTimeout(redissonProps.getTimeout())
-                .setRetryAttempts(redissonProps.getRetryAttempts())
-                .setRetryInterval(redissonProps.getRetryInterval());
-
-        String password = redisProperties.getPassword();
-        if (password != null && !password.isEmpty()) {
-            config.useSingleServer().setPassword(password);
+        // Advanced override: user-provided Redisson YAML config
+        if (redis.getRedissonConfigPath() != null && !redis.getRedissonConfigPath().isBlank()) {
+            log.info("Loading Redisson configuration from: {}", redis.getRedissonConfigPath());
+            return Redisson.create(Config.fromYAML(new File(redis.getRedissonConfigPath())));
         }
 
-        log.debug("Created RedissonClient with single server configuration: {}", address);
+        Config config = new Config();
+        String scheme = redis.isTlsEnabled() ? "rediss://" : "redis://";
+
+        switch (redis.getMode()) {
+            case "cluster" -> configureCluster(config, redis, properties, scheme);
+            case "sentinel" -> configureSentinel(config, redis, properties, scheme);
+            default -> configureSingle(config, redis, redisProperties, properties, scheme);
+        }
+
+        log.debug("Created RedissonClient with mode: {}", redis.getMode());
         return Redisson.create(config);
+    }
+
+    private void configureCluster(
+            Config config,
+            RedisProCacheProperties.RedisDeploymentProperties redis,
+            RedisProCacheProperties properties,
+            String scheme) {
+
+        if (redis.getClusterNodes().isEmpty()) {
+            throw new IllegalStateException("cluster-nodes must not be empty when mode=cluster");
+        }
+
+        String[] nodes = redis.getClusterNodes().stream()
+                .map(n -> scheme + n)
+                .toArray(String[]::new);
+
+        ClusterServersConfig clusterConfig = config.useClusterServers().addNodeAddress(nodes);
+        applyCommonSettings(clusterConfig, redis, properties);
+        log.debug("Configured Redisson for cluster mode with {} nodes", nodes.length);
+    }
+
+    private void configureSentinel(
+            Config config,
+            RedisProCacheProperties.RedisDeploymentProperties redis,
+            RedisProCacheProperties properties,
+            String scheme) {
+
+        if (redis.getSentinelMaster() == null || redis.getSentinelMaster().isBlank()) {
+            throw new IllegalStateException("sentinel-master must not be empty when mode=sentinel");
+        }
+        if (redis.getSentinelNodes().isEmpty()) {
+            throw new IllegalStateException("sentinel-nodes must not be empty when mode=sentinel");
+        }
+
+        String[] sentinels = redis.getSentinelNodes().stream()
+                .map(n -> scheme + n)
+                .toArray(String[]::new);
+
+        SentinelServersConfig sentinelConfig = config.useSentinelServers()
+                .setMasterName(redis.getSentinelMaster())
+                .addSentinelAddress(sentinels);
+
+        applyCommonSettings(sentinelConfig, redis, properties);
+        log.debug("Configured Redisson for sentinel mode with master: {}", redis.getSentinelMaster());
+    }
+
+    private void configureSingle(
+            Config config,
+            RedisProCacheProperties.RedisDeploymentProperties redis,
+            RedisProperties redisProperties,
+            RedisProCacheProperties properties,
+            String scheme) {
+
+        // Fallback to Spring's RedisProperties if not set in ResiCache properties
+        String host = redis.getHost() != null && !redis.getHost().isBlank()
+                ? redis.getHost()
+                : redisProperties.getHost();
+        int port = redis.getPort() != 0 ? redis.getPort() : redisProperties.getPort();
+        int database = redis.getDatabase() != 0 ? redis.getDatabase() : redisProperties.getDatabase();
+
+        String address = scheme + host + ":" + port;
+
+        RedisProCacheProperties.RedissonProperties pool = properties.getRedisson();
+        SingleServerConfig singleConfig = config.useSingleServer()
+                .setAddress(address)
+                .setDatabase(database)
+                .setConnectionPoolSize(pool.getConnectionPoolSize())
+                .setConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize())
+                .setIdleConnectionTimeout(pool.getIdleConnectionTimeout())
+                .setConnectTimeout(pool.getConnectTimeout())
+                .setTimeout(pool.getTimeout())
+                .setRetryAttempts(pool.getRetryAttempts())
+                .setRetryInterval(pool.getRetryInterval());
+
+        // Apply password from ResiCache properties, fallback to Spring's RedisProperties
+        String password = redis.getPassword() != null && !redis.getPassword().isEmpty()
+                ? redis.getPassword()
+                : redisProperties.getPassword();
+        if (password != null && !password.isEmpty()) {
+            singleConfig.setPassword(password);
+        }
+        if (redis.getUsername() != null && !redis.getUsername().isEmpty()) {
+            singleConfig.setUsername(redis.getUsername());
+        }
+
+        log.debug("Configured Redisson for single server mode: {}", address);
+    }
+
+    private void applyCommonSettings(
+            BaseMasterSlaveServersConfig<?> serverConfig,
+            RedisProCacheProperties.RedisDeploymentProperties redis,
+            RedisProCacheProperties properties) {
+
+        RedisProCacheProperties.RedissonProperties pool = properties.getRedisson();
+        // For cluster/sentinel, use master/slave connection pool settings
+        serverConfig
+                .setMasterConnectionPoolSize(pool.getConnectionPoolSize())
+                .setSlaveConnectionPoolSize(pool.getConnectionPoolSize())
+                .setMasterConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize())
+                .setSlaveConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize())
+                .setIdleConnectionTimeout(pool.getIdleConnectionTimeout())
+                .setConnectTimeout(pool.getConnectTimeout())
+                .setTimeout(pool.getTimeout())
+                .setRetryAttempts(pool.getRetryAttempts())
+                .setRetryInterval(pool.getRetryInterval());
+
+        // Username/password for ACL (Redis 6+)
+        if (redis.getPassword() != null && !redis.getPassword().isEmpty()) {
+            serverConfig.setPassword(redis.getPassword());
+        }
+        if (redis.getUsername() != null && !redis.getUsername().isEmpty()) {
+            serverConfig.setUsername(redis.getUsername());
+        }
     }
 }

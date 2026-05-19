@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
@@ -8,18 +9,19 @@ import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 public class RedisProCache extends RedisCache {
 
-    private final AtomicLong hitCount = new AtomicLong();
-    private final AtomicLong missCount = new AtomicLong();
-    private final AtomicLong size = new AtomicLong();
     private final Timer getTimer;
     private final Timer putTimer;
     private final Timer evictTimer;
+    private final Counter hitCounter;
+    private final Counter missCounter;
+    private final Counter putCounter;
+    private final Counter evictCounter;
 
     public RedisProCache(
             String name,
@@ -39,21 +41,69 @@ public class RedisProCache extends RedisCache {
                 .tag("cache", name)
                 .description("Time spent evicting cache entries")
                 .register(meterRegistry);
+        this.hitCounter = Counter.builder("resicache.cache.hit")
+                .tag("cache", name)
+                .description("Cache hit count")
+                .register(meterRegistry);
+        this.missCounter = Counter.builder("resicache.cache.miss")
+                .tag("cache", name)
+                .description("Cache miss count")
+                .register(meterRegistry);
+        this.putCounter = Counter.builder("resicache.cache.put.count")
+                .tag("cache", name)
+                .description("Cache put count")
+                .register(meterRegistry);
+        this.evictCounter = Counter.builder("resicache.cache.evict.count")
+                .tag("cache", name)
+                .description("Cache evict count")
+                .register(meterRegistry);
     }
 
     @Override
-    public <T> T get(Object key, java.util.concurrent.Callable<T> loader) {
+    public ValueWrapper get(Object key) {
+        long start = System.nanoTime();
+        try {
+            ValueWrapper result = super.get(key);
+            if (result != null) {
+                hitCounter.increment();
+            } else {
+                missCounter.increment();
+            }
+            return result;
+        } finally {
+            getTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+        }
+    }
+
+    @Override
+    public <T> T get(Object key, Class<T> type) {
+        long start = System.nanoTime();
+        try {
+            T result = super.get(key, type);
+            if (result != null) {
+                hitCounter.increment();
+            } else {
+                missCounter.increment();
+            }
+            return result;
+        } finally {
+            getTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+        }
+    }
+
+    @Override
+    public <T> T get(Object key, Callable<T> loader) {
         long start = System.nanoTime();
         try {
             T result = super.get(key, loader);
             if (result != null) {
-                hitCount.incrementAndGet();
+                hitCounter.increment();
             } else {
-                missCount.incrementAndGet();
+                missCounter.increment();
             }
             return result;
         } catch (Exception e) {
-            missCount.incrementAndGet();
+            missCounter.increment();
             throw new RuntimeException("Failed to load cache value for key: " + key, e);
         } finally {
             getTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
@@ -65,9 +115,7 @@ public class RedisProCache extends RedisCache {
         long start = System.nanoTime();
         try {
             super.put(key, value);
-            // 注意：这里不维护 size 计数器，因为 put 可能更新已存在的 key，
-            // 而我们无法在不加锁的情况下准确判断 key 是否已存在。
-            // size 只在 evict 时递减，在 clear 时重置，能够反映缓存变化的趋势但不会精确。
+            putCounter.increment();
         } finally {
             putTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
@@ -78,10 +126,7 @@ public class RedisProCache extends RedisCache {
         long start = System.nanoTime();
         try {
             super.evict(key);
-            // size 不会变成负数（evict 已存在的 key 时才会递减）
-            if (size.get() > 0) {
-                size.decrementAndGet();
-            }
+            evictCounter.increment();
         } finally {
             evictTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
@@ -89,28 +134,33 @@ public class RedisProCache extends RedisCache {
 
     @Override
     public void clear() {
+        long start = System.nanoTime();
         try {
             super.clear();
         } finally {
-            size.set(0);
+            evictTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
     }
 
     public long getHitCount() {
-        return hitCount.get();
+        return (long) hitCounter.count();
     }
 
     public long getMissCount() {
-        return missCount.get();
+        return (long) missCounter.count();
     }
 
-    public long getSize() {
-        return size.get();
+    public long getPutCount() {
+        return (long) putCounter.count();
+    }
+
+    public long getEvictCount() {
+        return (long) evictCounter.count();
     }
 
     public double getHitRate() {
-        long hits = hitCount.get();
-        long total = hits + missCount.get();
+        long hits = getHitCount();
+        long total = hits + getMissCount();
         return total > 0 ? (double) hits / total : 0.0;
     }
 }
