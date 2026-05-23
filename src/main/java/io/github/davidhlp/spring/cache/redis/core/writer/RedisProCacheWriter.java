@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core.writer;
 
+import io.github.davidhlp.spring.cache.redis.core.holder.CacheOperationMetadataHolder;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
@@ -8,6 +9,7 @@ import io.github.davidhlp.spring.cache.redis.core.writer.chain.handler.CacheCont
 import io.github.davidhlp.spring.cache.redis.core.writer.support.type.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
+import org.springframework.context.expression.AnnotatedElementKey;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,7 +27,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Redis 增强缓存写入器（基于责任链模式重构）
  *
- * <p>核心功能： - 使用责任链模式处理缓存操作 - 支持布隆过滤器（防止缓存穿透） - 支持同步锁（防止缓存击穿） - 支持 TTL 随机化（防止缓存雪崩） - 支持缓存预刷新 -
+ * <p>核心功能： - 使用责任链模式处理缓存操作 - 支持布隆过滤器（防止缓存穿透） - 支持同步锁（防止缓存击穿） - 支持 TTL 随机化（防止缓存雪崩） - 支持缓存提前过期 -
  * 支持空值缓存
  *
  * <p>责任链顺序： BloomFilterHandler → SyncLockHandler → TtlHandler → NullValueHandler →
@@ -268,9 +270,15 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable Object deserializedValue,
             @Nullable Duration ttl) {
 
-        // 获取缓存操作配置
-        RedisCacheableOperation cacheOperation =
-                redisCacheRegister.getCacheableOperation(cacheName, actualKey);
+        // 获取缓存操作配置（优先通过 AnnotatedElementKey 查找，匹配 Spring 的方法级元数据语义）
+        AnnotatedElementKey elementKey = CacheOperationMetadataHolder.getCurrentKey();
+        RedisCacheableOperation cacheOperation = null;
+        if (elementKey != null) {
+            cacheOperation = redisCacheRegister.getCacheableOperation(cacheName, elementKey);
+        }
+        if (cacheOperation == null) {
+            log.debug("No metadata found via AnnotatedElementKey for cacheName={}, falling back to actualKey", cacheName);
+        }
 
         return CacheContext.builder()
                 .operation(operation)

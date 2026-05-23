@@ -63,7 +63,16 @@ abstract class AbstractCacheHandler implements CacheHandler {
 
         // 判断是否需要处理
         if (shouldHandle(context)) {
-            return doHandle(context);
+            HandlerResult result = doHandle(context);
+            // 如果 doHandle 要求继续链，则继续执行下一个 Handler
+            if (result.decision() == ChainDecision.CONTINUE && getNext() != null) {
+                return getNext().handle(context);
+            }
+            // SKIP_ALL 需要标记上下文，确保后置处理和上游逻辑一致
+            if (result.decision() == ChainDecision.SKIP_ALL) {
+                context.markSkipRemaining();
+            }
+            return result;
         }
 
         // 当前 Handler 不处理，继续下一个

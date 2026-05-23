@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>读取操作参数：context.getOperation(), context.getCacheName() 等</li>
  *   <li>设置处理结果：context.output().setFinalTtl(...), context.output().setStoreValue(...)</li>
- *   <li>检查状态：context.isSkipRemaining(), context.output().isPreRefreshCheckEnabled()</li>
+ *   <li>检查状态：context.isSkipRemaining(), context.output().isEarlyExpirationCheckEnabled()</li>
  *   <li>属性传递：context.setAttribute(key, value), context.getAttribute(key)</li>
  * </ul>
  */
@@ -35,14 +35,17 @@ public class CacheContext {
     public static final class AttributeKey {
         private AttributeKey() {}
 
-        /** 预刷新跳过标记 */
-        public static final String PRE_REFRESH_SKIPPED = "preRefresh.skipped";
+        /** 提前过期跳过标记 */
+        public static final String EARLY_EXPIRATION_SKIPPED = "earlyExpiration.skipped";
 
         /** 缓存命中标记 */
         public static final String CACHE_HIT = "cache.hit";
 
         /** 异步刷新任务ID */
         public static final String ASYNC_REFRESH_TASK_ID = "async.refresh.taskId";
+
+        /** EarlyExpirationHandler 获取的缓存值（供 ActualCacheHandler 复用，避免双重 Redis GET） */
+        public static final String PREFETCHED_CACHED_VALUE = "cache.prefetchedValue";
     }
 
     /** 输入参数（不可变） */
@@ -127,7 +130,11 @@ public class CacheContext {
      * @param <T> 值类型
      */
     public <T> void setAttribute(String key, T value) {
-        attributes.put(key, value);
+        if (value != null) {
+            attributes.put(key, value);
+        } else {
+            attributes.remove(key);
+        }
     }
 
     /**

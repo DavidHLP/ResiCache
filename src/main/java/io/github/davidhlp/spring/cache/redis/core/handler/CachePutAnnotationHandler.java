@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -55,11 +56,12 @@ public class CachePutAnnotationHandler extends AnnotationHandler {
     private RedisCachePutOperation registerCachePutOperation(
             Method method, Object target, Object[] args, RedisCachePut redisCachePut) {
         try {
-            String key = generateKey(target, method, args);
+            String key = generateKey(target, method, args, redisCachePut);
             RedisCachePutOperation operation =
                     cachePutOperationFactory.create(method, redisCachePut, target, args, key);
 
-            redisCacheRegister.registerCachePutOperation(operation);
+            Class<?> targetClass = target != null ? target.getClass() : null;
+            redisCacheRegister.registerCachePutOperation(method, targetClass, operation);
             log.debug(
                     "Registered cache put operation: {} with key: {} for caches: {}",
                     method.getName(),
@@ -72,7 +74,10 @@ public class CachePutAnnotationHandler extends AnnotationHandler {
         }
     }
 
-    private String generateKey(Object target, Method method, Object[] args) {
+    private String generateKey(Object target, Method method, Object[] args, RedisCachePut redisCachePut) {
+        if (StringUtils.hasText(redisCachePut.key())) {
+            return redisCachePut.key();
+        }
         Object key = keyGenerator.generate(target, method, args);
         return String.valueOf(key);
     }

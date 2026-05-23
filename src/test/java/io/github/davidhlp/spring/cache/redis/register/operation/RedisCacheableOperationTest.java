@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.register.operation;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -44,7 +44,7 @@ class RedisCacheableOperationTest {
             assertThat(operation.isCacheNullValues()).isFalse();
             assertThat(operation.isUseBloomFilter()).isFalse();
             assertThat(operation.isRandomTtl()).isFalse();
-            assertThat(operation.isEnablePreRefresh()).isFalse();
+            assertThat(operation.isEnableEarlyExpiration()).isFalse();
         }
 
         @Test
@@ -63,9 +63,9 @@ class RedisCacheableOperationTest {
                     .useBloomFilter(true)
                     .randomTtl(true)
                     .variance(0.2f)
-                    .enablePreRefresh(true)
-                    .preRefreshThreshold(0.8)
-                    .preRefreshMode(PreRefreshMode.ASYNC)
+                    .enableEarlyExpiration(true)
+                    .earlyExpirationThreshold(0.8)
+                    .earlyExpirationMode(EarlyExpirationMode.ASYNC)
                     .build();
 
             assertThat(operation.getName()).isEqualTo("fullOperation");
@@ -80,9 +80,9 @@ class RedisCacheableOperationTest {
             assertThat(operation.isUseBloomFilter()).isTrue();
             assertThat(operation.isRandomTtl()).isTrue();
             assertThat(operation.getVariance()).isEqualTo(0.2f);
-            assertThat(operation.isEnablePreRefresh()).isTrue();
-            assertThat(operation.getPreRefreshThreshold()).isEqualTo(0.8);
-            assertThat(operation.getPreRefreshMode()).isEqualTo(PreRefreshMode.ASYNC);
+            assertThat(operation.isEnableEarlyExpiration()).isTrue();
+            assertThat(operation.getEarlyExpirationThreshold()).isEqualTo(0.8);
+            assertThat(operation.getEarlyExpirationMode()).isEqualTo(EarlyExpirationMode.ASYNC);
         }
 
         @Test
@@ -205,36 +205,36 @@ class RedisCacheableOperationTest {
         }
 
         @Test
-        @DisplayName("isEnablePreRefresh")
-        void isEnablePreRefresh() {
+        @DisplayName("isEnableEarlyExpiration")
+        void isEnableEarlyExpiration() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("test")
-                    .enablePreRefresh(true)
+                    .enableEarlyExpiration(true)
                     .build();
 
-            assertThat(operation.isEnablePreRefresh()).isTrue();
+            assertThat(operation.isEnableEarlyExpiration()).isTrue();
         }
 
         @Test
-        @DisplayName("getPreRefreshThreshold")
-        void getPreRefreshThreshold() {
+        @DisplayName("getEarlyExpirationThreshold")
+        void getEarlyExpirationThreshold() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("test")
-                    .preRefreshThreshold(0.9)
+                    .earlyExpirationThreshold(0.9)
                     .build();
 
-            assertThat(operation.getPreRefreshThreshold()).isEqualTo(0.9);
+            assertThat(operation.getEarlyExpirationThreshold()).isEqualTo(0.9);
         }
 
         @Test
-        @DisplayName("getPreRefreshMode")
-        void getPreRefreshMode() {
+        @DisplayName("getEarlyExpirationMode")
+        void getEarlyExpirationMode() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("test")
-                    .preRefreshMode(PreRefreshMode.SYNC)
+                    .earlyExpirationMode(EarlyExpirationMode.SYNC)
                     .build();
 
-            assertThat(operation.getPreRefreshMode()).isEqualTo(PreRefreshMode.SYNC);
+            assertThat(operation.getEarlyExpirationMode()).isEqualTo(EarlyExpirationMode.SYNC);
         }
     }
 }

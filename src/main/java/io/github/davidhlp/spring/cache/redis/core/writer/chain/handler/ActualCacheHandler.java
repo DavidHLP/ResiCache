@@ -3,12 +3,11 @@ package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 import io.github.davidhlp.spring.cache.redis.core.writer.CachedValue;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.nullvalue.NullValuePolicy;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationSupport;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.*;
 import org.springframework.stereotype.Component;
@@ -26,12 +25,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * <ul>
  *   <li>执行实际的 Redis 缓存操作（GET/PUT/PUT_IF_ABSENT/REMOVE/CLEAN）</li>
  *   <li>不包含锁逻辑（已移至 SyncLockHandler）</li>
- *   <li>预刷新逻辑由 PreRefreshHandler 处理</li>
+ *   <li>提前过期逻辑由 EarlyExpirationHandler 处理</li>
  * </ul>
  *
  * <p>设计改进：
  * <ul>
- *   <li>原设计：锁逻辑、预刷新逻辑、实际操作混在一起，职责过重</li>
+ *   <li>原设计：锁逻辑、提前过期逻辑、实际操作混在一起，职责过重</li>
  *   <li>新设计：仅负责 Redis 操作，其他逻辑由专门的 Handler 处理</li>
  * </ul>
  */
@@ -46,9 +45,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
-    private final CacheStatisticsCollector statistics;
     private final NullValuePolicy nullValuePolicy;
-    private final PreRefreshSupport preRefreshSupport;
+    private final EarlyExpirationSupport earlyExpirationSupport;
     private final CacheErrorHandler errorHandler;
 
     @Override
@@ -61,8 +59,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(context.getOperation(), "Cache operation must not be null");
 
-        // 检查是否已被预刷新处理跳过
-        if (context.getAttribute(CacheContext.AttributeKey.PRE_REFRESH_SKIPPED, false)) {
+        // 检查是否已被提前过期处理跳过
+        if (context.getAttribute(CacheContext.AttributeKey.EARLY_EXPIRATION_SKIPPED, false)) {
             return HandlerResult.terminate(CacheResult.miss());
         }
 
@@ -101,17 +99,19 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         log.debug("Cache GET: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
-        statistics.incGets(context.getCacheName());
-
         try {
-            CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
+            // 优先复用 EarlyExpirationHandler 预取的缓存值，避免双重 Redis GET
+            CachedValue cachedValue = context.getAttribute(CacheContext.AttributeKey.PREFETCHED_CACHED_VALUE);
+            if (cachedValue == null) {
+                Object rawValue = valueOperations.get(context.getRedisKey());
+                cachedValue = (rawValue instanceof CachedValue cv) ? cv : null;
+            }
 
             if (isCacheHit(cachedValue)) {
                 return processCacheHit(context, cachedValue);
             }
 
             log.debug("Cache miss: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
-            statistics.incMisses(context.getCacheName());
             return CacheResult.miss();
 
         } catch (Exception e) {
@@ -122,40 +122,19 @@ public class ActualCacheHandler extends AbstractCacheHandler {
     /**
      * 处理缓存命中
      *
-     * <p>预刷新检查由 PreRefreshHandler 完成，这里只处理正常的缓存命中。
+     * <p>提前过期检查由 EarlyExpirationHandler 完成，这里只处理正常的缓存命中。
      */
     private CacheResult processCacheHit(CacheContext context, CachedValue cachedValue) {
         log.debug("Cache hit: cacheName={}, key={}, remainingTtl={}s",
                   context.getCacheName(), context.getRedisKey(), cachedValue.getRemainingTtl());
 
-        statistics.incHits(context.getCacheName());
-
-        // 更新访问时间和访问次数
-        CachedValue updatedValue = cachedValue.withAccessUpdate();
-        updateTtlIfExists(context, updatedValue);
-
-        // 转换返回值
+        // 读路径默认不触发写操作，避免写放大。
+        // 如需 TTI（读取刷新 TTL），应使用 Spring Data Redis 的 RedisCacheConfiguration.enableTimeToIdle()，
+        // 由 Redis 6.2+ 的 GETEX 命令实现，无需重写 value。
         byte[] result = nullValuePolicy.toReturnValue(
-            updatedValue.getValue(), context.getCacheName(), context.getRedisKey());
+            cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
 
         return CacheResult.success(result);
-    }
-
-    /**
-     * 更新 TTL（如果 key 仍存在）
-     */
-    private void updateTtlIfExists(CacheContext context, CachedValue cachedValue) {
-        try {
-            long remainingTtl = cachedValue.getRemainingTtl();
-            if (remainingTtl >= 0) {
-                valueOperations.setIfPresent(
-                    context.getRedisKey(), cachedValue, Duration.ofSeconds(remainingTtl));
-            } else {
-                valueOperations.setIfPresent(context.getRedisKey(), cachedValue);
-            }
-        } catch (Exception e) {
-            log.debug("Failed to update TTL: key={}", context.getRedisKey(), e);
-        }
     }
 
     /**
@@ -181,8 +160,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                   context.getOutput().isShouldApplyTtl(), context.getOutput().getFinalTtl());
 
         try {
-            // 取消可能的异步预刷新任务
-            preRefreshSupport.cancelAsyncRefresh(context.getRedisKey());
+            // 取消可能的异步提前过期任务
+            earlyExpirationSupport.cancelAsyncRefresh(context.getRedisKey());
 
             // 获取存储值
             Object storeValue = context.getOutput().getStoreValue();
@@ -201,7 +180,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
                 valueOperations.set(context.getRedisKey(), cachedValue);
             }
 
-            statistics.incPuts(context.getCacheName());
+
             log.debug("Cache PUT success: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
             return CacheResult.success();
@@ -215,6 +194,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
     /**
      * 处理 PUT_IF_ABSENT 操作
+     *
+     * <p>直接使用 SETNX（setIfAbsent）保证原子性，避免先 GET 再 SET 的 TOCTOU 竞态。
      */
     private CacheResult handlePutIfAbsent(CacheContext context) {
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
@@ -223,23 +204,13 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         log.debug("Cache PUT_IF_ABSENT: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
         try {
-            // 先检查是否存在
-            CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
-            if (isCacheHit(existingValue)) {
-                log.debug("Cache PUT_IF_ABSENT: key exists, returning existing value: cacheName={}, key={}",
-                          context.getCacheName(), context.getRedisKey());
-                byte[] result = nullValuePolicy.toReturnValue(
-                    existingValue.getValue(), context.getCacheName(), context.getRedisKey());
-                return CacheResult.success(result);
-            }
-
             // 获取存储值
             Object storeValue = context.getOutput().getStoreValue();
             if (storeValue == null) {
                 storeValue = context.getDeserializedValue();
             }
 
-            // 条件写入
+            // 原子条件写入：SETNX 保证不存在时才写入，消除 TOCTOU 竞态
             CachedValue cachedValue;
             Boolean success;
 
@@ -253,17 +224,18 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             }
 
             if (Boolean.TRUE.equals(success)) {
-                statistics.incPuts(context.getCacheName());
-                log.debug("Cache PUT_IF_ABSENT success: cacheName={}, key={}", 
+                log.debug("Cache PUT_IF_ABSENT success: cacheName={}, key={}",
                           context.getCacheName(), context.getRedisKey());
                 return CacheResult.success();
             }
 
-            // 写入失败，返回当前值
-            CachedValue actualValue = (CachedValue) valueOperations.get(context.getRedisKey());
-            if (actualValue != null) {
+            // SETNX 失败说明 key 已存在，读取当前值返回
+            log.debug("Cache PUT_IF_ABSENT: key already exists, returning existing value: cacheName={}, key={}",
+                      context.getCacheName(), context.getRedisKey());
+            CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
+            if (existingValue != null) {
                 byte[] result = nullValuePolicy.toReturnValue(
-                    actualValue.getValue(), context.getCacheName(), context.getRedisKey());
+                    existingValue.getValue(), context.getCacheName(), context.getRedisKey());
                 return CacheResult.success(result);
             }
 
@@ -287,7 +259,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         try {
             Boolean deleted = redisTemplate.delete(context.getRedisKey());
-            statistics.incDeletes(context.getCacheName());
 
             log.debug("Cache REMOVE completed: cacheName={}, key={}, deleted={}",
                       context.getCacheName(), context.getRedisKey(), deleted);
@@ -347,10 +318,6 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             });
 
             long deletedTotal = totalDeleted.get();
-            if (deletedTotal > 0) {
-                int reportedDeletes = deletedTotal > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) deletedTotal;
-                statistics.incDeletesBy(context.getCacheName(), reportedDeletes);
-            }
 
             log.debug("Cache CLEAN completed: cacheName={}, pattern={}, deletedCount={}",
                       context.getCacheName(), keyPattern, deletedTotal);

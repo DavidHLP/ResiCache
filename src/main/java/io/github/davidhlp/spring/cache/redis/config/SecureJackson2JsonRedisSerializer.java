@@ -1,99 +1,46 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator.TypeMatcher;
 import com.fasterxml.jackson.databind.cfg.MapperConfig;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.data.redis.serializer.SerializationException;
 
 import java.util.List;
 
 /**
  * Secure Jackson2 JSON Redis serializer that uses a whitelist-based PolymorphicTypeValidator.
  *
- * <p>This serializer addresses the deserialization vulnerability in the default
- * GenericJackson2JsonRedisSerializer by restricting type information to only allow
- * classes from configured package hierarchies.
- *
- * <h2>Why Package Whitelist?</h2>
- * <p>Without whitelist validation, Jackson's default typing can deserialize arbitrary classes
- * from the classpath, enabling remote code execution (RCE) attacks if Redis is compromised.
- * This serializer restricts deserialization to explicitly allowed package prefixes only.
- *
- * <h2>Configuration</h2>
- * <p>Default allowed package: {@code io.github.davidhlp}
- * <p>To add custom packages, configure in application.yml:
- * <pre>{@code
- * # application.yml
- * spring:
- *   data:
- *     redis:
- *       host: localhost
- *       port: 6379
- *
- * resi-cache:
- *   serializer:
- *     allowed-package-prefixes:
- *       - io.github.davidhlp        # default, required for ResiCache internals
- *       - com.example.business      # your domain objects (add this)
- *       - com.acme.domain           # another package (add as needed)
- *       - com.example.dto           # DTOs and value objects (add as needed)
- * }</pre>
- *
- * <h2>Full Spring Boot 3.x Configuration Example</h2>
- * <pre>{@code
- * # application.yml - Complete ResiCache Configuration
- * spring:
- *   application:
- *     name: my-application
- *   data:
- *     redis:
- *       host: ${REDIS_HOST:localhost}
- *       port: ${REDIS_PORT:6379}
- *       password: ${REDIS_PASSWORD:}
- *       timeout: 5000ms
- *
- * resi-cache:
- *   default-ttl: 30m
- *   serializer:
- *     allowed-package-prefixes:
- *       - io.github.davidhlp        # REQUIRED: ResiCache internal classes
- *       - com.example.business       # Your business domain objects
- *       - com.example.dto            # Data transfer objects
- *       - com.acme.domain           # Additional domain packages
- *   bloom-filter:
- *     enabled: true
- *     expected-insertions: 100000
- *     false-probability: 0.01
- *   lock:
- *     enabled: true
- *     wait-time: 5
- *     lease-time: 30
- *   pre-refresh:
- *     enabled: true
- *     threshold: 0.8
- *     core-pool-size: 4
- * }</pre>
- *
- * <h2>Common Pitfalls</h2>
+ * <p>Security improvements over default GenericJackson2JsonRedisSerializer:
  * <ul>
- *   <li>If your cached objects are in a package <strong>not</strong> in the whitelist,
- *       deserialization will fail silently and return {@code null}.</li>
- *   <li>Ensure all cached domain object packages are listed before first deployment.</li>
+ *   <li>Polymorphic typing is <strong>disabled by default</strong> — only enabled when explicitly configured</li>
+ *   <li>When enabled, type information is restricted to configured package whitelist only</li>
+ *   <li>All cached values are wrapped in a {@link VersionEnvelope} for version control and safe migration</li>
  * </ul>
  *
- * @see PolymorphicTypeValidator
- * @see BasicPolymorphicTypeValidator
+ * <p>序列化格式：
+ * <pre>{@code
+ * {
+ *   "version": 2,
+ *   "payload": { ...actual cached value... }
+ * }
+ * }</pre>
  */
+@Slf4j
 public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object> {
 
     private static final String DEFAULT_ALLOWED_PACKAGE_PREFIX = "io.github.davidhlp";
 
-    private final Jackson2JsonRedisSerializer<Object> delegate;
+    private final ObjectMapper objectMapper;
+    private final boolean failOnUnknownType;
+    private final List<String> allowedPackagePrefixes;
 
     /**
      * Creates a new SecureJackson2JsonRedisSerializer using the provided ObjectMapper
@@ -102,7 +49,7 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
      * @param objectMapper the ObjectMapper to use for JSON serialization/deserialization
      */
     public SecureJackson2JsonRedisSerializer(ObjectMapper objectMapper) {
-        this(objectMapper, List.of(DEFAULT_ALLOWED_PACKAGE_PREFIX));
+        this(objectMapper, List.of(DEFAULT_ALLOWED_PACKAGE_PREFIX), true, "@class", false);
     }
 
     /**
@@ -113,12 +60,32 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
      * @param allowedPackagePrefixes list of package prefixes to allow for deserialization
      */
     public SecureJackson2JsonRedisSerializer(ObjectMapper objectMapper, List<String> allowedPackagePrefixes) {
-        this.delegate = createSecureSerializer(objectMapper, allowedPackagePrefixes);
+        this(objectMapper, allowedPackagePrefixes, true, "@class", false);
     }
 
-    private Jackson2JsonRedisSerializer<Object> createSecureSerializer(ObjectMapper objectMapper, List<String> allowedPackagePrefixes) {
-        // Build a secure type validator with explicit package whitelist using TypeMatcher
-        // BasicPolymorphicTypeValidator.Builder provides production-safe validation
+    /**
+     * Creates a new SecureJackson2JsonRedisSerializer with full configuration.
+     *
+     * @param objectMapper the ObjectMapper to use for JSON serialization/deserialization
+     * @param allowedPackagePrefixes list of package prefixes to allow for deserialization
+     * @param failOnUnknownType whether to fail on unknown types during deserialization
+     * @param typeProperty the Jackson type property name (e.g. "@class")
+     * @param polymorphicTypingEnabled whether to enable Jackson polymorphic typing
+     */
+    public SecureJackson2JsonRedisSerializer(ObjectMapper objectMapper,
+                                             List<String> allowedPackagePrefixes,
+                                             boolean failOnUnknownType,
+                                             String typeProperty,
+                                             boolean polymorphicTypingEnabled) {
+        this.objectMapper = createSecureObjectMapper(objectMapper, allowedPackagePrefixes, typeProperty, polymorphicTypingEnabled);
+        this.failOnUnknownType = failOnUnknownType;
+        this.allowedPackagePrefixes = List.copyOf(allowedPackagePrefixes);
+    }
+
+    private ObjectMapper createSecureObjectMapper(ObjectMapper objectMapper,
+                                                  List<String> allowedPackagePrefixes,
+                                                  String typeProperty,
+                                                  boolean polymorphicTypingEnabled) {
         String[] prefixes = allowedPackagePrefixes.toArray(new String[0]);
         PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
                 .allowIfBaseType(new TypeMatcher() {
@@ -128,46 +95,148 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
                             return false;
                         }
                         String className = rawSubType.getName();
-                        // Allow configured domain packages
                         for (String prefix : prefixes) {
                             if (className.startsWith(prefix)) {
                                 return true;
                             }
                         }
-                        // Allow safe JDK value types
                         return className.startsWith("java.lang.")
-                                || className.startsWith("java.util.")
+                                || isAllowedJavaUtilClass(className)
                                 || className.startsWith("java.time.")
                                 || className.startsWith("java.math.");
                     }
                 })
                 .build();
 
-        // Clone the object mapper to avoid modifying the original
         ObjectMapper secureObjectMapper = objectMapper.copy();
 
-        // Register JavaTimeModule if not already registered
         if (!secureObjectMapper.canSerialize(java.time.LocalDateTime.class)) {
             secureObjectMapper.registerModule(new JavaTimeModule());
         }
 
-        // Enable type information for polymorphic deserialization
-        secureObjectMapper.activateDefaultTyping(
-                typeValidator,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
+        if (polymorphicTypingEnabled) {
+            // 使用自定义 type property 启用多态类型信息
+            ObjectMapper.DefaultTypeResolverBuilder typer = new ObjectMapper.DefaultTypeResolverBuilder(
+                    ObjectMapper.DefaultTyping.NON_FINAL);
+            typer.init(JsonTypeInfo.Id.CLASS, null);
+            typer.inclusion(JsonTypeInfo.As.PROPERTY);
+            typer.typeProperty(typeProperty);
+            secureObjectMapper.setDefaultTyping(typer);
+            log.info("Polymorphic typing enabled with typeProperty='{}' and package whitelist", typeProperty);
+        } else {
+            log.debug("Polymorphic typing disabled (default secure mode)");
+        }
 
-        return new Jackson2JsonRedisSerializer<>(secureObjectMapper, Object.class);
+        return secureObjectMapper;
     }
 
     @Override
     public byte[] serialize(Object value) {
-        return delegate.serialize(value);
+        if (value == null) {
+            return new byte[0];
+        }
+        try {
+            VersionEnvelope envelope = new VersionEnvelope(VersionEnvelope.CURRENT_VERSION, value);
+            return objectMapper.writeValueAsBytes(envelope);
+        } catch (JsonProcessingException e) {
+            throw new SerializationException("Could not serialize value: " + e.getMessage(), e);
+        }
     }
 
     @Override
     public Object deserialize(byte[] bytes) {
-        return delegate.deserialize(bytes);
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        try {
+            // 先解析为 JsonNode，递归验证所有 @class 属性在白名单中
+            // 这能阻止 @JsonTypeInfo 注解绕过 BasicPolymorphicTypeValidator
+            JsonNode rootNode = objectMapper.readTree(bytes);
+            validateTypeIds(rootNode);
+
+            VersionEnvelope envelope = objectMapper.treeToValue(rootNode, VersionEnvelope.class);
+
+            if (envelope.getVersion() != VersionEnvelope.CURRENT_VERSION) {
+                String message = String.format(
+                        "Unsupported version envelope: expected=%d, actual=%d",
+                        VersionEnvelope.CURRENT_VERSION, envelope.getVersion());
+                if (failOnUnknownType) {
+                    throw new SerializationException(message);
+                }
+                log.warn("{} — returning null", message);
+                return null;
+            }
+
+            return envelope.getPayload();
+        } catch (SerializationException e) {
+            throw e;
+        } catch (Exception e) {
+            if (failOnUnknownType) {
+                throw new SerializationException("Could not deserialize value: " + e.getMessage(), e);
+            }
+            log.warn("Deserialization failed (failOnUnknownType=false, returning null): {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 递归验证 JsonNode 中所有 {@code @class} 类型标识符是否在白名单中。
+     *
+     * <p>由于 {@code @JsonTypeInfo(use = Id.CLASS)} 会绕过
+     * {@code BasicPolymorphicTypeValidator}，我们在反序列化前手动做二次校验。
+     */
+    private void validateTypeIds(JsonNode node) {
+        if (node.isObject()) {
+            JsonNode classNode = node.get("@class");
+            if (classNode != null && classNode.isTextual()) {
+                String className = classNode.asText();
+                if (!isAllowedClass(className)) {
+                    throw new SerializationException(
+                            "Type not in deserialization whitelist: " + className);
+                }
+            }
+            node.fields().forEachRemaining(entry -> validateTypeIds(entry.getValue()));
+        } else if (node.isArray()) {
+            node.forEach(this::validateTypeIds);
+        }
+    }
+
+    private boolean isAllowedClass(String className) {
+        for (String prefix : allowedPackagePrefixes) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return className.startsWith("java.lang.")
+                || isAllowedJavaUtilClass(className)
+                || className.startsWith("java.time.")
+                || className.startsWith("java.math.");
+    }
+
+    private static final java.util.Set<String> ALLOWED_JAVA_UTIL_CLASSES = java.util.Set.of(
+            "java.util.ArrayList",
+            "java.util.LinkedList",
+            "java.util.HashMap",
+            "java.util.LinkedHashMap",
+            "java.util.TreeMap",
+            "java.util.HashSet",
+            "java.util.LinkedHashSet",
+            "java.util.TreeSet",
+            "java.util.Collections$EmptyList",
+            "java.util.Collections$EmptyMap",
+            "java.util.Collections$EmptySet",
+            "java.util.Collections$SingletonList",
+            "java.util.Collections$SingletonMap",
+            "java.util.Collections$SingletonSet",
+            "java.util.Collections$UnmodifiableRandomAccessList",
+            "java.util.Collections$UnmodifiableList",
+            "java.util.Collections$UnmodifiableMap",
+            "java.util.Collections$UnmodifiableSet",
+            "java.util.Collections$UnmodifiableSortedMap",
+            "java.util.Collections$UnmodifiableSortedSet"
+    );
+
+    private static boolean isAllowedJavaUtilClass(String className) {
+        return ALLOWED_JAVA_UTIL_CLASSES.contains(className);
     }
 }

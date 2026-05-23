@@ -5,7 +5,7 @@
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Language | Java | 17+ |
-| Framework | Spring Boot | 3.2.4 |
+| Framework | Spring Boot | 3.4.13 |
 | Cache | Spring Cache + Spring Data Redis | - |
 | Distributed Lock | Redisson | 3.27.0 |
 | Local Cache | Caffeine | 3.1.8 |
@@ -47,7 +47,7 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │   │       └── handler/ # Chain of Responsibility handlers (main logic)
 │   │           ├── BloomFilterHandler.java      # Cache penetration protection
 │   │           ├── SyncLockHandler.java         # Cache breakdown protection
-│   │           ├── PreRefreshHandler.java       # Hot key protection
+│   │           ├── EarlyExpirationHandler.java  # Hot key protection (early expiration)
 │   │           ├── TtlHandler.java              # TTL variation for cache avalanche
 │   │           ├── NullValueHandler.java        # Null value caching
 │   │           └── ActualCacheHandler.java      # Actual Redis put operation

@@ -1,12 +1,12 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.support.refresh;
 
 /**
- * 协调异步预刷新执行并跟踪正在进行的任务。
+ * 协调异步提前过期执行并跟踪正在进行的任务。
  */
-public interface PreRefreshExecutor {
+public interface EarlyExpirationExecutor {
 
     /**
-     * 提交一个预刷新任务到执行器
+     * 提交一个提前过期任务到执行器
      *
      * @param key  任务关联的键
      * @param task 要执行的任务
@@ -14,7 +14,7 @@ public interface PreRefreshExecutor {
 	void submit(String key, Runnable task);
 
     /**
-     * 取消指定键的预刷新任务
+     * 取消指定键的提前过期任务
      * @param key 要取消的任务关联的键
 	 */
 	void cancel(String key);

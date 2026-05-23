@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.core.handler;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
+import io.github.davidhlp.spring.cache.redis.core.factory.CachePutOperationFactory;
 import io.github.davidhlp.spring.cache.redis.core.factory.CacheableOperationFactory;
 import io.github.davidhlp.spring.cache.redis.core.factory.EvictOperationFactory;
 import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
@@ -43,12 +44,15 @@ class CachingAnnotationHandlerTest {
     @Mock
     private EvictOperationFactory evictOperationFactory;
 
+    @Mock
+    private CachePutOperationFactory cachePutOperationFactory;
+
     private CachingAnnotationHandler handler;
 
     @BeforeEach
     void setUp() {
         handler = new CachingAnnotationHandler(
-                redisCacheRegister, keyGenerator, cacheableOperationFactory, evictOperationFactory);
+                redisCacheRegister, keyGenerator, cacheableOperationFactory, evictOperationFactory, cachePutOperationFactory);
     }
 
     private Method getMethod(String name) throws NoSuchMethodException {
@@ -130,8 +134,8 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister).registerCacheableOperation(any(RedisCacheableOperation.class));
-            verify(redisCacheRegister).registerCacheEvictOperation(any(RedisCacheEvictOperation.class));
+            verify(redisCacheRegister).registerCacheableOperation(any(Method.class), any(Class.class), any(RedisCacheableOperation.class));
+            verify(redisCacheRegister).registerCacheEvictOperation(any(Method.class), any(Class.class), any(RedisCacheEvictOperation.class));
         }
 
         @Test
@@ -188,7 +192,7 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, times(2)).registerCacheableOperation(any(RedisCacheableOperation.class));
+            verify(redisCacheRegister, times(2)).registerCacheableOperation(any(Method.class), any(Class.class), any(RedisCacheableOperation.class));
         }
 
         @Test
@@ -204,7 +208,7 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, times(2)).registerCacheEvictOperation(any(RedisCacheEvictOperation.class));
+            verify(redisCacheRegister, times(2)).registerCacheEvictOperation(any(Method.class), any(Class.class), any(RedisCacheEvictOperation.class));
         }
     }
 
@@ -223,8 +227,8 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any());
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any());
+            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
         }
 
         @Test
@@ -241,8 +245,8 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any());
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any());
+            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
         }
 
         @Test
@@ -259,7 +263,7 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any());
+            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
         }
     }
 }

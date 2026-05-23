@@ -37,40 +37,54 @@ public class CacheHandlerChainFactory {
         this.properties = properties;
     }
 
+    /** 缓存的责任链实例（单例，避免 handler next 指针被并发修改） */
+    private volatile CacheHandlerChain cachedChain;
+
     /**
-     * 创建责任链（自动排序 + 配置过滤）
+     * 创建或获取责任链（单例模式，确保 handler next 指针不被并发修改）
      *
      * @return 配置好的责任链
      */
     public CacheHandlerChain createChain() {
-        CacheHandlerChain chain = new CacheHandlerChain();
-
-        Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
-
-        // 按 @HandlerPriority 注解排序
-        List<CacheHandler> sortedHandlers = handlers.stream()
-            .sorted(Comparator.comparingInt(this::getOrder))
-            .toList();
-
-        // 添加到链，过滤禁用的 Handler
-        for (CacheHandler handler : sortedHandlers) {
-            String handlerName = getHandlerDisableName(handler);
-
-            if (disabled.contains(handlerName)) {
-                log.info("Handler disabled by configuration: {}", handler.getClass().getSimpleName());
-                continue;
-            }
-
-            chain.addHandler(handler);
-            log.debug("Added handler to chain: {} (order={})",
-                      handler.getClass().getSimpleName(),
-                      getOrder(handler));
+        if (cachedChain != null) {
+            return cachedChain;
         }
 
-        log.info("Handler chain created with {} handlers: {}",
-                 chain.size(), chain.getHandlerNames());
+        synchronized (this) {
+            if (cachedChain != null) {
+                return cachedChain;
+            }
 
-        return chain;
+            CacheHandlerChain chain = new CacheHandlerChain();
+
+            Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
+
+            // 按 @HandlerPriority 注解排序
+            List<CacheHandler> sortedHandlers = handlers.stream()
+                .sorted(Comparator.comparingInt(this::getOrder))
+                .toList();
+
+            // 添加到链，过滤禁用的 Handler
+            for (CacheHandler handler : sortedHandlers) {
+                String handlerName = getHandlerDisableName(handler);
+
+                if (disabled.contains(handlerName)) {
+                    log.info("Handler disabled by configuration: {}", handler.getClass().getSimpleName());
+                    continue;
+                }
+
+                chain.addHandler(handler);
+                log.debug("Added handler to chain: {} (order={})",
+                          handler.getClass().getSimpleName(),
+                          getOrder(handler));
+            }
+
+            log.info("Handler chain created with {} handlers: {}",
+                     chain.size(), chain.getHandlerNames());
+
+            cachedChain = chain;
+            return cachedChain;
+        }
     }
 
     /**
@@ -80,7 +94,7 @@ public class CacheHandlerChainFactory {
     private String getHandlerDisableName(CacheHandler handler) {
         String className = handler.getClass().getSimpleName();
         // BloomFilterHandler -> bloom-filter
-        // PreRefreshHandler -> pre-refresh
+        // EarlyExpirationHandler -> early-expiration
         // SyncLockHandler -> sync-lock
         // NullValueHandler -> null-value
         // TtlHandler -> ttl

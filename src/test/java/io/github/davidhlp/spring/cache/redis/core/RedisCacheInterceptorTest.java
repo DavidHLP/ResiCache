@@ -173,4 +173,29 @@ class RedisCacheInterceptorTest {
             verify(cacheableHandler).handle(method, target, args);
         }
     }
+
+    @Nested
+    @DisplayName("Reactive Type Detection Tests")
+    class ReactiveTypeDetectionTests {
+
+        @Test
+        @DisplayName("isReactiveType returns true for Mono")
+        void isReactiveType_mono_returnsTrue() {
+            assertThat(RedisCacheInterceptor.isReactiveType("reactor.core.publisher.Mono")).isTrue();
+        }
+
+        @Test
+        @DisplayName("isReactiveType returns true for Flux")
+        void isReactiveType_flux_returnsTrue() {
+            assertThat(RedisCacheInterceptor.isReactiveType("reactor.core.publisher.Flux")).isTrue();
+        }
+
+        @Test
+        @DisplayName("isReactiveType returns false for non-reactive types")
+        void isReactiveType_nonReactive_returnsFalse() {
+            assertThat(RedisCacheInterceptor.isReactiveType("java.lang.String")).isFalse();
+            assertThat(RedisCacheInterceptor.isReactiveType("java.lang.Integer")).isFalse();
+            assertThat(RedisCacheInterceptor.isReactiveType("java.lang.Object")).isFalse();
+        }
+    }
 }

@@ -32,6 +32,14 @@ public class EvictOperationFactory implements OperationFactory<RedisCacheEvict, 
                 .allEntries(annotation.allEntries())
                 .beforeInvocation(annotation.beforeInvocation())
                 .sync(annotation.sync())
+                .syncTimeout(annotation.syncTimeout())
+                .ttl(annotation.ttl())
+                .useBloomFilter(annotation.useBloomFilter())
+                .expectedInsertions(annotation.expectedInsertions())
+                .falseProbability(annotation.falseProbability())
+                .enableEarlyExpiration(annotation.enableEarlyExpiration())
+                .earlyExpirationThreshold(annotation.earlyExpirationThreshold())
+                .earlyExpirationMode(annotation.earlyExpirationMode())
                 .build();
     }
 
