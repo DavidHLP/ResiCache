@@ -42,8 +42,9 @@ public class RedisProxyCachingConfiguration {
 
     @Bean(name = REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    public CacheOperationSource redisCacheOperationSource() {
-        return new RedisCacheOperationSource();
+    public CacheOperationSource redisCacheOperationSource(
+            RedisProCacheProperties redisProCacheProperties) {
+        return new RedisCacheOperationSource(redisProCacheProperties.getNativeAnnotationMode());
     }
 
     @Bean
@@ -59,10 +60,6 @@ public class RedisProxyCachingConfiguration {
             CachingAnnotationHandler cachingAnnotationHandler,
             CachePutAnnotationHandler cachePutAnnotationHandler,
             RedisProCacheProperties redisProCacheProperties) {
-
-        // 配置 Handler 的 SpEL 错误行为
-        cacheableAnnotationHandler.setFailOnSpelError(
-                redisProCacheProperties.isFailOnSpelError());
 
         // 创建带调试信息的 CacheInterceptor
         RedisCacheInterceptor interceptor =

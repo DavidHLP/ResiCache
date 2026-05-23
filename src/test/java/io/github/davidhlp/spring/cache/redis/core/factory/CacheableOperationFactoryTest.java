@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.core.factory;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -25,13 +25,13 @@ class CacheableOperationFactoryTest {
             String[] values,
             String key,
             long ttl,
-            boolean enablePreRefresh,
-            double preRefreshThreshold,
-            PreRefreshMode preRefreshMode,
+            boolean enableEarlyExpiration,
+            double earlyExpirationThreshold,
+            EarlyExpirationMode earlyExpirationMode,
             String condition,
             String unless) {
-        return new TestRedisCacheable(cacheNames, values, key, ttl, enablePreRefresh,
-                preRefreshThreshold, preRefreshMode, condition, unless);
+        return new TestRedisCacheable(cacheNames, values, key, ttl, enableEarlyExpiration,
+                earlyExpirationThreshold, earlyExpirationMode, condition, unless);
     }
 
     private Method getTestMethod() throws NoSuchMethodException {
@@ -52,7 +52,7 @@ class CacheableOperationFactoryTest {
                     120L,
                     true,
                     0.5,
-                    PreRefreshMode.ASYNC,
+                    EarlyExpirationMode.ASYNC,
                     "#args[0] != null",
                     "#result != null"
             );
@@ -66,9 +66,9 @@ class CacheableOperationFactoryTest {
             assertThat(operation.getKey()).isEqualTo("generated-key");
             assertThat(operation.getTtl()).isEqualTo(120L);
             assertThat(operation.getType()).isEqualTo(String.class);
-            assertThat(operation.isEnablePreRefresh()).isTrue();
-            assertThat(operation.getPreRefreshThreshold()).isEqualTo(0.5);
-            assertThat(operation.getPreRefreshMode()).isEqualTo(PreRefreshMode.ASYNC);
+            assertThat(operation.isEnableEarlyExpiration()).isTrue();
+            assertThat(operation.getEarlyExpirationThreshold()).isEqualTo(0.5);
+            assertThat(operation.getEarlyExpirationMode()).isEqualTo(EarlyExpirationMode.ASYNC);
             assertThat(operation.getCondition()).isEqualTo("#args[0] != null");
             assertThat(operation.getUnless()).isEqualTo("#result != null");
             assertThat(operation.getCacheNames()).containsExactly("cache1", "cache2");
@@ -84,7 +84,7 @@ class CacheableOperationFactoryTest {
                     60L,
                     false,
                     0.3,
-                    PreRefreshMode.SYNC,
+                    EarlyExpirationMode.SYNC,
                     "",
                     ""
             );
@@ -105,7 +105,7 @@ class CacheableOperationFactoryTest {
                     60L,
                     false,
                     0.3,
-                    PreRefreshMode.SYNC,
+                    EarlyExpirationMode.SYNC,
                     "",
                     ""
             );
@@ -131,7 +131,7 @@ class CacheableOperationFactoryTest {
                     60L,
                     false,
                     0.3,
-                    PreRefreshMode.SYNC,
+                    EarlyExpirationMode.SYNC,
                     "",
                     ""
             );
@@ -159,22 +159,22 @@ class CacheableOperationFactoryTest {
         private final String[] values;
         private final String key;
         private final long ttl;
-        private final boolean enablePreRefresh;
-        private final double preRefreshThreshold;
-        private final PreRefreshMode preRefreshMode;
+        private final boolean enableEarlyExpiration;
+        private final double earlyExpirationThreshold;
+        private final EarlyExpirationMode earlyExpirationMode;
         private final String condition;
         private final String unless;
 
         TestRedisCacheable(String[] cacheNames, String[] values, String key, long ttl,
-                          boolean enablePreRefresh, double preRefreshThreshold, PreRefreshMode preRefreshMode,
+                          boolean enableEarlyExpiration, double earlyExpirationThreshold, EarlyExpirationMode earlyExpirationMode,
                           String condition, String unless) {
             this.cacheNames = cacheNames;
             this.values = values;
             this.key = key;
             this.ttl = ttl;
-            this.enablePreRefresh = enablePreRefresh;
-            this.preRefreshThreshold = preRefreshThreshold;
-            this.preRefreshMode = preRefreshMode;
+            this.enableEarlyExpiration = enableEarlyExpiration;
+            this.earlyExpirationThreshold = earlyExpirationThreshold;
+            this.earlyExpirationMode = earlyExpirationMode;
             this.condition = condition;
             this.unless = unless;
         }
@@ -255,6 +255,16 @@ class CacheableOperationFactoryTest {
         }
 
         @Override
+        public int expectedInsertions() {
+            return 10000;
+        }
+
+        @Override
+        public double falseProbability() {
+            return 0.03;
+        }
+
+        @Override
         public boolean randomTtl() {
             return false;
         }
@@ -265,18 +275,18 @@ class CacheableOperationFactoryTest {
         }
 
         @Override
-        public boolean enablePreRefresh() {
-            return enablePreRefresh;
+        public boolean enableEarlyExpiration() {
+            return enableEarlyExpiration;
         }
 
         @Override
-        public double preRefreshThreshold() {
-            return preRefreshThreshold;
+        public double earlyExpirationThreshold() {
+            return earlyExpirationThreshold;
         }
 
         @Override
-        public PreRefreshMode preRefreshMode() {
-            return preRefreshMode;
+        public EarlyExpirationMode earlyExpirationMode() {
+            return earlyExpirationMode;
         }
     }
 

@@ -5,6 +5,7 @@ import io.github.davidhlp.spring.cache.redis.core.handler.CachePutAnnotationHand
 import io.github.davidhlp.spring.cache.redis.core.handler.CacheableAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.core.handler.CachingAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.core.handler.EvictAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.core.holder.CacheOperationMetadataHolder;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -50,15 +51,50 @@ public class RedisCacheInterceptor extends CacheInterceptor {
         org.springframework.util.Assert.state(target != null, "Target object must not be null");
 
         Object[] args = invocation.getArguments();
+        Class<?> targetClass = target.getClass();
 
-        // 1. 注册自定义缓存操作元数据
-        //    使用责任链处理方法上的自定义注解，将操作注册到 RedisCacheRegister
-        handlerChain.handle(method, target, args);
+        // 检测 Reactive 返回类型并记录警告
+        warnIfReactiveReturnType(method);
 
-        // 2. 委托给父类的 invoke 方法
-        //    由于自定义操作已继承 Spring 的具体操作类型，Spring 的
-        //    CacheAspectSupport 会正确路由到 cacheable/put/evict 路径，
-        //    并原生处理 condition 和 unless 语义。
-        return super.invoke(invocation);
+        // 设置当前线程的 AnnotatedElementKey，供 Writer 层进行元数据查找
+        CacheOperationMetadataHolder.setCurrentKey(method, targetClass);
+        try {
+            // 1. 注册自定义缓存操作元数据
+            //    使用责任链处理方法上的自定义注解，将操作注册到 RedisCacheRegister
+            handlerChain.handle(method, target, args);
+
+            // 2. 委托给父类的 invoke 方法
+            //    由于自定义操作已继承 Spring 的具体操作类型，Spring 的
+            //    CacheAspectSupport 会正确路由到 cacheable/put/evict 路径，
+            //    并原生处理 condition 和 unless 语义。
+            return super.invoke(invocation);
+        } finally {
+            CacheOperationMetadataHolder.clear();
+        }
+    }
+
+    /**
+     * 检测方法返回类型是否为 Reactive 类型（Mono/Flux）。
+     *
+     * <p>ResiCache 目前仅支持同步缓存。若检测到 Reactive 返回类型且方法带有缓存注解，
+     * 记录警告日志，提示用户当前行为将回退到 Spring 原生缓存逻辑。
+     *
+     * @param method 被调用的方法
+     */
+    private void warnIfReactiveReturnType(Method method) {
+        Class<?> returnType = method.getReturnType();
+        if (isReactiveType(returnType.getName())) {
+            log.warn(
+                    "Reactive return type {} is not fully supported by ResiCache. "
+                            + "Method [{}.{}] will use Spring's native cache behavior without ResiCache enhancements.",
+                    returnType.getName(),
+                    method.getDeclaringClass().getName(),
+                    method.getName());
+        }
+    }
+
+    static boolean isReactiveType(String typeName) {
+        return "reactor.core.publisher.Mono".equals(typeName)
+                || "reactor.core.publisher.Flux".equals(typeName);
     }
 }

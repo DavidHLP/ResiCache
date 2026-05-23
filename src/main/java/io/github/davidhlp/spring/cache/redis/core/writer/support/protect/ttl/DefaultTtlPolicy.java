@@ -55,15 +55,15 @@ public class DefaultTtlPolicy implements TtlPolicy {
     }
 
     /**
-     * 判断是否应该预刷新缓存项
+     * 判断是否应该提前过期缓存项
      *
      * @param createdTime 创建时间戳（毫秒）
      * @param ttlSeconds TTL时间（秒）
-     * @param threshold 预刷新阈值
-     * @return 如果应该预刷新返回true，否则返回false
+     * @param threshold 提前过期阈值
+     * @return 如果应该提前过期返回true，否则返回false
      */
     @Override
-    public boolean shouldPreRefresh(long createdTime, long ttlSeconds, double threshold) {
+    public boolean shouldEarlyExpiration(long createdTime, long ttlSeconds, double threshold) {
         if (ttlSeconds <= 0 || threshold <= 0 || threshold >= 1) {
             return false;
         }

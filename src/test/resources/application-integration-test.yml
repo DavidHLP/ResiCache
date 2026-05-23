@@ -12,7 +12,7 @@ resi-cache:
     enabled: true
     expected-insertions: 100000
     false-probability: 0.01
-  pre-refresh:
+  early-expiration:
     enabled: false
   sync-lock:
     enabled: true

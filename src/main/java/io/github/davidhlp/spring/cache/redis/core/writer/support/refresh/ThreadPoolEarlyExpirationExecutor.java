@@ -15,9 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 在有限的线程池上执行预刷新任务，同时防止每个键的重复提交。
+ * 在有限的线程池上执行提前过期任务，同时防止每个键的重复提交。
  * <p>
- * 此执行器管理一个线程池，用于异步执行缓存预刷新操作。
+ * 此执行器管理一个线程池，用于异步执行缓存提前过期操作。
  * 它通过跟踪正在进行的操作，确保任何给定时间每个缓存键只执行一个刷新任务。
  * 任务被提交到具有可配置核心和最大大小的有限线程池中，
  * 被拒绝的任务由调用者运行策略处理。
@@ -32,9 +32,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Slf4j
 @Component
-public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
+public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecutor {
 
-    /** 预刷新任务最大重试次数 */
+    /** 提前过期任务最大重试次数 */
     private static final int MAX_RETRY_COUNT = 3;
     
     /** 重试间隔（毫秒） */
@@ -42,7 +42,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
 
     private final ExecutorService executorService;
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
-    private static final String THREAD_NAME_PREFIX = "pre-refresh-";
+    private static final String THREAD_NAME_PREFIX = "early-expiration-";
 
     /** 独立调度器用于定期清理已完成任务 */
     private final ScheduledExecutorService cleanupScheduler;
@@ -58,7 +58,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     /**
      * 默认构造函数，创建具有默认配置的线程池执行器
      */
-    public ThreadPoolPreRefreshExecutor() {
+    public ThreadPoolEarlyExpirationExecutor() {
         this(createExecutor(), new ConcurrentHashMap<>(), null, 30_000L);
     }
 
@@ -69,7 +69,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
      * @param inFlight        正在进行中的任务映射
      * @param meterRegistry   Micrometer meter注册表（可选，为null时不注册指标）
      */
-    ThreadPoolPreRefreshExecutor(
+    ThreadPoolEarlyExpirationExecutor(
             ExecutorService executorService,
             ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
             MeterRegistry meterRegistry,
@@ -80,7 +80,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
 
         // 创建独立的清理调度器
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "pre-refresh-cleanup");
+            Thread t = new Thread(r, "early-expiration-cleanup");
             t.setDaemon(true);
             return t;
         });
@@ -89,25 +89,25 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
             // 初始化 Micrometer 指标
             if (meterRegistry != null) {
                 this.submittedCounter = Counter.builder("prerefresh.submitted")
-                        .description("Number of pre-refresh tasks submitted")
+                        .description("Number of early-expiration tasks submitted")
                         .register(meterRegistry);
                 this.completedCounter = Counter.builder("prerefresh.completed")
-                        .description("Number of pre-refresh tasks completed")
+                        .description("Number of early-expiration tasks completed")
                         .register(meterRegistry);
                 this.cancelledCounter = Counter.builder("prerefresh.cancelled")
-                        .description("Number of pre-refresh tasks cancelled")
+                        .description("Number of early-expiration tasks cancelled")
                         .register(meterRegistry);
 
                 // Gauge: 活跃任务数
                 Gauge.builder("prerefresh.active", inFlight, map -> map.size())
-                        .description("Number of active pre-refresh tasks")
+                        .description("Number of active early-expiration tasks")
                         .register(meterRegistry);
 
                 // Gauge: 队列大小
                 if (executorService instanceof ThreadPoolExecutor tpe) {
                     Gauge.builder("prerefresh.queue.size", tpe, tpe2 -> tpe2.getQueue().size())
                             .tag("component", "prerefresh")
-                            .description("Size of the pre-refresh task queue")
+                            .description("Size of the early-expiration task queue")
                             .register(meterRegistry);
                 }
             } else {
@@ -116,7 +116,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
                 this.cancelledCounter = null;
             }
 
-            log.info("ThreadPoolPreRefreshExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}", MAX_RETRY_COUNT);
+            log.info("ThreadPoolEarlyExpirationExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}", MAX_RETRY_COUNT);
         } catch (RuntimeException e) {
             // 初始化失败时，确保清理已创建的资源
             cleanupScheduler.shutdownNow();
@@ -137,16 +137,16 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
                 60L,
                 TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(100),
-                new PreRefreshThreadFactory(),
+                new EarlyExpirationThreadFactory(),
                 new ThreadPoolExecutor.CallerRunsPolicy());
     }
 
     /**
-     * 提交一个预刷新任务到执行器中
+     * 提交一个提前过期任务到执行器中
      * 如果给定键的任务已经在执行中，则跳过提交
      *
-     * @param key  与预刷新任务关联的键
-     * @param task 要执行的预刷新任务
+     * @param key  与提前过期任务关联的键
+     * @param task 要执行的提前过期任务
      */
     @Override
     public void submit(String key, Runnable task) {
@@ -172,7 +172,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
                                             completedCounter.increment();
                                         }
                                         if (throwable != null) {
-                                            log.error("Async pre-refresh failed after all retries for key: {}", k, throwable);
+                                            log.error("Async early-expiration failed after all retries for key: {}", k, throwable);
                                         }
                                     });
                             return created;
@@ -184,7 +184,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     }
 
     /**
-     * 带重试机制执行预刷新任务
+     * 带重试机制执行提前过期任务
      *
      * @param key  缓存键
      * @param task 要执行的任务
@@ -196,13 +196,13 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
         while (attempt < MAX_RETRY_COUNT) {
             attempt++;
             try {
-                log.debug("Starting async pre-refresh for key: {} (attempt {}/{})", key, attempt, MAX_RETRY_COUNT);
+                log.debug("Starting async early-expiration for key: {} (attempt {}/{})", key, attempt, MAX_RETRY_COUNT);
                 task.run();
-                log.debug("Completed async pre-refresh for key: {} (attempt {})", key, attempt);
+                log.debug("Completed async early-expiration for key: {} (attempt {})", key, attempt);
                 return; // 成功，退出
             } catch (Exception ex) {
                 lastException = ex;
-                log.warn("Async pre-refresh failed for key: {} (attempt {}/{}): {}", 
+                log.warn("Async early-expiration failed for key: {} (attempt {}/{}): {}", 
                         key, attempt, MAX_RETRY_COUNT, ex.getMessage());
                 
                 if (attempt < MAX_RETRY_COUNT) {
@@ -219,15 +219,15 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
         
         // 所有重试都失败
         if (lastException != null) {
-            log.error("Async pre-refresh failed after {} attempts for key: {}", MAX_RETRY_COUNT, key, lastException);
+            log.error("Async early-expiration failed after {} attempts for key: {}", MAX_RETRY_COUNT, key, lastException);
             throw new RuntimeException("Pre-refresh failed after " + MAX_RETRY_COUNT + " attempts", lastException);
         }
     }
 
     /**
-     * 取消与给定键关联的预刷新任务
+     * 取消与给定键关联的提前过期任务
      *
-     * @param key 要取消的预刷新任务的键
+     * @param key 要取消的提前过期任务的键
      */
     @Override
     public void cancel(String key) {
@@ -241,7 +241,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
             }
             boolean cancelled = future.cancel(true);
             log.debug(
-                    "Cancelled async pre-refresh for key: {} (cancelled={}, done={})",
+                    "Cancelled async early-expiration for key: {} (cancelled={}, done={})",
                     key,
                     cancelled,
                     future.isDone());
@@ -257,13 +257,13 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     public String getStats() {
         if (executorService instanceof ThreadPoolExecutor tpe) {
             return String.format(
-                    "PreRefreshThreadPool[active=%d, poolSize=%d, queueSize=%d, completed=%d]",
+                    "EarlyExpirationThreadPool[active=%d, poolSize=%d, queueSize=%d, completed=%d]",
                     tpe.getActiveCount(),
                     tpe.getPoolSize(),
                     tpe.getQueue().size(),
                     tpe.getCompletedTaskCount());
         }
-        return "PreRefreshThreadPool[unknown]";
+        return "EarlyExpirationThreadPool[unknown]";
     }
 
     /**
@@ -280,7 +280,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     }
 
     /**
-     * 获取当前正在进行的预刷新任务数量
+     * 获取当前正在进行的提前过期任务数量
      *
      * @return 正在进行的任务数量
      */
@@ -306,7 +306,7 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     @Override
     @PreDestroy
     public void shutdown() {
-        log.info("Shutting down pre-refresh executor thread pool...");
+        log.info("Shutting down early-expiration executor thread pool...");
 
         cleanupScheduler.shutdown();
         try {
@@ -338,13 +338,13 @@ public class ThreadPoolPreRefreshExecutor implements PreRefreshExecutor {
     }
 
     /**
-     * 为预刷新线程创建命名线程的工厂类
+     * 为提前过期线程创建命名线程的工厂类
      */
-    private static final class PreRefreshThreadFactory implements ThreadFactory {
+    private static final class EarlyExpirationThreadFactory implements ThreadFactory {
         private final AtomicInteger threadNumber = new AtomicInteger(1);
 
         /**
-         * 创建一个新的预刷新线程
+         * 创建一个新的提前过期线程
          *
          * @param r 线程要执行的任务
          * @return 配置好的线程实例

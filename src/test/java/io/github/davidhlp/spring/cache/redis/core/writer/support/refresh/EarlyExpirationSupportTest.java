@@ -20,20 +20,20 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * PreRefreshSupport 单元测试
+ * EarlyExpirationSupport 单元测试
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("PreRefreshSupport Tests")
-class PreRefreshSupportTest {
+@DisplayName("EarlyExpirationSupport Tests")
+class EarlyExpirationSupportTest {
 
     @Mock
-    private PreRefreshExecutor executor;
+    private EarlyExpirationExecutor executor;
 
-    private PreRefreshSupport support;
+    private EarlyExpirationSupport support;
 
     @BeforeEach
     void setUp() {
-        support = new PreRefreshSupport(executor);
+        support = new EarlyExpirationSupport(executor);
     }
 
     @Nested
@@ -116,7 +116,7 @@ class PreRefreshSupportTest {
         @Test
         @DisplayName("returns stats from executor")
         void getThreadPoolStats_returnsExecutorStats() {
-            String expectedStats = "PreRefreshThreadPool[active=0, poolSize=2, queueSize=0, completed=10]";
+            String expectedStats = "EarlyExpirationThreadPool[active=0, poolSize=2, queueSize=0, completed=10]";
             when(executor.getStats()).thenReturn(expectedStats);
 
             String stats = support.getThreadPoolStats();

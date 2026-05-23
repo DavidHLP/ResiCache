@@ -109,7 +109,7 @@ class CacheableAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister).registerCacheableOperation(operation);
+            verify(redisCacheRegister).registerCacheableOperation(any(Method.class), any(Class.class), eq(operation));
         }
 
         @Test
@@ -161,7 +161,7 @@ class CacheableAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any());
+            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
         }
 
         @Test
@@ -177,7 +177,7 @@ class CacheableAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any());
+            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
         }
     }
 }
