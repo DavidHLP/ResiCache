@@ -3,8 +3,8 @@ package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.CachedValue;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.ttl.TtlPolicy;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationSupport;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,31 +19,31 @@ import org.springframework.data.redis.serializer.RedisSerializer;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 预刷新处理器，防止缓存雪崩
+ * 提前过期处理器，防止缓存雪崩
  *
  * <p>职责：
  * <ul>
- *   <li>检查缓存是否需要预刷新</li>
+ *   <li>检查缓存是否需要提前过期</li>
  *   <li>同步模式：返回 miss 触发刷新</li>
  *   <li>异步模式：安排后台刷新，缩短 TTL</li>
  * </ul>
  *
  * <p>设计说明：
  * <ul>
- *   <li>原设计：预刷新逻辑在 ActualCacheHandler 中，通过回调实现</li>
+ *   <li>原设计：提前过期逻辑在 ActualCacheHandler 中，通过回调实现</li>
  *   <li>新设计：独立为 Handler，直接检查缓存值并做出决策</li>
- *   <li>GET 操作时，先获取缓存值，判断是否需要预刷新</li>
+ *   <li>GET 操作时，先获取缓存值，判断是否需要提前过期</li>
  *   <li>如果需要同步刷新，返回 skipAll，ActualCacheHandler 检查标记后返回 miss</li>
  * </ul>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@HandlerPriority(HandlerOrder.PRE_REFRESH)
-public class PreRefreshHandler extends AbstractCacheHandler {
+@HandlerPriority(HandlerOrder.EARLY_EXPIRATION)
+public class EarlyExpirationHandler extends AbstractCacheHandler {
 
-    /** 上下文属性键：预刷新决策 */
-    private static final String DECISION_KEY = "preRefresh.decision";
+    /** 上下文属性键：提前过期决策 */
+    private static final String DECISION_KEY = "earlyExpiration.decision";
 
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
 
@@ -57,17 +57,17 @@ public class PreRefreshHandler extends AbstractCacheHandler {
         "end";
 
     private final TtlPolicy ttlPolicy;
-    private final PreRefreshSupport preRefreshSupport;
+    private final EarlyExpirationSupport earlyExpirationSupport;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
-        // 仅 GET 操作且启用了预刷新
+        // 仅 GET 操作且启用了提前过期
         return context.getOperation() == CacheOperation.GET
                && context.getCacheOperation() != null
-               && context.getCacheOperation().isEnablePreRefresh();
+               && context.getCacheOperation().isEnableEarlyExpiration();
     }
 
     @Override
@@ -75,19 +75,22 @@ public class PreRefreshHandler extends AbstractCacheHandler {
         // 先尝试获取缓存值
         CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
 
+        // 将预取的缓存值存入上下文，供 ActualCacheHandler 复用，避免双重 Redis GET
+        context.setAttribute(CacheContext.AttributeKey.PREFETCHED_CACHED_VALUE, cachedValue);
+
         if (cachedValue == null || cachedValue.checkExpired()) {
             // 缓存不存在或已过期，继续执行后续 Handler
             return HandlerResult.continueChain();
         }
 
-        // 检查是否需要预刷新
-        PreRefreshDecision decision = checkPreRefresh(context, cachedValue);
+        // 检查是否需要提前过期
+        EarlyExpirationDecision decision = checkEarlyExpiration(context, cachedValue);
         context.setAttribute(DECISION_KEY, decision);
 
         if (decision.needsRefresh() && decision.isSync()) {
-            // 同步预刷新：返回 skipAll，ActualCacheHandler 会返回 miss
-            context.setAttribute(CacheContext.AttributeKey.PRE_REFRESH_SKIPPED, true);
-            log.debug("Sync pre-refresh triggered, skipping actual cache: cacheName={}, key={}",
+            // 同步提前过期：返回 skipAll，ActualCacheHandler 会返回 miss
+            context.setAttribute(CacheContext.AttributeKey.EARLY_EXPIRATION_SKIPPED, true);
+            log.debug("Sync early-expiration triggered, skipping actual cache: cacheName={}, key={}",
                       context.getCacheName(), context.getRedisKey());
             return HandlerResult.skipAll();
         }
@@ -97,82 +100,82 @@ public class PreRefreshHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 检查是否需要预刷新
+     * 检查是否需要提前过期
      *
      * @param context 缓存上下文
      * @param cachedValue 缓存的值
-     * @return 预刷新决策
+     * @return 提前过期决策
      */
-    private PreRefreshDecision checkPreRefresh(CacheContext context, CachedValue cachedValue) {
-        boolean shouldRefresh = ttlPolicy.shouldPreRefresh(
+    private EarlyExpirationDecision checkEarlyExpiration(CacheContext context, CachedValue cachedValue) {
+        boolean shouldRefresh = ttlPolicy.shouldEarlyExpiration(
             cachedValue.getCreatedTime(),
             cachedValue.getTtl(),
-            context.getCacheOperation().getPreRefreshThreshold()
+            context.getCacheOperation().getEarlyExpirationThreshold()
         );
 
         if (!shouldRefresh) {
-            return PreRefreshDecision.noRefresh();
+            return EarlyExpirationDecision.noRefresh();
         }
 
-        PreRefreshMode mode = resolveMode(context);
+        EarlyExpirationMode mode = resolveMode(context);
 
         log.info("Pre-refresh needed: cacheName={}, key={}, mode={}, remainingTtl={}s",
                  context.getCacheName(), context.getRedisKey(), mode, cachedValue.getRemainingTtl());
 
-        if (mode == PreRefreshMode.ASYNC) {
+        if (mode == EarlyExpirationMode.ASYNC) {
             scheduleAsyncRefresh(context, cachedValue);
-            return PreRefreshDecision.asyncRefresh();
+            return EarlyExpirationDecision.asyncRefresh();
         }
 
         statistics.incMisses(context.getCacheName());
-        return PreRefreshDecision.syncRefresh();
+        return EarlyExpirationDecision.syncRefresh();
     }
 
     /**
-     * 解析预刷新模式
+     * 解析提前过期模式
      */
-    private PreRefreshMode resolveMode(CacheContext context) {
-        PreRefreshMode mode = context.getCacheOperation().getPreRefreshMode();
-        return mode != null ? mode : PreRefreshMode.SYNC;
+    private EarlyExpirationMode resolveMode(CacheContext context) {
+        EarlyExpirationMode mode = context.getCacheOperation().getEarlyExpirationMode();
+        return mode != null ? mode : EarlyExpirationMode.SYNC;
     }
 
     /**
-     * 安排异步预刷新任务
+     * 安排异步提前过期任务
      */
     private void scheduleAsyncRefresh(CacheContext context, CachedValue cachedValue) {
         String redisKey = context.getRedisKey();
         String cacheName = context.getCacheName();
 
-        preRefreshSupport.submitAsyncRefresh(redisKey, () -> {
+        earlyExpirationSupport.submitAsyncRefresh(redisKey, () -> {
             try {
                 CachedValue liveValue = (CachedValue) valueOperations.get(redisKey);
 
                 if (liveValue == null) {
-                    log.debug("Async pre-refresh: key already missing: {}", redisKey);
+                    log.debug("Async early-expiration: key already missing: {}", redisKey);
                     return;
                 }
 
                 // 检查 TTL 是否即将过期（避免刷新已过期数据）
                 long remainingTtl = liveValue.getRemainingTtl();
                 if (remainingTtl > 0 && remainingTtl < REFRESH_GRACE_PERIOD_SECONDS) {
-                    log.debug("Async pre-refresh skipped: key={} remainingTtl={}s is below grace period {}s",
+                    log.debug("Async early-expiration skipped: key={} remainingTtl={}s is below grace period {}s",
                               redisKey, remainingTtl, REFRESH_GRACE_PERIOD_SECONDS);
                     return;
                 }
 
                 boolean shortened = atomicShortenTtlIfValueUnchanged(redisKey, cachedValue);
                 if (shortened) {
-                    log.debug("Async pre-refresh shortened TTL: key={}, gracePeriod={}s",
+                    log.debug("Async early-expiration shortened TTL: key={}, gracePeriod={}s",
                               redisKey, REFRESH_GRACE_PERIOD_SECONDS);
                 } else {
-                    log.debug("Async pre-refresh skipped: value changed: {}", redisKey);
+                    log.debug("Async early-expiration skipped: value changed: {}", redisKey);
                 }
             } catch (Exception ex) {
-                log.error("Async pre-refresh failed: cacheName={}, key={}", cacheName, redisKey, ex);
+                log.error("Async early-expiration failed: cacheName={}, key={}", cacheName, redisKey, ex);
             }
         });
 
-        log.info("Async pre-refresh scheduled: cacheName={}, key={}", cacheName, redisKey);
+        log.info("Async early-expiration scheduled: cacheName={}, key={}", cacheName, redisKey);
     }
 
     private boolean atomicShortenTtlIfValueUnchanged(String redisKey, CachedValue expectedValue) {
@@ -196,12 +199,12 @@ public class PreRefreshHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 获取预刷新决策（供其他 Handler 使用）
+     * 获取提前过期决策（供其他 Handler 使用）
      *
      * @param context 缓存上下文
-     * @return 预刷新决策
+     * @return 提前过期决策
      */
-    public static PreRefreshDecision getDecision(CacheContext context) {
-        return context.getAttribute(DECISION_KEY, PreRefreshDecision.noRefresh());
+    public static EarlyExpirationDecision getDecision(CacheContext context) {
+        return context.getAttribute(DECISION_KEY, EarlyExpirationDecision.noRefresh());
     }
 }

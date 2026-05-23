@@ -34,31 +34,31 @@ class RedisProCachePropertiesTest {
         }
 
         @Test
-        @DisplayName("默认启用预刷新")
-        void preRefresh_enabledByDefault() {
+        @DisplayName("默认启用提前过期")
+        void earlyExpiration_enabledByDefault() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
-            assertThat(properties.getPreRefresh().isEnabled()).isTrue();
+            assertThat(properties.getEarlyExpiration().isEnabled()).isTrue();
         }
 
         @Test
         @DisplayName("默认核心线程池大小为 2")
-        void preRefresh_defaultPoolSize() {
+        void earlyExpiration_defaultPoolSize() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
-            assertThat(properties.getPreRefresh().getPoolSize()).isEqualTo(2);
+            assertThat(properties.getEarlyExpiration().getPoolSize()).isEqualTo(2);
         }
 
         @Test
         @DisplayName("默认最大线程池大小为 10")
-        void preRefresh_defaultMaxPoolSize() {
+        void earlyExpiration_defaultMaxPoolSize() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
-            assertThat(properties.getPreRefresh().getMaxPoolSize()).isEqualTo(10);
+            assertThat(properties.getEarlyExpiration().getMaxPoolSize()).isEqualTo(10);
         }
 
         @Test
         @DisplayName("默认队列容量为 100")
-        void preRefresh_defaultQueueCapacity() {
+        void earlyExpiration_defaultQueueCapacity() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
-            assertThat(properties.getPreRefresh().getQueueCapacity()).isEqualTo(100);
+            assertThat(properties.getEarlyExpiration().getQueueCapacity()).isEqualTo(100);
         }
     }
 
@@ -113,31 +113,31 @@ class RedisProCachePropertiesTest {
     }
 
     @Nested
-    @DisplayName("预刷新配置")
-    class PreRefreshPropertiesTests {
+    @DisplayName("提前过期配置")
+    class EarlyExpirationPropertiesTests {
 
         @Test
         @DisplayName("设置核心线程池大小")
         void setPoolSize_changesValue() {
-            RedisProCacheProperties.PreRefreshProperties preRefresh = new RedisProCacheProperties.PreRefreshProperties();
-            preRefresh.setPoolSize(4);
-            assertThat(preRefresh.getPoolSize()).isEqualTo(4);
+            RedisProCacheProperties.EarlyExpirationProperties earlyExpiration = new RedisProCacheProperties.EarlyExpirationProperties();
+            earlyExpiration.setPoolSize(4);
+            assertThat(earlyExpiration.getPoolSize()).isEqualTo(4);
         }
 
         @Test
         @DisplayName("设置最大线程池大小")
         void setMaxPoolSize_changesValue() {
-            RedisProCacheProperties.PreRefreshProperties preRefresh = new RedisProCacheProperties.PreRefreshProperties();
-            preRefresh.setMaxPoolSize(20);
-            assertThat(preRefresh.getMaxPoolSize()).isEqualTo(20);
+            RedisProCacheProperties.EarlyExpirationProperties earlyExpiration = new RedisProCacheProperties.EarlyExpirationProperties();
+            earlyExpiration.setMaxPoolSize(20);
+            assertThat(earlyExpiration.getMaxPoolSize()).isEqualTo(20);
         }
 
         @Test
         @DisplayName("设置队列容量")
         void setQueueCapacity_changesValue() {
-            RedisProCacheProperties.PreRefreshProperties preRefresh = new RedisProCacheProperties.PreRefreshProperties();
-            preRefresh.setQueueCapacity(200);
-            assertThat(preRefresh.getQueueCapacity()).isEqualTo(200);
+            RedisProCacheProperties.EarlyExpirationProperties earlyExpiration = new RedisProCacheProperties.EarlyExpirationProperties();
+            earlyExpiration.setQueueCapacity(200);
+            assertThat(earlyExpiration.getQueueCapacity()).isEqualTo(200);
         }
     }
 
@@ -274,8 +274,8 @@ class RedisProCachePropertiesTest {
         @DisplayName("设置禁用的 Handler 列表")
         void setDisabledHandlers_changesList() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
-            properties.setDisabledHandlers(java.util.List.of("pre-refresh"));
-            assertThat(properties.getDisabledHandlers()).containsExactly("pre-refresh");
+            properties.setDisabledHandlers(java.util.List.of("early-expiration"));
+            assertThat(properties.getDisabledHandlers()).containsExactly("early-expiration");
         }
 
         @Test
@@ -303,14 +303,14 @@ class RedisProCachePropertiesTest {
         }
 
         @Test
-        @DisplayName("设置预刷新配置")
-        void setPreRefresh_changesConfig() {
+        @DisplayName("设置提前过期配置")
+        void setEarlyExpiration_changesConfig() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
-            RedisProCacheProperties.PreRefreshProperties preRefresh = new RedisProCacheProperties.PreRefreshProperties();
-            preRefresh.setPoolSize(8);
-            properties.setPreRefresh(preRefresh);
+            RedisProCacheProperties.EarlyExpirationProperties earlyExpiration = new RedisProCacheProperties.EarlyExpirationProperties();
+            earlyExpiration.setPoolSize(8);
+            properties.setEarlyExpiration(earlyExpiration);
 
-            assertThat(properties.getPreRefresh().getPoolSize()).isEqualTo(8);
+            assertThat(properties.getEarlyExpiration().getPoolSize()).isEqualTo(8);
         }
     }
 }

@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
 
 import java.lang.annotation.*;
 
@@ -113,17 +113,17 @@ public @interface RedisCachePut {
     float variance() default 0.2F;
 
     /**
-     * 是否启用预刷新.
+     * 是否启用提前过期.
      */
-    boolean enablePreRefresh() default false;
+    boolean enableEarlyExpiration() default false;
 
     /**
-     * 预刷新阈值.
+     * 提前过期阈值.
      */
-    double preRefreshThreshold() default 0.3;
+    double earlyExpirationThreshold() default 0.3;
 
     /**
-     * 预刷新模式.
+     * 提前过期模式.
      */
-    PreRefreshMode preRefreshMode() default PreRefreshMode.SYNC;
+    EarlyExpirationMode earlyExpirationMode() default EarlyExpirationMode.SYNC;
 }

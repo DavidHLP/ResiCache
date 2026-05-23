@@ -11,5 +11,5 @@ public interface TtlPolicy {
 
     long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance);
 
-    boolean shouldPreRefresh(long createdTime, long ttlSeconds, double threshold);
+    boolean shouldEarlyExpiration(long createdTime, long ttlSeconds, double threshold);
 }

@@ -1,12 +1,14 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheEvictOperation;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCachePutOperation;
-import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -23,12 +25,22 @@ import java.util.List;
  * Redis缓存操作源.
  *
  * <p>负责解析Redis缓存注解并转换为缓存操作.
+ * <p>支持 Spring 原生注解 {@code @Cacheable}, {@code @CachePut}, {@code @CacheEvict}
+ * 通过 {@link RedisProCacheProperties.NativeAnnotationMode} 控制兼容模式.
  */
 @Slf4j
 public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
 
+    private final RedisProCacheProperties.NativeAnnotationMode nativeAnnotationMode;
+
     public RedisCacheOperationSource() {
+        this(RedisProCacheProperties.NativeAnnotationMode.FULL);
+    }
+
+    public RedisCacheOperationSource(
+            RedisProCacheProperties.NativeAnnotationMode nativeAnnotationMode) {
         super(false);
+        this.nativeAnnotationMode = nativeAnnotationMode;
     }
 
     @Override
@@ -141,22 +153,204 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
      */
     private void addSpringNativeCacheOperations(
             final Object target, final List<CacheOperation> ops) {
-        // 处理 Spring @Cacheable
-        final Cacheable springCacheable;
-        if (target instanceof Method) {
-            springCacheable = AnnotatedElementUtils.findMergedAnnotation(
-                    (Method) target, Cacheable.class);
-        } else if (target instanceof Class) {
-            springCacheable = AnnotatedElementUtils.findMergedAnnotation(
-                    (Class<?>) target, Cacheable.class);
-        } else {
+        if (nativeAnnotationMode == RedisProCacheProperties.NativeAnnotationMode.NONE) {
             return;
         }
 
-        if (springCacheable != null) {
-            log.debug("Found Spring @Cacheable annotation on target: {}, "
-                    + "forwarding to native handler", target);
+        if (nativeAnnotationMode == RedisProCacheProperties.NativeAnnotationMode.SELECTIVE
+                && !hasResiCacheAnnotation(target)) {
+            return;
         }
+
+        // In SELECTIVE mode, skip Spring annotations whose ResiCache counterpart
+        // is already present to avoid duplicate cache operations
+        if (nativeAnnotationMode == RedisProCacheProperties.NativeAnnotationMode.SELECTIVE) {
+            if (target instanceof Method method) {
+                if (!hasResiCacheable(method)) { convertSpringCacheable(method, ops); }
+                if (!hasResiCacheEvict(method)) { convertSpringCacheEvict(method, ops); }
+                if (!hasResiCachePut(method)) { convertSpringCachePut(method, ops); }
+            } else if (target instanceof Class<?> clazz) {
+                if (!hasResiCacheable(clazz)) { convertSpringCacheable(clazz, ops); }
+                if (!hasResiCacheEvict(clazz)) { convertSpringCacheEvict(clazz, ops); }
+                if (!hasResiCachePut(clazz)) { convertSpringCachePut(clazz, ops); }
+            }
+            return;
+        }
+
+        // FULL mode: convert all Spring native annotations
+        if (target instanceof Method method) {
+            convertSpringCacheable(method, ops);
+            convertSpringCachePut(method, ops);
+            convertSpringCacheEvict(method, ops);
+        } else if (target instanceof Class<?> clazz) {
+            convertSpringCacheable(clazz, ops);
+            convertSpringCachePut(clazz, ops);
+            convertSpringCacheEvict(clazz, ops);
+        }
+    }
+
+    private boolean hasResiCacheAnnotation(Object target) {
+        if (target instanceof Method method) {
+            return hasResiCacheable(method) || hasResiCacheEvict(method)
+                    || hasResiCachePut(method)
+                    || AnnotatedElementUtils.findMergedAnnotation(method, RedisCaching.class) != null;
+        } else if (target instanceof Class<?> clazz) {
+            return hasResiCacheable(clazz) || hasResiCacheEvict(clazz)
+                    || hasResiCachePut(clazz)
+                    || AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCaching.class) != null;
+        }
+        return false;
+    }
+
+    private boolean hasResiCacheable(Method method) {
+        return AnnotatedElementUtils.findMergedAnnotation(method, RedisCacheable.class) != null;
+    }
+
+    private boolean hasResiCacheable(Class<?> clazz) {
+        return AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCacheable.class) != null;
+    }
+
+    private boolean hasResiCacheEvict(Method method) {
+        return AnnotatedElementUtils.findMergedAnnotation(method, RedisCacheEvict.class) != null;
+    }
+
+    private boolean hasResiCacheEvict(Class<?> clazz) {
+        return AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCacheEvict.class) != null;
+    }
+
+    private boolean hasResiCachePut(Method method) {
+        return AnnotatedElementUtils.findMergedAnnotation(method, RedisCachePut.class) != null;
+    }
+
+    private boolean hasResiCachePut(Class<?> clazz) {
+        return AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCachePut.class) != null;
+    }
+
+    private void convertSpringCacheable(Method method, List<CacheOperation> ops) {
+        Cacheable ann = AnnotatedElementUtils.findMergedAnnotation(method, Cacheable.class);
+        if (ann != null) {
+            ops.add(buildRedisCacheableOperation(ann, method.getName()));
+            log.debug("Converted Spring @Cacheable on method: {}", method.getName());
+        }
+    }
+
+    private void convertSpringCacheable(Class<?> clazz, List<CacheOperation> ops) {
+        Cacheable ann = AnnotatedElementUtils.findMergedAnnotation(clazz, Cacheable.class);
+        if (ann != null) {
+            ops.add(buildRedisCacheableOperation(ann, clazz.getName()));
+            log.debug("Converted Spring @Cacheable on class: {}", clazz.getName());
+        }
+    }
+
+    private void convertSpringCachePut(Method method, List<CacheOperation> ops) {
+        CachePut ann = AnnotatedElementUtils.findMergedAnnotation(method, CachePut.class);
+        if (ann != null) {
+            ops.add(buildRedisCachePutOperation(ann, method.getName()));
+            log.debug("Converted Spring @CachePut on method: {}", method.getName());
+        }
+    }
+
+    private void convertSpringCachePut(Class<?> clazz, List<CacheOperation> ops) {
+        CachePut ann = AnnotatedElementUtils.findMergedAnnotation(clazz, CachePut.class);
+        if (ann != null) {
+            ops.add(buildRedisCachePutOperation(ann, clazz.getName()));
+            log.debug("Converted Spring @CachePut on class: {}", clazz.getName());
+        }
+    }
+
+    private void convertSpringCacheEvict(Method method, List<CacheOperation> ops) {
+        CacheEvict ann = AnnotatedElementUtils.findMergedAnnotation(method, CacheEvict.class);
+        if (ann != null) {
+            ops.add(buildRedisCacheEvictOperation(ann, method.getName()));
+            log.debug("Converted Spring @CacheEvict on method: {}", method.getName());
+        }
+    }
+
+    private void convertSpringCacheEvict(Class<?> clazz, List<CacheOperation> ops) {
+        CacheEvict ann = AnnotatedElementUtils.findMergedAnnotation(clazz, CacheEvict.class);
+        if (ann != null) {
+            ops.add(buildRedisCacheEvictOperation(ann, clazz.getName()));
+            log.debug("Converted Spring @CacheEvict on class: {}", clazz.getName());
+        }
+    }
+
+    private org.springframework.cache.interceptor.CacheableOperation buildRedisCacheableOperation(
+            Cacheable ann, String name) {
+        org.springframework.cache.interceptor.CacheableOperation.Builder builder =
+                new org.springframework.cache.interceptor.CacheableOperation.Builder();
+        builder.setName(name);
+        builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
+        if (StringUtils.hasText(ann.key())) {
+            builder.setKey(ann.key());
+        }
+        if (StringUtils.hasText(ann.condition())) {
+            builder.setCondition(ann.condition());
+        }
+        if (StringUtils.hasText(ann.unless())) {
+            builder.setUnless(ann.unless());
+        }
+        if (StringUtils.hasText(ann.keyGenerator())) {
+            builder.setKeyGenerator(ann.keyGenerator());
+        }
+        if (StringUtils.hasText(ann.cacheManager())) {
+            builder.setCacheManager(ann.cacheManager());
+        }
+        if (StringUtils.hasText(ann.cacheResolver())) {
+            builder.setCacheResolver(ann.cacheResolver());
+        }
+        builder.setSync(ann.sync());
+        return builder.build();
+    }
+
+    private RedisCachePutOperation buildRedisCachePutOperation(
+            CachePut ann, String name) {
+        RedisCachePutOperation.Builder builder = RedisCachePutOperation.builder();
+        builder.name(name);
+        builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
+        if (StringUtils.hasText(ann.key())) {
+            builder.key(ann.key());
+        }
+        if (StringUtils.hasText(ann.condition())) {
+            builder.condition(ann.condition());
+        }
+        if (StringUtils.hasText(ann.unless())) {
+            builder.unless(ann.unless());
+        }
+        if (StringUtils.hasText(ann.keyGenerator())) {
+            builder.keyGenerator(ann.keyGenerator());
+        }
+        if (StringUtils.hasText(ann.cacheManager())) {
+            builder.cacheManager(ann.cacheManager());
+        }
+        if (StringUtils.hasText(ann.cacheResolver())) {
+            builder.cacheResolver(ann.cacheResolver());
+        }
+        return builder.build();
+    }
+
+    private RedisCacheEvictOperation buildRedisCacheEvictOperation(
+            CacheEvict ann, String name) {
+        RedisCacheEvictOperation.Builder builder = RedisCacheEvictOperation.builder();
+        builder.name(name);
+        builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
+        if (StringUtils.hasText(ann.key())) {
+            builder.key(ann.key());
+        }
+        if (StringUtils.hasText(ann.condition())) {
+            builder.condition(ann.condition());
+        }
+        if (StringUtils.hasText(ann.keyGenerator())) {
+            builder.keyGenerator(ann.keyGenerator());
+        }
+        if (StringUtils.hasText(ann.cacheManager())) {
+            builder.cacheManager(ann.cacheManager());
+        }
+        if (StringUtils.hasText(ann.cacheResolver())) {
+            builder.cacheResolver(ann.cacheResolver());
+        }
+        builder.allEntries(ann.allEntries());
+        builder.beforeInvocation(ann.beforeInvocation());
+        return builder.build();
     }
 
     /**
@@ -172,9 +366,11 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
                 ? ((Method) target).getName() : target.toString();
         log.trace("Parsing @RedisCacheable annotation for target: {}", target);
 
-        final RedisCacheableOperation.Builder builder =
-                RedisCacheableOperation.builder();
-        builder.name(name);
+        // 使用 Spring 标准的 CacheableOperation.Builder，确保 getClass() 返回 CacheableOperation.class
+        // 这样 CacheAspectSupport 的 CacheOperationContexts 能正确按类型索引
+        final org.springframework.cache.interceptor.CacheableOperation.Builder builder =
+                new org.springframework.cache.interceptor.CacheableOperation.Builder();
+        builder.setName(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
@@ -191,7 +387,6 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         builder.setSync(ann.sync());
-        builder.syncTimeout(ann.syncTimeout());
 
         if (StringUtils.hasText(ann.keyGenerator())) {
             builder.setKeyGenerator(ann.keyGenerator());
@@ -205,17 +400,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
             builder.setCacheResolver(ann.cacheResolver());
         }
 
-        builder.ttl(ann.ttl());
-        builder.type(ann.type());
-        builder.cacheNullValues(ann.cacheNullValues());
-        builder.useBloomFilter(ann.useBloomFilter());
-        builder.randomTtl(ann.randomTtl());
-        builder.variance(ann.variance());
-        builder.enablePreRefresh(ann.enablePreRefresh());
-        builder.preRefreshThreshold(ann.preRefreshThreshold());
-        builder.preRefreshMode(ann.preRefreshMode());
-
-        final RedisCacheableOperation operation = builder.build();
+        final org.springframework.cache.interceptor.CacheableOperation operation = builder.build();
         log.debug("Built CacheableOperation: {}", operation);
         return operation;
     }
@@ -268,9 +453,9 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         builder.useBloomFilter(ann.useBloomFilter());
         builder.expectedInsertions(ann.expectedInsertions());
         builder.falseProbability(ann.falseProbability());
-        builder.enablePreRefresh(ann.enablePreRefresh());
-        builder.preRefreshThreshold(ann.preRefreshThreshold());
-        builder.preRefreshMode(ann.preRefreshMode());
+        builder.enableEarlyExpiration(ann.enableEarlyExpiration());
+        builder.earlyExpirationThreshold(ann.earlyExpirationThreshold());
+        builder.earlyExpirationMode(ann.earlyExpirationMode());
 
         final RedisCacheEvictOperation operation = builder.build();
         log.debug("Built RedisCacheEvictOperation: {}", operation);
@@ -369,9 +554,9 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         builder.syncTimeout(ann.syncTimeout());
         builder.randomTtl(ann.randomTtl());
         builder.variance(ann.variance());
-        builder.enablePreRefresh(ann.enablePreRefresh());
-        builder.preRefreshThreshold(ann.preRefreshThreshold());
-        builder.preRefreshMode(ann.preRefreshMode());
+        builder.enableEarlyExpiration(ann.enableEarlyExpiration());
+        builder.earlyExpirationThreshold(ann.earlyExpirationThreshold());
+        builder.earlyExpirationMode(ann.earlyExpirationMode());
 
         final RedisCachePutOperation operation = builder.build();
         log.debug("Built RedisCachePutOperation: {}", operation);

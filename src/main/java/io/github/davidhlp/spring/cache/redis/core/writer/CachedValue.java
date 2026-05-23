@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.core.writer;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 /**
  * 缓存值包装类
@@ -12,19 +13,25 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  * <ul>
  *   <li>v2 版本新增了 startNanoTime 字段</li>
  *   <li>旧缓存数据反序列化时 startNanoTime=0，会自动降级使用 createdTime</li>
+ *   <li>value 字段使用 @JsonTypeInfo(Id.CLASS) 保留类型信息，安全性由 validateTypeIds() 校验</li>
  * </ul>
  */
 public final class CachedValue {
 
-    private final Object value;
-    private final Class<?> type;
-    private final long ttl;
-    private final long createdTime;
-    private final long startNanoTime;
-    private final long lastAccessTime;
-    private final long visitTimes;
-    private final boolean expired;
-    private final long version;
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+    private Object value;
+    private Class<?> type;
+    private long ttl;
+    private long createdTime;
+    private long startNanoTime;
+    private long lastAccessTime;
+    private long visitTimes;
+    private boolean expired;
+    private long version;
+
+    /** 仅供 Jackson 反序列化使用 */
+    private CachedValue() {
+    }
 
     private CachedValue(Object value, Class<?> type, long ttl, long createdTime,
                         long startNanoTime, long lastAccessTime, long visitTimes,
@@ -129,7 +136,6 @@ public final class CachedValue {
         }
     }
 
-    @JsonIgnore
     public Object getValue() {
         return value;
     }

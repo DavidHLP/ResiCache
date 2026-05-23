@@ -14,18 +14,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ThreadPoolPreRefreshExecutor 单元测试
+ * ThreadPoolEarlyExpirationExecutor 单元测试
  */
-@DisplayName("ThreadPoolPreRefreshExecutor Tests")
-class ThreadPoolPreRefreshExecutorTest {
+@DisplayName("ThreadPoolEarlyExpirationExecutor Tests")
+class ThreadPoolEarlyExpirationExecutorTest {
 
-    private ThreadPoolPreRefreshExecutor executor;
+    private ThreadPoolEarlyExpirationExecutor executor;
     private ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
 
     @BeforeEach
     void setUp() {
         inFlight = new ConcurrentHashMap<>();
-        executor = new ThreadPoolPreRefreshExecutor(
+        executor = new ThreadPoolEarlyExpirationExecutor(
                 Executors.newCachedThreadPool(),
                 inFlight,
                 null,
@@ -181,7 +181,7 @@ class ThreadPoolPreRefreshExecutorTest {
         void getStats_validThreadPool_returnsStats() {
             String stats = executor.getStats();
 
-            assertThat(stats).contains("PreRefreshThreadPool");
+            assertThat(stats).contains("EarlyExpirationThreadPool");
             assertThat(stats).contains("active=");
             assertThat(stats).contains("poolSize=");
         }
@@ -189,7 +189,7 @@ class ThreadPoolPreRefreshExecutorTest {
         @Test
         @DisplayName("returns unknown stats for non-threadpool executor")
         void getStats_nonThreadPool_returnsUnknown() {
-            ThreadPoolPreRefreshExecutor simpleExecutor = new ThreadPoolPreRefreshExecutor(
+            ThreadPoolEarlyExpirationExecutor simpleExecutor = new ThreadPoolEarlyExpirationExecutor(
                     Executors.newSingleThreadExecutor(),
                     new ConcurrentHashMap<>(),
                     null,
@@ -240,7 +240,7 @@ class ThreadPoolPreRefreshExecutorTest {
         @Test
         @DisplayName("shutdown properly cleans up all resources")
         void shutdown_properlyCleansUpResources() throws Exception {
-            ThreadPoolPreRefreshExecutor testExecutor = new ThreadPoolPreRefreshExecutor(
+            ThreadPoolEarlyExpirationExecutor testExecutor = new ThreadPoolEarlyExpirationExecutor(
                     Executors.newCachedThreadPool(),
                     new ConcurrentHashMap<>(),
                     null,
@@ -254,11 +254,11 @@ class ThreadPoolPreRefreshExecutorTest {
 
             testExecutor.shutdown();
 
-            java.lang.reflect.Field executorField = ThreadPoolPreRefreshExecutor.class.getDeclaredField("executorService");
+            java.lang.reflect.Field executorField = ThreadPoolEarlyExpirationExecutor.class.getDeclaredField("executorService");
             executorField.setAccessible(true);
             ExecutorService executorService = (ExecutorService) executorField.get(testExecutor);
 
-            java.lang.reflect.Field schedulerField = ThreadPoolPreRefreshExecutor.class.getDeclaredField("cleanupScheduler");
+            java.lang.reflect.Field schedulerField = ThreadPoolEarlyExpirationExecutor.class.getDeclaredField("cleanupScheduler");
             schedulerField.setAccessible(true);
             ExecutorService cleanupScheduler = (ExecutorService) schedulerField.get(testExecutor);
 

@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.register.operation;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.springframework.cache.interceptor.CacheableOperation;
@@ -19,11 +19,13 @@ public class RedisCacheableOperation extends CacheableOperation {
     private final Class<?> type;
     private final boolean cacheNullValues;
     private final boolean useBloomFilter;
+    private final int expectedInsertions;
+    private final double falseProbability;
     private final boolean randomTtl;
     private final float variance;
-    private final boolean enablePreRefresh;
-    private final double preRefreshThreshold;
-    private final PreRefreshMode preRefreshMode;
+    private final boolean enableEarlyExpiration;
+    private final double earlyExpirationThreshold;
+    private final EarlyExpirationMode earlyExpirationMode;
     private final long syncTimeout;
 
     protected RedisCacheableOperation(Builder b) {
@@ -32,11 +34,13 @@ public class RedisCacheableOperation extends CacheableOperation {
         this.type = b.type;
         this.cacheNullValues = b.cacheNullValues;
         this.useBloomFilter = b.useBloomFilter;
+        this.expectedInsertions = b.expectedInsertions;
+        this.falseProbability = b.falseProbability;
         this.randomTtl = b.randomTtl;
         this.variance = b.variance;
-        this.enablePreRefresh = b.enablePreRefresh;
-        this.preRefreshThreshold = b.preRefreshThreshold;
-        this.preRefreshMode = b.preRefreshMode;
+        this.enableEarlyExpiration = b.enableEarlyExpiration;
+        this.earlyExpirationThreshold = b.earlyExpirationThreshold;
+        this.earlyExpirationMode = b.earlyExpirationMode;
         this.syncTimeout = b.syncTimeout;
     }
 
@@ -50,11 +54,13 @@ public class RedisCacheableOperation extends CacheableOperation {
         private Class<?> type = Object.class;
         private boolean cacheNullValues;
         private boolean useBloomFilter;
+        private int expectedInsertions = 10000;
+        private double falseProbability = 0.03;
         private boolean randomTtl;
         private float variance = 0.2F;
-        private boolean enablePreRefresh;
-        private double preRefreshThreshold = 0.3;
-        private PreRefreshMode preRefreshMode = PreRefreshMode.SYNC;
+        private boolean enableEarlyExpiration;
+        private double earlyExpirationThreshold = 0.3;
+        private EarlyExpirationMode earlyExpirationMode = EarlyExpirationMode.SYNC;
         private long syncTimeout = 10;
 
         public Builder name(String name) {
@@ -127,6 +133,16 @@ public class RedisCacheableOperation extends CacheableOperation {
             return this;
         }
 
+        public Builder expectedInsertions(int expectedInsertions) {
+            this.expectedInsertions = expectedInsertions;
+            return this;
+        }
+
+        public Builder falseProbability(double falseProbability) {
+            this.falseProbability = falseProbability;
+            return this;
+        }
+
         public Builder randomTtl(boolean randomTtl) {
             this.randomTtl = randomTtl;
             return this;
@@ -137,18 +153,18 @@ public class RedisCacheableOperation extends CacheableOperation {
             return this;
         }
 
-        public Builder enablePreRefresh(boolean enablePreRefresh) {
-            this.enablePreRefresh = enablePreRefresh;
+        public Builder enableEarlyExpiration(boolean enableEarlyExpiration) {
+            this.enableEarlyExpiration = enableEarlyExpiration;
             return this;
         }
 
-        public Builder preRefreshThreshold(double preRefreshThreshold) {
-            this.preRefreshThreshold = preRefreshThreshold;
+        public Builder earlyExpirationThreshold(double earlyExpirationThreshold) {
+            this.earlyExpirationThreshold = earlyExpirationThreshold;
             return this;
         }
 
-        public Builder preRefreshMode(PreRefreshMode preRefreshMode) {
-            this.preRefreshMode = preRefreshMode;
+        public Builder earlyExpirationMode(EarlyExpirationMode earlyExpirationMode) {
+            this.earlyExpirationMode = earlyExpirationMode;
             return this;
         }
 

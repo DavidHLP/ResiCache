@@ -10,7 +10,7 @@ import org.springframework.lang.Nullable;
  * - TtlHandler: finalTtl, shouldApplyTtl, ttlFromContext
  * - NullValueHandler: storeValue
  * - SyncLockHandler: lockContext
- * - PreRefreshHandler: preRefreshCheckEnabled, preRefreshDecision
+ * - EarlyExpirationHandler: earlyExpirationCheckEnabled, earlyExpirationDecision
  * - ActualCacheHandler: finalResult
  * 
  * 字段分组，便于追踪状态变更来源。
@@ -40,14 +40,14 @@ public class CacheOutput {
     @Nullable
     private LockContext lockContext;
     
-    // ==================== PreRefresh Handler 输出 ====================
+    // ==================== EarlyExpiration Handler 输出 ====================
     
-    /** 是否启用预刷新检查 */
-    private boolean preRefreshCheckEnabled;
+    /** 是否启用提前过期检查 */
+    private boolean earlyExpirationCheckEnabled;
     
-    /** 预刷新决策 */
+    /** 提前过期决策 */
     @Nullable
-    private PreRefreshDecision preRefreshDecision;
+    private EarlyExpirationDecision earlyExpirationDecision;
     
     // ==================== 控制标记 ====================
     
@@ -88,13 +88,13 @@ public class CacheOutput {
     public LockContext getLockContext() { return lockContext; }
     public void setLockContext(@Nullable LockContext lockContext) { this.lockContext = lockContext; }
     
-    // PreRefresh 相关
-    public boolean isPreRefreshCheckEnabled() { return preRefreshCheckEnabled; }
-    public void setPreRefreshCheckEnabled(boolean preRefreshCheckEnabled) { this.preRefreshCheckEnabled = preRefreshCheckEnabled; }
+    // EarlyExpiration 相关
+    public boolean isEarlyExpirationCheckEnabled() { return earlyExpirationCheckEnabled; }
+    public void setEarlyExpirationCheckEnabled(boolean earlyExpirationCheckEnabled) { this.earlyExpirationCheckEnabled = earlyExpirationCheckEnabled; }
     
     @Nullable
-    public PreRefreshDecision getPreRefreshDecision() { return preRefreshDecision; }
-    public void setPreRefreshDecision(@Nullable PreRefreshDecision preRefreshDecision) { this.preRefreshDecision = preRefreshDecision; }
+    public EarlyExpirationDecision getEarlyExpirationDecision() { return earlyExpirationDecision; }
+    public void setEarlyExpirationDecision(@Nullable EarlyExpirationDecision earlyExpirationDecision) { this.earlyExpirationDecision = earlyExpirationDecision; }
     
     // 控制标记
     public boolean isSkipRemaining() { return skipRemaining; }

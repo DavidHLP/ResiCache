@@ -109,7 +109,7 @@ class EvictAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister).registerCacheEvictOperation(operation);
+            verify(redisCacheRegister).registerCacheEvictOperation(any(Method.class), any(Class.class), eq(operation));
         }
 
         @Test
@@ -166,7 +166,7 @@ class EvictAnnotationHandlerTest {
             handler.doHandle(method1, target, args);
             handler.doHandle(method2, target, args);
 
-            verify(redisCacheRegister, times(2)).registerCacheEvictOperation(any(RedisCacheEvictOperation.class));
+            verify(redisCacheRegister, times(2)).registerCacheEvictOperation(any(Method.class), any(Class.class), any(RedisCacheEvictOperation.class));
         }
     }
 
@@ -185,7 +185,7 @@ class EvictAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any());
+            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
         }
 
         @Test
@@ -201,7 +201,7 @@ class EvictAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any());
+            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
         }
     }
 }

@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.core.writer;
 
+import io.github.davidhlp.spring.cache.redis.core.holder.CacheOperationMetadataHolder;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
@@ -8,6 +9,7 @@ import io.github.davidhlp.spring.cache.redis.core.writer.chain.handler.CacheCont
 import io.github.davidhlp.spring.cache.redis.core.writer.support.type.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -17,11 +19,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.expression.AnnotatedElementKey;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,9 +60,10 @@ class RedisProCacheWriterTest {
     private CacheHandlerChain chain;
 
     private RedisProCacheWriter writer;
+    private Method dummyMethod;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws NoSuchMethodException {
         when(chainFactory.createChain()).thenReturn(chain);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         writer = new RedisProCacheWriter(
@@ -68,6 +73,14 @@ class RedisProCacheWriterTest {
                 redisCacheRegister,
                 typeSupport,
                 chainFactory);
+
+        dummyMethod = RedisProCacheWriterTest.class.getMethod("toString");
+        CacheOperationMetadataHolder.setCurrentKey(dummyMethod, RedisProCacheWriterTest.class);
+    }
+
+    @AfterEach
+    void tearDown() {
+        CacheOperationMetadataHolder.clear();
     }
 
     @Nested
@@ -84,7 +97,7 @@ class RedisProCacheWriterTest {
             String actualKey = "key1";
 
             when(typeSupport.bytesToString(key)).thenReturn(redisKey);
-            when(redisCacheRegister.getCacheableOperation(name, actualKey)).thenReturn(null);
+            when(redisCacheRegister.getCacheableOperation(eq(name), any(AnnotatedElementKey.class))).thenReturn(null);
             when(chain.execute(any(CacheContext.class))).thenReturn(CacheResult.success(expectedBytes));
 
             byte[] result = writer.get(name, key);
@@ -102,7 +115,7 @@ class RedisProCacheWriterTest {
             String actualKey = "key1";
 
             when(typeSupport.bytesToString(key)).thenReturn(redisKey);
-            when(redisCacheRegister.getCacheableOperation(name, actualKey)).thenReturn(null);
+            when(redisCacheRegister.getCacheableOperation(eq(name), any(AnnotatedElementKey.class))).thenReturn(null);
             when(chain.execute(any(CacheContext.class))).thenReturn(CacheResult.miss());
 
             byte[] result = writer.get(name, key);
@@ -127,7 +140,7 @@ class RedisProCacheWriterTest {
 
             when(typeSupport.bytesToString(key)).thenReturn(redisKey);
             when(typeSupport.deserializeFromBytes(value)).thenReturn("value");
-            when(redisCacheRegister.getCacheableOperation(name, actualKey)).thenReturn(null);
+            when(redisCacheRegister.getCacheableOperation(eq(name), any(AnnotatedElementKey.class))).thenReturn(null);
             when(chain.execute(any(CacheContext.class))).thenReturn(CacheResult.success());
 
             writer.put(name, key, value, ttl);
@@ -174,7 +187,7 @@ class RedisProCacheWriterTest {
 
             when(typeSupport.bytesToString(key)).thenReturn(redisKey);
             when(typeSupport.deserializeFromBytes(value)).thenReturn("value");
-            when(redisCacheRegister.getCacheableOperation(name, actualKey)).thenReturn(null);
+            when(redisCacheRegister.getCacheableOperation(eq(name), any(AnnotatedElementKey.class))).thenReturn(null);
             when(chain.execute(any(CacheContext.class))).thenReturn(CacheResult.success(existingValue));
 
             byte[] result = writer.putIfAbsent(name, key, value, null);
@@ -196,7 +209,7 @@ class RedisProCacheWriterTest {
             String actualKey = "key1";
 
             when(typeSupport.bytesToString(key)).thenReturn(redisKey);
-            when(redisCacheRegister.getCacheableOperation(name, actualKey)).thenReturn(null);
+            when(redisCacheRegister.getCacheableOperation(eq(name), any(AnnotatedElementKey.class))).thenReturn(null);
             when(chain.execute(any(CacheContext.class))).thenReturn(CacheResult.success());
 
             writer.remove(name, key);
@@ -220,7 +233,7 @@ class RedisProCacheWriterTest {
 
             when(typeSupport.bytesToString(pattern)).thenReturn(keyPattern);
             when(typeSupport.bytesToString(keyPattern.getBytes())).thenReturn(redisKey);
-            when(redisCacheRegister.getCacheableOperation(name, actualKey)).thenReturn(null);
+            when(redisCacheRegister.getCacheableOperation(eq(name), any(AnnotatedElementKey.class))).thenReturn(null);
             when(chain.execute(any(CacheContext.class))).thenReturn(CacheResult.success());
 
             writer.clean(name, pattern);
