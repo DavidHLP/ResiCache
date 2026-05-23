@@ -9,7 +9,7 @@ package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 public enum HandlerOrder {
     BLOOM_FILTER(100, "布隆过滤器-防穿透"),
     SYNC_LOCK(200, "分布式锁-防击穿"),
-    PRE_REFRESH(250, "预刷新-热key保护"),
+    EARLY_EXPIRATION(250, "提前过期-热key保护"),
     TTL(300, "TTL计算"),
     NULL_VALUE(400, "空值处理"),
     ACTUAL_CACHE(500, "实际缓存操作");

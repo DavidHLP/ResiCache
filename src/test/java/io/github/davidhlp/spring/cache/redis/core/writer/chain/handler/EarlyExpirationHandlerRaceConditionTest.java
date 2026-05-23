@@ -3,8 +3,8 @@ package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 import io.github.davidhlp.spring.cache.redis.core.writer.CachedValue;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.ttl.TtlPolicy;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationSupport;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,17 +30,17 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.lenient;
 
 /**
- * PreRefreshHandler race condition tests verifying correct behavior under concurrent access.
+ * EarlyExpirationHandler race condition tests verifying correct behavior under concurrent access.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("PreRefreshHandler Race Condition Tests")
-class PreRefreshHandlerRaceConditionTest {
+@DisplayName("EarlyExpirationHandler Race Condition Tests")
+class EarlyExpirationHandlerRaceConditionTest {
 
     @Mock
     private TtlPolicy ttlPolicy;
 
     @Mock
-    private PreRefreshSupport preRefreshSupport;
+    private EarlyExpirationSupport earlyExpirationSupport;
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;
@@ -51,12 +51,12 @@ class PreRefreshHandlerRaceConditionTest {
     @Mock
     private ValueOperations<String, Object> valueOperations;
 
-    private PreRefreshHandler handler;
+    private EarlyExpirationHandler handler;
     private ExecutorService executor;
 
     @BeforeEach
     void setUp() {
-        handler = new PreRefreshHandler(ttlPolicy, preRefreshSupport, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations);
         executor = Executors.newCachedThreadPool();
     }
 
@@ -74,13 +74,13 @@ class PreRefreshHandlerRaceConditionTest {
         return new CacheContext(input);
     }
 
-    private RedisCacheableOperation createPreRefreshOperation(boolean enablePreRefresh, double threshold, PreRefreshMode mode) {
+    private RedisCacheableOperation createEarlyExpirationOperation(boolean enableEarlyExpiration, double threshold, EarlyExpirationMode mode) {
         return RedisCacheableOperation.builder()
                 .name("test-cache")
                 .cacheNames("test-cache")
-                .enablePreRefresh(enablePreRefresh)
-                .preRefreshThreshold(threshold)
-                .preRefreshMode(mode)
+                .enableEarlyExpiration(enableEarlyExpiration)
+                .earlyExpirationThreshold(threshold)
+                .earlyExpirationMode(mode)
                 .build();
     }
 
@@ -98,14 +98,14 @@ class PreRefreshHandlerRaceConditionTest {
     @Test
     @DisplayName("asyncRefreshAndEvict_concurrentNoCorruption")
     void asyncRefreshAndEvict_concurrentNoCorruption() throws InterruptedException {
-        RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+        RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
         AtomicBoolean exceptionThrown = new AtomicBoolean(false);
 
-        // Stub both valueOperations.get and shouldPreRefresh
+        // Stub both valueOperations.get and shouldEarlyExpiration
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             executor.submit(() -> {
@@ -116,7 +116,7 @@ class PreRefreshHandlerRaceConditionTest {
                 }
             });
             return null;
-        }).when(preRefreshSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
 
         // First call sets up the async refresh
         handler.doHandle(context);
@@ -134,13 +134,13 @@ class PreRefreshHandlerRaceConditionTest {
 
         assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(exceptionThrown.get()).isFalse();
-        verify(preRefreshSupport, atLeastOnce()).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        verify(earlyExpirationSupport, atLeastOnce()).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
     }
 
     @Test
     @DisplayName("asyncRefreshAndPut_concurrentCorrectPrecedence")
     void asyncRefreshAndPut_concurrentCorrectPrecedence() throws InterruptedException {
-        RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+        RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
         CachedValue originalValue = createCachedValue(60, System.currentTimeMillis(), 1L);
         CachedValue newValue = createCachedValue(60, System.currentTimeMillis(), 2L);
@@ -153,7 +153,7 @@ class PreRefreshHandlerRaceConditionTest {
             capturedValue.set(invocation.getMock());
             return originalValue;
         });
-        lenient().when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        lenient().when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
@@ -173,7 +173,7 @@ class PreRefreshHandlerRaceConditionTest {
                 }
             });
             return null;
-        }).when(preRefreshSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
 
         handler.doHandle(context);
 
@@ -190,7 +190,7 @@ class PreRefreshHandlerRaceConditionTest {
     @Test
     @DisplayName("multipleAsyncRefreshes_onlyLatestWins")
     void multipleAsyncRefreshes_onlyLatestWins() throws InterruptedException {
-        RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+        RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context1 = createContext(CacheOperation.GET, operation);
         CacheContext context2 = createContext(CacheOperation.GET, operation);
         CacheContext context3 = createContext(CacheOperation.GET, operation);
@@ -203,13 +203,13 @@ class PreRefreshHandlerRaceConditionTest {
         AtomicReference<String> capturedKey = new AtomicReference<>();
 
         lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue1);
-        lenient().when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        lenient().when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             capturedKey.set(invocation.getArgument(0));
             allRefreshesSubmitted.countDown();
             return null;
-        }).when(preRefreshSupport).submitAsyncRefresh(anyString(), any(Runnable.class));
+        }).when(earlyExpirationSupport).submitAsyncRefresh(anyString(), any(Runnable.class));
 
         // Submit multiple refreshes
         handler.doHandle(context1);
@@ -221,24 +221,24 @@ class PreRefreshHandlerRaceConditionTest {
         assertThat(allRefreshesSubmitted.await(5, TimeUnit.SECONDS)).isTrue();
 
         // All three should have been submitted
-        verify(preRefreshSupport, times(3)).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        verify(earlyExpirationSupport, times(3)).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
     }
 
     @Test
     @DisplayName("atomicLuaScript_preventsRaceBetweenVersionCheckAndTtlShorten")
     void atomicLuaScript_preventsRaceBetweenVersionCheckAndTtlShorten() {
-        RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+        RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
 
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             runnable.run();
             return null;
-        }).when(preRefreshSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
 
         handler.doHandle(context);
 
@@ -248,12 +248,12 @@ class PreRefreshHandlerRaceConditionTest {
     @Test
     @DisplayName("atomicLuaScript_valueChanged_skipsTtlShorten")
     void atomicLuaScript_valueChanged_skipsTtlShorten() {
-        RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+        RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
 
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
             .thenReturn(false);
@@ -262,7 +262,7 @@ class PreRefreshHandlerRaceConditionTest {
             Runnable runnable = invocation.getArgument(1);
             runnable.run();
             return null;
-        }).when(preRefreshSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
 
         handler.doHandle(context);
 

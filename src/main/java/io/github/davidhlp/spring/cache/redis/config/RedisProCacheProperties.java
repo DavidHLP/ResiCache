@@ -1,10 +1,11 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
-import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -24,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  *     enabled: true
  *     expected-insertions: 100000
  *     false-probability: 0.01
- *   pre-refresh:
+ *   early-expiration:
  *     enabled: true
  *     pool-size: 2
  *     max-pool-size: 10
@@ -33,11 +34,12 @@ import java.util.concurrent.TimeUnit;
  */
 @Getter
 @Setter
-@Component
+@Validated
 @ConfigurationProperties(prefix = "resi-cache")
 public class RedisProCacheProperties {
 
     /** 默认缓存TTL */
+    @NotNull
     private Duration defaultTtl = Duration.ofMinutes(30);
 
     /** SpEL 求值失败时是否抛出异常（默认 true）。配置错误（语法错误）始终抛出。 */
@@ -52,8 +54,8 @@ public class RedisProCacheProperties {
     /** 布隆过滤器配置 */
     private BloomFilterProperties bloomFilter = new BloomFilterProperties();
 
-    /** 预刷新配置 */
-    private PreRefreshProperties preRefresh = new PreRefreshProperties();
+    /** 提前过期配置 */
+    private EarlyExpirationProperties earlyExpiration = new EarlyExpirationProperties();
 
     /** 同步锁配置 */
     private SyncLockProperties syncLock = new SyncLockProperties();
@@ -70,11 +72,26 @@ public class RedisProCacheProperties {
     /** 按缓存名称细粒度配置 */
     private Map<String, CacheConfig> caches = new HashMap<>();
 
-    /** 禁用的 Handler 列表（如 bloom-filter、pre-refresh、sync-lock） */
+    /** 禁用的 Handler 列表（如 bloom-filter、early-expiration、sync-lock） */
     private List<String> disabledHandlers = new ArrayList<>();
 
     /** Handler 配置（支持按 cacheName 细粒度禁用） */
     private Map<String, HandlerConfig> handlerSettings = new HashMap<>();
+
+    /** Spring 原生注解兼容模式: FULL, NONE, SELECTIVE */
+    private NativeAnnotationMode nativeAnnotationMode = NativeAnnotationMode.FULL;
+
+    /**
+     * Spring 原生注解兼容模式.
+     */
+    public enum NativeAnnotationMode {
+        /** 转换所有 Spring 原生缓存注解 */
+        FULL,
+        /** 忽略 Spring 原生缓存注解 */
+        NONE,
+        /** 仅当同时存在 ResiCache 注解时才转换 */
+        SELECTIVE
+    }
 
     /**
      * Per-cache configuration.
@@ -90,8 +107,8 @@ public class RedisProCacheProperties {
         private String keyPrefix;
         /** 是否启用布隆过滤器 */
         private Boolean enableBloomFilter;
-        /** 是否启用预刷新 */
-        private Boolean enablePreRefresh;
+        /** 是否启用提前过期 */
+        private Boolean enableEarlyExpiration;
     }
 
     /**
@@ -107,6 +124,8 @@ public class RedisProCacheProperties {
         private boolean failOnUnknownType = true;
         /** Jackson 类型属性名 */
         private String typeProperty = "@class";
+        /** 是否启用 Jackson 多态类型信息（默认关闭，更安全） */
+        private boolean polymorphicTypingEnabled = false;
     }
 
     /**
@@ -165,8 +184,8 @@ public class RedisProCacheProperties {
 
     @Getter
     @Setter
-    public static class PreRefreshProperties {
-        /** 是否启用预刷新 */
+    public static class EarlyExpirationProperties {
+        /** 是否启用提前过期 */
         private boolean enabled = true;
         /** 核心线程池大小 */
         private int poolSize = 2;

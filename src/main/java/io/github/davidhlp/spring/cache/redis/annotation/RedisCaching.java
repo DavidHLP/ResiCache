@@ -23,8 +23,5 @@ public @interface RedisCaching {
      */
     RedisCacheEvict[] redisCacheEvict() default {};
 
-    /**
-     * 缓存更新的操作数组.
-     */
     RedisCachePut[] redisCachePut() default {};
 }

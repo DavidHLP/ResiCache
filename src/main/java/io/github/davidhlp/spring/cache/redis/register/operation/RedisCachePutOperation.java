@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.register.operation;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.springframework.cache.interceptor.CachePutOperation;
@@ -25,9 +25,9 @@ public class RedisCachePutOperation extends CachePutOperation {
     private final long syncTimeout;
     private final boolean randomTtl;
     private final float variance;
-    private final boolean enablePreRefresh;
-    private final double preRefreshThreshold;
-    private final PreRefreshMode preRefreshMode;
+    private final boolean enableEarlyExpiration;
+    private final double earlyExpirationThreshold;
+    private final EarlyExpirationMode earlyExpirationMode;
 
     protected RedisCachePutOperation(Builder b) {
         super(b);
@@ -41,9 +41,9 @@ public class RedisCachePutOperation extends CachePutOperation {
         this.syncTimeout = b.syncTimeout;
         this.randomTtl = b.randomTtl;
         this.variance = b.variance;
-        this.enablePreRefresh = b.enablePreRefresh;
-        this.preRefreshThreshold = b.preRefreshThreshold;
-        this.preRefreshMode = b.preRefreshMode;
+        this.enableEarlyExpiration = b.enableEarlyExpiration;
+        this.earlyExpirationThreshold = b.earlyExpirationThreshold;
+        this.earlyExpirationMode = b.earlyExpirationMode;
     }
 
     public static Builder builder() {
@@ -62,9 +62,9 @@ public class RedisCachePutOperation extends CachePutOperation {
         private long syncTimeout = 10;
         private boolean randomTtl;
         private float variance = 0.2F;
-        private boolean enablePreRefresh;
-        private double preRefreshThreshold = 0.3;
-        private PreRefreshMode preRefreshMode = PreRefreshMode.SYNC;
+        private boolean enableEarlyExpiration;
+        private double earlyExpirationThreshold = 0.3;
+        private EarlyExpirationMode earlyExpirationMode = EarlyExpirationMode.SYNC;
 
         public Builder name(String name) {
             setName(name);
@@ -156,18 +156,18 @@ public class RedisCachePutOperation extends CachePutOperation {
             return this;
         }
 
-        public Builder enablePreRefresh(boolean enablePreRefresh) {
-            this.enablePreRefresh = enablePreRefresh;
+        public Builder enableEarlyExpiration(boolean enableEarlyExpiration) {
+            this.enableEarlyExpiration = enableEarlyExpiration;
             return this;
         }
 
-        public Builder preRefreshThreshold(double preRefreshThreshold) {
-            this.preRefreshThreshold = preRefreshThreshold;
+        public Builder earlyExpirationThreshold(double earlyExpirationThreshold) {
+            this.earlyExpirationThreshold = earlyExpirationThreshold;
             return this;
         }
 
-        public Builder preRefreshMode(PreRefreshMode preRefreshMode) {
-            this.preRefreshMode = preRefreshMode;
+        public Builder earlyExpirationMode(EarlyExpirationMode earlyExpirationMode) {
+            this.earlyExpirationMode = earlyExpirationMode;
             return this;
         }
 

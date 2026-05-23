@@ -171,6 +171,11 @@ public class CacheHandlerChain {
      * @return 处理器名称列表
      */
     public List<String> getHandlerNames() {
-        return handlers.stream().map(h -> h.getClass().getSimpleName()).toList();
+        lock.readLock().lock();
+        try {
+            return handlers.stream().map(h -> h.getClass().getSimpleName()).toList();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 }

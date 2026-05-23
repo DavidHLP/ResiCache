@@ -4,7 +4,7 @@ import io.github.davidhlp.spring.cache.redis.core.writer.CachedValue;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.nullvalue.NullValuePolicy;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationSupport;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -38,13 +37,10 @@ class ActualCacheHandlerTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Mock
-    private CacheStatisticsCollector statistics;
-
-    @Mock
     private NullValuePolicy nullValuePolicy;
 
     @Mock
-    private PreRefreshSupport preRefreshSupport;
+    private EarlyExpirationSupport earlyExpirationSupport;
 
     @Mock
     private CacheErrorHandler errorHandler;
@@ -56,9 +52,8 @@ class ActualCacheHandlerTest {
         handler = new ActualCacheHandler(
             redisTemplate,
             valueOperations,
-            statistics,
             nullValuePolicy,
-            preRefreshSupport,
+            earlyExpirationSupport,
             errorHandler
         );
     }
@@ -97,14 +92,14 @@ class ActualCacheHandlerTest {
     }
 
     @Nested
-    @DisplayName("doHandle - preRefresh skipped")
-    class PreRefreshSkippedTests {
+    @DisplayName("doHandle - earlyExpiration skipped")
+    class EarlyExpirationSkippedTests {
 
         @Test
-        @DisplayName("returns miss when preRefresh.skipped attribute is true")
-        void doHandle_preRefreshSkipped_returnsMiss() {
+        @DisplayName("returns miss when earlyExpiration.skipped attribute is true")
+        void doHandle_earlyExpirationSkipped_returnsMiss() {
             CacheContext context = createContext(CacheOperation.GET);
-            context.setAttribute("preRefresh.skipped", true);
+            context.setAttribute("earlyExpiration.skipped", true);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -134,7 +129,6 @@ class ActualCacheHandlerTest {
             assertThat(result.result().isSuccess()).isTrue();
             assertThat(result.result().isHit()).isTrue();
             assertThat(result.result().getResultBytes()).isEqualTo(returnValue);
-            verify(statistics).incHits("test-cache");
         }
 
         @Test
@@ -148,7 +142,6 @@ class ActualCacheHandlerTest {
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
             assertThat(result.result().isHit()).isFalse();
-            verify(statistics).incMisses("test-cache");
         }
 
         @Test
@@ -164,7 +157,6 @@ class ActualCacheHandlerTest {
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isHit()).isFalse();
-            verify(statistics).incMisses("test-cache");
         }
 
         @Test
@@ -200,9 +192,8 @@ class ActualCacheHandlerTest {
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
-            verify(preRefreshSupport).cancelAsyncRefresh("test:key");
+            verify(earlyExpirationSupport).cancelAsyncRefresh("test:key");
             verify(valueOperations).set(eq("test:key"), any(CachedValue.class), eq(Duration.ofSeconds(120)));
-            verify(statistics).incPuts("test-cache");
         }
 
         @Test
@@ -217,7 +208,6 @@ class ActualCacheHandlerTest {
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
             verify(valueOperations).set(eq("test:key"), any(CachedValue.class));
-            verify(statistics).incPuts("test-cache");
         }
 
         @Test
@@ -263,7 +253,6 @@ class ActualCacheHandlerTest {
             context.getOutput().setShouldApplyTtl(true);
             context.getOutput().setFinalTtl(120);
             context.getOutput().setStoreValue("storeValue");
-            when(valueOperations.get("test:key")).thenReturn(null);
             when(valueOperations.setIfAbsent(eq("test:key"), any(CachedValue.class), eq(Duration.ofSeconds(120))))
                 .thenReturn(true);
 
@@ -271,7 +260,6 @@ class ActualCacheHandlerTest {
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
-            verify(statistics).incPuts("test-cache");
         }
 
         @Test
@@ -299,7 +287,6 @@ class ActualCacheHandlerTest {
             CachedValue existingValue = CachedValue.of("existingValue", 60);
             byte[] returnValue = "convertedExisting".getBytes();
             when(valueOperations.get("test:key"))
-                .thenReturn(null)
                 .thenReturn(existingValue);
             when(nullValuePolicy.toReturnValue(any(), eq("test-cache"), eq("test:key")))
                 .thenReturn(returnValue);
@@ -345,7 +332,6 @@ class ActualCacheHandlerTest {
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
             verify(redisTemplate).delete("test:key");
-            verify(statistics).incDeletes("test-cache");
         }
 
         @Test

@@ -3,8 +3,8 @@ package io.github.davidhlp.spring.cache.redis.core.writer.chain.handler;
 import io.github.davidhlp.spring.cache.redis.core.writer.CachedValue;
 import io.github.davidhlp.spring.cache.redis.core.writer.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.ttl.TtlPolicy;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshMode;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.PreRefreshSupport;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
+import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationSupport;
 import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,16 +26,16 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * PreRefreshHandler 单元测试
+ * EarlyExpirationHandler 单元测试
  */
 @ExtendWith(MockitoExtension.class)
-class PreRefreshHandlerTest {
+class EarlyExpirationHandlerTest {
 
     @Mock
     private TtlPolicy ttlPolicy;
 
     @Mock
-    private PreRefreshSupport preRefreshSupport;
+    private EarlyExpirationSupport earlyExpirationSupport;
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;
@@ -46,11 +46,11 @@ class PreRefreshHandlerTest {
     @Mock
     private ValueOperations<String, Object> valueOperations;
 
-    private PreRefreshHandler handler;
+    private EarlyExpirationHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new PreRefreshHandler(ttlPolicy, preRefreshSupport, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
@@ -67,13 +67,13 @@ class PreRefreshHandlerTest {
         return new CacheContext(input);
     }
 
-    private RedisCacheableOperation createPreRefreshOperation(boolean enablePreRefresh, double threshold, PreRefreshMode mode) {
+    private RedisCacheableOperation createEarlyExpirationOperation(boolean enableEarlyExpiration, double threshold, EarlyExpirationMode mode) {
         return RedisCacheableOperation.builder()
                 .name("test-cache")
                 .cacheNames("test-cache")
-                .enablePreRefresh(enablePreRefresh)
-                .preRefreshThreshold(threshold)
-                .preRefreshMode(mode)
+                .enableEarlyExpiration(enableEarlyExpiration)
+                .earlyExpirationThreshold(threshold)
+                .earlyExpirationMode(mode)
                 .build();
     }
 
@@ -93,9 +93,9 @@ class PreRefreshHandlerTest {
     class ShouldHandleTests {
 
         @Test
-        @DisplayName("returns true for GET with preRefresh enabled")
-        void shouldHandle_getWithPreRefreshEnabled_returnsTrue() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.SYNC);
+        @DisplayName("returns true for GET with earlyExpiration enabled")
+        void shouldHandle_getWithEarlyExpirationEnabled_returnsTrue() {
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
 
             boolean result = handler.shouldHandle(context);
@@ -104,9 +104,9 @@ class PreRefreshHandlerTest {
         }
 
         @Test
-        @DisplayName("returns false for GET with preRefresh disabled")
-        void shouldHandle_getWithPreRefreshDisabled_returnsFalse() {
-            RedisCacheableOperation operation = createPreRefreshOperation(false, 0.8, PreRefreshMode.SYNC);
+        @DisplayName("returns false for GET with earlyExpiration disabled")
+        void shouldHandle_getWithEarlyExpirationDisabled_returnsFalse() {
+            RedisCacheableOperation operation = createEarlyExpirationOperation(false, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
 
             boolean result = handler.shouldHandle(context);
@@ -115,9 +115,9 @@ class PreRefreshHandlerTest {
         }
 
         @Test
-        @DisplayName("returns false for PUT operation even with preRefresh enabled")
-        void shouldHandle_putWithPreRefreshEnabled_returnsFalse() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.SYNC);
+        @DisplayName("returns false for PUT operation even with earlyExpiration enabled")
+        void shouldHandle_putWithEarlyExpirationEnabled_returnsFalse() {
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.PUT, operation);
 
             boolean result = handler.shouldHandle(context);
@@ -143,7 +143,7 @@ class PreRefreshHandlerTest {
         @Test
         @DisplayName("continues chain when cache value is null")
         void doHandle_cacheValueNull_continuesChain() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.SYNC);
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             when(valueOperations.get("test:key")).thenReturn(null);
 
@@ -156,7 +156,7 @@ class PreRefreshHandlerTest {
         @Test
         @DisplayName("continues chain when cache value is expired")
         void doHandle_cacheValueExpired_continuesChain() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.SYNC);
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = CachedValue.builder()
                     .value("test-value")
@@ -182,11 +182,11 @@ class PreRefreshHandlerTest {
         @Test
         @DisplayName("continues chain when TTL policy indicates no refresh needed")
         void doHandle_noRefreshNeeded_continuesChain() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.SYNC);
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(false);
+            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(false);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -203,16 +203,16 @@ class PreRefreshHandlerTest {
         @Test
         @DisplayName("returns skipAll and increments misses when sync refresh needed")
         void doHandle_syncRefreshNeeded_returnsSkipAll() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.SYNC);
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
-            assertThat(context.getAttribute("preRefresh.skipped", false)).isTrue();
+            assertThat(context.getAttribute("earlyExpiration.skipped", false)).isTrue();
             verify(statistics).incMisses("test-cache");
         }
 
@@ -222,14 +222,14 @@ class PreRefreshHandlerTest {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("test-cache")
                     .cacheNames("test-cache")
-                    .enablePreRefresh(true)
-                    .preRefreshThreshold(0.8)
-                    .preRefreshMode(null)
+                    .enableEarlyExpiration(true)
+                    .earlyExpirationThreshold(0.8)
+                    .earlyExpirationMode(null)
                     .build();
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -245,26 +245,26 @@ class PreRefreshHandlerTest {
         @Test
         @DisplayName("continues chain and schedules async refresh when async mode")
         void doHandle_asyncRefresh_schedulesAndContinues() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
-            verify(preRefreshSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+            verify(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
         }
 
         @Test
         @DisplayName("async refresh does not increment misses")
         void doHandle_asyncRefresh_noMissIncrement() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.ASYNC);
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             handler.doHandle(context);
 
@@ -291,7 +291,7 @@ class PreRefreshHandlerTest {
             );
             CacheContext context = new CacheContext(input);
 
-            PreRefreshDecision decision = PreRefreshHandler.getDecision(context);
+            EarlyExpirationDecision decision = EarlyExpirationHandler.getDecision(context);
 
             assertThat(decision.needsRefresh()).isFalse();
             assertThat(decision.isSync()).isFalse();
@@ -311,10 +311,10 @@ class PreRefreshHandlerTest {
                     null
             );
             CacheContext context = new CacheContext(input);
-            PreRefreshDecision storedDecision = PreRefreshDecision.syncRefresh();
-            context.setAttribute("preRefresh.decision", storedDecision);
+            EarlyExpirationDecision storedDecision = EarlyExpirationDecision.syncRefresh();
+            context.setAttribute("earlyExpiration.decision", storedDecision);
 
-            PreRefreshDecision decision = PreRefreshHandler.getDecision(context);
+            EarlyExpirationDecision decision = EarlyExpirationHandler.getDecision(context);
 
             assertThat(decision).isEqualTo(storedDecision);
         }
@@ -327,15 +327,15 @@ class PreRefreshHandlerTest {
         @Test
         @DisplayName("sets decision attribute in context when refresh needed")
         void doHandle_setsDecisionAttribute() {
-            RedisCacheableOperation operation = createPreRefreshOperation(true, 0.8, PreRefreshMode.SYNC);
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldPreRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             handler.doHandle(context);
 
-            PreRefreshDecision decision = context.getAttribute("preRefresh.decision");
+            EarlyExpirationDecision decision = context.getAttribute("earlyExpiration.decision");
             assertThat(decision).isNotNull();
             assertThat(decision.needsRefresh()).isTrue();
         }

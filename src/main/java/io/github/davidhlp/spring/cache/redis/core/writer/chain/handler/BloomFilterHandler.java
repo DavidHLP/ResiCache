@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>职责：
  * <ul>
- *   <li>GET: 检查 key 是否可能存在，不存在则直接返回 miss</li>
+ *   <li>GET: Writer 层透传，Bloom 短路检查已移至 {@link io.github.davidhlp.spring.cache.redis.core.RedisProCache#get(Object, Callable)} 层</li>
  *   <li>PUT/PUT_IF_ABSENT: 先让后续 Handler 执行，成功后将 key 添加到布隆过滤器</li>
  *   <li>CLEAN: 清理缓存时，同时清理布隆过滤器</li>
  * </ul>
@@ -22,12 +22,7 @@ import org.springframework.stereotype.Component;
  *   <li>对于 PUT 操作，采用前置检查+后置处理模式</li>
  *   <li>通过 markPostProcess 标记请求后置处理</li>
  *   <li>在责任链执行完成后执行后置逻辑</li>
- * </ul>
- *
- * <p>假阳性处理：
- * <ul>
- *   <li>当 bloom filter 返回 positive 但 cache 实际 miss 时，在 post-processing 时
- *       将 key 添加到 bloom filter，避免对不存在的 key 重复进行缓存查找</li>
+ *   <li>Bloom 仅在确认数据存在时（PUT 成功）才添加 key，GET miss 不会污染 Bloom</li>
  * </ul>
  */
 @Slf4j
@@ -39,9 +34,6 @@ public class BloomFilterHandler extends AbstractCacheHandler
 
     /** 上下文属性键：标记需要后置处理 */
     private static final String POST_PROCESS_KEY = "bloom.postProcess";
-
-    /** 上下文属性键：bloom filter 对 GET 返回 positive（可能存在） */
-    private static final String BLOOM_POSITIVE_GET_KEY = "bloom.get.positive";
 
     private final BloomSupport bloomSupport;
     private final CacheStatisticsCollector statistics;
@@ -66,9 +58,9 @@ public class BloomFilterHandler extends AbstractCacheHandler
     /**
      * 处理 GET 操作
      *
-     * <p>检查布隆过滤器，如果 key 不可能存在，直接返回 miss。
-     * 如果 key 可能存在（假阳性），继续执行但标记 post-processing，
-     * 后续根据 cache 结果决定是否添加到 bloom filter。
+     * <p>Writer 层短路：若 Bloom 判定 key 不可能存在，直接返回 miss，避免查询 Redis。
+     * 对于 sync 模式，{@link io.github.davidhlp.spring.cache.redis.core.RedisProCache#get(Object, Callable)}
+     * 会在调用 loader 前再做一次 Bloom 拦截，防止触发数据源查询。
      */
     private HandlerResult handleGet(CacheContext context) {
         boolean mightContain =
@@ -80,20 +72,13 @@ public class BloomFilterHandler extends AbstractCacheHandler
                     context.getCacheName(),
                     context.getRedisKey());
             statistics.incMisses(context.getCacheName());
-            // 明确终止，不继续执行
-            return HandlerResult.terminate(CacheResult.rejectedByBloomFilter());
+            return HandlerResult.terminate(CacheResult.miss());
         }
 
         log.debug(
                 "Bloom filter passed (key might exist): cacheName={}, key={}",
                 context.getCacheName(),
                 context.getRedisKey());
-
-        // 标记该 GET 请求的 bloom filter 返回了 positive
-        // 在 post-processing 时，如果 cache miss，则添加 key 到 bloom filter
-        context.setAttribute(BLOOM_POSITIVE_GET_KEY, true);
-
-        // 继续执行后续 Handler
         return HandlerResult.continueChain();
     }
 
@@ -162,33 +147,7 @@ public class BloomFilterHandler extends AbstractCacheHandler
         switch (context.getOperation()) {
             case PUT, PUT_IF_ABSENT -> addToBloomFilter(context);
             case CLEAN -> clearBloomFilter(context);
-            case GET -> handleGetPostProcessing(context, result);
-            default -> { /* 其他操作无需后置处理 */ }
-        }
-    }
-
-    /**
-     * 处理 GET 操作的后置处理
-     *
-     * <p>当 bloom filter 返回 positive 但 cache miss 时，将 key 添加到 bloom filter，
-     * 避免对不存在的 key 重复进行缓存查找。
-     */
-    private void handleGetPostProcessing(CacheContext context, CacheResult result) {
-        // 检查该 GET 请求是否 bloom filter 返回了 positive
-        Boolean bloomPositive = context.getAttribute(BLOOM_POSITIVE_GET_KEY);
-        if (bloomPositive == null || !bloomPositive) {
-            // bloom filter 未返回 positive，无需处理
-            return;
-        }
-
-        // 如果 cache miss（bloom 返回 positive 但实际不存在）
-        // 添加 key 到 bloom filter，避免后续重复查询
-        if (!result.isHit()) {
-            bloomSupport.add(context.getCacheName(), context.getActualKey());
-            log.debug(
-                    "Added false positive key to bloom filter: cacheName={}, key={}",
-                    context.getCacheName(),
-                    context.getRedisKey());
+            default -> { /* GET 等操作无需后置处理 */ }
         }
     }
 
@@ -201,11 +160,12 @@ public class BloomFilterHandler extends AbstractCacheHandler
     }
 
     private void clearBloomFilter(CacheContext context) {
-        if (context.getKeyPattern() != null && context.getKeyPattern().endsWith("*")) {
-            bloomSupport.clear(context.getCacheName());
-            log.debug(
-                    "Bloom filter cleared along with cache: cacheName={}",
-                    context.getCacheName());
-        }
+        // 仅清空布隆过滤器，不做增量删除（布隆过滤器不支持精确删除）
+        // 但记录警告：清空后短时间内会有穿透风险，直到新 PUT 重新填充
+        bloomSupport.clear(context.getCacheName());
+        log.warn(
+                "Bloom filter cleared along with cache: cacheName={} — " +
+                "cache penetration risk until filter is repopulated by subsequent PUTs",
+                context.getCacheName());
     }
 }

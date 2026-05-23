@@ -272,8 +272,8 @@ class CacheHandlerChainFactoryTest {
         }
     }
 
-    @HandlerPriority(HandlerOrder.PRE_REFRESH)
-    static class PreRefreshTestHandler implements CacheHandler {
+    @HandlerPriority(HandlerOrder.EARLY_EXPIRATION)
+    static class EarlyExpirationTestHandler implements CacheHandler {
         @Override
         public HandlerResult handle(CacheContext context) {
             return HandlerResult.continueWith(CacheResult.success());

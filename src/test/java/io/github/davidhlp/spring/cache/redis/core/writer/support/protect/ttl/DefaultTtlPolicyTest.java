@@ -186,8 +186,8 @@ class DefaultTtlPolicyTest {
     }
 
     @Nested
-    @DisplayName("shouldPreRefresh() Tests")
-    class ShouldPreRefreshTests {
+    @DisplayName("shouldEarlyExpiration() Tests")
+    class ShouldEarlyExpirationTests {
 
         private static final ZoneId UTC = ZoneId.of("UTC");
         private static final Instant FIXED_INSTANT = Instant.parse("2024-01-01T12:00:00Z");
@@ -201,55 +201,55 @@ class DefaultTtlPolicyTest {
 
         @Test
         @DisplayName("returns false when ttlSeconds is zero")
-        void shouldPreRefresh_zeroTtl_returnsFalse() {
-            boolean result = policy.shouldPreRefresh(FIXED_TIME_MS, 0, 0.2);
+        void shouldEarlyExpiration_zeroTtl_returnsFalse() {
+            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 0, 0.2);
 
             assertThat(result).isFalse();
         }
 
         @Test
         @DisplayName("returns false when ttlSeconds is negative")
-        void shouldPreRefresh_negativeTtl_returnsFalse() {
-            boolean result = policy.shouldPreRefresh(FIXED_TIME_MS, -100, 0.2);
+        void shouldEarlyExpiration_negativeTtl_returnsFalse() {
+            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, -100, 0.2);
 
             assertThat(result).isFalse();
         }
 
         @Test
         @DisplayName("returns false when threshold is zero")
-        void shouldPreRefresh_zeroThreshold_returnsFalse() {
-            boolean result = policy.shouldPreRefresh(FIXED_TIME_MS, 100, 0.0);
+        void shouldEarlyExpiration_zeroThreshold_returnsFalse() {
+            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, 0.0);
 
             assertThat(result).isFalse();
         }
 
         @Test
         @DisplayName("returns false when threshold is negative")
-        void shouldPreRefresh_negativeThreshold_returnsFalse() {
-            boolean result = policy.shouldPreRefresh(FIXED_TIME_MS, 100, -0.1);
+        void shouldEarlyExpiration_negativeThreshold_returnsFalse() {
+            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, -0.1);
 
             assertThat(result).isFalse();
         }
 
         @Test
         @DisplayName("returns false when threshold is 1")
-        void shouldPreRefresh_thresholdOne_returnsFalse() {
-            boolean result = policy.shouldPreRefresh(FIXED_TIME_MS, 100, 1.0);
+        void shouldEarlyExpiration_thresholdOne_returnsFalse() {
+            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, 1.0);
 
             assertThat(result).isFalse();
         }
 
         @Test
         @DisplayName("returns false when threshold is greater than 1")
-        void shouldPreRefresh_thresholdGreaterThanOne_returnsFalse() {
-            boolean result = policy.shouldPreRefresh(FIXED_TIME_MS, 100, 1.5);
+        void shouldEarlyExpiration_thresholdGreaterThanOne_returnsFalse() {
+            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, 1.5);
 
             assertThat(result).isFalse();
         }
 
         @Test
         @DisplayName("returns true when at threshold boundary")
-        void shouldPreRefresh_atThreshold_returnsTrue() {
+        void shouldEarlyExpiration_atThreshold_returnsTrue() {
             // TTL 100 seconds, threshold 0.2 (80% used)
             // Current time: 1704100800000 (12:00:00)
             // At 80 seconds elapsed, ratio = 80/100 = 0.8 = 1 - threshold
@@ -258,33 +258,33 @@ class DefaultTtlPolicyTest {
             double threshold = 0.2;
             long createdTime = FIXED_TIME_MS - 80000; // 80 seconds ago
 
-            boolean result = policy.shouldPreRefresh(createdTime, ttlSeconds, threshold);
+            boolean result = policy.shouldEarlyExpiration(createdTime, ttlSeconds, threshold);
 
             assertThat(result).isTrue();
         }
 
         @Test
         @DisplayName("returns true when past threshold")
-        void shouldPreRefresh_pastThreshold_returnsTrue() {
+        void shouldEarlyExpiration_pastThreshold_returnsTrue() {
             // Elapsed 90 seconds, ratio = 0.9 >= 0.8
             long ttlSeconds = 100;
             double threshold = 0.2;
             long createdTime = FIXED_TIME_MS - 90000; // 90 seconds ago
 
-            boolean result = policy.shouldPreRefresh(createdTime, ttlSeconds, threshold);
+            boolean result = policy.shouldEarlyExpiration(createdTime, ttlSeconds, threshold);
 
             assertThat(result).isTrue();
         }
 
         @Test
         @DisplayName("returns false when before threshold")
-        void shouldPreRefresh_beforeThreshold_returnsFalse() {
+        void shouldEarlyExpiration_beforeThreshold_returnsFalse() {
             // Elapsed 70 seconds, ratio = 0.7 < 0.8
             long ttlSeconds = 100;
             double threshold = 0.2;
             long createdTime = FIXED_TIME_MS - 70000; // 70 seconds ago
 
-            boolean result = policy.shouldPreRefresh(createdTime, ttlSeconds, threshold);
+            boolean result = policy.shouldEarlyExpiration(createdTime, ttlSeconds, threshold);
 
             assertThat(result).isFalse();
         }

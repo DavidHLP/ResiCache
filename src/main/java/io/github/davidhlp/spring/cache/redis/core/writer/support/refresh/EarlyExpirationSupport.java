@@ -6,31 +6,31 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 协调预刷新评估和异步执行。
+ * 协调提前过期评估和异步执行。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class PreRefreshSupport {
+public class EarlyExpirationSupport {
 
-    private final PreRefreshExecutor executor;
+    private final EarlyExpirationExecutor executor;
 
     /**
-     * 提交异步预刷新任务
+     * 提交异步提前过期任务
      *
      * @param key         刷新任务关联的键
      * @param refreshTask 要执行的刷新任务
      */
     public void submitAsyncRefresh(String key, Runnable refreshTask) {
         if (key == null || refreshTask == null) {
-            log.warn("Skipping async pre-refresh submission due to missing key or task");
+            log.warn("Skipping async early-expiration submission due to missing key or task");
             return;
         }
         executor.submit(key, refreshTask);
     }
 
     /**
-     * 取消指定键的异步预刷新任务
+     * 取消指定键的异步提前过期任务
      *
      * @param key 需要取消刷新任务的键
      */
@@ -60,7 +60,7 @@ public class PreRefreshSupport {
     }
 
     /**
-     * 关闭预刷新支持服务，在Bean销毁时自动调用
+     * 关闭提前过期支持服务，在Bean销毁时自动调用
      */
     @PreDestroy
     public void shutdown() {

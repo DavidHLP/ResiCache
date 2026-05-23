@@ -7,10 +7,10 @@ import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOp
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -31,8 +31,6 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
     private final RedisCacheRegister redisCacheRegister;
     private final KeyGenerator keyGenerator;
     private final CacheableOperationFactory cacheableOperationFactory;
-    private final SpelExpressionParser parser = new SpelExpressionParser();
-    private boolean failOnSpelError = true;
 
     public CacheableAnnotationHandler(
             RedisCacheRegister redisCacheRegister,
@@ -43,22 +41,28 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
         this.cacheableOperationFactory = cacheableOperationFactory;
     }
 
-    public void setFailOnSpelError(boolean failOnSpelError) {
-        this.failOnSpelError = failOnSpelError;
-    }
-
     @Override
     protected boolean canHandle(Method method) {
-        return method.isAnnotationPresent(RedisCacheable.class);
+        return AnnotatedElementUtils.findMergedAnnotation(method, RedisCacheable.class) != null
+                || AnnotatedElementUtils.findMergedAnnotation(method, Cacheable.class) != null;
     }
 
     @Override
     protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
-        RedisCacheable[] cacheables = method.getAnnotationsByType(RedisCacheable.class);
         List<CacheOperation> operations = new ArrayList<>();
 
-        for (RedisCacheable cacheable : cacheables) {
+        RedisCacheable cacheable = AnnotatedElementUtils.findMergedAnnotation(method, RedisCacheable.class);
+        if (cacheable != null) {
             RedisCacheableOperation operation = registerCacheableOperation(method, target, args, cacheable);
+            if (operation != null) {
+                operations.add(operation);
+            }
+            return operations;
+        }
+
+        Cacheable springCacheable = AnnotatedElementUtils.findMergedAnnotation(method, Cacheable.class);
+        if (springCacheable != null) {
+            RedisCacheableOperation operation = registerSpringCacheableOperation(method, target, args, springCacheable);
             if (operation != null) {
                 operations.add(operation);
             }
@@ -70,11 +74,16 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
     private RedisCacheableOperation registerCacheableOperation(
             Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
         try {
-            String key = resolveKey(target, method, args, redisCacheable.key());
+            // 不再手动解析 SpEL key 表达式；将原始表达式或 KeyGenerator 结果传给工厂。
+            // 真正的 key 解析由 Spring 的 CacheAspectSupport 负责。
+            String key = StringUtils.hasText(redisCacheable.key())
+                    ? redisCacheable.key()
+                    : String.valueOf(keyGenerator.generate(target, method, args));
             RedisCacheableOperation operation =
                     cacheableOperationFactory.create(method, redisCacheable, target, args, key);
 
-            redisCacheRegister.registerCacheableOperation(operation);
+            Class<?> targetClass = target != null ? target.getClass() : null;
+            redisCacheRegister.registerCacheableOperation(method, targetClass, operation);
             log.debug(
                     "Registered cacheable operation: {} with key: {} for caches: {}",
                     method.getName(),
@@ -87,61 +96,52 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
         }
     }
 
-    /**
-     * Resolves the cache key using the same logic Spring Cache uses:
-     * if a SpEL key expression is provided, evaluate it;
-     * otherwise fall back to the configured KeyGenerator.
-     */
-    private String resolveKey(Object target, Method method, Object[] args, String keyExpression) {
-        if (StringUtils.hasText(keyExpression)) {
-            try {
-                StandardEvaluationContext context = new StandardEvaluationContext();
-                context.setVariable("root", new RootObject(method, args, target));
-                // Bind method parameters as variables (e.g., #id, #name)
-                bindMethodParameters(context, method, args);
-                Object key = parser.parseExpression(keyExpression).getValue(context);
-                if (key != null) {
-                    return key.toString();
-                }
-            } catch (Exception e) {
-                if (failOnSpelError) {
-                    throw new IllegalStateException(
-                            "Failed to evaluate SpEL key expression '" + keyExpression + "'", e);
-                }
-                log.warn("Failed to evaluate SpEL key expression '{}', falling back to KeyGenerator", keyExpression);
+    private RedisCacheableOperation registerSpringCacheableOperation(
+            Method method, Object target, Object[] args, Cacheable springCacheable) {
+        try {
+            String key = StringUtils.hasText(springCacheable.key())
+                    ? springCacheable.key()
+                    : String.valueOf(keyGenerator.generate(target, method, args));
+
+            RedisCacheableOperation.Builder builder = RedisCacheableOperation.builder();
+            builder.name(method.getName());
+            builder.cacheNames(
+                    springCacheable.value().length > 0
+                            ? springCacheable.value()
+                            : springCacheable.cacheNames());
+            if (StringUtils.hasText(springCacheable.key())) {
+                builder.key(springCacheable.key());
             }
-        }
-        Object key = keyGenerator.generate(target, method, args);
-        return String.valueOf(key);
-    }
-
-    private void bindMethodParameters(StandardEvaluationContext context, Method method, Object[] args) {
-        java.lang.reflect.Parameter[] params = method.getParameters();
-        for (int i = 0; i < params.length && i < args.length; i++) {
-            String paramName = params[i].getName();
-            if (!paramName.equals("arg" + i)) {
-                context.setVariable(paramName, args[i]);
+            if (StringUtils.hasText(springCacheable.condition())) {
+                builder.condition(springCacheable.condition());
             }
-            context.setVariable("a" + i, args[i]);
-            context.setVariable("p" + i, args[i]);
+            if (StringUtils.hasText(springCacheable.unless())) {
+                builder.unless(springCacheable.unless());
+            }
+            if (StringUtils.hasText(springCacheable.keyGenerator())) {
+                builder.keyGenerator(springCacheable.keyGenerator());
+            }
+            if (StringUtils.hasText(springCacheable.cacheManager())) {
+                builder.cacheManager(springCacheable.cacheManager());
+            }
+            if (StringUtils.hasText(springCacheable.cacheResolver())) {
+                builder.cacheResolver(springCacheable.cacheResolver());
+            }
+            builder.sync(springCacheable.sync());
+
+            RedisCacheableOperation operation = builder.build();
+
+            Class<?> targetClass = target != null ? target.getClass() : null;
+            redisCacheRegister.registerCacheableOperation(method, targetClass, operation);
+            log.debug(
+                    "Registered Spring @Cacheable operation: {} with key: {} for caches: {}",
+                    method.getName(),
+                    key,
+                    String.join(",", operation.getCacheNames()));
+            return operation;
+        } catch (Exception e) {
+            log.error("Failed to register Spring @Cacheable operation", e);
+            return null;
         }
-    }
-
-    private static class RootObject {
-        private final Method method;
-        private final Object[] args;
-        private final Object target;
-
-        RootObject(Method method, Object[] args, Object target) {
-            this.method = method;
-            this.args = args;
-            this.target = target;
-        }
-
-        public Method getMethod() { return method; }
-        public Object[] getArgs() { return args; }
-        public Object getTarget() { return target; }
-        public Class<?> getTargetClass() { return target != null ? target.getClass() : null; }
-        public String getMethodName() { return method != null ? method.getName() : null; }
     }
 }

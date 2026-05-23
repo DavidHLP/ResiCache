@@ -99,39 +99,27 @@ class BloomFilterHandlerTest {
     class GetOperationTests {
 
         @Test
-        @DisplayName("terminates chain when bloom filter rejects key")
-        void handleGet_bloomFilterRejects_terminatesChain() {
-            when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(false);
+        @DisplayName("returns miss and terminates when bloom filter rejects key")
+        void handleGet_bloomRejects_returnsMissAndTerminates() {
+            when(bloomSupport.mightContain("test-cache", "key")).thenReturn(false);
             CacheContext context = createContext(CacheOperation.GET, cacheOperation);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.shouldTerminate()).isTrue();
-            assertThat(result.result()).isNotNull();
-            assertThat(result.result().isRejectedByBloomFilter()).isTrue();
             verify(statistics).incMisses("test-cache");
         }
 
         @Test
-        @DisplayName("continues chain when bloom filter might contain key")
-        void handleGet_bloomFilterMightContain_continuesChain() {
-            when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(true);
+        @DisplayName("continues chain when bloom filter allows key")
+        void handleGet_bloomAllows_returnsContinueChain() {
+            when(bloomSupport.mightContain("test-cache", "key")).thenReturn(true);
             CacheContext context = createContext(CacheOperation.GET, cacheOperation);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.shouldTerminate()).isFalse();
-        }
-
-        @Test
-        @DisplayName("increments miss counter when bloom filter rejects")
-        void handleGet_bloomFilterRejects_incrementsMissCounter() {
-            when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(false);
-            CacheContext context = createContext(CacheOperation.GET, cacheOperation);
-
-            handler.doHandle(context);
-
-            verify(statistics).incMisses("test-cache");
+            verify(statistics, never()).incMisses(anyString());
         }
     }
 
@@ -251,8 +239,8 @@ class BloomFilterHandlerTest {
         }
 
         @Test
-        @DisplayName("does not clear bloom filter on CLEAN without wildcard pattern")
-        void afterChainExecution_cleanWithoutWildcard_doesNotClear() {
+        @DisplayName("clears bloom filter on CLEAN even without wildcard pattern")
+        void afterChainExecution_cleanWithoutWildcard_clearsBloomFilter() {
             CacheContext context = createContext(CacheOperation.CLEAN, cacheOperation);
             context.setAttribute("bloom.postProcess", true);
             context.setKeyPattern("test:single");
@@ -260,7 +248,7 @@ class BloomFilterHandlerTest {
 
             handler.afterChainExecution(context, chainResult);
 
-            verify(bloomSupport, never()).clear(anyString());
+            verify(bloomSupport).clear("test-cache");
         }
 
         @Test
