@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
-import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheEvictOperation;
-import io.github.davidhlp.spring.cache.redis.register.operation.RedisCachePutOperation;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
 
 import lombok.extern.slf4j.Slf4j;
 

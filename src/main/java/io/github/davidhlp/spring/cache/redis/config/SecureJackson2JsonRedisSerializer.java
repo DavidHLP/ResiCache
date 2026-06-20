@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.type.SecureNullValueDeserializer;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureNullValueDeserializer;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;

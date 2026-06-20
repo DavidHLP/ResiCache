@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.spi;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.lock.DistributedLockManager;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.DistributedLockManager;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;

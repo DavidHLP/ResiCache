@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
-import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
-import io.github.davidhlp.spring.cache.redis.register.operation.RedisCacheableOperation;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

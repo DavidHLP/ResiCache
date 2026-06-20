@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import io.github.davidhlp.spring.cache.redis.actuator.RedisCacheHealthIndicator;
-import io.github.davidhlp.spring.cache.redis.core.metrics.CacheMetricsRecorder;
+import io.github.davidhlp.spring.cache.redis.observability.RedisCacheHealthIndicator;
+import io.github.davidhlp.spring.cache.redis.observability.CacheMetricsRecorder;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 

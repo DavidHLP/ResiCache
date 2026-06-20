@@ -2,10 +2,10 @@ package io.github.davidhlp.spring.cache.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.BloomFilterConfig;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.filter.RedisBloomIFilter;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.strategy.BloomHashStrategy;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.protect.bloom.strategy.MessageDigestBloomHashStrategy;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterConfig;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.RedisBloomIFilter;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomHashStrategy;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.MessageDigestBloomHashStrategy;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
