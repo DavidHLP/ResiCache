@@ -1,0 +1,174 @@
+package io.github.davidhlp.spring.cache.redis.protection.bloom;
+
+import io.github.davidhlp.spring.cache.redis.chain.*;
+import io.github.davidhlp.spring.cache.redis.chain.model.*;
+
+
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.cache.CacheStatisticsCollector;
+import org.springframework.stereotype.Component;
+
+/**
+ * 布隆过滤器处理器，防止缓存穿透
+ *
+ * <p>职责：
+ * <ul>
+ *   <li>GET: Writer 层透传，Bloom 短路检查已移至 {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCache#get(Object, Callable)} 层</li>
+ *   <li>PUT/PUT_IF_ABSENT: 先让后续 Handler 执行，成功后将 key 添加到布隆过滤器</li>
+ *   <li>CLEAN: 清理缓存时，同时清理布隆过滤器</li>
+ * </ul>
+ *
+ * <p>设计说明：
+ * <ul>
+ *   <li>对于 PUT 操作，采用前置检查+后置处理模式</li>
+ *   <li>通过 markPostProcess 标记请求后置处理</li>
+ *   <li>在责任链执行完成后执行后置逻辑</li>
+ *   <li>Bloom 仅在确认数据存在时（PUT 成功）才添加 key，GET miss 不会污染 Bloom</li>
+ * </ul>
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+@HandlerPriority(HandlerOrder.BLOOM_FILTER)
+public class BloomFilterHandler extends AbstractCacheHandler
+        implements PostProcessHandler {
+
+    /** 上下文属性键：标记需要后置处理 */
+    private static final String POST_PROCESS_KEY = "bloom.postProcess";
+
+    private final BloomSupport bloomSupport;
+    private final CacheStatisticsCollector statistics;
+
+    @Override
+    protected boolean shouldHandle(CacheContext context) {
+        return context.getCacheOperation() != null
+                && context.getCacheOperation().isUseBloomFilter();
+    }
+
+    @Override
+    protected HandlerResult doHandle(CacheContext context) {
+        return switch (context.getOperation()) {
+            case GET -> handleGet(context);
+            case PUT -> handlePut(context);
+            case PUT_IF_ABSENT -> handlePutIfAbsent(context);
+            case CLEAN -> handleClean(context);
+            default -> HandlerResult.continueChain();
+        };
+    }
+
+    /**
+     * 处理 GET 操作
+     *
+     * <p>Writer 层短路：若 Bloom 判定 key 不可能存在，直接返回 miss，避免查询 Redis。
+     * 对于 sync 模式，{@link io.github.davidhlp.spring.cache.redis.cache.RedisProCache#get(Object, Callable)}
+     * 会在调用 loader 前再做一次 Bloom 拦截，防止触发数据源查询。
+     */
+    private HandlerResult handleGet(CacheContext context) {
+        boolean mightContain =
+                bloomSupport.mightContain(context.getCacheName(), context.getActualKey());
+
+        if (!mightContain) {
+            log.debug(
+                    "Bloom filter rejected (key does not exist): cacheName={}, key={}",
+                    context.getCacheName(),
+                    context.getRedisKey());
+            statistics.incMisses(context.getCacheName());
+            return HandlerResult.terminate(CacheResult.miss());
+        }
+
+        log.debug(
+                "Bloom filter passed (key might exist): cacheName={}, key={}",
+                context.getCacheName(),
+                context.getRedisKey());
+        return HandlerResult.continueChain();
+    }
+
+    /**
+     * 处理 PUT 操作
+     *
+     * <p>标记需要后置处理，继续责任链。
+     * 后续 Handler 执行完成后，会检查标记并执行后置逻辑。
+     */
+    private HandlerResult handlePut(CacheContext context) {
+        // 标记需要后置处理
+        context.setAttribute(POST_PROCESS_KEY, true);
+
+        // 继续执行后续 Handler
+        return HandlerResult.continueChain();
+    }
+
+    /**
+     * 处理 PUT_IF_ABSENT 操作
+     *
+     * <p>同 PUT，标记后置处理。
+     */
+    private HandlerResult handlePutIfAbsent(CacheContext context) {
+        context.setAttribute(POST_PROCESS_KEY, true);
+        return HandlerResult.continueChain();
+    }
+
+    /**
+     * 处理 CLEAN 操作
+     *
+     * <p>标记后置处理。
+     */
+    private HandlerResult handleClean(CacheContext context) {
+        context.setAttribute(POST_PROCESS_KEY, true);
+        return HandlerResult.continueChain();
+    }
+
+    /**
+     * 判断是否需要执行后置处理
+     *
+     * <p>只在标记了 POST_PROCESS_KEY 且操作成功时执行。
+     */
+    @Override
+    public boolean requiresPostProcess(CacheContext context) {
+        Boolean postProcess = context.getAttribute(POST_PROCESS_KEY);
+        return postProcess != null && postProcess;
+    }
+
+    /**
+     * 后置处理：责任链执行完成后调用
+     */
+    @Override
+    public void afterChainExecution(CacheContext context, CacheResult result) {
+        // 空值检查
+        if (context == null || result == null) {
+            log.warn("Post-processing skipped: null context or result");
+            return;
+        }
+
+        // 只在成功时执行后置处理
+        if (!result.isSuccess() || context.isSkipRemaining()) {
+            return;
+        }
+
+        // 根据操作类型执行相应的后置处理
+        switch (context.getOperation()) {
+            case PUT, PUT_IF_ABSENT -> addToBloomFilter(context);
+            case CLEAN -> clearBloomFilter(context);
+            default -> { /* GET 等操作无需后置处理 */ }
+        }
+    }
+
+    private void addToBloomFilter(CacheContext context) {
+        bloomSupport.add(context.getCacheName(), context.getActualKey());
+        log.debug(
+                "Added key to bloom filter: cacheName={}, key={}",
+                context.getCacheName(),
+                context.getRedisKey());
+    }
+
+    private void clearBloomFilter(CacheContext context) {
+        // 仅清空布隆过滤器，不做增量删除（布隆过滤器不支持精确删除）
+        // 但记录警告：清空后短时间内会有穿透风险，直到新 PUT 重新填充
+        bloomSupport.clear(context.getCacheName());
+        log.warn(
+                "Bloom filter cleared along with cache: cacheName={} — " +
+                "cache penetration risk until filter is repopulated by subsequent PUTs",
+                context.getCacheName());
+    }
+}

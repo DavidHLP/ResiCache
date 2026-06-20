@@ -49,7 +49,7 @@ class SyncSingleFlightIntegrationTest extends AbstractRedisIntegrationTest {
     private RedisTemplate<String, Object> redisCacheTemplate;
 
     @Autowired
-    private io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister redisCacheRegister;
+    private io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister redisCacheRegister;
 
     @Autowired
     private org.springframework.context.ApplicationContext applicationContext;
@@ -90,7 +90,7 @@ class SyncSingleFlightIntegrationTest extends AbstractRedisIntegrationTest {
     @DisplayName("cache manager returns RedisProCache")
     void cacheManager_returnsRedisProCache() {
         var cache = cacheManager.getCache("test");
-        assertThat(cache).isInstanceOf(io.github.davidhlp.spring.cache.redis.core.RedisProCache.class);
+        assertThat(cache).isInstanceOf(io.github.davidhlp.spring.cache.redis.cache.RedisProCache.class);
     }
 
     @Test

@@ -1,0 +1,10 @@
+package io.github.davidhlp.spring.cache.redis.protection.bloom;
+
+
+/**
+ * 用于计算键的布隆过滤器位位置的策略。
+ */
+public interface BloomHashStrategy {
+
+    int[] positionsFor(String key, BloomFilterConfig config);
+}

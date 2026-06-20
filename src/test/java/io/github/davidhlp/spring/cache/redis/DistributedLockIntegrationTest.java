@@ -3,8 +3,8 @@ package io.github.davidhlp.spring.cache.redis;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.lock.DistributedLockManager;
-import io.github.davidhlp.spring.cache.redis.core.writer.support.lock.LockManager;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.DistributedLockManager;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

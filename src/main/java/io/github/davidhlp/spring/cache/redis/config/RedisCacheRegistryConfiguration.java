@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 
 import lombok.extern.slf4j.Slf4j;
 

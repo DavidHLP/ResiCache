@@ -1,13 +1,13 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheOperationSource;
-import io.github.davidhlp.spring.cache.redis.core.RedisCacheInterceptor;
-import io.github.davidhlp.spring.cache.redis.core.handler.CachePutAnnotationHandler;
-import io.github.davidhlp.spring.cache.redis.core.handler.CacheableAnnotationHandler;
-import io.github.davidhlp.spring.cache.redis.core.handler.CachingAnnotationHandler;
-import io.github.davidhlp.spring.cache.redis.core.handler.EvictAnnotationHandler;
-import io.github.davidhlp.spring.cache.redis.manager.RedisProCacheManager;
-import io.github.davidhlp.spring.cache.redis.register.RedisCacheRegister;
+import io.github.davidhlp.spring.cache.redis.cache.RedisCacheInterceptor;
+import io.github.davidhlp.spring.cache.redis.handler.CachePutAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.handler.CacheableAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.handler.CachingAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.handler.EvictAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;

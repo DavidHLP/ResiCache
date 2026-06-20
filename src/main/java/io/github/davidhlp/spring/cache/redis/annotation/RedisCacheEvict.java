@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
-import io.github.davidhlp.spring.cache.redis.core.writer.support.refresh.EarlyExpirationMode;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 
 import java.lang.annotation.*;
 
