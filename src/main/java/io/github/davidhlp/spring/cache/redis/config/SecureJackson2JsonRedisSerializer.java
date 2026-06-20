@@ -1,5 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
+import io.github.davidhlp.spring.cache.redis.core.writer.support.type.SecureNullValueDeserializer;
+
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -147,6 +149,12 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
     public Object deserialize(byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
             return null;
+        }
+        // NullValue 因 Spring 设计（final + 私有构造）只能用 Java 序列化往返、无法 JSON 化。
+        // 缓存命中 null 值时上游会产出 NullValue 的 Java 序列化字节，此处识别并用受限白名单
+        // （仅允许 NullValue）安全还原，使 Spring RedisCache.lookup 能正确返回 NullValue。
+        if (SecureNullValueDeserializer.isJavaSerialized(bytes)) {
+            return SecureNullValueDeserializer.deserializeNullValue(bytes);
         }
         try {
             // 先解析为 JsonNode，递归验证所有 @class 属性在白名单中

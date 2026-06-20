@@ -27,6 +27,13 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  *
  * <p>condition 在方法执行前求值，为 false 时跳过整个缓存操作。
  * <p>unless 在方法执行后求值，为 true 时跳过缓存（不缓存结果）。
+ *
+ * <p><b>安全须知（重要）</b>：本求值器使用 {@link StandardEvaluationContext}，具备完整的 SpEL
+ * 能力（包括类型引用 {@code T(...)}、任意方法调用等）。因此 condition/unless 表达式
+ * <b>必须来自可信源</b>——即注解中由开发者在源码内写死的字面量，仅在注解元数据层面流转，
+ * <b>严禁</b>直接拼接或求值终端用户的运行时输入，否则可能导致任意代码执行（RCE）。本实现与
+ * Spring 原生 {@code @Cacheable} 的 condition/unless 处理行为一致。若未来需要求值动态生成的
+ * 表达式，必须改用受限的 {@code SimpleEvaluationContext}（仅支持属性读写，禁止类型引用与方法调用）。
  */
 @Slf4j
 public class SpelConditionEvaluator {

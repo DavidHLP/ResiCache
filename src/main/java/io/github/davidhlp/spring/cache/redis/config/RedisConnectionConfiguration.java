@@ -78,7 +78,10 @@ public class RedisConnectionConfiguration {
 
         RedisProCacheProperties.RedisDeploymentProperties redis = properties.getRedis();
 
-        // Advanced override: user-provided Redisson YAML config
+        // Advanced override: user-provided Redisson YAML config.
+        // 安全须知：该文件路径必须仅由可信的运维/部署配置源提供（如 application.yml、环境变量、
+        // 配置中心），严禁接受终端用户输入。Config.fromYAML 会读取并解析任意路径下的 YAML 文件，
+        // 若路径可被外部控制，将导致任意本地文件读取风险。
         if (redis.getRedissonConfigPath() != null && !redis.getRedissonConfigPath().isBlank()) {
             log.info("Loading Redisson configuration from: {}", redis.getRedissonConfigPath());
             return Redisson.create(Config.fromYAML(new File(redis.getRedissonConfigPath())));

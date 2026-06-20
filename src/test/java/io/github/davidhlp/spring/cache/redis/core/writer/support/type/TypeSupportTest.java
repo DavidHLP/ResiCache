@@ -1,5 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.core.writer.support.type;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -132,14 +136,29 @@ class TypeSupportTest {
         }
 
         @Test
-        @DisplayName("Java序列化数据被拒绝")
-        void deserializeFromBytes_javaSerialized_rejected() {
-            // 创建一个Java序列化的NullValue
+        @DisplayName("NullValue 的 Java 序列化可正确往返")
+        void deserializeFromBytes_nullValueJavaSerialized_roundtrip() {
+            // NullValue 因 Spring 设计只能用 Java 序列化往返，反序列化应还原为 NullValue
             byte[] javaSerialized = typeSupport.serializeToBytes(NullValue.INSTANCE);
 
-            assertThatThrownBy(() -> typeSupport.deserializeFromBytes(javaSerialized))
-                    .isInstanceOf(SecurityException.class)
-                    .hasMessageContaining("Java deserialization is not allowed");
+            Object result = typeSupport.deserializeFromBytes(javaSerialized);
+            assertThat(result).isEqualTo(NullValue.INSTANCE);
+        }
+
+        @Test
+        @DisplayName("非 NullValue 的 Java 序列化数据被拒绝（防 RCE）")
+        void deserializeFromBytes_nonNullValueJavaSerialized_rejected() {
+            // 用标准 ObjectOutputStream 序列化一个普通字符串，模拟非 NullValue 的 Java 序列化 payload
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            try (ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+                oos.writeObject("malicious-non-null-payload");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            byte[] maliciousJavaSerialized = bos.toByteArray();
+
+            assertThatThrownBy(() -> typeSupport.deserializeFromBytes(maliciousJavaSerialized))
+                    .isInstanceOf(SecurityException.class);
         }
 
         @Test

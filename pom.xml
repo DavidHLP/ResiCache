@@ -55,7 +55,6 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <redisson.version>3.27.0</redisson.version>
-        <hutool.version>5.8.25</hutool.version>
     </properties>
 
     <dependencies>
