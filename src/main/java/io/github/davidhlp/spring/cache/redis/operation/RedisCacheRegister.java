@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.operation;
 
 import io.github.davidhlp.spring.cache.redis.eviction.EvictionStrategy;
-import io.github.davidhlp.spring.cache.redis.eviction.EvictionStrategyFactory;
+import io.github.davidhlp.spring.cache.redis.eviction.TwoListEvictionStrategy;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,7 +23,7 @@ public class RedisCacheRegister {
 
     public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
         this.operationStrategy =
-                EvictionStrategyFactory.createTwoList(maxActiveSize, maxInactiveSize);
+                new TwoListEvictionStrategy<>(maxActiveSize, maxInactiveSize);
     }
 
     /** 注册Cacheable操作（基于 AnnotatedElementKey，推荐方式） */

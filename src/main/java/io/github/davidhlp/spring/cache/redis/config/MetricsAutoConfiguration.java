@@ -1,7 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import io.github.davidhlp.spring.cache.redis.observability.RedisCacheHealthIndicator;
-import io.github.davidhlp.spring.cache.redis.observability.CacheMetricsRecorder;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 
@@ -12,16 +11,16 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 
-import java.util.Optional;
-
 import org.springframework.data.redis.core.RedisTemplate;
 
 /**
  * Metrics auto-configuration for Redis cache monitoring.
  *
- * <p>Provides cache metrics recording via Micrometer and health indicators
- * for Spring Boot Actuator. Metrics are disabled by default and must be
- * explicitly enabled via {@code resi-cache.metrics.enabled=true}.
+ * <p>Provides a health indicator for Spring Boot Actuator. Metrics recording is
+ * handled inline by {@code RedisProCache} via the {@link MeterRegistry} directly,
+ * so no separate metrics-recording bean is registered here. Metrics/health are
+ * disabled by default and must be explicitly enabled via
+ * {@code resi-cache.metrics.enabled=true}.
  *
  * <p>This configuration is only loaded when:
  * <ul>
@@ -29,19 +28,13 @@ import org.springframework.data.redis.core.RedisTemplate;
  *   <li>{@code resi-cache.metrics.enabled} is set to {@code true}</li>
  * </ul>
  *
- * <p>Both beans can be overridden by the user via custom {@link Bean} definitions.
+ * <p>The health indicator can be overridden by the user via a custom {@link Bean} definition.
  */
 @Slf4j
 @AutoConfiguration
 @ConditionalOnClass({MeterRegistry.class, HealthIndicator.class})
 @ConditionalOnProperty(prefix = "resi-cache.metrics", name = "enabled", havingValue = "true")
 public class MetricsAutoConfiguration {
-
-    @Bean
-    @ConditionalOnMissingBean
-    public CacheMetricsRecorder cacheMetricsRecorder(MeterRegistry meterRegistry) {
-        return new CacheMetricsRecorder(Optional.of(meterRegistry));
-    }
 
     @Bean
     @ConditionalOnMissingBean

@@ -1,1 +1,3 @@
 io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration
+io.github.davidhlp.spring.cache.redis.config.MetricsAutoConfiguration
+io.github.davidhlp.spring.cache.redis.config.CachingEnablementValidation

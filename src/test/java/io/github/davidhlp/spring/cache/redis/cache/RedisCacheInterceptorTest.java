@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.evaluator.SpelConditionEvaluator;
 import io.github.davidhlp.spring.cache.redis.handler.CachePutAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.handler.CacheableAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.handler.CachingAnnotationHandler;

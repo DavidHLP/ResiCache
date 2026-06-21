@@ -42,9 +42,6 @@ public class RedisProCacheProperties {
     @NotNull
     private Duration defaultTtl = Duration.ofMinutes(30);
 
-    /** SpEL 求值失败时是否抛出异常（默认 true）。配置错误（语法错误）始终抛出。 */
-    private boolean failOnSpelError = true;
-
     /** 是否启用事务感知缓存 */
     private boolean transactionAware = false;
 
