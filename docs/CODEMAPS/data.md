@@ -48,4 +48,4 @@ redisson.connection-pool-size: 64, connectionMinimumIdleSize: 10
 ## Health & Metrics
 
 - `RedisCacheHealthIndicator` exposes Redis reachability via actuator
-- `CacheMetricsRecorder` tracks hits/misses/latency per cache (see observability/)
+- `RedisProCache` records hits/misses/latency inline via Micrometer `MeterRegistry` (timers + counters)

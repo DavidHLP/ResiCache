@@ -1,6 +1,6 @@
 # Backend Map (Java/Spring Starter)
 
-<!-- Generated: 2026-06-21 | Files scanned: 104 main | Token estimate: ~850 -->
+<!-- Generated: 2026-06-21 | Files scanned: 90 main | Token estimate: ~750 -->
 
 ## Annotations (annotation/)
 
@@ -47,45 +47,45 @@ RedisCacheRegister (operation/) registers ops → RedisProCacheManager (cache/)
 | NullValueHandler | 400 | protection/nullvalue | Penetration (null cache) |
 | ActualCacheHandler | 500 | chain | Redis PUT |
 
-## Bloom Filter SPI (protection/bloom/filter/)
+## Bloom Filter (protection/bloom/filter/)
 
 ```
 BloomIFilter (interface)
-  ├─ LocalBloomIFilter         — in-memory (hash cache)
-  ├─ RedisBloomIFilter         — Redis bitmap
-  └─ HierarchicalBloomIFilter  — local(L1) + Redis(L2) layered
-Provider: RedisBloomFilterProvider  |  Hash: MessageDigestBloomHashStrategy : BloomHashStrategy
-Config:  BloomFilterConfig { enabled, expectedInsertions(100k), hashCacheSize(10k) }
+  ├─ LocalBloomIFilter         — in-memory (hash cache)        @Component("localBloomFilter")
+  ├─ RedisBloomIFilter         — Redis bitmap                   @Component("redisBloomFilter")
+  └─ HierarchicalBloomIFilter  — local(L1) + Redis(L2) layered  @Primary, composes the two above via @Qualifier
+BloomSupport (@Component) → injected with HierarchicalBloomIFilter (selected by @Primary)
+Hash:  MessageDigestBloomHashStrategy : BloomHashStrategy
+Config: BloomFilterConfig (@Value: prefix, bit-size, hash-functions, hash-cache-size)
 ```
 
-## Lock SPI (protection/breakdown/ + spi/)
+## Distributed Lock (protection/breakdown/)
 
 ```
-LockProvider (spi) → RedissonLockProvider       LockManager → DistributedLockManager
-LockHandle (spi) — auto-releasing handle (try-with-resources)
+LockManager (interface) → DistributedLockManager (@Component, @ConditionalOnClass RedissonClient)
+  └─ tryAcquire → Redisson RLock → LockManager.LockHandle (nested interface, AutoCloseable)
+SyncLockHandler → SyncSupport (JVM single-flight + distributed lock) → LockManager
 ```
 
 ## Configuration Classes (config/)
 
 | Class | Purpose |
 |-------|---------|
-| `RedisCacheAutoConfiguration` | Entry (@ConditionalOnClass RedisOperations) |
+| `RedisCacheAutoConfiguration` | Entry (@ConditionalOnClass RedisOperations, @Import 5 sub-configs) |
 | `RedisProxyCachingConfiguration` | AOP / proxy registration |
-| `RedisProCacheConfiguration` | Core beans (manager, writer, chain factory) |
+| `RedisProCacheConfiguration` | Core beans (manager, writer, chain factory) + @ComponentScan |
 | `RedisCacheRegistryConfiguration` | Cache registration |
 | `RedisConnectionConfiguration` | Redis / Redisson connection |
 | `RedisProCacheProperties` | `resi-cache.*` binding |
 | `SecureJackson2JsonRedisSerializer` | Safe polymorphic serialization |
 | `JacksonConfig` | ObjectMapper setup |
-| `MetricsAutoConfiguration` | Observability beans |
-| `CachingEnablementValidation` | `@EnableResiCache` validation |
-| `VersionEnvelope` | Version metadata |
+| `MetricsAutoConfiguration` | `RedisCacheHealthIndicator` bean (metrics are inline in RedisProCache) |
+| `CachingEnablementValidation` | `@EnableCaching` presence check at startup |
+| `VersionEnvelope` | Serialization version envelope |
 
 ## Supporting Modules
 
-- `evaluator/SpelConditionEvaluator` — condition/unless via SpEL (`failOnSpelError` toggle)
-- `eviction/TwoListLRU` + `TwoListEvictionStrategy` — LRU via 2 Redis lists (`EvictionStrategyFactory`)
-- `wrapper/CircuitBreakerCacheWrapper`, `RateLimiterCacheWrapper` — resilience decorators
+- `eviction/TwoListLRU` + `TwoListEvictionStrategy` — LRU via 2 Redis lists (used by `RedisCacheRegister`)
 - `serialization/TypeSupport` + `SecureNullValueDeserializer` — type-safe deser with allow-list
-- `observability/CacheMetricsRecorder`, `RedisCacheHealthIndicator`
-- `event/CacheEvictedEvent` — Spring application event on evict
+- `observability/RedisCacheHealthIndicator` — actuator health endpoint
+- SpEL `condition`/`unless` on annotations handled natively by Spring's `CacheAspectSupport` (no custom evaluator)
