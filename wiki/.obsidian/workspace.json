@@ -4,17 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "c0555e2ed3e4679a",
+        "id": "088ef44fc84e7018",
         "type": "tabs",
         "children": [
           {
-            "id": "89fad3a838cfb5b7",
+            "id": "65c62cfe32d0a256",
             "type": "leaf",
             "state": {
-              "type": "graph",
+              "type": "empty",
               "state": {},
-              "icon": "lucide-git-fork",
-              "title": "关系图谱"
+              "icon": "lucide-file",
+              "title": "新标签页"
             }
           }
         ]
@@ -187,8 +187,18 @@
       "realclaudian:Open Claudian": false
     }
   },
-  "active": "89fad3a838cfb5b7",
+  "active": "65c62cfe32d0a256",
   "lastOpenFiles": [
+    "index.md",
+    "meta/modules-canvas.canvas",
+    "meta/mechanisms-canvas.canvas",
+    "meta/overview.canvas",
+    "overview.md",
+    "README.md",
+    "未命名.canvas",
+    "meta/modules-canvas.canvas.tmp.647604.196ab036de38",
+    "meta/mechanisms-canvas.canvas.tmp.647604.b16bd67288d6",
+    "meta/overview.canvas.tmp.647604.263e9d134f88",
     "log.md.tmp.647604.9e2808a0b843",
     "architecture/chain-of-responsibility.md",
     "architecture/auto-configuration.md",
@@ -200,18 +210,11 @@
     "meta/modules-moc.md",
     "meta/modules-moc.md.tmp.647604.2a120e2fa14a",
     "meta/mechanisms-moc.md",
-    "meta/mechanisms-moc.md.tmp.647604.bd70810334d8",
-    "meta/modules-canvas.canvas",
-    "meta/modules-canvas.canvas.tmp.647604.fc49ed5c4077",
-    "meta/mechanisms-canvas.canvas",
-    "meta/mechanisms-canvas.canvas.tmp.647604.331c8f66cc28",
-    "overview.md.tmp.647604.6ec8caeb74d2",
     "architecture/cache-lifecycle.md",
     "meta/ofm-lint-report-2026-06-21.md",
     "modules/annotations.md",
     "mechanisms/bloom-filter.md",
     "concepts/cache-penetration.md",
-    "concepts/cache-avalanche.md",
-    "index.md"
+    "concepts/cache-avalanche.md"
   ]
 }

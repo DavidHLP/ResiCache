@@ -1,138 +1,31 @@
 {
-  "nodes": [
-    {
-      "id": "title",
-      "type": "text",
-      "text": "# 模块依赖图\n\n按数据流分层:Application → Cache(核心)→ 支撑层。\n箭头表示「依赖 / 调用」方向。",
-      "x": -480,
-      "y": -380,
-      "width": 380,
-      "height": 110,
-      "color": "default"
-    },
-    {
-      "id": "annotations",
-      "type": "file",
-      "file": "modules/annotations.md",
-      "x": -560,
-      "y": -200,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "annotations"
-    },
-    {
-      "id": "operations",
-      "type": "file",
-      "file": "modules/operations.md",
-      "x": -560,
-      "y": -50,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "operations"
-    },
-    {
-      "id": "core",
-      "type": "file",
-      "file": "modules/cache-core.md",
-      "x": -200,
-      "y": -200,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "cache-core"
-    },
-    {
-      "id": "holder",
-      "type": "file",
-      "file": "modules/holder-and-config.md",
-      "x": -200,
-      "y": -50,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "holder-and-config"
-    },
-    {
-      "id": "serialization",
-      "type": "file",
-      "file": "modules/serialization.md",
-      "x": 160,
-      "y": -200,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "serialization"
-    },
-    {
-      "id": "eviction",
-      "type": "file",
-      "file": "modules/eviction.md",
-      "x": 160,
-      "y": -50,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "eviction"
-    },
-    {
-      "id": "configuration",
-      "type": "file",
-      "file": "modules/configuration.md",
-      "x": -200,
-      "y": 100,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "configuration"
-    },
-    {
-      "id": "observability",
-      "type": "file",
-      "file": "modules/observability.md",
-      "x": 160,
-      "y": 100,
-      "width": 280,
-      "height": 100,
-      "color": "2",
-      "label": "observability"
-    },
-    {
-      "id": "auto",
-      "type": "file",
-      "file": "architecture/auto-configuration.md",
-      "x": 520,
-      "y": -200,
-      "width": 280,
-      "height": 100,
-      "color": "1",
-      "label": "auto-configuration"
-    },
-    {
-      "id": "chain",
-      "type": "file",
-      "file": "architecture/chain-of-responsibility.md",
-      "x": 520,
-      "y": -50,
-      "width": 280,
-      "height": 100,
-      "color": "1",
-      "label": "chain-of-responsibility"
-    }
-  ],
-  "edges": [
-    { "id": "e1", "fromNode": "title", "fromSide": "bottom", "toNode": "annotations", "toSide": "top" },
-    { "id": "e2", "fromNode": "annotations", "fromSide": "right", "toNode": "core", "toSide": "left" },
-    { "id": "e3", "fromNode": "annotations", "fromSide": "bottom", "toNode": "operations", "toSide": "top" },
-    { "id": "e4", "fromNode": "operations", "fromSide": "right", "toNode": "core", "toSide": "left" },
-    { "id": "e5", "fromNode": "core", "fromSide": "right", "toNode": "serialization", "toSide": "left" },
-    { "id": "e6", "fromNode": "core", "fromSide": "bottom", "toNode": "eviction", "toSide": "top" },
-    { "id": "e7", "fromNode": "core", "fromSide": "right", "toNode": "chain", "toSide": "left" },
-    { "id": "e8", "fromNode": "core", "fromSide": "top", "toNode": "auto", "toSide": "bottom" },
-    { "id": "e9", "fromNode": "configuration", "fromSide": "top", "toNode": "core", "toSide": "bottom" },
-    { "id": "e10", "fromNode": "configuration", "fromSide": "right", "toNode": "auto", "toSide": "left" },
-    { "id": "e11", "fromNode": "holder", "fromSide": "top", "toNode": "core", "toSide": "bottom" },
-    { "id": "e12", "fromNode": "observability", "fromSide": "top", "toNode": "core", "toSide": "bottom" }
-  ]
+	"nodes":[
+		{"id":"zone-modules","type":"group","label":"📦 核心模块 (8)","color":"2","x":-580,"y":-220,"width":1040,"height":440,"zIndex":-1},
+		{"id":"zone-arch","type":"group","label":"🏛️ 架构支撑 (2)","color":"1","x":500,"y":-220,"width":320,"height":340,"zIndex":-1},
+		{"id":"title","type":"text","text":"# 模块依赖图\n\n按数据流分层:Application → Cache(核心)→ 支撑层。\n箭头表示「依赖 / 调用」方向。","x":-480,"y":-380,"width":380,"height":110,"color":"default"},
+		{"id":"annotations","type":"file","file":"modules/annotations.md","x":-560,"y":-200,"width":280,"height":100,"color":"2","label":"annotations"},
+		{"id":"operations","type":"file","file":"modules/operations.md","x":-560,"y":-50,"width":280,"height":100,"color":"2","label":"operations"},
+		{"id":"core","type":"file","file":"modules/cache-core.md","x":-200,"y":-200,"width":280,"height":100,"color":"2","label":"cache-core"},
+		{"id":"holder","type":"file","file":"modules/holder-and-config.md","x":-200,"y":-50,"width":280,"height":100,"color":"2","label":"holder-and-config"},
+		{"id":"serialization","type":"file","file":"modules/serialization.md","x":160,"y":-200,"width":280,"height":100,"color":"2","label":"serialization"},
+		{"id":"eviction","type":"file","file":"modules/eviction.md","x":160,"y":-50,"width":280,"height":100,"color":"2","label":"eviction"},
+		{"id":"configuration","type":"file","file":"modules/configuration.md","x":-200,"y":100,"width":280,"height":100,"color":"2","label":"configuration"},
+		{"id":"observability","type":"file","file":"modules/observability.md","x":160,"y":100,"width":280,"height":100,"color":"2","label":"observability"},
+		{"id":"auto","type":"file","file":"architecture/auto-configuration.md","x":520,"y":-200,"width":280,"height":100,"color":"1","label":"auto-configuration"},
+		{"id":"chain","type":"file","file":"architecture/chain-of-responsibility.md","x":520,"y":-50,"width":280,"height":100,"color":"1","label":"chain-of-responsibility"}
+	],
+	"edges":[
+		{"id":"e1","fromNode":"title","fromSide":"bottom","toNode":"annotations","toSide":"top","color":"2"},
+		{"id":"e2","fromNode":"annotations","fromSide":"right","toNode":"core","toSide":"left","color":"2"},
+		{"id":"e3","fromNode":"annotations","fromSide":"bottom","toNode":"operations","toSide":"top","color":"2"},
+		{"id":"e4","fromNode":"operations","fromSide":"right","toNode":"core","toSide":"left","color":"2"},
+		{"id":"e5","fromNode":"core","fromSide":"right","toNode":"serialization","toSide":"left","color":"2"},
+		{"id":"e6","fromNode":"core","fromSide":"bottom","toNode":"eviction","toSide":"top","color":"2"},
+		{"id":"e7","fromNode":"core","fromSide":"right","toNode":"chain","toSide":"left","color":"1"},
+		{"id":"e8","fromNode":"core","fromSide":"top","toNode":"auto","toSide":"bottom","color":"1"},
+		{"id":"e9","fromNode":"configuration","fromSide":"top","toNode":"core","toSide":"bottom","color":"2"},
+		{"id":"e10","fromNode":"configuration","fromSide":"right","toNode":"auto","toSide":"left","color":"1"},
+		{"id":"e11","fromNode":"holder","fromSide":"top","toNode":"core","toSide":"bottom","color":"2"},
+		{"id":"e12","fromNode":"observability","fromSide":"top","toNode":"core","toSide":"bottom","color":"2"}
+	]
 }
