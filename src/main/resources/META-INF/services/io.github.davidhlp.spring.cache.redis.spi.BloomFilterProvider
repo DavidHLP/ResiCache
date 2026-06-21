@@ -1,4 +1,0 @@
-# ResiCache BloomFilter SPI Providers
-# Format: fully.qualified.ClassName
-# Uncomment to use alternative implementations
-# com.example.MyBloomFilterProvider

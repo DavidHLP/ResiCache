@@ -13,13 +13,15 @@
  *     ↓
  * 1. BloomFilterHandler    - 布隆过滤器检查（防止缓存穿透）
  *     ↓
- * 2. SyncLockHandler       - 同步锁处理（防止缓存击穿）
+ * 2. SyncLockHandler          - 同步锁处理（防止缓存击穿）
  *     ↓
- * 3. TtlHandler            - TTL 计算和配置
+ * 3. EarlyExpirationHandler   - 热点 Key 提前异步刷新
  *     ↓
- * 4. NullValueHandler      - 空值处理
+ * 4. TtlHandler               - TTL 计算和配置
  *     ↓
- * 5. ActualCacheHandler    - 实际缓存操作
+ * 5. NullValueHandler         - 空值处理
+ *     ↓
+ * 6. ActualCacheHandler       - 实际缓存操作
  *     ↓
  * CacheResult
  * </pre>
