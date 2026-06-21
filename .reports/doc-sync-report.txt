@@ -1,0 +1,110 @@
+Documentation Sync Report
+Generated: 2026-06-21
+Trigger: /ecc:update-docs (sources of truth: pom.xml, *.java, .github/workflows/*, LICENSE)
+
+================================================================================
+SUMMARY
+================================================================================
+Updated:  README.md          (architecture diagram, config, structure, deps)
+Updated:  docs/CONTRIBUTING.md (project structure, deps table, JaCoCo threshold)
+Updated:  AGENTS.md          (structure, Chain, Conventions, JaCoCo threshold)
+Updated:  CLAUDE.md          (structure, Chain, Conventions, JaCoCo threshold)
+Updated:  docs/RUNBOOK.md    (publish cmd, Sonatype URL, JaCoCo threshold)
+Skipped:  COMPATIBILITY.md   (accurate — 3.4.13 / Java 17,21 / Redisson 3.27.0 verified)
+Skipped:  docs/CODEMAPS/*    (regenerated prior turn — current)
+
+No new doc files created (rule: don't create docs unprompted).
+No documentation >90 days stale (oldest: 34 days).
+
+================================================================================
+FACTUAL ERRORS CORRECTED (from source of truth)
+================================================================================
+[JaCoCo coverage threshold]  pom.xml jacoco-maven-plugin rule:
+  LINE   minimum 0.70   (docs said 60%)
+  BRANCH minimum 0.40   (docs omitted)
+  Corrected in: CONTRIBUTING.md (×2), CLAUDE.md, AGENTS.md, RUNBOOK.md
+
+[Hutool dependency]  pom.xml has NO hutool dependency.
+  Was falsely listed in README.md and CONTRIBUTING.md dependency tables. Removed.
+
+[Spring Boot version]  Actual 3.4.13 (parent).
+  Docs said 3.2.4. Corrected in README.md, CONTRIBUTING.md.
+
+[Testcontainers version]  Actual 1.20.6.
+  Docs said 1.19.7. Corrected in README.md, CONTRIBUTING.md.
+
+[Handler name]  PreRefreshHandler → EarlyExpirationHandler (protection/refresh/).
+  Corrected in README.md, CLAUDE.md, AGENTS.md, docs/CONTRIBUTING.md.
+
+[Binding mechanism]  @Order → @HandlerPriority(HandlerOrder) enum (chain/HandlerOrder.java).
+  Corrected in CLAUDE.md, AGENTS.md.
+
+[Config property name]  resi-cache.pre-refresh → resi-cache.early-expiration.
+  Corrected in README.md (config section).
+
+[Publish command]  `./mvnw deploy -P release` → `./mvnw deploy`.
+  pom.xml has NO release profile; GPG sign is auto-bound to deploy phase
+  via maven-gpg-plugin <phase>deploy</phase>. Corrected in RUNBOOK.md.
+
+[Sonatype URL]  https://s01.oss.sonatype.org/ (OSSRH Nexus, sunset 2025-06)
+  → https://central.sonatype.com/ (Central Portal, matches central-publishing-maven-plugin 0.8.0).
+  Corrected in RUNBOOK.md (account, close/release, rollback sections).
+
+================================================================================
+NEW CONTENT ADDED (from source of truth, gaps in docs)
+================================================================================
+README.md:
+  - Full @RedisCacheable annotation attributes table (syncTimeout, ttl,
+    cacheNullValues, useBloomFilter, expectedInsertions, falseProbability,
+    randomTtl, variance, enableEarlyExpiration, earlyExpirationThreshold)
+  - Advanced usage example showing protection toggles
+  - Config sections: redis.*, serializer.*, caches.<name>.*, global resi-cache.*
+  - Auto-configuration note (META-INF/spring AutoConfiguration.imports)
+  - CI + License badges
+
+================================================================================
+PACKAGE STRUCTURE (all docs synchronized to this view)
+================================================================================
+Old (removed everywhere):  core/writer/chain/handler/, core/handler/, core/evaluator/,
+  core/metrics/, core/factory/, register/, manager/, strategy/, ratelimit/
+
+New (business capability):
+  annotation/ cache/ chain/+model/ config/ protection/{avalanche,bloom,breakdown,
+  nullvalue,refresh}/ operation/ factory/ handler/ evaluator/ eviction/
+  serialization/ observability/ wrapper/ spi/ event/ holder/
+
+================================================================================
+STALENESS CHECK (today 2026-06-21, threshold 90d = 2026-03-23)
+================================================================================
+  2026-06-20  AGENTS.md
+  2026-05-23  CLAUDE.md, COMPATIBILITY.md, .claude/PRPs/* , .claude/reviews/*
+  2026-05-18  README.md, docs/CONTRIBUTING.md, docs/RUNBOOK.md, docs/CODEMAPS/*
+  → NONE exceed 90 days. No staleness warnings.
+
+================================================================================
+CODE-SIDE ISSUES FLAGGED (out of doc-sync scope, recommend separate fix)
+================================================================================
+[1] .github/workflows/release.yml
+      environment.url: https://s01.oss.sonatype.org/  → should be central.sonatype.com
+      secrets OSSRH_USERNAME / OSSRH_PASSWORD        → legacy OSSRH naming;
+        Central Portal uses a Portal Access Token (single token, not user/pass).
+      deploy step works today because central-publishing-maven-plugin reads
+        the `central` server from ~/.m2/settings.xml (publishingServerId=central).
+
+[2] release.yml job name `release-conda` is a copy-paste artifact
+      (it only echoes release status, no conda). Cosmetic.
+
+These are CI configuration changes, not documentation — left untouched per
+update-docs scope. Flagged for owner action.
+
+================================================================================
+VERIFICATION
+================================================================================
+All corrections sourced from:
+  - pom.xml (deps, versions, jacoco rules, plugins, no profiles)
+  - chain/HandlerOrder.java (handler order enum)
+  - config/RedisProCacheProperties.java (resi-cache.* property tree)
+  - annotation/RedisCacheable.java (annotation attributes + defaults)
+  - .github/workflows/{ci,pr-checks,release}.yml (CI jobs, release flow)
+  - LICENSE (MIT, 2026 DavidHLP)
+  - META-INF/spring/...AutoConfiguration.imports (single entry)

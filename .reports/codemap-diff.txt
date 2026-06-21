@@ -1,66 +1,83 @@
 Codemap Analysis Report
-Generated: 2026-05-18
+Generated: 2026-06-21
 
 ================================================================================
 OVERVIEW
 ================================================================================
-Project: ResiCache
+Project: ResiCache (parent: spring-boot-starter-parent:3.4.13)
 Type: Java Library (Spring Boot Starter)
-Files scanned: 102 Java source files
+Files scanned: 104 main + 64 test  (prev baseline: 102 main)
 Project root: /home/davidhlp/project/ResiCache
 
 ================================================================================
-FILES ADDED/MODIFIED
+DIFF VS PREVIOUS BASELINE (2026-05-18)
 ================================================================================
-First codemap generation - no previous baseline for comparison.
+Estimated diff: ~80% (package reorganization) — exceeds 30% threshold.
+User approved: overwrite existing + add missing codemaps.
 
-New codemaps created:
-- docs/CODEMAPS/architecture.md
-- docs/CODEMAPS/backend.md
+Trigger: commit a6d03c5 "refactor: reorganize packages by business capability"
 
-================================================================================
-ARCHITECTURE SUMMARY
-================================================================================
-The project implements a Spring Cache abstraction over Redis with protections
-against common cache failure modes:
+Package path migrations (old -> new):
+  core/writer/chain/handler/*  -> chain/ (infra) + protection/{bloom,breakdown,refresh,avalanche,nullvalue}/
+  core/handler/*               -> handler/  (annotation handlers)
+  core/evaluator/*             -> evaluator/
+  core/metrics/*               -> observability/
+  core/factory/*               -> factory/
+  core/writer/...              -> cache/  (RedisProCache*, RedisCacheInterceptor)
+  register/*                   -> operation/RedisCacheRegister
+  manager/*                    -> cache/RedisProCacheManager
+  strategy/*                   -> eviction/
+  ratelimit/*                  -> wrapper/RateLimiterCacheWrapper
+  (lock/bloom support)         -> protection/breakdown/, protection/bloom/, spi/, serialization/
 
-  Cache Penetration  → BloomFilterHandler + NullValueHandler
-  Cache Breakdown    → SyncLockHandler (distributed lock)
-  Cache Avalanche    → TtlHandler (TTL variation)
-  Hot Keys           → PreRefreshHandler (async refresh)
+Renamed components:
+  PreRefreshHandler (250)        -> EarlyExpirationHandler  (protection/refresh/)
+  Bloom filter impls             -> protection/bloom/filter/  (Local/Redis/Hierarchical BloomIFilter)
 
-Chain of Responsibility pattern used for handler execution with support for
-post-processing callbacks.
+Binding mechanism change:
+  @Order annotation              -> @HandlerPriority(HandlerOrder)  (enum = single source of truth)
+
+New modules absent from prior codemap:
+  - eviction/      TwoListLRU, TwoListEvictionStrategy, EvictionStrategyFactory, EvictionStats, LockPoolStats
+  - wrapper/       CircuitBreakerCacheWrapper, RateLimiterCacheWrapper
+  - serialization/ SecureNullValueDeserializer, TypeSupport, SerializationException
+  - observability/ RedisCacheHealthIndicator (added alongside CacheMetricsRecorder)
+  - event/         CacheEvictedEvent
+  - factory/       OperationFactory + 3 concretes
+  - holder/        CacheOperationMetadataHolder
+  - chain/model/   CacheInput, CacheOutput, CacheContext, EarlyExpirationDecision, LockContext
 
 ================================================================================
 NEW DEPENDENCIES DETECTED
 ================================================================================
-None - this is a new project creation.
+None added since baseline (14 deps stable). Now fully captured:
+  - jackson-datatype-jsr310, spring-boot-starter-actuator, spring-boot-starter-validation
+    were under-documented in prior codemap -> now in dependencies.md.
 
 ================================================================================
 ARCHITECTURE CHANGES
 ================================================================================
-None - first scan.
-
-================================================================================
-STALENESS WARNINGS
-================================================================================
-None - codemaps just generated.
+1. Package structure flattened by business capability (was core/* nested).
+2. Handler binding: @Order -> @HandlerPriority(HandlerOrder) enum (chain/HandlerOrder.java).
+3. Bloom filter consolidated under protection/bloom/filter/ — 3-tier (Local/Redis/Hierarchical).
+4. Explicit Two-List LRU eviction strategy (was undocumented).
+5. Circuit-breaker + rate-limiter wrappers added.
+6. Secure serialization (allow-list + NullValue marker) — defect-remediation hardening.
 
 ================================================================================
 CODEMAP FILE DETAILS
 ================================================================================
-docs/CODEMAPS/architecture.md  (~600 tokens)
-  - High-level system diagram
-  - Cache handler chain order and responsibilities
-  - Data flow description
-  - SPI providers location
-  - Configuration properties prefix
+docs/CODEMAPS/architecture.md   (~700 tok) UPDATED — flow, handler chain, package map, context model
+docs/CODEMAPS/backend.md        (~850 tok) UPDATED — annotations, pipeline, chain contracts, handlers, SPI, config
+docs/CODEMAPS/data.md           (~600 tok) NEW     — Redis key namespaces, TTL, serialization, per-cache config
+docs/CODEMAPS/dependencies.md   (~500 tok) NEW     — runtime/test deps, external systems, SPI boundaries
+(frontend.md omitted — pure Java library, no UI)
 
-docs/CODEMAPS/backend.md  (~800 tokens)
-  - All 4 annotations documented
-  - Handler interface hierarchy
-  - 6 cache handler implementations with order numbers
-  - 5 configuration classes
-  - SPI implementations (BloomFilter, Lock)
-  - Key supporting classes
+================================================================================
+STALENESS WARNINGS
+================================================================================
+[!] CLAUDE.md "Project Structure" section still references the OLD layout:
+    core/writer/chain/handler/, register/, manager/, strategy/, ratelimit/, core/metrics/,
+    core/factory/, core/handler/, core/evaluator/.
+    Recommend updating CLAUDE.md to match current business-capability packages.
+[!] Prior codemap baseline (2026-05-18) fully superseded by this scan.

@@ -22,7 +22,7 @@
 ## Testing
 
 - **Run tests**: `./mvnw test`
-- **Run with coverage**: `./mvnw verify` (JaCoCo enforced at 60% line coverage)
+- **Run with coverage**: `./mvnw verify` (JaCoCo enforced at 70% line / 40% branch coverage)
 - **Integration tests**: Use Testcontainers for Redis, extend `AbstractRedisIntegrationTest`
 - **Pattern**: Test classes mirror source structure under `src/test/java/`
 
@@ -37,29 +37,28 @@
 
 ```
 src/main/java/io/github/davidhlp/spring/cache/redis/
-├── annotation/          # Custom cache annotations (@RedisCacheable, @RedisCacheEvict, etc.)
-├── config/              # Spring configuration classes
-├── core/
-│   ├── factory/         # Cache component factories
-│   ├── handler/         # Annotation handlers for @Cacheable/@CacheEvict/@CachePut
-│   ├── writer/
-│   │   └── chain/
-│   │       └── handler/ # Chain of Responsibility handlers (main logic)
-│   │           ├── BloomFilterHandler.java      # Cache penetration protection
-│   │           ├── SyncLockHandler.java         # Cache breakdown protection
-│   │           ├── EarlyExpirationHandler.java  # Hot key protection (early expiration)
-│   │           ├── TtlHandler.java              # TTL variation for cache avalanche
-│   │           ├── NullValueHandler.java        # Null value caching
-│   │           └── ActualCacheHandler.java      # Actual Redis put operation
-│   ├── evaluator/       # SpEL condition evaluator
-│   ├── metrics/         # Metrics collection
-│   └── wrapper/        # Cache wrappers (CircuitBreaker, RateLimiter)
-├── register/           # Cache registration with Redis
-├── manager/            # Cache managers
-├── ratelimit/          # Rate limiting support
-├── spi/                # Service Provider Interfaces (BloomFilterProvider, LockProvider)
-├── strategy/           # Eviction strategies
-└── event/              # Cache events
+├── annotation/          # Custom cache annotations (@RedisCacheable, @RedisCacheEvict, @RedisCachePut, @RedisCaching)
+├── cache/               # RedisProCache, RedisProCacheManager, RedisProCacheWriter, RedisCacheInterceptor
+├── chain/               # Chain of Responsibility: CacheHandler/Chain/Factory, AbstractCacheHandler,
+│   └── model/           #   ActualCacheHandler, HandlerOrder/Priority  +  CacheInput/Output/Context
+├── config/              # Auto-configuration + RedisProCacheProperties + SecureJackson
+├── protection/          # The 5 resilience mechanisms
+│   ├── avalanche/       #   TtlHandler (300)              - TTL jitter, avalanche protection
+│   ├── bloom/           #   BloomFilterHandler (100) + filter/{Local,Redis,Hierarchical} - penetration
+│   ├── breakdown/       #   SyncLockHandler (200) + DistributedLockManager - breakdown protection
+│   ├── nullvalue/       #   NullValueHandler (400)        - null caching, penetration protection
+│   └── refresh/         #   EarlyExpirationHandler (250)  - hot key early refresh
+├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheRegister
+├── factory/             # OperationFactory + 3 concrete factories
+├── handler/             # AnnotationHandler + 4 concrete annotation handlers
+├── evaluator/           # SpEL condition evaluator (SpelConditionEvaluator)
+├── eviction/            # TwoListLRU + TwoListEvictionStrategy
+├── serialization/       # SecureNullValueDeserializer, TypeSupport (safe Jackson)
+├── observability/       # CacheMetricsRecorder, RedisCacheHealthIndicator
+├── wrapper/             # CircuitBreakerCacheWrapper, RateLimiterCacheWrapper
+├── spi/                 # Service Provider Interfaces (BloomFilterProvider, LockProvider)
+├── event/               # Cache events (CacheEvictedEvent)
+└── holder/              # CacheOperationMetadataHolder
 ```
 
 ## Key Architecture: Chain of Responsibility
@@ -68,7 +67,7 @@ Cache writes go through a chain of handlers (in order):
 
 1. **BloomFilterHandler** (100) - Checks if key exists in bloom filter, blocks cache penetration
 2. **SyncLockHandler** (200) - Acquires distributed lock, prevents cache breakdown
-3. **PreRefreshHandler** (250) - Triggers async pre-refresh for hot keys
+3. **EarlyExpirationHandler** (250) - Triggers async early refresh for hot keys
 4. **TtlHandler** (300) - Applies TTL variation to prevent cache avalanche
 5. **NullValueHandler** (400) - Caches null values to prevent cache penetration
 6. **ActualCacheHandler** (500) - Executes actual Redis PUT
@@ -77,7 +76,7 @@ Each handler implements `CacheHandler` interface with `handle()` method.
 
 ## Conventions
 
-- **Handler ordering**: Defined by `@Order` annotation or explicit order numbers
+- **Handler ordering**: Defined by `@HandlerPriority(HandlerOrder)` enum in `chain/HandlerOrder.java` (gap=100, single source of truth)
 - **Configuration properties**: Use `@ConfigurationProperties(prefix = "resi-cache")` with nested properties classes
 - **Context passing**: Use `CacheContext` to pass data between handlers (input is immutable, output is mutable)
 - **SPI discovery**: Components use Java ServiceLoader pattern via `META-INF/services/`
@@ -86,8 +85,8 @@ Each handler implements `CacheHandler` interface with `handle()` method.
 
 | I want to... | Look at... |
 |--------------|-----------|
-| Add a new cache protection handler | `core/writer/chain/handler/` + implement `CacheHandler` |
-| Modify annotation processing | `core/handler/` + `AnnotationHandler` interface |
+| Add a new cache protection handler | `protection/<mechanism>/` + implement `CacheHandler`, annotate `@HandlerPriority(HandlerOrder.X)` |
+| Modify annotation processing | `handler/` + `AnnotationHandler` interface |
 | Change Redis connection config | `config/RedisConnectionConfiguration.java` |
 | Add a new SPI provider | `spi/` + `META-INF/services/` |
 | Configure behavior | `config/RedisProCacheProperties.java` |
