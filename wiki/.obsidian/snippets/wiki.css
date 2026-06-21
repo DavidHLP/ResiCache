@@ -1,0 +1,118 @@
+/* =============================================================================
+ * ResiCache Wiki — Obsidian CSS snippet
+ * -----------------------------------------------------------------------------
+ * 文件:.obsidian/snippets/wiki.css
+ * 启用:Settings → Appearance → CSS snippets → 启用 "wiki"
+ * 目标:让 LLM 维护的 wiki 视觉更聚焦于「机制路径」与「概念地图」。
+ * =========================================================================== */
+
+/* ---- 1. 链接:让 wikilink 在 hover 时有呼吸感 ---------------------------- */
+.internal-link {
+  text-decoration: none;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.internal-link:hover {
+  border-bottom-color: var(--text-accent);
+}
+.internal-link.is-unresolved {
+  color: var(--text-faint);
+  border-bottom-color: var(--text-faint);
+}
+
+/* ---- 2. Callout:与内容主题一致 ----------------------------------------- */
+.callout {
+  border-radius: 6px;
+  border-left-width: 4px;
+}
+.callout[data-callout="info"] {
+  --callout-color: 110, 170, 220;
+}
+.callout[data-callout="tip"] {
+  --callout-color: 80, 180, 140;
+}
+.callout[data-callout="example"] {
+  --callout-color: 180, 160, 110;
+}
+.callout[data-callout="warning"] {
+  --callout-color: 220, 170, 70;
+}
+.callout[data-callout="danger"] {
+  --callout-color: 220, 100, 100;
+}
+.callout[data-callout="important"] {
+  --callout-color: 180, 110, 220;
+}
+
+/* ---- 3. 代码块:暗色微调 ------------------------------------------------- */
+.theme-dark pre code {
+  font-size: 0.88em;
+  line-height: 1.55;
+}
+.markdown-rendered pre {
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+/* ---- 4. Embed / 画布嵌入:留白 ------------------------------------------ */
+.markdown-embed {
+  margin: 1.2em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--background-modifier-border);
+}
+.markdown-embed .markdown-embed-content {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+/* ---- 5. 表格:偶数行底色,标题加粗 --------------------------------------- */
+.markdown-rendered table {
+  border-collapse: collapse;
+}
+.markdown-rendered tbody tr:nth-child(even) {
+  background-color: var(--background-secondary-alt);
+}
+.markdown-rendered th {
+  background-color: var(--background-secondary);
+  font-weight: 600;
+}
+
+/* ---- 6. 标题层级:H1 / H2 微缩,H3 起保留强调 ---------------------------- */
+.markdown-rendered h1 {
+  font-size: 1.85em;
+  border-bottom: 2px solid var(--background-modifier-border);
+  padding-bottom: 0.2em;
+}
+.markdown-rendered h2 {
+  font-size: 1.45em;
+  margin-top: 1.6em;
+  color: var(--text-accent);
+}
+.markdown-rendered h3 {
+  font-size: 1.15em;
+  color: var(--text-normal);
+}
+
+/* ---- 7. Frontmatter 区:背景淡化 ---------------------------------------- */
+.frontmatter {
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 0.85em;
+  margin-bottom: 1.2em;
+}
+
+/* ---- 8. Graph view 节点文字:避免重叠 ----------------------------------- */
+.graph-view .node {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ---- 9. Dataview 表格:继承主表样式 ------------------------------------- */
+.dataview.table-view-table {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+}
+.dataview.table-view-table thead th {
+  background-color: var(--background-secondary);
+}

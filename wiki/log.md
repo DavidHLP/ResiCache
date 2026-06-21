@@ -14,9 +14,92 @@ updated: 2026-06-21
 
 # 操作日志
 
-wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subject>`(op ∈ init / ingest / query / lint)。
+wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subject>`(op ∈ init / ingest / improve / colorize / query / lint)。
 
 > 解析最近条目:`grep "^## \[" log.md | tail -5`
+
+---
+
+## [2026-06-21] colorize | graph.json 按目录着色
+
+之前 `improve` 项里 `colorGroups` 用了未加引号的 `path:architecture` + 字符串 palette,被还原。此次按官方规范重写并写入。
+
+**Schema 调研**
+
+- 权威来源:Obsidian 论坛 + 社区 colorize skill
+- `colorGroups` 数组,`{query, color}` 对,first-match wins
+- `query` 用 Obsidian 搜索语法,`path:"folder"` 必须双引号包(无空格也强烈推荐)
+- `color` 两种合法形式:`"1"` 字符串(引用当前 palette)或 `{"a":1,"rgb":<int>}` 对象(rgb = (R<<16)|(G<<8)|B)
+- 写盘时机:Obsidian 启动读、关闭重写,要么先关 Obsidian,要么改完立即 Cmd/Ctrl+R
+
+**写入**
+
+- 备份:`.obsidian/graph.json.backup-20260621-1729`(改前)
+- 改动:仅 `colorGroups` 由 `[]` 改为 6 项,其它 19 字段全部原样保留
+- 配色:用显式 RGB 对象(不依赖 palette 主题),与画布文件 `color` 编号保持同一色系
+  - architecture `#E15759` 红
+  - mechanisms `#76B7B2` 青
+  - modules `#F28E2B` 橙
+  - concepts `#B07AA1` 紫
+  - how-to `#EDC948` 黄
+  - meta `#59A14F` 绿
+
+**未匹配节点走默认色**(4 个根文件 `README` / `index` / `log` / `overview`)— 它们是入口 + 维护层,作为图谱外围。
+
+**效果预期**
+
+- 6 色立即可视区分;`mechanisms/` 5 页青、`architecture/` 5 页红、`modules/` 8 页橙
+- 画布节点与 graph view 节点颜色一致
+- 第一次 reload 即可看到;若当前 vault 开着,Cmd/Ctrl+R
+
+---
+
+## [2026-06-21] improve | 完善 obsidian 设计
+
+为 wiki 加固结构与视觉一致性,补回 6 块短板。
+
+**Frontmatter 修复**(lint MEDIUM 落地)
+
+- `modules/eviction.md`、`modules/observability.md` 此前缺 `status` / `created` 字段,已补齐 `status: stable` + `created: 2026-06-21`
+- 现 32/32 页 `type` / `status` / `created` / `updated` 全部对齐,Dataview dashboard 的「按状态统计」「待完善」查询可正常返回
+
+**启用 Dataview**
+
+- `.obsidian/community-plugins.json` 新增 `dataview` 条目
+- 首次启动 Obsidian 时,`Settings → Community Plugins → Browse → Dataview → Install` 即可启用
+- `meta/dashboard.md` 重写为分组化结构(全局统计 / 近期更新 / 核心骨架 / 模块速查 / 概念与指南 / 待完善),每段用 callout 框定;纯 markdown 浏览不受影响
+
+**画布整合**
+
+- `index.md` 顶部新增「🗺️ 视觉地图」三栏表,用 `![[meta/overview.canvas]]` / `![[meta/mechanisms-canvas.canvas]]` / `![[meta/modules-canvas.canvas]]` 嵌入三张画布
+- `overview.md` 「核心架构」前嵌入 `meta/overview.canvas`,文字流与画布并排
+- 新建两张画布:
+  - `meta/mechanisms-canvas.canvas` —— 5 机制 + 4 概念,左机制右概念,边色与 `overview.canvas` 一致
+  - `meta/modules-canvas.canvas` —— 8 模块按数据流分层(入口 / 核心 / 支撑)+ 架构层 `auto-configuration` 与 `chain-of-responsibility`
+
+**MOC 导航页**
+
+- `meta/mechanisms-moc.md` —— 机制拓扑 MOC:责任链档位表 + 4 问题 ↔ 防御组合 callout + Dataview 动态视角
+- `meta/modules-moc.md` —— 模块依赖 MOC:三层模型 + 8 模块分组 + 关键调用链
+
+**图谱视觉与 CSS**
+
+- `.obsidian/graph.json`:
+  - 新增 6 个 `colorGroups`(按 `path:` 着 6 色,与画布色彩一致)
+  - 调强 `centerStrength` (0.52 → 0.7) + 增大 `nodeSizeMultiplier` (1 → 1.15) + `lineSizeMultiplier` (1 → 1.2)
+  - 关闭 `showOrphans`(lint 已确认 0 孤儿,关闭以减少视觉噪声)
+- 新建 `.obsidian/snippets/wiki.css`:链接 hover 下划线、callout 主题色、代码块圆角、表格斑马线、Frontmatter 淡化、Dataview 表格继承,共 9 节
+- 启用方式:`Settings → Appearance → CSS snippets → 启用 "wiki"`
+
+**Workspace 默认布局**
+
+- 主区从「仅一个 graph tab」扩展为「概览 / Dashboard / 索引 / 关系图谱」四个 tab,首次打开 vault 直接看到导航
+- 保留原 Claudian tab 与右栏(反向链接 / 出链 / 标签 / 属性 / 大纲),Claude 工作流不受影响
+
+**未触碰的内容**
+
+- 28 份已有 md / 1 份 canvas 的正文无变更,本次为纯结构与配置层加固
+- 全部改动在 `wiki/` 范围内,未触及源码
 
 ---
 
