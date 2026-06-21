@@ -1,11 +1,13 @@
 ---
 title: 缓存穿透
-category: concepts
+type: concepts
 tags: [缓存穿透, 防护概念]
 related: [bloom-filter, null-value, cache-breakdown, cache-avalanche]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/bloom/BloomFilterHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/nullvalue/NullValueHandler.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 提前过期(250)
-category: mechanisms
+type: mechanisms
 tags: [提前过期, 热key, EARLY_EXPIRATION, 异步刷新, Lua]
 related: [hot-key, cache-avalanche, ttl-jitter, handler-result-control]
 source-files:
@@ -8,6 +8,8 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationSupport.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/ThreadPoolEarlyExpirationExecutor.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/TtlPolicy.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

@@ -1,12 +1,14 @@
 ---
 title: 如何新增防护 Handler
-category: how-to
+type: how-to
 tags: [扩展, handler, 教程]
 related: [chain-of-responsibility, handler-result-control, context-data-flow, configuration]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChainFactory.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

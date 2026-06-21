@@ -1,6 +1,6 @@
 ---
 title: 淘汰策略(eviction)
-category: modules
+type: modules
 tags: [TwoListLRU, 双链表, 近似LRU, 淘汰]
 related: [cache-core, cache-lifecycle]
 source-files:
@@ -8,6 +8,8 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/TwoListEvictionStrategy.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/EvictionStrategy.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/EvictionStats.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

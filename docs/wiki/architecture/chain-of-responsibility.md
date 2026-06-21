@@ -1,12 +1,14 @@
 ---
 title: 责任链架构
-category: architecture
+type: architecture
 tags: [责任链, handler, HandlerOrder, 核心架构]
 related: [cache-lifecycle, context-data-flow, handler-result-control, auto-configuration, add-protection-handler]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChainFactory.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

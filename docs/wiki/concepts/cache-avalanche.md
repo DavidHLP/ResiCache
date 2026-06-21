@@ -1,11 +1,13 @@
 ---
 title: 缓存雪崩
-category: concepts
+type: concepts
 tags: [缓存雪崩, 防护概念]
 related: [ttl-jitter, early-expiration, cache-penetration, cache-breakdown]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/TtlHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

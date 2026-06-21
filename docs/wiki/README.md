@@ -1,8 +1,10 @@
 ---
 title: ResiCache Wiki 维护规范
-category: meta
+type: meta
 tags: [wiki, schema, conventions]
 related: [index, overview, log]
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 
@@ -38,10 +40,11 @@ docs/wiki/
 ├── mechanisms/          5 大防护机制:布隆/锁/提前过期/TTL抖动/空值
 ├── modules/             模块实体页:cache-core、annotations、serialization 等
 ├── concepts/            缓存领域概念:穿透/击穿/雪崩/热key
-└── how-to/              操作指南:加 handler、配置行为
+├── how-to/              操作指南:加 handler、配置行为
+└── meta/                元数据:lint 报告、dashboard、canvas 地图
 ```
 
-共 30 页。完整清单见 [[index]]。
+内容页 25 + meta 若干。完整清单见 [[index]]。
 
 ## 页面规范(每个 wiki 页必须遵守)
 
@@ -50,11 +53,13 @@ docs/wiki/
 ```yaml
 ---
 title: 页面标题
-category: architecture | mechanisms | modules | concepts | how-to | meta
+type: architecture | mechanisms | modules | concepts | how-to | meta
 tags: [责任链, handler, 缓存雪崩]   # 自由标签,便于检索
 related: [chain-of-responsibility, cache-avalanche]   # wikilink slug 列表
 source-files:                          # 引用的源码(相对仓库根)
   - src/main/java/.../HandlerOrder.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 ```

@@ -1,6 +1,6 @@
 ---
 title: 操作与工厂(operation + factory)
-category: modules
+type: modules
 tags: [CacheOperation, OperationFactory, RedisCacheRegister, 元数据]
 related: [annotations, chain-of-responsibility, context-data-flow, cache-core]
 source-files:
@@ -9,6 +9,8 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/operation/RedisCacheEvictOperation.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/operation/RedisCacheRegister.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/factory/OperationFactory.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 
