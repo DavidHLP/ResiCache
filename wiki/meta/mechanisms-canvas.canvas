@@ -1,0 +1,126 @@
+{
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "text": "# 机制拓扑\n\n责任链上的 5 大防护机制 ↔ 它们各自防的缓存问题。\n顺序由 `HandlerOrder` 枚举定义(间隔 100),数字是 chain 优先级。",
+      "x": -480,
+      "y": -380,
+      "width": 380,
+      "height": 130,
+      "color": "default"
+    },
+    {
+      "id": "bloom",
+      "type": "file",
+      "file": "mechanisms/bloom-filter.md",
+      "x": -560,
+      "y": -200,
+      "width": 280,
+      "height": 110,
+      "color": "5",
+      "label": "100 布隆过滤器"
+    },
+    {
+      "id": "lock",
+      "type": "file",
+      "file": "mechanisms/breakdown-lock.md",
+      "x": -560,
+      "y": -50,
+      "width": 280,
+      "height": 110,
+      "color": "5",
+      "label": "200 分布式锁"
+    },
+    {
+      "id": "early",
+      "type": "file",
+      "file": "mechanisms/early-expiration.md",
+      "x": -560,
+      "y": 100,
+      "width": 280,
+      "height": 110,
+      "color": "5",
+      "label": "250 提前过期"
+    },
+    {
+      "id": "ttl",
+      "type": "file",
+      "file": "mechanisms/ttl-jitter.md",
+      "x": -560,
+      "y": 250,
+      "width": 280,
+      "height": 110,
+      "color": "5",
+      "label": "300 TTL 抖动"
+    },
+    {
+      "id": "null",
+      "type": "file",
+      "file": "mechanisms/null-value.md",
+      "x": -560,
+      "y": 400,
+      "width": 280,
+      "height": 110,
+      "color": "5",
+      "label": "400 空值缓存"
+    },
+    {
+      "id": "pen",
+      "type": "file",
+      "file": "concepts/cache-penetration.md",
+      "x": 40,
+      "y": -200,
+      "width": 260,
+      "height": 90,
+      "color": "6",
+      "label": "穿透"
+    },
+    {
+      "id": "brk",
+      "type": "file",
+      "file": "concepts/cache-breakdown.md",
+      "x": 40,
+      "y": -50,
+      "width": 260,
+      "height": 90,
+      "color": "6",
+      "label": "击穿"
+    },
+    {
+      "id": "hot",
+      "type": "file",
+      "file": "concepts/hot-key.md",
+      "x": 40,
+      "y": 100,
+      "width": 260,
+      "height": 90,
+      "color": "6",
+      "label": "热 key"
+    },
+    {
+      "id": "ava",
+      "type": "file",
+      "file": "concepts/cache-avalanche.md",
+      "x": 40,
+      "y": 250,
+      "width": 260,
+      "height": 90,
+      "color": "6",
+      "label": "雪崩"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "fromNode": "title", "fromSide": "bottom", "toNode": "bloom", "toSide": "top" },
+    { "id": "e2", "fromNode": "bloom", "fromSide": "right", "toNode": "pen", "toSide": "left" },
+    { "id": "e3", "fromNode": "lock", "fromSide": "right", "toNode": "brk", "toSide": "left" },
+    { "id": "e4", "fromNode": "early", "fromSide": "right", "toNode": "hot", "toSide": "left" },
+    { "id": "e5", "fromNode": "ttl", "fromSide": "right", "toNode": "ava", "toSide": "left" },
+    { "id": "e6", "fromNode": "null", "fromSide": "right", "toNode": "pen", "toSide": "left", "fromSide-position": 0.7 },
+    { "id": "e7", "fromNode": "early", "fromSide": "right", "toNode": "ava", "toSide": "left", "fromSide-position": 0.3 },
+    { "id": "e8", "fromNode": "bloom", "fromSide": "bottom", "toNode": "lock", "toSide": "top" },
+    { "id": "e9", "fromNode": "lock", "fromSide": "bottom", "toNode": "early", "toSide": "top" },
+    { "id": "e10", "fromNode": "early", "fromSide": "bottom", "toNode": "ttl", "toSide": "top" },
+    { "id": "e11", "fromNode": "ttl", "fromSide": "bottom", "toNode": "null", "toSide": "top" }
+  ]
+}

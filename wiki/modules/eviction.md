@@ -13,6 +13,8 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/TwoListEvictionStrategy.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/EvictionStrategy.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/EvictionStats.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

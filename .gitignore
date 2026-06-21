@@ -44,7 +44,3 @@ application-myself.yml
 ### CodeGraph ###
 # Local code-graph index (tool artifact)
 .codegraph/
-
-### Obsidian ###
-# Local Obsidian vault config (workspace/appearance state)
-.obsidian/

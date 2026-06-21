@@ -11,6 +11,8 @@ related: [auto-configuration, configuration, cache-core, early-expiration]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/observability/RedisCacheHealthIndicator.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/MetricsAutoConfiguration.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 
