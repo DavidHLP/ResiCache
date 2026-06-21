@@ -7,7 +7,7 @@
 |---------|-------------|
 | `./mvnw clean compile` | Compile source code |
 | `./mvnw test` | Run unit tests |
-| `./mvnw verify` | Run tests with JaCoCo coverage (60% minimum) |
+| `./mvnw verify` | Run tests with JaCoCo coverage (70% line / 40% branch minimum) |
 | `./mvnw checkstyle:check` | Run Checkstyle linting |
 | `./mvnw clean package -DskipTests` | Build JAR without tests |
 | `./mvnw clean verify -B` | Full CI build (no IDE integration) |
@@ -58,25 +58,28 @@ Checkstyle Rules:
 
 ```
 src/main/java/io/github/davidhlp/spring/cache/redis/
-├── annotation/          # @RedisCacheable, @RedisCacheEvict, @RedisCachePut
-├── config/              # Spring Boot auto-configuration
-├── core/
-│   ├── handler/         # Annotation handler chain
-│   ├── writer/
-│   │   └── chain/
-│   │       └── handler/ # 6 cache protection handlers (order 100-500)
-│   │           ├── BloomFilterHandler (100)
-│   │           ├── SyncLockHandler (200)
-│   │           ├── PreRefreshHandler (250)
-│   │           ├── TtlHandler (300)
-│   │           ├── NullValueHandler (400)
-│   │           └── ActualCacheHandler (500)
-│   ├── evaluator/       # SpEL condition evaluator
-│   └── metrics/         # Cache metrics
-├── register/            # Cache operation registration
-├── spi/                # BloomFilterProvider, LockProvider (SPI)
-├── strategy/           # Eviction strategies
-└── event/              # Cache events
+├── annotation/          # @RedisCacheable, @RedisCacheEvict, @RedisCachePut, @RedisCaching
+├── cache/               # RedisProCache, RedisProCacheManager, RedisProCacheWriter, RedisCacheInterceptor
+├── chain/               # 责任链: CacheHandler/Chain/Factory, ActualCacheHandler, HandlerOrder
+│   └── model/           #   CacheInput / CacheOutput / CacheContext
+├── config/              # 自动配置 + RedisProCacheProperties + SecureJackson
+├── protection/          # 五大防护机制 (avalanche/bloom/breakdown/nullvalue/refresh)
+│   ├── avalanche/       #   TtlHandler (300)              — 防雪崩
+│   ├── bloom/           #   BloomFilterHandler (100)      — 防穿透
+│   ├── breakdown/       #   SyncLockHandler (200)         — 防击穿
+│   ├── nullvalue/       #   NullValueHandler (400)        — 防穿透
+│   └── refresh/         #   EarlyExpirationHandler (250)  — 热 key 保护
+├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheRegister
+├── factory/             # OperationFactory + 3 个具体工厂
+├── handler/             # AnnotationHandler + 4 个注解处理器
+├── evaluator/           # SpelConditionEvaluator (condition/unless)
+├── eviction/            # TwoListLRU + TwoListEvictionStrategy
+├── serialization/       # SecureNullValueDeserializer, TypeSupport
+├── observability/       # CacheMetricsRecorder, RedisCacheHealthIndicator
+├── wrapper/             # CircuitBreakerCacheWrapper, RateLimiterCacheWrapper
+├── spi/                 # BloomFilterProvider, LockProvider
+├── event/               # CacheEvictedEvent
+└── holder/              # CacheOperationMetadataHolder
 ```
 
 <!-- AUTO-GENERATED: Dependencies -->
@@ -84,18 +87,20 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| Spring Boot | 3.2.4 | Framework |
+| Spring Boot (parent) | 3.4.13 | Framework baseline |
+| spring-boot-starter-data-redis | 3.4.13 | Redis client (Lettuce) |
 | Redisson | 3.27.0 | Distributed lock |
-| Caffeine | 3.1.8 | Local cache |
-| Hutool | 5.8.25 | Utility |
-| Testcontainers | 1.19.7 | Integration testing |
+| Caffeine | 3.1.8 | Local cache / Bloom L1 |
+| jackson-datatype-jsr310 | managed | Java 8 time serde |
+| Testcontainers | 1.20.6 | Integration testing |
+| Awaitility | 4.3.0 | Async test assertions |
 
 <!-- AUTO-GENERATED: PR Checklist -->
 ## Pull Request Checklist
 
 - [ ] Code follows checkstyle (`./mvnw checkstyle:check` passes)
 - [ ] Tests added/updated for new features
-- [ ] JaCoCo coverage ≥ 60% (`./mvnw verify`)
+- [ ] JaCoCo coverage ≥ 70% line / 40% branch (`./mvnw verify`)
 - [ ] Javadoc added for public APIs
 - [ ] Git commit message follows conventional format
 - [ ] No sensitive data in commits (tokens, secrets)

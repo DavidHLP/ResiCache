@@ -14,8 +14,8 @@ ResiCache uses Sonatype's central-publishing-maven-plugin for Maven Central rele
    gpg --keyring gpg_pubring.kbx --export-secret-keys > private.gpg
    ```
 
-2. **Sonatype Account**: Create JIRA account at https://issues.sonatype.org
-   - Request access to `io.github.davidhlp` group
+2. **Sonatype Central Portal Account**: Sign in at https://central.sonatype.com
+   - Verify namespace `io.github.davidhlp` is associated with your account
 
 3. **Configure Maven settings.xml**:
    ```xml
@@ -47,12 +47,12 @@ ResiCache uses Sonatype's central-publishing-maven-plugin for Maven Central rele
 # 2. Run full CI build
 ./mvnw clean verify -B
 
-# 3. Deploy to Maven Central (requires GPG passphrase)
-./mvnw deploy -P release -B
+# 3. Deploy to Maven Central (GPG sign auto-bound to deploy phase)
+./mvnw deploy -B
 
-# 4. Close and release via Sonatype Nexus
-# Visit: https://s01.oss.sonatype.org/
-# Login → Staging Repositories → Find resicache → Close → Release
+# 4. Publish via Sonatype Central Portal
+# Visit: https://central.sonatype.com/
+# Login → Publishing → Find deployment → Publish (auto-publish can be enabled)
 ```
 
 ### Version Management
@@ -120,9 +120,9 @@ jar tf target/resicache-*.jar | head -20
 ```
 
 ### Failed Deploy Rollback
-1. Login to https://s01.oss.sonatype.org/
-2. Navigate to Staging Repositories
-3. Drop the failed staging repository
+1. Login to https://central.sonatype.com/
+2. Navigate to Publishing → Deployments
+3. Drop the failed deployment
 4. Fix issues and re-deploy
 
 ### Git Rollback
@@ -142,6 +142,6 @@ git push --force
 |-------|----------|
 | `GPG signing failed` | Ensure gpg-agent running, passphrase in settings.xml |
 | `Checkstyle violations` | Run `./mvnw checkstyle:check` locally first |
-| `JaCoCo < 60%` | Add tests for uncovered code paths |
+| `JaCoCo < 70% line / 40% branch` | Add tests for uncovered code paths |
 | `Testcontainers failed` | Ensure Docker is running (`docker ps`) |
 | `Redisson connection timeout` | Check Redis is running on localhost:6379 |
