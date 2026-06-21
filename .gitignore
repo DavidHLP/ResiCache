@@ -40,3 +40,7 @@ application-myself.yml
 **/data
 
 **.zip
+
+### CodeGraph ###
+# Local code-graph index (tool artifact)
+.codegraph/
