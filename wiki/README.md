@@ -27,15 +27,15 @@ ResiCache 的架构散落在 90 个 Java 文件里。每次回答「责任链怎
 | 层 | 位置 | 谁拥有 | 说明 |
 |---|---|---|---|
 | **Raw sources** | `src/main/java/**`、`README.md`、`CLAUDE.md` | 项目 / 只读 | 权威真相。改 wiki 不改它们,除非源码本身变了 |
-| **The Wiki** | `docs/wiki/**/*.md` | **LLM 完全拥有** | 你写的页面,人类阅读、你维护 |
-| **The Schema** | `docs/wiki/README.md` + `index.md` + `log.md` | 人机共演 | 本文件 + 导航 + 日志 |
+| **The Wiki** | `wiki/**/*.md` | **LLM 完全拥有** | 你写的页面,人类阅读、你维护 |
+| **The Schema** | `wiki/README.md` + `index.md` + `log.md` | 人机共演 | 本文件 + 导航 + 日志 |
 
 **铁律:源码变了 → 更新对应 wiki 页 → 记一条 log。源码没变 → wiki 视为可信,直接引用,不重新推导。**
 
 ## 目录结构
 
 ```
-docs/wiki/
+wiki/
 ├── README.md            ← 你在这里(schema)
 ├── index.md             内容索引(按类别,每页一句摘要)
 ├── log.md               操作日志(append-only)

@@ -14,7 +14,7 @@ updated: 2026-06-21
 # Wiki Dashboard
 
 > 需 **Obsidian Dataview 插件**才渲染以下查询;纯 markdown 浏览器会显示原始代码块(不影响阅读)。
-> 若 vault 根不是 `docs/wiki/`,把 `FROM "..."` 的路径调整为相对 vault 根的实际路径。
+> 若 vault 根不是 `wiki/`,把 `FROM "..."` 的路径调整为相对 vault 根的实际路径。
 
 ## 近期更新(最新 15 页)
 
