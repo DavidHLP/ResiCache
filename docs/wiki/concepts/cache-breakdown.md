@@ -1,7 +1,10 @@
 ---
 title: 缓存击穿
 type: concepts
-tags: [缓存击穿, 防护概念]
+tags:
+  - concept
+  - 缓存击穿
+  - 防护概念
 related: [breakdown-lock, cache-penetration, cache-avalanche, hot-key]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/SyncLockHandler.java

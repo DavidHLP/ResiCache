@@ -1,7 +1,12 @@
 ---
 title: 分布式锁(200)
 type: mechanisms
-tags: [分布式锁, 防击穿, Redisson, SYNC_LOCK]
+tags:
+  - mechanism
+  - 分布式锁
+  - 防击穿
+  - Redisson
+  - SYNC_LOCK
 related: [cache-breakdown, handler-result-control, context-data-flow]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/SyncLockHandler.java

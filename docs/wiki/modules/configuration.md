@@ -1,7 +1,12 @@
 ---
 title: 配置体系(RedisProCacheProperties)
 type: modules
-tags: [配置, ConfigurationProperties, resi-cache, 三层配置]
+tags:
+  - module
+  - 配置
+  - ConfigurationProperties
+  - resi-cache
+  - 三层配置
 related: [auto-configuration, annotations, configure-behavior, serialization]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java

@@ -1,7 +1,12 @@
 ---
 title: TTL 抖动(300)
 type: mechanisms
-tags: [TTL, 抖动, 防雪崩, TTL_HANDLER]
+tags:
+  - mechanism
+  - TTL
+  - 抖动
+  - 防雪崩
+  - TTL_HANDLER
 related: [cache-avalanche, early-expiration, context-data-flow]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/TtlHandler.java

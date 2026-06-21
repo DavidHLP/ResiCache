@@ -1,7 +1,12 @@
 ---
 title: 责任链架构
 type: architecture
-tags: [责任链, handler, HandlerOrder, 核心架构]
+tags:
+  - architecture
+  - 责任链
+  - handler
+  - HandlerOrder
+  - 核心架构
 related: [cache-lifecycle, context-data-flow, handler-result-control, auto-configuration, add-protection-handler]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java

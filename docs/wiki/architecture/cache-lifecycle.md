@@ -1,7 +1,13 @@
 ---
 title: 缓存生命周期
 type: architecture
-tags: [生命周期, GET, PUT, CLEAN, 数据流]
+tags:
+  - architecture
+  - 生命周期
+  - GET
+  - PUT
+  - CLEAN
+  - 数据流
 related: [chain-of-responsibility, context-data-flow, handler-result-control, cache-core]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriter.java

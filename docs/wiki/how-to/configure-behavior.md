@@ -1,7 +1,11 @@
 ---
 title: 如何配置缓存行为
 type: how-to
-tags: [配置, 教程, 三层配置]
+tags:
+  - howto
+  - 配置
+  - 教程
+  - 三层配置
 related: [configuration, annotations, auto-configuration]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java

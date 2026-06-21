@@ -1,7 +1,11 @@
 ---
 title: 热点 Key
 type: concepts
-tags: [热点key, hot-key, 防护概念]
+tags:
+  - concept
+  - 热点key
+  - hot-key
+  - 防护概念
 related: [early-expiration, cache-breakdown, cache-avalanche]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java

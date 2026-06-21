@@ -1,7 +1,12 @@
 ---
 title: Spring Boot 自动装配
 type: architecture
-tags: [auto-configuration, starter, ConditionalOnMissingBean, 装配链]
+tags:
+  - architecture
+  - auto-configuration
+  - starter
+  - ConditionalOnMissingBean
+  - 装配链
 related: [configuration, cache-core, chain-of-responsibility]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisCacheAutoConfiguration.java
