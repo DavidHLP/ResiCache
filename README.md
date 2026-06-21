@@ -268,7 +268,7 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 | Caffeine | 3.1.8 |
 | Testcontainers | 1.20.6 |
 
-完整依赖与兼容矩阵见 [COMPATIBILITY.md](COMPATIBILITY.md)、[docs/CODEMAPS/dependencies.md](docs/CODEMAPS/dependencies.md)。
+完整依赖与兼容矩阵见 [COMPATIBILITY.md](COMPATIBILITY.md)。
 
 ## 📄 License
 
