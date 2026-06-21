@@ -1,12 +1,14 @@
 ---
 title: 安全序列化(serialization + SecureJackson)
-category: modules
+type: modules
 tags: [序列化, Jackson, 白名单, NullValue, 反序列化攻击]
 related: [null-value, configuration, cache-core, auto-configuration]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/serialization/TypeSupport.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/serialization/SecureNullValueDeserializer.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/SecureJackson2JsonRedisSerializer.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

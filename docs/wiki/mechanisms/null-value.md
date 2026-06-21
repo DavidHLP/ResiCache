@@ -1,12 +1,14 @@
 ---
 title: 空值缓存(400)
-category: mechanisms
+type: mechanisms
 tags: [空值缓存, 防穿透, NULL_VALUE, CachedValue]
 related: [cache-penetration, serialization, context-data-flow, cache-lifecycle]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/nullvalue/NullValueHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/nullvalue/DefaultNullValuePolicy.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/CachedValue.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 

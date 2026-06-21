@@ -1,0 +1,39 @@
+{
+  "nodes": [
+    { "id": "overview", "type": "file", "file": "overview.md", "x": 0, "y": -200, "width": 320, "height": 140, "color": "1" },
+    { "id": "cor", "type": "file", "file": "architecture/chain-of-responsibility.md", "x": 0, "y": 0, "width": 320, "height": 140, "color": "1" },
+    { "id": "lifecycle", "type": "file", "file": "architecture/cache-lifecycle.md", "x": -400, "y": 0, "width": 300, "height": 120, "color": "1" },
+    { "id": "ctx", "type": "file", "file": "architecture/context-data-flow.md", "x": -400, "y": 160, "width": 300, "height": 120, "color": "1" },
+    { "id": "ctrl", "type": "file", "file": "architecture/handler-result-control.md", "x": 0, "y": 180, "width": 320, "height": 120, "color": "1" },
+    { "id": "bloom", "type": "file", "file": "mechanisms/bloom-filter.md", "x": 400, "y": -160, "width": 280, "height": 110, "color": "5" },
+    { "id": "lock", "type": "file", "file": "mechanisms/breakdown-lock.md", "x": 400, "y": -30, "width": 280, "height": 110, "color": "5" },
+    { "id": "early", "type": "file", "file": "mechanisms/early-expiration.md", "x": 400, "y": 100, "width": 280, "height": 110, "color": "5" },
+    { "id": "ttl", "type": "file", "file": "mechanisms/ttl-jitter.md", "x": 400, "y": 230, "width": 280, "height": 110, "color": "5" },
+    { "id": "null", "type": "file", "file": "mechanisms/null-value.md", "x": 400, "y": 360, "width": 280, "height": 110, "color": "5" },
+    { "id": "pen", "type": "file", "file": "concepts/cache-penetration.md", "x": 760, "y": -160, "width": 260, "height": 100, "color": "6" },
+    { "id": "brk", "type": "file", "file": "concepts/cache-breakdown.md", "x": 760, "y": -30, "width": 260, "height": 100, "color": "6" },
+    { "id": "ava", "type": "file", "file": "concepts/cache-avalanche.md", "x": 760, "y": 165, "width": 260, "height": 100, "color": "6" },
+    { "id": "hot", "type": "file", "file": "concepts/hot-key.md", "x": 760, "y": 295, "width": 260, "height": 100, "color": "6" },
+    { "id": "cfg", "type": "file", "file": "modules/configuration.md", "x": -400, "y": -160, "width": 300, "height": 110, "color": "4" },
+    { "id": "core", "type": "file", "file": "modules/cache-core.md", "x": -760, "y": 0, "width": 300, "height": 110, "color": "2" }
+  ],
+  "edges": [
+    { "id": "e1", "fromNode": "overview", "fromSide": "bottom", "toNode": "cor", "toSide": "top" },
+    { "id": "e2", "fromNode": "overview", "fromSide": "left", "toNode": "cfg", "toSide": "right" },
+    { "id": "e3", "fromNode": "cor", "fromSide": "left", "toNode": "lifecycle", "toSide": "right" },
+    { "id": "e4", "fromNode": "cor", "fromSide": "bottom", "toNode": "ctrl", "toSide": "top" },
+    { "id": "e5", "fromNode": "cor", "fromSide": "right", "toNode": "bloom", "toSide": "left" },
+    { "id": "e6", "fromNode": "cor", "fromSide": "right", "toNode": "lock", "toSide": "left" },
+    { "id": "e7", "fromNode": "cor", "fromSide": "right", "toNode": "early", "toSide": "left" },
+    { "id": "e8", "fromNode": "cor", "fromSide": "right", "toNode": "ttl", "toSide": "left" },
+    { "id": "e9", "fromNode": "cor", "fromSide": "right", "toNode": "null", "toSide": "left" },
+    { "id": "e10", "fromNode": "bloom", "fromSide": "right", "toNode": "pen", "toSide": "left" },
+    { "id": "e11", "fromNode": "null", "fromSide": "right", "toNode": "pen", "toSide": "left" },
+    { "id": "e12", "fromNode": "lock", "fromSide": "right", "toNode": "brk", "toSide": "left" },
+    { "id": "e13", "fromNode": "early", "fromSide": "right", "toNode": "hot", "toSide": "left" },
+    { "id": "e14", "fromNode": "early", "fromSide": "right", "toNode": "ava", "toSide": "left" },
+    { "id": "e15", "fromNode": "ttl", "fromSide": "right", "toNode": "ava", "toSide": "left" },
+    { "id": "e16", "fromNode": "lifecycle", "fromSide": "left", "toNode": "core", "toSide": "right" },
+    { "id": "e17", "fromNode": "ctx", "fromSide": "top", "toNode": "lifecycle", "toSide": "bottom" }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 title: 链路控制(HandlerResult)
-category: architecture
+type: architecture
 tags: [HandlerResult, ChainDecision, 短路, PostProcessHandler, 控制流]
 related: [chain-of-responsibility, context-data-flow, cache-lifecycle]
 source-files:
@@ -8,6 +8,8 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainDecision.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/PostProcessHandler.java
+status: stable
+created: 2026-06-21
 updated: 2026-06-21
 ---
 
