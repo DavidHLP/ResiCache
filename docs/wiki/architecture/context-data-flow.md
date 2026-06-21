@@ -1,7 +1,13 @@
 ---
 title: 上下文数据流
 type: architecture
-tags: [CacheInput, CacheContext, CacheOutput, 数据流, 属性袋]
+tags:
+  - architecture
+  - CacheInput
+  - CacheContext
+  - CacheOutput
+  - 数据流
+  - 属性袋
 related: [handler-result-control, cache-lifecycle, chain-of-responsibility]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/model/CacheInput.java

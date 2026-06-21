@@ -1,7 +1,13 @@
 ---
 title: 提前过期(250)
 type: mechanisms
-tags: [提前过期, 热key, EARLY_EXPIRATION, 异步刷新, Lua]
+tags:
+  - mechanism
+  - 提前过期
+  - 热key
+  - EARLY_EXPIRATION
+  - 异步刷新
+  - Lua
 related: [hot-key, cache-avalanche, ttl-jitter, handler-result-control]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java

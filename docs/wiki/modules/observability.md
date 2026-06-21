@@ -1,7 +1,12 @@
 ---
 title: 可观测性(observability)
 type: modules
-tags: [HealthIndicator, actuator, MeterRegistry, 健康检查]
+tags:
+  - module
+  - HealthIndicator
+  - actuator
+  - MeterRegistry
+  - 健康检查
 related: [auto-configuration, configuration, cache-core, early-expiration]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/observability/RedisCacheHealthIndicator.java

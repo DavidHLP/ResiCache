@@ -1,7 +1,10 @@
 ---
 title: 操作日志
 type: meta
-tags: [日志, 历史]
+tags:
+  - meta
+  - 日志
+  - 历史
 related: [index, overview, README]
 status: stable
 created: 2026-06-21

@@ -1,7 +1,10 @@
 ---
 title: Dashboard
 type: meta
-tags: [meta, dashboard, dataview]
+tags:
+  - meta
+  - dashboard
+  - dataview
 related: [index, overview, lint-report-2026-06-21]
 status: stable
 created: 2026-06-21

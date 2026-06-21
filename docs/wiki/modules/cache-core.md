@@ -1,7 +1,13 @@
 ---
 title: 缓存核心(cache 包)
 type: modules
-tags: [RedisProCache, RedisProCacheManager, RedisProCacheWriter, RedisCacheInterceptor, CachedValue]
+tags:
+  - module
+  - RedisProCache
+  - RedisProCacheManager
+  - RedisProCacheWriter
+  - RedisCacheInterceptor
+  - CachedValue
 related: [cache-lifecycle, auto-configuration, chain-of-responsibility, annotations, serialization]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheManager.java

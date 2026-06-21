@@ -1,7 +1,12 @@
 ---
 title: 布隆过滤器(100)
 type: mechanisms
-tags: [布隆过滤器, 防穿透, BLOOM_FILTER, PostProcessHandler]
+tags:
+  - mechanism
+  - 布隆过滤器
+  - 防穿透
+  - BLOOM_FILTER
+  - PostProcessHandler
 related: [cache-penetration, handler-result-control, chain-of-responsibility]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/bloom/BloomFilterHandler.java

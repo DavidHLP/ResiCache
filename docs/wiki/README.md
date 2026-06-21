@@ -1,7 +1,11 @@
 ---
 title: ResiCache Wiki 维护规范
 type: meta
-tags: [wiki, schema, conventions]
+tags:
+  - meta
+  - wiki
+  - schema
+  - conventions
 related: [index, overview, log]
 status: stable
 created: 2026-06-21
@@ -54,7 +58,10 @@ docs/wiki/
 ---
 title: 页面标题
 type: architecture | mechanisms | modules | concepts | how-to | meta
-tags: [责任链, handler, 缓存雪崩]   # 自由标签,便于检索
+tags:                                  # 首个为 type 锚(分类用),其余自由
+  - architecture
+  - 责任链
+  - handler
 related: [chain-of-responsibility, cache-avalanche]   # wikilink slug 列表
 source-files:                          # 引用的源码(相对仓库根)
   - src/main/java/.../HandlerOrder.java

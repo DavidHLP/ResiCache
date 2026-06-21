@@ -1,7 +1,12 @@
 ---
 title: 注解与注解处理(annotation + handler)
 type: modules
-tags: [注解, RedisCacheable, AnnotationHandler, RedisCacheOperationSource]
+tags:
+  - module
+  - 注解
+  - RedisCacheable
+  - AnnotationHandler
+  - RedisCacheOperationSource
 related: [operations, auto-configuration, chain-of-responsibility, configure-behavior]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheable.java

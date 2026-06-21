@@ -1,7 +1,10 @@
 ---
 title: "Lint Report 2026-06-21"
 type: meta
-tags: [meta, lint, 健康检查]
+tags:
+  - meta
+  - lint
+  - 健康检查
 related: [index, log, README]
 status: stable
 created: 2026-06-21

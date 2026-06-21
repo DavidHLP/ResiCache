@@ -1,7 +1,10 @@
 ---
 title: 项目概览
 type: meta
-tags: [概览, 入口]
+tags:
+  - meta
+  - 概览
+  - 入口
 related: [index, chain-of-responsibility, auto-configuration, configuration, cache-lifecycle]
 status: stable
 created: 2026-06-21

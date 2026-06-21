@@ -1,7 +1,12 @@
 ---
 title: 元数据持有与配置装配辅助(holder + config 辅助类)
 type: modules
-tags: [CacheOperationMetadataHolder, 配置装配, VersionEnvelope, CachingEnablementValidation]
+tags:
+  - module
+  - CacheOperationMetadataHolder
+  - 配置装配
+  - VersionEnvelope
+  - CachingEnablementValidation
 related: [operations, auto-configuration, annotations]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/holder/CacheOperationMetadataHolder.java

@@ -1,7 +1,10 @@
 ---
 title: 内容索引
 type: meta
-tags: [索引, 导航]
+tags:
+  - meta
+  - 索引
+  - 导航
 related: [overview, log, README]
 status: stable
 created: 2026-06-21
