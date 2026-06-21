@@ -38,7 +38,9 @@ Parent: `spring-boot-starter-parent:3.4.13`, Java 17+, packaging=jar (Starter li
 - **Redis** (single / cluster / sentinel) — sole data store: cache values, locks, bloom bitmaps, LRU lists
 - No RDBMS · No message broker · No external HTTP APIs
 
-## Internal SPI Boundaries
+## Extension Points
 
-- `BloomFilterProvider` / `LockProvider` — pluggable via `META-INF/services/` (empty by default)
-- Default impls (`RedissonLockProvider`, `RedisBloomFilterProvider`) wired as Spring beans
+- Bloom filter layering via `BloomIFilter` impls (Local / Redis / Hierarchical) — Spring beans,
+  `@Primary` selects `HierarchicalBloomIFilter` (L1 local + L2 Redis)
+- Distributed lock via `LockManager` (`protection/breakdown/`) — `DistributedLockManager` is the
+  default bean; replace by registering another `LockManager`

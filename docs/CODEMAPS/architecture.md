@@ -1,6 +1,6 @@
 # Architecture Map
 
-<!-- Generated: 2026-06-21 | Files scanned: 104 main + 64 test | Token estimate: ~700 -->
+<!-- Generated: 2026-06-21 | Files scanned: 90 main + 55 test | Token estimate: ~650 -->
 
 ## System Type
 
@@ -22,7 +22,7 @@ User App → @RedisCacheable / @RedisCacheEvict / @RedisCachePut / @RedisCaching
                 ↓
     RedisProCacheWriter (cache/) → CacheHandlerChain (chain/)
                 ↓
-    6 resilience handlers (protection/* + chain/ActualCacheHandler)
+    6 handlers (protection/* + chain/ActualCacheHandler)
 ```
 
 ## Cache Handler Chain (chain/HandlerOrder.java — single source of truth, gap=100)
@@ -53,13 +53,9 @@ protection/    avalanche/ bloom/ breakdown/ nullvalue/ refresh/   ← the 5 resi
 operation/     RedisCacheable/Put/Evict Operation + RedisCacheRegister
 factory/       OperationFactory + 3 concrete factories
 handler/       AnnotationHandler + 4 concrete annotation handlers
-evaluator/     SpelConditionEvaluator (condition/unless)
 eviction/      TwoListLRU + TwoListEvictionStrategy (LRU via 2 Redis lists)
 serialization/ SecureNullValueDeserializer, TypeSupport, SerializationException (safe Jackson)
-observability/ CacheMetricsRecorder, RedisCacheHealthIndicator
-wrapper/       CircuitBreakerCacheWrapper, RateLimiterCacheWrapper
-spi/           BloomFilter, BloomFilterProvider, LockManager, LockProvider, LockHandle, RedissonLockProvider
-event/         CacheEvictedEvent
+observability/ RedisCacheHealthIndicator
 holder/        CacheOperationMetadataHolder
 ```
 
@@ -68,20 +64,14 @@ holder/        CacheOperationMetadataHolder
 | Model | Mutability | Holds |
 |-------|-----------|-------|
 | `CacheInput` | immutable | operation, cacheName, redisKey, actualKey, valueBytes, deserializedValue, ttl, cacheOperation |
-| `CacheOutput` | mutable | finalTtl, storeValue, lockContext, earlyExpirationDecision, skipRemaining, keyPattern, finalResult |
+| `CacheOutput` | mutable | finalTtl, storeValue, earlyExpirationCheckEnabled, skipRemaining, keyPattern, finalResult |
 | `CacheContext` | wrapper | input + output + `attributes` (ConcurrentHashMap — cross-handler data) |
-
-## SPI (optional extension — META-INF/services/ files empty by default)
-
-```
-io.github.davidhlp.spring.cache.redis.spi.BloomFilterProvider  → user registers impl
-io.github.davidhlp.spring.cache.redis.spi.LockProvider         → user registers impl
-```
-
-Default impls injected as Spring beans, not via ServiceLoader.
 
 ## Configuration Entry
 
 - Prefix `resi-cache.*` → `config/RedisProCacheProperties.java`
-- Auto-config: `RedisCacheAutoConfiguration` (@ConditionalOnClass RedisOperations)
+- Auto-config registered in `META-INF/spring/...AutoConfiguration.imports`:
+  `RedisCacheAutoConfiguration` (@ConditionalOnClass RedisOperations, @Import 5 sub-configs),
+  `MetricsAutoConfiguration`, `CachingEnablementValidation`
+- `RedisProCacheConfiguration.@ComponentScan` scans the root package → handlers, policies, factories
 - See [data.md](data.md) for key/TTL model · [dependencies.md](dependencies.md) for libs

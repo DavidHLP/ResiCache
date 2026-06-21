@@ -1,83 +1,60 @@
-Codemap Analysis Report
+Codemap Diff Report
+====================
 Generated: 2026-06-21
+Trigger: post-refactor "remove dead code and simplify over-engineering" (commit a5ab55b,
+         32 files, +42 / -2989, net -2947 lines)
 
-================================================================================
-OVERVIEW
-================================================================================
-Project: ResiCache (parent: spring-boot-starter-parent:3.4.13)
-Type: Java Library (Spring Boot Starter)
-Files scanned: 104 main + 64 test  (prev baseline: 102 main)
-Project root: /home/davidhlp/project/ResiCache
+Scope change: 104 main files → 90 main files (14 deleted)
 
-================================================================================
-DIFF VS PREVIOUS BASELINE (2026-05-18)
-================================================================================
-Estimated diff: ~80% (package reorganization) — exceeds 30% threshold.
-User approved: overwrite existing + add missing codemaps.
+ARCHITECTURE CHANGES SINCE LAST SCAN
+------------------------------------
+Deleted packages (entire):
+  - evaluator/   (SpelConditionEvaluator — condition handled by Spring natively)
+  - event/       (CacheEvictedEvent — never published, never listened)
+  - wrapper/     (CircuitBreakerCacheWrapper, RateLimiterCacheWrapper — no wiring point)
+  - spi/         (BloomFilter, BloomFilterProvider, LockManager, LockProvider, LockHandle,
+                 RedissonLockProvider — SPI shell, ServiceLoader never invoked)
 
-Trigger: commit a6d03c5 "refactor: reorganize packages by business capability"
+Deleted classes (within surviving packages):
+  - observability/CacheMetricsRecorder       (zombie bean; recordHit/recordMiss zero callers;
+                                              RedisProCache uses MeterRegistry inline)
+  - eviction/LockPoolStats                   (test-only DTO)
+  - eviction/EvictionStrategyFactory         (@Deprecated; RedisCacheRegister now constructs
+                                              TwoListEvictionStrategy directly)
+  - protection/bloom/RedisBloomFilterProvider (SPI not wired)
 
-Package path migrations (old -> new):
-  core/writer/chain/handler/*  -> chain/ (infra) + protection/{bloom,breakdown,refresh,avalanche,nullvalue}/
-  core/handler/*               -> handler/  (annotation handlers)
-  core/evaluator/*             -> evaluator/
-  core/metrics/*               -> observability/
-  core/factory/*               -> factory/
-  core/writer/...              -> cache/  (RedisProCache*, RedisCacheInterceptor)
-  register/*                   -> operation/RedisCacheRegister
-  manager/*                    -> cache/RedisProCacheManager
-  strategy/*                   -> eviction/
-  ratelimit/*                  -> wrapper/RateLimiterCacheWrapper
-  (lock/bloom support)         -> protection/breakdown/, protection/bloom/, spi/, serialization/
+Field/method cleanup:
+  - CacheOutput: removed dead lockContext / earlyExpirationDecision / clearSkipRemaining
+  - RedisProCacheProperties: removed failOnSpelError (sole reader deleted)
 
-Renamed components:
-  PreRefreshHandler (250)        -> EarlyExpirationHandler  (protection/refresh/)
-  Bloom filter impls             -> protection/bloom/filter/  (Local/Redis/Hierarchical BloomIFilter)
+Loading-chain fix:
+  - MetricsAutoConfiguration + CachingEnablementValidation now explicitly registered in
+    META-INF/spring/...AutoConfiguration.imports (previously relied on @ComponentScan
+    side-effect — fragile).
 
-Binding mechanism change:
-  @Order annotation              -> @HandlerPriority(HandlerOrder)  (enum = single source of truth)
+CODEMAPS UPDATED
+----------------
+architecture.md  - dropped evaluator/wrapper/spi/event package lines + entire SPI section;
+                    metadata 104→90 main; CacheOutput fields updated; added explicit auto-config
+                    registration note (3 entries in imports file).
+backend.md       - removed SPI / evaluator / wrapper / event sections; rewrote Bloom filter as
+                    concrete bean wiring (Local/Redis/Hierarchical with @Primary); rewrote Lock
+                    as breakdown.LockManager → DistributedLockManager; metrics noted as inline
+                    in RedisProCache.
+dependencies.md  - replaced "Internal SPI Boundaries" (SPI deleted) with "Extension Points"
+                    (BloomIFilter layering via @Primary; LockManager replaceable bean).
+data.md          - CacheMetricsRecorder reference → RedisProCache inline MeterRegistry metrics.
 
-New modules absent from prior codemap:
-  - eviction/      TwoListLRU, TwoListEvictionStrategy, EvictionStrategyFactory, EvictionStats, LockPoolStats
-  - wrapper/       CircuitBreakerCacheWrapper, RateLimiterCacheWrapper
-  - serialization/ SecureNullValueDeserializer, TypeSupport, SerializationException
-  - observability/ RedisCacheHealthIndicator (added alongside CacheMetricsRecorder)
-  - event/         CacheEvictedEvent
-  - factory/       OperationFactory + 3 concretes
-  - holder/        CacheOperationMetadataHolder
-  - chain/model/   CacheInput, CacheOutput, CacheContext, EarlyExpirationDecision, LockContext
+DIFF MAGNITUDE
+--------------
+> 30% (structural: 4 packages + entire SPI system removed). Updated in place per standing
+authorization — the refactor is a committed fact; codemaps must reflect the post-refactor
+structure. No approval gate needed for doc-only sync.
 
-================================================================================
 NEW DEPENDENCIES DETECTED
-================================================================================
-None added since baseline (14 deps stable). Now fully captured:
-  - jackson-datatype-jsr310, spring-boot-starter-actuator, spring-boot-starter-validation
-    were under-documented in prior codemap -> now in dependencies.md.
+-------------------------
+None. Dependency manifest unchanged by this refactor.
 
-================================================================================
-ARCHITECTURE CHANGES
-================================================================================
-1. Package structure flattened by business capability (was core/* nested).
-2. Handler binding: @Order -> @HandlerPriority(HandlerOrder) enum (chain/HandlerOrder.java).
-3. Bloom filter consolidated under protection/bloom/filter/ — 3-tier (Local/Redis/Hierarchical).
-4. Explicit Two-List LRU eviction strategy (was undocumented).
-5. Circuit-breaker + rate-limiter wrappers added.
-6. Secure serialization (allow-list + NullValue marker) — defect-remediation hardening.
-
-================================================================================
-CODEMAP FILE DETAILS
-================================================================================
-docs/CODEMAPS/architecture.md   (~700 tok) UPDATED — flow, handler chain, package map, context model
-docs/CODEMAPS/backend.md        (~850 tok) UPDATED — annotations, pipeline, chain contracts, handlers, SPI, config
-docs/CODEMAPS/data.md           (~600 tok) NEW     — Redis key namespaces, TTL, serialization, per-cache config
-docs/CODEMAPS/dependencies.md   (~500 tok) NEW     — runtime/test deps, external systems, SPI boundaries
-(frontend.md omitted — pure Java library, no UI)
-
-================================================================================
 STALENESS WARNINGS
-================================================================================
-[!] CLAUDE.md "Project Structure" section still references the OLD layout:
-    core/writer/chain/handler/, register/, manager/, strategy/, ratelimit/, core/metrics/,
-    core/factory/, core/handler/, core/evaluator/.
-    Recommend updating CLAUDE.md to match current business-capability packages.
-[!] Prior codemap baseline (2026-05-18) fully superseded by this scan.
+------------------
+None. All four codemaps regenerated same day as the refactor they document.
