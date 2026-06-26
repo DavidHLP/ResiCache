@@ -60,8 +60,7 @@ public abstract class AbstractCacheHandler implements CacheHandler {
         HandlerResult result = shouldHandle(context) ? doHandle(context) : HandlerResult.continueChain();
         return switch (result.decision()) {
             // 继续：有下一个则推进，否则链尾成功
-            case CONTINUE -> getNext() != null ? getNext().handle(context)
-                    : HandlerResult.continueWith(CacheResult.success());
+            case CONTINUE -> getNext() != null ? getNext().handle(context) : result;
             // 跳过剩余：单点物化 skipRemaining，供下游 handler 短路与 BloomFilterHandler 后置门控读取
             case SKIP_ALL -> {
                 context.markSkipRemaining();

@@ -64,7 +64,7 @@ public class CachingAnnotationHandler extends AbstractAnnotationHandler {
         for (RedisCacheable cacheable : caching.redisCacheable()) {
             RedisCacheableOperation operation = registerOne(
                     method, target, args, cacheable, cacheable.key(),
-                    cacheableOperationFactory, redisCacheRegister::registerCacheableOperation, "cacheable");
+                    cacheableOperationFactory, redisCacheRegister::registerCacheableOperation, "cacheable from @RedisCaching");
             if (operation != null) {
                 operations.add(operation);
             }
@@ -74,7 +74,7 @@ public class CachingAnnotationHandler extends AbstractAnnotationHandler {
         for (RedisCacheEvict evict : caching.redisCacheEvict()) {
             RedisCacheEvictOperation operation = registerOne(
                     method, target, args, evict, evict.key(),
-                    evictOperationFactory, redisCacheRegister::registerCacheEvictOperation, "cache evict");
+                    evictOperationFactory, redisCacheRegister::registerCacheEvictOperation, "cache evict from @RedisCaching");
             if (operation != null) {
                 operations.add(operation);
             }
@@ -84,7 +84,7 @@ public class CachingAnnotationHandler extends AbstractAnnotationHandler {
         for (RedisCachePut put : caching.redisCachePut()) {
             RedisCachePutOperation operation = registerOne(
                     method, target, args, put, put.key(),
-                    cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put");
+                    cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put from @RedisCaching");
             if (operation != null) {
                 operations.add(operation);
             }

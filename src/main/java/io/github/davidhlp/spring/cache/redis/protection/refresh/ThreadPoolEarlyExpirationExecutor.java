@@ -139,6 +139,9 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
                             return created;
                         });
 
+        if (scheduled.get()) {
+            metrics.recordSubmitted();
+        }
         if (!scheduled.get() && !future.isDone()) {
             log.debug("Key {} is already being refreshed, skipping", key);
         }
@@ -211,10 +214,7 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
      * 清理已完成的任务，从进行中的映射中移除已完成的任务
      */
     private void cleanFinished() {
-        inFlight.keySet().removeIf(key -> {
-            CompletableFuture<Void> future = inFlight.get(key);
-            return future != null && future.isDone();
-        });
+        inFlight.entrySet().removeIf(e -> e.getValue() != null && e.getValue().isDone());
     }
 
     /**
