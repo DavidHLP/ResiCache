@@ -57,6 +57,22 @@
         <redisson.version>3.27.0</redisson.version>
     </properties>
 
+    <!-- Override Spring Boot parent's testcontainers-bom: parent 管理的 1.20.6 拉入
+         docker-java 3.5.0 (Docker client API 1.54), 与 CI Docker daemon (API 1.48) 不兼容,
+         导致集成测试全 skip、覆盖率跌破 0.70 门。1.20.4 用 docker-java 3.4.x (API <=1.43),
+         daemon 兼容。child dependencyManagement override parent。 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>1.20.4</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.redisson</groupId>
