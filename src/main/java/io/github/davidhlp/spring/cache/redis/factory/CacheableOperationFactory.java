@@ -5,14 +5,12 @@ import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 
-/** Cacheable 操作工厂 负责创建 RedisCacheableOperation 对象 */
+/** Cacheable 操作工厂，负责创建 RedisCacheableOperation 对象 */
 @Slf4j
 @Component
-public class CacheableOperationFactory
-        implements OperationFactory<RedisCacheable, RedisCacheableOperation> {
+public class CacheableOperationFactory extends AbstractOperationFactory<RedisCacheable, RedisCacheableOperation> {
 
     @Override
     public RedisCacheableOperation create(
@@ -45,12 +43,7 @@ public class CacheableOperationFactory
     }
 
     @Override
-    public boolean supports(Annotation annotation) {
-        return annotation instanceof RedisCacheable;
-    }
-
-    /** 解析缓存名称 优先使用 cacheNames，如果为空则使用 value */
-    private String[] resolveCacheNames(String[] cacheNames, String[] values) {
-        return (cacheNames != null && cacheNames.length > 0) ? cacheNames : values;
+    protected Class<RedisCacheable> annotationClass() {
+        return RedisCacheable.class;
     }
 }

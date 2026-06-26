@@ -5,14 +5,12 @@ import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 
-/** CachePut 操作工厂 负责创建 RedisCachePutOperation 对象 */
+/** CachePut 操作工厂，负责创建 RedisCachePutOperation 对象 */
 @Slf4j
 @Component
-public class CachePutOperationFactory
-        implements OperationFactory<RedisCachePut, RedisCachePutOperation> {
+public class CachePutOperationFactory extends AbstractOperationFactory<RedisCachePut, RedisCachePutOperation> {
 
     @Override
     public RedisCachePutOperation create(
@@ -28,13 +26,13 @@ public class CachePutOperationFactory
                 .useBloomFilter(annotation.useBloomFilter())
                 .expectedInsertions(annotation.expectedInsertions())
                 .falseProbability(annotation.falseProbability())
-                .sync(annotation.sync())
-                .syncTimeout(annotation.syncTimeout())
                 .randomTtl(annotation.randomTtl())
                 .variance(annotation.variance())
                 .enableEarlyExpiration(annotation.enableEarlyExpiration())
                 .earlyExpirationThreshold(annotation.earlyExpirationThreshold())
                 .earlyExpirationMode(annotation.earlyExpirationMode())
+                .sync(annotation.sync())
+                .syncTimeout(annotation.syncTimeout())
                 .cacheManager(annotation.cacheManager())
                 .cacheResolver(annotation.cacheResolver())
                 .condition(annotation.condition())
@@ -45,12 +43,7 @@ public class CachePutOperationFactory
     }
 
     @Override
-    public boolean supports(Annotation annotation) {
-        return annotation instanceof RedisCachePut;
-    }
-
-    /** 解析缓存名称 优先使用 cacheNames，如果为空则使用 value */
-    private String[] resolveCacheNames(String[] cacheNames, String[] values) {
-        return (cacheNames != null && cacheNames.length > 0) ? cacheNames : values;
+    protected Class<RedisCachePut> annotationClass() {
+        return RedisCachePut.class;
     }
 }

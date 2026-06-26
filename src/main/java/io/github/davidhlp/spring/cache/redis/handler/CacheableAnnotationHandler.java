@@ -19,25 +19,29 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handler for @RedisCacheable annotations.
+ * 处理 {@link RedisCacheable @RedisCacheable} 与 Spring {@link Cacheable @Cacheable} 注解，
+ * 为其构建并注册 {@link RedisCacheableOperation}。
  *
- * <p>Registers cacheable operations with metadata lookup keys that match
- * Spring's actual cache key resolution as closely as possible.
+ * <p>两条路径：
+ * <ul>
+ *   <li>{@code @RedisCacheable} —— 走 {@link CacheableOperationFactory}，复用
+ *       {@link AbstractAnnotationHandler#registerOne} 模板；</li>
+ *   <li>Spring {@code @Cacheable} —— 字段映射与 @RedisCacheable 不一致（无 TTL/布隆/早过期等增强属性），
+ *       故保留独立的 {@link #registerSpringCacheableOperation} 直接走 Builder，
+ *       不强行套用工厂模板，避免污染兼容路径。</li>
+ * </ul>
  */
 @Slf4j
 @Component
-public class CacheableAnnotationHandler extends AnnotationHandler {
+public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
 
-    private final RedisCacheRegister redisCacheRegister;
-    private final KeyGenerator keyGenerator;
     private final CacheableOperationFactory cacheableOperationFactory;
 
     public CacheableAnnotationHandler(
             RedisCacheRegister redisCacheRegister,
             KeyGenerator keyGenerator,
             CacheableOperationFactory cacheableOperationFactory) {
-        this.redisCacheRegister = redisCacheRegister;
-        this.keyGenerator = keyGenerator;
+        super(redisCacheRegister, keyGenerator);
         this.cacheableOperationFactory = cacheableOperationFactory;
     }
 
@@ -53,7 +57,9 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
 
         RedisCacheable cacheable = AnnotatedElementUtils.findMergedAnnotation(method, RedisCacheable.class);
         if (cacheable != null) {
-            RedisCacheableOperation operation = registerCacheableOperation(method, target, args, cacheable);
+            RedisCacheableOperation operation = registerOne(
+                    method, target, args, cacheable, cacheable.key(),
+                    cacheableOperationFactory, redisCacheRegister::registerCacheableOperation, "cacheable");
             if (operation != null) {
                 operations.add(operation);
             }
@@ -71,37 +77,16 @@ public class CacheableAnnotationHandler extends AnnotationHandler {
         return operations;
     }
 
-    private RedisCacheableOperation registerCacheableOperation(
-            Method method, Object target, Object[] args, RedisCacheable redisCacheable) {
-        try {
-            // 不再手动解析 SpEL key 表达式；将原始表达式或 KeyGenerator 结果传给工厂。
-            // 真正的 key 解析由 Spring 的 CacheAspectSupport 负责。
-            String key = StringUtils.hasText(redisCacheable.key())
-                    ? redisCacheable.key()
-                    : String.valueOf(keyGenerator.generate(target, method, args));
-            RedisCacheableOperation operation =
-                    cacheableOperationFactory.create(method, redisCacheable, target, args, key);
-
-            Class<?> targetClass = target != null ? target.getClass() : null;
-            redisCacheRegister.registerCacheableOperation(method, targetClass, operation);
-            log.debug(
-                    "Registered cacheable operation: {} with key: {} for caches: {}",
-                    method.getName(),
-                    key,
-                    String.join(",", operation.getCacheNames()));
-            return operation;
-        } catch (Exception e) {
-            log.error("Failed to register cacheable operation", e);
-            return null;
-        }
-    }
-
+    /**
+     * Spring {@code @Cacheable} 的字段映射：@Cacheable 无 TTL/布隆/早过期等增强属性，
+     * 仅映射 Spring 原生字段（name/key/condition/unless/sync 等），直接走 Builder。
+     * 异常返回 null，语义与 {@link AbstractAnnotationHandler#registerOne} 一致。
+     */
     private RedisCacheableOperation registerSpringCacheableOperation(
             Method method, Object target, Object[] args, Cacheable springCacheable) {
         try {
-            String key = StringUtils.hasText(springCacheable.key())
-                    ? springCacheable.key()
-                    : String.valueOf(keyGenerator.generate(target, method, args));
+            // key 仅用于日志；真正的运行时 key 解析由 Spring 的 CacheAspectSupport 负责。
+            String key = generateKey(target, method, args, springCacheable.key());
 
             RedisCacheableOperation.Builder builder = RedisCacheableOperation.builder();
             builder.name(method.getName());

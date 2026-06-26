@@ -10,7 +10,19 @@ import org.springframework.context.expression.AnnotatedElementKey;
 
 import java.lang.reflect.Method;
 
-/** Redis缓存注册器 使用通用淘汰策略管理缓存操作,防止内存占用过多 */
+/**
+ * Redis 缓存注册器：以 {@link AnnotatedElementKey}（方法 + 目标类）为查找键，
+ * 将三类缓存操作（Cacheable / Evict / Put）纳入统一淘汰策略管理，防止元数据内存膨胀。
+ *
+ * <p>三类操作的注册/查询逻辑同构（仅 type 标签 "CACHE"/"EVICT"/"PUT" 与返回类型不同），
+ * 故收敛为 {@link #registerInternal} / {@link #getInternal} 两个私有泛型实现；
+ * 六个公开具名方法作为薄包装保留——既是稳定 API，也作为
+ * {@code AbstractAnnotationHandler} 方法引用的目标（{@code redisCacheRegister::registerCacheableOperation} 等），
+ * 其第三参数为具体操作类型，规避泛型方法引用的类型推断陷阱。
+ *
+ * <p>查找键 = {@code <type>:<cacheName>:<elementKey.toString()>}，由 {@link #buildKey} 统一构造。
+ * operation 自身的 {@code key} 字段（SpEL/字面量）是运行时缓存键的来源，与这里的注册查找键无关。
+ */
 @Slf4j
 public class RedisCacheRegister {
 
@@ -26,175 +38,85 @@ public class RedisCacheRegister {
                 new TwoListEvictionStrategy<>(maxActiveSize, maxInactiveSize);
     }
 
-    /** 注册Cacheable操作（基于 AnnotatedElementKey，推荐方式） */
-    public void registerCacheableOperation(Method method, Class<?> targetClass, RedisCacheableOperation cacheOperation) {
+    // ============================ 注册（薄包装）============================
+
+    /** 注册 Cacheable 操作（基于 AnnotatedElementKey） */
+    public void registerCacheableOperation(Method method, Class<?> targetClass,
+                                           RedisCacheableOperation cacheOperation) {
+        registerInternal(method, targetClass, cacheOperation, "CACHE");
+    }
+
+    /** 注册 CacheEvict 操作（基于 AnnotatedElementKey） */
+    public void registerCacheEvictOperation(Method method, Class<?> targetClass,
+                                            RedisCacheEvictOperation cacheOperation) {
+        registerInternal(method, targetClass, cacheOperation, "EVICT");
+    }
+
+    /** 注册 CachePut 操作（基于 AnnotatedElementKey） */
+    public void registerCachePutOperation(Method method, Class<?> targetClass,
+                                          RedisCachePutOperation cacheOperation) {
+        registerInternal(method, targetClass, cacheOperation, "PUT");
+    }
+
+    /**
+     * 注册单个操作的内部实现：以方法+目标类构造 AnnotatedElementKey，按 cacheName 维度逐个写入淘汰策略。
+     * 三类操作同构，统一在此处理。
+     *
+     * @param type 操作类型标签（"CACHE"/"EVICT"/"PUT"），用于区分查找键命名空间
+     * @param <O> 操作类型
+     */
+    private <O extends CacheOperation> void registerInternal(
+            Method method, Class<?> targetClass, O cacheOperation, String type) {
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
         for (String cacheName : cacheOperation.getCacheNames()) {
-            String key = buildKey(cacheName, elementKey, "CACHE");
+            String key = buildKey(cacheName, elementKey, type);
             operationStrategy.put(key, cacheOperation);
             log.debug(
-                    "Registered cacheable operation: cacheName={}, elementKey={}, stats={}",
-                    cacheName,
-                    elementKey,
-                    operationStrategy.getStats());
+                    "Registered {} operation: cacheName={}, elementKey={}, stats={}",
+                    type, cacheName, elementKey, operationStrategy.getStats());
         }
     }
 
-    /** 注册Cacheable操作（向后兼容，基于 key 字符串） */
-    public void registerCacheableOperation(RedisCacheableOperation cacheOperation) {
-        for (String cacheName : cacheOperation.getCacheNames()) {
-            String key = buildKey(cacheName, cacheOperation.getKey(), "CACHE");
-            operationStrategy.put(key, cacheOperation);
-            log.debug(
-                    "Registered cacheable operation: cacheName={}, key={}, stats={}",
-                    cacheName,
-                    cacheOperation.getKey(),
-                    operationStrategy.getStats());
-        }
-    }
+    // ============================ 查询（薄包装）============================
 
-    /** 注册CacheEvict操作（基于 AnnotatedElementKey，推荐方式） */
-    public void registerCacheEvictOperation(Method method, Class<?> targetClass, RedisCacheEvictOperation cacheOperation) {
-        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        for (String cacheName : cacheOperation.getCacheNames()) {
-            String key = buildKey(cacheName, elementKey, "EVICT");
-            operationStrategy.put(key, cacheOperation);
-            log.debug(
-                    "Registered CacheEvict operation: cacheName={}, elementKey={}, stats={}",
-                    cacheName,
-                    elementKey,
-                    operationStrategy.getStats());
-        }
-    }
-
-    /** 注册CacheEvict操作（向后兼容，基于 key 字符串） */
-    public void registerCacheEvictOperation(RedisCacheEvictOperation cacheOperation) {
-        for (String cacheName : cacheOperation.getCacheNames()) {
-            String key = buildKey(cacheName, cacheOperation.getKey(), "EVICT");
-            operationStrategy.put(key, cacheOperation);
-            log.debug(
-                    "Registered CacheEvict operation: cacheName={}, key={}, stats={}",
-                    cacheName,
-                    cacheOperation.getKey(),
-                    operationStrategy.getStats());
-        }
-    }
-
-    /** 注册CachePut操作（基于 AnnotatedElementKey，推荐方式） */
-    public void registerCachePutOperation(Method method, Class<?> targetClass, RedisCachePutOperation cacheOperation) {
-        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        for (String cacheName : cacheOperation.getCacheNames()) {
-            String key = buildKey(cacheName, elementKey, "PUT");
-            operationStrategy.put(key, cacheOperation);
-            log.debug(
-                    "Registered CachePut operation: cacheName={}, elementKey={}, stats={}",
-                    cacheName,
-                    elementKey,
-                    operationStrategy.getStats());
-        }
-    }
-
-    /** 注册CachePut操作（向后兼容，基于 key 字符串） */
-    public void registerCachePutOperation(RedisCachePutOperation cacheOperation) {
-        for (String cacheName : cacheOperation.getCacheNames()) {
-            String key = buildKey(cacheName, cacheOperation.getKey(), "PUT");
-            operationStrategy.put(key, cacheOperation);
-            log.debug(
-                    "Registered CachePut operation: cacheName={}, key={}, stats={}",
-                    cacheName,
-                    cacheOperation.getKey(),
-                    operationStrategy.getStats());
-        }
-    }
-
-    /** 获取Cacheable操作（基于 AnnotatedElementKey，推荐方式） */
+    /** 获取 Cacheable 操作（基于 AnnotatedElementKey） */
     public RedisCacheableOperation getCacheableOperation(String name, AnnotatedElementKey elementKey) {
-        String operationKey = buildKey(name, elementKey, "CACHE");
-        CacheOperation operation = operationStrategy.get(operationKey);
-
-        if (operation instanceof RedisCacheableOperation cacheableOp) {
-            return cacheableOp;
-        }
-
-        log.debug("Cacheable operation not found: name={}, elementKey={}", name, elementKey);
-        return null;
+        return getInternal(name, elementKey, "CACHE", RedisCacheableOperation.class);
     }
 
-    /** 获取Cacheable操作（向后兼容，基于 key 字符串） */
-    public RedisCacheableOperation getCacheableOperation(String name, String key) {
-        String operationKey = buildKey(name, key, "CACHE");
-        CacheOperation operation = operationStrategy.get(operationKey);
-
-        if (operation instanceof RedisCacheableOperation cacheableOp) {
-            return cacheableOp;
-        }
-
-        log.debug("Cacheable operation not found: name={}, key={}", name, key);
-        return null;
-    }
-
-    /** 获取CacheEvict操作（基于 AnnotatedElementKey，推荐方式） */
+    /** 获取 CacheEvict 操作（基于 AnnotatedElementKey） */
     public RedisCacheEvictOperation getCacheEvictOperation(String name, AnnotatedElementKey elementKey) {
-        String operationKey = buildKey(name, elementKey, "EVICT");
-        CacheOperation operation = operationStrategy.get(operationKey);
-
-        if (operation instanceof RedisCacheEvictOperation evictOp) {
-            return evictOp;
-        }
-
-        log.debug("CacheEvict operation not found: name={}, elementKey={}", name, elementKey);
-        return null;
+        return getInternal(name, elementKey, "EVICT", RedisCacheEvictOperation.class);
     }
 
-    /** 获取CacheEvict操作（向后兼容，基于 key 字符串） */
-    public RedisCacheEvictOperation getCacheEvictOperation(String name, String key) {
-        String operationKey = buildKey(name, key, "EVICT");
-        CacheOperation operation = operationStrategy.get(operationKey);
-
-        if (operation instanceof RedisCacheEvictOperation evictOp) {
-            return evictOp;
-        }
-
-        log.debug("CacheEvict operation not found: name={}, key={}", name, key);
-        return null;
-    }
-
-    /** 获取CachePut操作（基于 AnnotatedElementKey，推荐方式） */
+    /** 获取 CachePut 操作（基于 AnnotatedElementKey） */
     public RedisCachePutOperation getCachePutOperation(String name, AnnotatedElementKey elementKey) {
-        String operationKey = buildKey(name, elementKey, "PUT");
+        return getInternal(name, elementKey, "PUT", RedisCachePutOperation.class);
+    }
+
+    /**
+     * 查询单个操作的内部实现：按 type 标签构造查找键，从淘汰策略取出并做类型断言；
+     * 类型不匹配（不同操作复用同一 cacheName+elementKey）视为未命中，返回 null。
+     *
+     * @param operationType 期望的操作类型，用于 instance-of 断言与安全转型
+     * @param <O> 操作类型
+     */
+    private <O extends CacheOperation> O getInternal(
+            String name, AnnotatedElementKey elementKey, String type, Class<O> operationType) {
+        String operationKey = buildKey(name, elementKey, type);
         CacheOperation operation = operationStrategy.get(operationKey);
-
-        if (operation instanceof RedisCachePutOperation putOp) {
-            return putOp;
+        if (operationType.isInstance(operation)) {
+            return operationType.cast(operation);
         }
-
-        log.debug("CachePut operation not found: name={}, elementKey={}", name, elementKey);
+        log.debug("{} operation not found: name={}, elementKey={}", type, name, elementKey);
         return null;
     }
 
-    /** 获取CachePut操作（向后兼容，基于 key 字符串） */
-    public RedisCachePutOperation getCachePutOperation(String name, String key) {
-        String operationKey = buildKey(name, key, "PUT");
-        CacheOperation operation = operationStrategy.get(operationKey);
+    // ============================ 键构造 ============================
 
-        if (operation instanceof RedisCachePutOperation putOp) {
-            return putOp;
-        }
-
-        log.debug("CachePut operation not found: name={}, key={}", name, key);
-        return null;
-    }
-
-    /** 构建操作key（基于 AnnotatedElementKey） */
+    /** 构建操作查找键：{@code <type>:<cacheName>:<elementKey>} */
     private String buildKey(String name, AnnotatedElementKey elementKey, String type) {
         String key = elementKey.toString();
-        StringBuilder sb = new StringBuilder(type.length() + name.length() + key.length() + 2);
-        sb.append(type).append(':').append(name).append(':').append(key);
-        return sb.toString();
-    }
-
-    /** 构建操作key（基于 key 字符串，向后兼容） */
-    private String buildKey(String name, String key, String type) {
         StringBuilder sb = new StringBuilder(type.length() + name.length() + key.length() + 2);
         sb.append(type).append(':').append(name).append(':').append(key);
         return sb.toString();
