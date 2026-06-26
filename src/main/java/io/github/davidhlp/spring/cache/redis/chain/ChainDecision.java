@@ -15,6 +15,9 @@ public enum ChainDecision {
     /** 终止责任链，返回当前结果 */
     TERMINATE,
     
-    /** 跳过剩余处理器，返回成功 */
+    /** 跳过剩余处理器，返回成功。
+     *  <p>不变式：返回 {@code SKIP_ALL} 等价于请求引擎跳过剩余 handler，
+     *  并由引擎在遇到该决策时单点置 {@code CacheOutput.skipRemaining=true}
+     *  （见 {@code AbstractCacheHandler.handle} 的 SKIP_ALL 分支）。 */
     SKIP_ALL
 }

@@ -43,7 +43,9 @@ public class CacheOutput {
 
     // ==================== 控制标记 ====================
 
-    /** 是否跳过后续处理器 */
+    /** 是否跳过后续处理器——SKIP_ALL 决策的物化状态，由引擎在遇到 SKIP_ALL 时单点设置。
+     *  BloomFilterHandler.afterChainExecution 与引擎短路均读它。
+     *  handler 内部不应读它判自身行为（它在 handler 返回后才生效）。 */
     private boolean skipRemaining = false;
 
     // ==================== CLEAN 操作专用 ====================

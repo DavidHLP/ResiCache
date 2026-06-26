@@ -8,22 +8,15 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * 抽象缓存处理器，提供责任链的基础实现
+ * 抽象缓存处理器，提供责任链的<b>单一引擎</b>实现。
  *
- * <p>执行流程：
- * <ol>
- *   <li>检查是否已被标记跳过</li>
- *   <li>调用 shouldHandle() 判断是否需要处理</li>
- *   <li>如果需要处理，调用 doHandle() 并根据返回的 HandlerResult 决定后续流程</li>
- *   <li>如果不需要处理，继续执行下一个 Handler</li>
- * </ol>
+ * <p>{@link #handle(CacheContext)} 是全仓唯一驱动链推进的代码：先检查 {@code skipRemaining}
+ * 短路，再按 {@link HandlerResult#decision()} 单 switch 分发（CONTINUE 推进下一个 /
+ * TERMINATE 直接返回 / SKIP_ALL 物化为 {@code skipRemaining}）。子类只需实现
+ * {@link #shouldHandle(CacheContext)} 与 {@link #doHandle(CacheContext)} 两个钩子，
+ * 无需也<strong>不应</strong>自行调用 {@code getNext().handle()} 推进链。
  *
- * <p>修复说明：
- * <ul>
- *   <li>handle() 方法现在返回 HandlerResult 而非 CacheResult，保持接口一致性</li>
- *   <li>简化责任链控制逻辑，移除手动调用 executeRestOfChain() 的模式</li>
- *   <li>统一通过 HandlerResult.decision() 控制链的执行</li>
- * </ul>
+ * <p>例外：{@code SyncLockHandler.executeChainInLock} 在分布式锁内手动推进，见其实现。
  */
 @Getter
 @Setter
@@ -58,32 +51,25 @@ public abstract class AbstractCacheHandler implements CacheHandler {
      */
     @Override
     public HandlerResult handle(CacheContext context) {
-        // 检查是否已被标记跳过
+        // 上游已标记跳过剩余处理器（SKIP_ALL 传播）：短路，等价链尾成功
         if (context.isSkipRemaining()) {
             return HandlerResult.continueWith(CacheResult.success());
         }
-
-        // 判断是否需要处理
-        if (shouldHandle(context)) {
-            HandlerResult result = doHandle(context);
-            // 如果 doHandle 要求继续链，则继续执行下一个 Handler
-            if (result.decision() == ChainDecision.CONTINUE && getNext() != null) {
-                return getNext().handle(context);
-            }
-            // SKIP_ALL 需要标记上下文，确保后置处理和上游逻辑一致
-            if (result.decision() == ChainDecision.SKIP_ALL) {
+        // 不需要处理时等价 continueChain，统一进入 decision 分发，
+        // 消除原先"shouldHandle 分支与 decision 分支"两条并行的推进路径
+        HandlerResult result = shouldHandle(context) ? doHandle(context) : HandlerResult.continueChain();
+        return switch (result.decision()) {
+            // 继续：有下一个则推进，否则链尾成功
+            case CONTINUE -> getNext() != null ? getNext().handle(context)
+                    : HandlerResult.continueWith(CacheResult.success());
+            // 跳过剩余：单点物化 skipRemaining，供下游 handler 短路与 BloomFilterHandler 后置门控读取
+            case SKIP_ALL -> {
                 context.markSkipRemaining();
+                yield result;
             }
-            return result;
-        }
-
-        // 当前 Handler 不处理，继续下一个
-        if (getNext() != null) {
-            return getNext().handle(context);
-        }
-
-        // 链尾，返回成功
-        return HandlerResult.continueWith(CacheResult.success());
+            // 终止：直接返回
+            case TERMINATE -> result;
+        };
     }
 
     /**

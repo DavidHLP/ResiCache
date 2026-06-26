@@ -48,9 +48,4 @@ public record HandlerResult(ChainDecision decision, CacheResult result) {
     public boolean shouldTerminate() {
         return decision == ChainDecision.TERMINATE || decision == ChainDecision.SKIP_ALL;
     }
-    
-    /** 是否应该跳过剩余处理器 */
-    public boolean shouldSkipAll() {
-        return decision == ChainDecision.SKIP_ALL;
-    }
 }
