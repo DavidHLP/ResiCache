@@ -18,7 +18,7 @@ import java.io.ObjectStreamClass;
  * <p>背景：{@link NullValue} 是 Spring 设计的 {@code final} 类（私有构造 + {@code readResolve}
  * 单例），无法被 Jackson JSON 序列化/反序列化，只能通过 Java 原生序列化往返。因此在缓存命中
  * null 值时，{@code toReturnValue} 会产出 NullValue 的 Java 序列化字节，需要由反序列化入口
- * （{@link TypeSupport} 与 {@code SecureJackson2JsonRedisSerializer}）识别并还原。
+ * （{@link TypeSupport} 与 {@code SecureJacksonRedisSerializer}）识别并还原。
  *
  * <p><b>安全设计</b>：Java 原生反序列化是已知的 RCE 攻击面（如 CVE-2016-1000027 及各类 gadget 链）。
  * 本工具通过重写 {@link ObjectInputStream#resolveClass} 建立严格的类白名单——<b>只允许

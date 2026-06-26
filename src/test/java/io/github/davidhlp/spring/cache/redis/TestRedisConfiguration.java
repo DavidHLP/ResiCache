@@ -2,7 +2,7 @@ package io.github.davidhlp.spring.cache.redis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
-import io.github.davidhlp.spring.cache.redis.config.SecureJackson2JsonRedisSerializer;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
 
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -35,8 +35,8 @@ public class TestRedisConfiguration {
         template.setConnectionFactory(redisConnectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        SecureJackson2JsonRedisSerializer jsonSerializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+        SecureJacksonRedisSerializer jsonSerializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);

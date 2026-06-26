@@ -1,5 +1,6 @@
-package io.github.davidhlp.spring.cache.redis.config;
+package io.github.davidhlp.spring.cache.redis.serialization;
 
+import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,10 +12,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * SecureJackson2JsonRedisSerializer unit tests
+ * SecureJacksonRedisSerializer unit tests
  */
-@DisplayName("SecureJackson2JsonRedisSerializer Tests")
-class SecureJackson2JsonRedisSerializerTest {
+@DisplayName("SecureJacksonRedisSerializer Tests")
+class SecureJacksonRedisSerializerTest {
 
     private ObjectMapper objectMapper;
 
@@ -30,8 +31,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("creates serializer with default package prefix")
         void constructor_defaultPackage_createsSerializer() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             assertThat(serializer).isNotNull();
         }
@@ -44,8 +45,8 @@ class SecureJackson2JsonRedisSerializerTest {
                 "com.example.domain"
             );
 
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper, customPrefixes);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper, customPrefixes);
 
             assertThat(serializer).isNotNull();
         }
@@ -53,8 +54,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("accepts empty package prefix list")
         void constructor_emptyPrefixList_createsSerializer() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper, List.of());
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper, List.of());
 
             assertThat(serializer).isNotNull();
         }
@@ -67,8 +68,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("serializes String value")
         void serialize_stringValue_returnsBytes() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             byte[] result = serializer.serialize("test-value");
 
@@ -79,8 +80,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("deserializes String value")
         void deserialize_stringValue_returnsString() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             byte[] serialized = serializer.serialize("test-value");
             Object result = serializer.deserialize(serialized);
@@ -91,8 +92,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("serializes Integer value")
         void serialize_integerValue_returnsBytes() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             byte[] result = serializer.serialize(42);
 
@@ -103,8 +104,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("deserializes Integer value")
         void deserialize_integerValue_returnsInteger() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             byte[] serialized = serializer.serialize(42);
             Object result = serializer.deserialize(serialized);
@@ -115,8 +116,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("serializes null value returns null")
         void serialize_nullValue_returnsNull() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             byte[] result = serializer.serialize(null);
 
@@ -127,8 +128,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("deserializes null bytes returns null")
         void deserialize_nullBytes_returnsNull() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             Object result = serializer.deserialize(null);
 
@@ -138,8 +139,8 @@ class SecureJackson2JsonRedisSerializerTest {
         @Test
         @DisplayName("roundtrip serialize/deserialize preserves data")
         void roundtrip_preservesData() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             TestDomainObject original = new TestDomainObject(1L, "test-name", 100.0);
             byte[] serialized = serializer.serialize(original);
@@ -151,10 +152,33 @@ class SecureJackson2JsonRedisSerializerTest {
         }
 
         @Test
+        @DisplayName("roundtrip CachedValue keeps class in whitelist and preserves payload value")
+        void roundtrip_cachedValue_preservesFields() {
+            // 铁律 #6：CachedValue(io.github.davidhlp...cache.CachedValue) 与 payload 必须在白名单
+            // （默认前缀 io.github.davidhlp 覆盖）。本用例验证 CachedValue 经 envelope 序列化往返后：
+            //   1) @class 类型标识在白名单内（不被 validateTypeIds 拒绝 → 不抛 SecurityException）
+            //   2) payload value 字段往返保持
+            //   3) 反序列化产物仍为 CachedValue 实例
+            // 注意：ttl/version/createdTime 等字段因 CachedValue 的 getter 全 @JsonIgnore、
+            // 默认 PUBLIC_ONLY 字段可见性下不进 JSON（这是 CachedValue 既有设计，与本次挪包无关）。
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
+
+            CachedValue original = CachedValue.of("payload-value", 60L);
+            byte[] serialized = serializer.serialize(original);
+            Object deserialized = serializer.deserialize(serialized);
+
+            assertThat(deserialized).isNotNull();
+            assertThat(deserialized).isInstanceOf(CachedValue.class);
+            CachedValue restored = (CachedValue) deserialized;
+            assertThat(restored.getValue()).isEqualTo("payload-value");
+        }
+
+        @Test
         @DisplayName("serializes List value")
         void serialize_listValue_returnsBytes() {
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
             List<String> listValue = List.of("a", "b", "c");
             byte[] result = serializer.serialize(listValue);
@@ -173,8 +197,8 @@ class SecureJackson2JsonRedisSerializerTest {
         void deserialize_rejectsTypesOutsideWhitelist() {
             // This type is NOT in io.github.davidhlp package
             List<String> restrictedPrefixes = List.of("com.notallowed");
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper, restrictedPrefixes);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper, restrictedPrefixes);
 
             // Serialize a restricted type
             RestrictedDomainObject obj = new RestrictedDomainObject("secret");
@@ -193,8 +217,8 @@ class SecureJackson2JsonRedisSerializerTest {
                 "io.github.davidhlp",
                 "com.example"
             );
-            SecureJackson2JsonRedisSerializer serializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper, allowedPrefixes);
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper, allowedPrefixes);
 
             // Should not throw - type is in allowed package
             byte[] result = serializer.serialize("simple-string");

@@ -1,6 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.config;
-
-import io.github.davidhlp.spring.cache.redis.serialization.SecureNullValueDeserializer;
+package io.github.davidhlp.spring.cache.redis.serialization;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -36,37 +34,36 @@ import java.util.List;
  * }</pre>
  */
 @Slf4j
-public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object> {
-
-    private static final String DEFAULT_ALLOWED_PACKAGE_PREFIX = "io.github.davidhlp";
+public class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
 
     private final ObjectMapper objectMapper;
     private final boolean failOnUnknownType;
     private final List<String> allowedPackagePrefixes;
+    private final WhitelistPolicy whitelistPolicy;
 
     /**
-     * Creates a new SecureJackson2JsonRedisSerializer using the provided ObjectMapper
+     * Creates a new SecureJacksonRedisSerializer using the provided ObjectMapper
      * with default package prefix (io.github.davidhlp).
      *
      * @param objectMapper the ObjectMapper to use for JSON serialization/deserialization
      */
-    public SecureJackson2JsonRedisSerializer(ObjectMapper objectMapper) {
-        this(objectMapper, List.of(DEFAULT_ALLOWED_PACKAGE_PREFIX), true, "@class", false);
+    public SecureJacksonRedisSerializer(ObjectMapper objectMapper) {
+        this(objectMapper, List.of(WhitelistPolicy.DEFAULT_ALLOWED_PACKAGE_PREFIX), true, "@class", false);
     }
 
     /**
-     * Creates a new SecureJackson2JsonRedisSerializer using the provided ObjectMapper
+     * Creates a new SecureJacksonRedisSerializer using the provided ObjectMapper
      * with custom allowed package prefixes.
      *
      * @param objectMapper the ObjectMapper to use for JSON serialization/deserialization
      * @param allowedPackagePrefixes list of package prefixes to allow for deserialization
      */
-    public SecureJackson2JsonRedisSerializer(ObjectMapper objectMapper, List<String> allowedPackagePrefixes) {
+    public SecureJacksonRedisSerializer(ObjectMapper objectMapper, List<String> allowedPackagePrefixes) {
         this(objectMapper, allowedPackagePrefixes, true, "@class", false);
     }
 
     /**
-     * Creates a new SecureJackson2JsonRedisSerializer with full configuration.
+     * Creates a new SecureJacksonRedisSerializer with full configuration.
      *
      * @param objectMapper the ObjectMapper to use for JSON serialization/deserialization
      * @param allowedPackagePrefixes list of package prefixes to allow for deserialization
@@ -74,38 +71,27 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
      * @param typeProperty the Jackson type property name (e.g. "@class")
      * @param polymorphicTypingEnabled whether to enable Jackson polymorphic typing
      */
-    public SecureJackson2JsonRedisSerializer(ObjectMapper objectMapper,
+    public SecureJacksonRedisSerializer(ObjectMapper objectMapper,
                                              List<String> allowedPackagePrefixes,
                                              boolean failOnUnknownType,
                                              String typeProperty,
                                              boolean polymorphicTypingEnabled) {
-        this.objectMapper = createSecureObjectMapper(objectMapper, allowedPackagePrefixes, typeProperty, polymorphicTypingEnabled);
+        this.whitelistPolicy = new WhitelistPolicy(allowedPackagePrefixes);
+        this.objectMapper = createSecureObjectMapper(objectMapper, this.whitelistPolicy, typeProperty, polymorphicTypingEnabled);
         this.failOnUnknownType = failOnUnknownType;
         this.allowedPackagePrefixes = List.copyOf(allowedPackagePrefixes);
     }
 
     private ObjectMapper createSecureObjectMapper(ObjectMapper objectMapper,
-                                                  List<String> allowedPackagePrefixes,
+                                                  WhitelistPolicy whitelistPolicy,
                                                   String typeProperty,
                                                   boolean polymorphicTypingEnabled) {
-        String[] prefixes = allowedPackagePrefixes.toArray(new String[0]);
         PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
                 .allowIfBaseType(new TypeMatcher() {
                     @Override
                     public boolean match(MapperConfig<?> config, Class<?> rawSubType) {
-                        if (rawSubType == null) {
-                            return false;
-                        }
-                        String className = rawSubType.getName();
-                        for (String prefix : prefixes) {
-                            if (className.startsWith(prefix)) {
-                                return true;
-                            }
-                        }
-                        return className.startsWith("java.lang.")
-                                || isAllowedJavaUtilClass(className)
-                                || className.startsWith("java.time.")
-                                || className.startsWith("java.math.");
+                        // 委托 WhitelistPolicy 统一判断（前缀 + java.lang/java.time/java.math/java.util 集合）
+                        return whitelistPolicy.isClassAllowed(rawSubType);
                     }
                 })
                 .build();
@@ -210,41 +196,7 @@ public class SecureJackson2JsonRedisSerializer implements RedisSerializer<Object
     }
 
     private boolean isAllowedClass(String className) {
-        for (String prefix : allowedPackagePrefixes) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return className.startsWith("java.lang.")
-                || isAllowedJavaUtilClass(className)
-                || className.startsWith("java.time.")
-                || className.startsWith("java.math.");
-    }
-
-    private static final java.util.Set<String> ALLOWED_JAVA_UTIL_CLASSES = java.util.Set.of(
-            "java.util.ArrayList",
-            "java.util.LinkedList",
-            "java.util.HashMap",
-            "java.util.LinkedHashMap",
-            "java.util.TreeMap",
-            "java.util.HashSet",
-            "java.util.LinkedHashSet",
-            "java.util.TreeSet",
-            "java.util.Collections$EmptyList",
-            "java.util.Collections$EmptyMap",
-            "java.util.Collections$EmptySet",
-            "java.util.Collections$SingletonList",
-            "java.util.Collections$SingletonMap",
-            "java.util.Collections$SingletonSet",
-            "java.util.Collections$UnmodifiableRandomAccessList",
-            "java.util.Collections$UnmodifiableList",
-            "java.util.Collections$UnmodifiableMap",
-            "java.util.Collections$UnmodifiableSet",
-            "java.util.Collections$UnmodifiableSortedMap",
-            "java.util.Collections$UnmodifiableSortedSet"
-    );
-
-    private static boolean isAllowedJavaUtilClass(String className) {
-        return ALLOWED_JAVA_UTIL_CLASSES.contains(className);
+        // 委托 WhitelistPolicy 统一判断：前缀 + java.lang/java.time/java.math + ALLOWED_JAVA_UTIL_CLASSES 全集
+        return whitelistPolicy.isClassNameAllowed(className);
     }
 }
