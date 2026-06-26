@@ -1,7 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.protection.refresh;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 
 import jakarta.annotation.PostConstruct;
@@ -16,29 +14,21 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 在有限的线程池上执行提前过期任务，同时防止每个键的重复提交。
- * <p>
- * 此执行器管理一个线程池，用于异步执行缓存提前过期操作。
- * 它通过跟踪正在进行的操作，确保任何给定时间每个缓存键只执行一个刷新任务。
- * 任务被提交到具有可配置核心和最大大小的有限线程池中，
- * 被拒绝的任务由调用者运行策略处理。
- * </p>
- * <p>
- * 执行器还通过统计和活动计数方法提供监控功能，
- * 并支持取消正在进行的刷新操作。
- * </p>
- * <p>
- * 失败的任务会自动重试，最多重试 {@value #MAX_RETRY_COUNT} 次。
- * </p>
+ *
+ * <p>本类是对外契约门面（{@link EarlyExpirationExecutor} + {@code @Component} +
+ * 反射可见的 {@code executorService}/{@code cleanupScheduler} 字段），内部职责委托给两个协作类：
+ * <ul>
+ *   <li>{@link RefreshRetryPolicy} —— 同步重试循环（纯函数，独立可测）</li>
+ *   <li>{@link RefreshTaskMetrics} —— Micrometer 指标注册与计数（无锁）</li>
+ * </ul>
+ * 去重提交（{@code inFlight} + {@code executorService}）与生命周期（清理调度、shutdown）
+ * 因与门面反射字段紧耦合而保留在此。
+ *
+ * <p>失败的任务由 {@link RefreshRetryPolicy} 自动重试，最多 {@value RefreshRetryPolicy#MAX_RETRY_COUNT} 次。
  */
 @Slf4j
 @Component
 public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecutor {
-
-    /** 提前过期任务最大重试次数 */
-    private static final int MAX_RETRY_COUNT = 3;
-    
-    /** 重试间隔（毫秒） */
-    private static final long RETRY_DELAY_MS = 1000;
 
     private final ExecutorService executorService;
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
@@ -50,10 +40,8 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
     /** 清理间隔（毫秒） */
     private final long cleanupIntervalMs;
 
-    /** Micrometer 计数器 */
-    private final Counter submittedCounter;
-    private final Counter completedCounter;
-    private final Counter cancelledCounter;
+    private final RefreshRetryPolicy retryPolicy;
+    private final RefreshTaskMetrics metrics;
 
     /**
      * 默认构造函数，创建具有默认配置的线程池执行器
@@ -68,6 +56,7 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
      * @param executorService 线程池执行器服务
      * @param inFlight        正在进行中的任务映射
      * @param meterRegistry   Micrometer meter注册表（可选，为null时不注册指标）
+     * @param cleanupIntervalMs 清理调度器周期（毫秒）
      */
     ThreadPoolEarlyExpirationExecutor(
             ExecutorService executorService,
@@ -77,6 +66,7 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
         this.executorService = executorService;
         this.inFlight = inFlight;
         this.cleanupIntervalMs = cleanupIntervalMs;
+        this.retryPolicy = new RefreshRetryPolicy();
 
         // 创建独立的清理调度器
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -86,37 +76,10 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
         });
 
         try {
-            // 初始化 Micrometer 指标
-            if (meterRegistry != null) {
-                this.submittedCounter = Counter.builder("prerefresh.submitted")
-                        .description("Number of early-expiration tasks submitted")
-                        .register(meterRegistry);
-                this.completedCounter = Counter.builder("prerefresh.completed")
-                        .description("Number of early-expiration tasks completed")
-                        .register(meterRegistry);
-                this.cancelledCounter = Counter.builder("prerefresh.cancelled")
-                        .description("Number of early-expiration tasks cancelled")
-                        .register(meterRegistry);
-
-                // Gauge: 活跃任务数
-                Gauge.builder("prerefresh.active", inFlight, map -> map.size())
-                        .description("Number of active early-expiration tasks")
-                        .register(meterRegistry);
-
-                // Gauge: 队列大小
-                if (executorService instanceof ThreadPoolExecutor tpe) {
-                    Gauge.builder("prerefresh.queue.size", tpe, tpe2 -> tpe2.getQueue().size())
-                            .tag("component", "prerefresh")
-                            .description("Size of the early-expiration task queue")
-                            .register(meterRegistry);
-                }
-            } else {
-                this.submittedCounter = null;
-                this.completedCounter = null;
-                this.cancelledCounter = null;
-            }
-
-            log.info("ThreadPoolEarlyExpirationExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}", MAX_RETRY_COUNT);
+            // 初始化 Micrometer 指标（注册逻辑收敛于 RefreshTaskMetrics）
+            this.metrics = new RefreshTaskMetrics(meterRegistry, inFlight, executorService);
+            log.info("ThreadPoolEarlyExpirationExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}",
+                    RefreshRetryPolicy.MAX_RETRY_COUNT);
         } catch (RuntimeException e) {
             // 初始化失败时，确保清理已创建的资源
             cleanupScheduler.shutdownNow();
@@ -162,15 +125,13 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
                             scheduled.set(true);
                             CompletableFuture<Void> created =
                                     CompletableFuture.runAsync(
-                                            () -> executeWithRetry(k, task),
+                                            () -> retryPolicy.executeWithRetry(k, task),
                                             executorService);
 
                             created.whenComplete(
                                     (result, throwable) -> {
                                         inFlight.remove(k, created);
-                                        if (completedCounter != null) {
-                                            completedCounter.increment();
-                                        }
+                                        metrics.recordCompleted();
                                         if (throwable != null) {
                                             log.error("Async early-expiration failed after all retries for key: {}", k, throwable);
                                         }
@@ -180,47 +141,6 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
 
         if (!scheduled.get() && !future.isDone()) {
             log.debug("Key {} is already being refreshed, skipping", key);
-        }
-    }
-
-    /**
-     * 带重试机制执行提前过期任务
-     *
-     * @param key  缓存键
-     * @param task 要执行的任务
-     */
-    private void executeWithRetry(String key, Runnable task) {
-        int attempt = 0;
-        Exception lastException = null;
-        
-        while (attempt < MAX_RETRY_COUNT) {
-            attempt++;
-            try {
-                log.debug("Starting async early-expiration for key: {} (attempt {}/{})", key, attempt, MAX_RETRY_COUNT);
-                task.run();
-                log.debug("Completed async early-expiration for key: {} (attempt {})", key, attempt);
-                return; // 成功，退出
-            } catch (Exception ex) {
-                lastException = ex;
-                log.warn("Async early-expiration failed for key: {} (attempt {}/{}): {}", 
-                        key, attempt, MAX_RETRY_COUNT, ex.getMessage());
-                
-                if (attempt < MAX_RETRY_COUNT) {
-                    try {
-                        Thread.sleep(RETRY_DELAY_MS);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        log.warn("Retry interrupted for key: {}, continuing with next attempt", key);
-                        continue; // Continue to next retry attempt instead of exiting loop
-                    }
-                }
-            }
-        }
-        
-        // 所有重试都失败
-        if (lastException != null) {
-            log.error("Async early-expiration failed after {} attempts for key: {}", MAX_RETRY_COUNT, key, lastException);
-            throw new RuntimeException("Pre-refresh failed after " + MAX_RETRY_COUNT + " attempts", lastException);
         }
     }
 
@@ -236,9 +156,7 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
         }
         CompletableFuture<Void> future = inFlight.remove(key);
         if (future != null) {
-            if (cancelledCounter != null) {
-                cancelledCounter.increment();
-            }
+            metrics.recordCancelled();
             boolean cancelled = future.cancel(true);
             log.debug(
                     "Cancelled async early-expiration for key: {} (cancelled={}, done={})",
@@ -292,7 +210,7 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
     /**
      * 清理已完成的任务，从进行中的映射中移除已完成的任务
      */
-	private void cleanFinished() {
+    private void cleanFinished() {
         inFlight.keySet().removeIf(key -> {
             CompletableFuture<Void> future = inFlight.get(key);
             return future != null && future.isDone();
