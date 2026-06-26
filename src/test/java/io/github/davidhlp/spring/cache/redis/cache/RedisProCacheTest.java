@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -103,7 +104,10 @@ class RedisProCacheTest {
 
             cache.evict(key);
 
-            assertThat(meterRegistry.find("resicache.cache.evict.count").counter()).isNotNull();
+            // 验证 evict 计数器自增为 1(而非仅断言 counter 存在)
+            Counter counter = meterRegistry.find("resicache.cache.evict.count").counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
         }
 
         @Test
@@ -154,9 +158,10 @@ class RedisProCacheTest {
         @Test
         @DisplayName("cache registers meter with correct tag")
         void cache_registersMeterWithCorrectTag() {
-            Timer getTimer = meterRegistry.find("resicache.cache.get").timer();
-            Timer putTimer = meterRegistry.find("resicache.cache.put").timer();
-            Timer evictTimer = meterRegistry.find("resicache.cache.evict").timer();
+            // 用 tag("cache","testCache") 精确查找,验证 meter 带 correct tag(而非仅断言 meter 存在)
+            Timer getTimer = meterRegistry.find("resicache.cache.get").tag("cache", "testCache").timer();
+            Timer putTimer = meterRegistry.find("resicache.cache.put").tag("cache", "testCache").timer();
+            Timer evictTimer = meterRegistry.find("resicache.cache.evict").tag("cache", "testCache").timer();
 
             assertThat(getTimer).isNotNull();
             assertThat(putTimer).isNotNull();

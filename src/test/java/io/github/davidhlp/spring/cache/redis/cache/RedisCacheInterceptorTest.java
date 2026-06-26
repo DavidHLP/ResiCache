@@ -127,12 +127,14 @@ class RedisCacheInterceptorTest {
     }
 
     @Nested
-    @DisplayName("evaluateCondition() Tests")
-    class EvaluateConditionTests {
+    @DisplayName("invoke() no-op Tests")
+    class InvokeNoOpTests {
 
         @Test
-        @DisplayName("evaluateCondition returns true when no operations")
-        void evaluateCondition_withNoOperations_returnsTrue() throws Throwable {
+        @DisplayName("invoke proceeds to target when no cache operations present")
+        void invoke_withNoOperations_proceedsToTarget() throws Throwable {
+            // RedisCacheInterceptor 无 evaluateCondition 方法(condition/unless 由 Spring 原生处理);
+            // 此处验证无 operation 时 invoke 正常委托给目标方法,并返回其结果
             Method method = getMethod("noAnnotation");
             TestClass target = new TestClass();
             Object[] args = new Object[]{};
@@ -143,8 +145,9 @@ class RedisCacheInterceptorTest {
             when(cacheableHandler.handle(method, target, args)).thenReturn(java.util.Collections.emptyList());
             when(invocation.proceed()).thenReturn("result");
 
-            interceptor.invoke(invocation);
+            Object result = interceptor.invoke(invocation);
 
+            assertThat(result).isEqualTo("result");
             verify(invocation).proceed();
         }
     }

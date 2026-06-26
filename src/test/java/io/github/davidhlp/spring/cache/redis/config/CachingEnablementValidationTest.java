@@ -20,42 +20,42 @@ class CachingEnablementValidationTest {
     class CachingEnabledValidatorTests {
 
         @Test
-        @DisplayName("构造函数不抛出异常")
-        void constructor_noException() {
+        @DisplayName("CacheInterceptor存在 → 检测为已启用")
+        void cacheInterceptorExists_detectedAsEnabled() {
             ApplicationContext context = mock(ApplicationContext.class);
-            when(context.getBeanNamesForType(org.springframework.cache.CacheManager.class))
-                    .thenReturn(new String[]{"cacheManager"});
-            when(context.getBeanNamesForType(org.springframework.cache.interceptor.CacheInterceptor.class))
-                    .thenReturn(new String[]{});
-
-            // Should not throw
-            new CachingEnablementValidation.CachingEnabledValidator(context);
-        }
-
-        @Test
-        @DisplayName("无CacheManager时创建成功")
-        void noCacheManager_noException() {
-            ApplicationContext context = mock(ApplicationContext.class);
-            when(context.getBeanNamesForType(org.springframework.cache.CacheManager.class))
-                    .thenReturn(new String[]{});
-            when(context.getBeanNamesForType(org.springframework.cache.interceptor.CacheInterceptor.class))
-                    .thenReturn(new String[]{});
-
-            // Should not throw
-            new CachingEnablementValidation.CachingEnabledValidator(context);
-        }
-
-        @Test
-        @DisplayName("CacheInterceptor存在时启用缓存")
-        void cacheInterceptorExists_enabled() {
-            ApplicationContext context = mock(ApplicationContext.class);
-            when(context.getBeanNamesForType(org.springframework.cache.CacheManager.class))
-                    .thenReturn(new String[]{});
             when(context.getBeanNamesForType(org.springframework.cache.interceptor.CacheInterceptor.class))
                     .thenReturn(new String[]{"cacheInterceptor"});
+            when(context.getBeanNamesForType(org.springframework.cache.CacheManager.class))
+                    .thenReturn(new String[]{});
 
-            // Should not throw
-            new CachingEnablementValidation.CachingEnabledValidator(context);
+            assertThat(CachingEnablementValidation.CachingEnabledValidator
+                    .detectCachingEnabled(context)).isTrue();
+        }
+
+        @Test
+        @DisplayName("CacheManager存在(无CacheInterceptor) → 检测为已启用")
+        void cacheManagerExists_detectedAsEnabled() {
+            ApplicationContext context = mock(ApplicationContext.class);
+            when(context.getBeanNamesForType(org.springframework.cache.interceptor.CacheInterceptor.class))
+                    .thenReturn(new String[]{});
+            when(context.getBeanNamesForType(org.springframework.cache.CacheManager.class))
+                    .thenReturn(new String[]{"cacheManager"});
+
+            assertThat(CachingEnablementValidation.CachingEnabledValidator
+                    .detectCachingEnabled(context)).isTrue();
+        }
+
+        @Test
+        @DisplayName("CacheInterceptor与CacheManager均不存在 → 检测为未启用")
+        void neitherExists_detectedAsDisabled() {
+            ApplicationContext context = mock(ApplicationContext.class);
+            when(context.getBeanNamesForType(org.springframework.cache.interceptor.CacheInterceptor.class))
+                    .thenReturn(new String[]{});
+            when(context.getBeanNamesForType(org.springframework.cache.CacheManager.class))
+                    .thenReturn(new String[]{});
+
+            assertThat(CachingEnablementValidation.CachingEnabledValidator
+                    .detectCachingEnabled(context)).isFalse();
         }
     }
 }

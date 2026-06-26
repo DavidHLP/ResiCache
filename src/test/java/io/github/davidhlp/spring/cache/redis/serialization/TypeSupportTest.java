@@ -119,12 +119,17 @@ class TypeSupportTest {
         }
 
         @Test
-        @DisplayName("反序列化复杂对象")
+        @DisplayName("反序列化复杂对象(无类型信息还原为 Map,字段保留)")
         void deserializeFromBytes_objectBytes_returnsObject() {
             TestObject obj = new TestObject(1L, "test");
             byte[] bytes = typeSupport.serializeToBytes(obj);
             Object result = typeSupport.deserializeFromBytes(bytes);
-            assertThat(result).isNotNull();
+
+            // TypeSupport 用无类型 JSON 序列化普通对象,反序列化为 Map,但字段值必须保留
+            assertThat(result).isInstanceOf(java.util.Map.class);
+            java.util.Map<?, ?> map = (java.util.Map<?, ?>) result;
+            assertThat(map.get("id")).isEqualTo(1);
+            assertThat(map.get("name")).isEqualTo("test");
         }
 
         @Test
