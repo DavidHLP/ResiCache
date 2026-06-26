@@ -15,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -145,7 +146,16 @@ class RedisProCacheWriterTest {
 
             writer.put(name, key, value, ttl);
 
-            verify(chain).execute(any(CacheContext.class));
+            // 用 ArgumentCaptor 捕获传给责任链的 context,验证操作类型/key/缓存名,
+            // 而非仅 verify(any(CacheContext.class)) —— 后者即使 put 误传 GET 操作也会通过
+            ArgumentCaptor<CacheContext> captor = ArgumentCaptor.forClass(CacheContext.class);
+            verify(chain).execute(captor.capture());
+            CacheContext ctx = captor.getValue();
+            assertThat(ctx.getOperation()).isEqualTo(CacheOperation.PUT);
+            assertThat(ctx.getCacheName()).isEqualTo(name);
+            assertThat(ctx.getRedisKey()).isEqualTo(redisKey);
+            assertThat(ctx.getActualKey()).isEqualTo("key1");
+            assertThat(ctx.getTtl()).isEqualTo(ttl);
         }
 
         @Test
@@ -167,7 +177,13 @@ class RedisProCacheWriterTest {
 
             writer.put(name, key, value, ttl, operation);
 
-            verify(chain).execute(any(CacheContext.class));
+            // 验证传入的 operation 配置被正确保留到 context(而非丢失或被覆盖)
+            ArgumentCaptor<CacheContext> captor = ArgumentCaptor.forClass(CacheContext.class);
+            verify(chain).execute(captor.capture());
+            CacheContext ctx = captor.getValue();
+            assertThat(ctx.getOperation()).isEqualTo(CacheOperation.PUT);
+            assertThat(ctx.getCacheName()).isEqualTo(name);
+            assertThat(ctx.getCacheOperation()).isSameAs(operation);
         }
     }
 
@@ -214,7 +230,12 @@ class RedisProCacheWriterTest {
 
             writer.remove(name, key);
 
-            verify(chain).execute(any(CacheContext.class));
+            ArgumentCaptor<CacheContext> captor = ArgumentCaptor.forClass(CacheContext.class);
+            verify(chain).execute(captor.capture());
+            CacheContext ctx = captor.getValue();
+            assertThat(ctx.getOperation()).isEqualTo(CacheOperation.REMOVE);
+            assertThat(ctx.getCacheName()).isEqualTo(name);
+            assertThat(ctx.getActualKey()).isEqualTo("key1");
         }
     }
 
@@ -228,17 +249,20 @@ class RedisProCacheWriterTest {
             String name = "testCache";
             byte[] pattern = "key*".getBytes();
             String keyPattern = "key*";
-            String redisKey = name + "::key*";
-            String actualKey = "key*";
 
             when(typeSupport.bytesToString(pattern)).thenReturn(keyPattern);
-            when(typeSupport.bytesToString(keyPattern.getBytes())).thenReturn(redisKey);
             when(redisCacheRegister.getCacheableOperation(eq(name), any(AnnotatedElementKey.class))).thenReturn(null);
             when(chain.execute(any(CacheContext.class))).thenReturn(CacheResult.success());
 
             writer.clean(name, pattern);
 
-            verify(chain).execute(any(CacheContext.class));
+            ArgumentCaptor<CacheContext> captor = ArgumentCaptor.forClass(CacheContext.class);
+            verify(chain).execute(captor.capture());
+            CacheContext ctx = captor.getValue();
+            assertThat(ctx.getOperation()).isEqualTo(CacheOperation.CLEAN);
+            assertThat(ctx.getCacheName()).isEqualTo(name);
+            assertThat(ctx.getRedisKey()).isEqualTo(keyPattern);
+            assertThat(ctx.getKeyPattern()).isEqualTo(keyPattern);
         }
     }
 

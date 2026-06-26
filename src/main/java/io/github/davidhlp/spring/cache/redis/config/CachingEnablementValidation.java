@@ -59,7 +59,16 @@ public class CachingEnablementValidation {
             }
         }
 
-        private boolean detectCachingEnabled(final ApplicationContext context) {
+        /**
+         * 检测是否已启用缓存(存在 CacheInterceptor 或 CacheManager bean).
+         *
+         * <p>package-private static 以便单元测试直接验证检测逻辑,避免只能通过
+         * "构造函数不抛异常"这种无法观测结果的间接方式测试(构造函数仅 log,不抛异常)。
+         *
+         * @param context 应用上下文
+         * @return 检测到 CacheInterceptor 或 CacheManager bean 返回 true,否则 false
+         */
+        static boolean detectCachingEnabled(final ApplicationContext context) {
             try {
                 final String[] beanNames = context.getBeanNamesForType(
                         Class.forName(

@@ -106,8 +106,11 @@ class RedisCacheRegisterTest {
             RedisCacheableOperation result1 = register.getCacheableOperation("cache1", ELEMENT_KEY);
             RedisCacheableOperation result2 = register.getCacheableOperation("cache2", ELEMENT_KEY);
 
+            // 验证两个 cache name 都存了同一个 operation(而非仅非空)
             assertThat(result1).isNotNull();
+            assertThat(result1.getName()).isEqualTo("testOperation");
             assertThat(result2).isNotNull();
+            assertThat(result2.getName()).isEqualTo("testOperation");
         }
 
         @Test
@@ -168,8 +171,11 @@ class RedisCacheRegisterTest {
             RedisCacheEvictOperation result1 = register.getCacheEvictOperation("cache1", ELEMENT_KEY);
             RedisCacheEvictOperation result2 = register.getCacheEvictOperation("cache2", ELEMENT_KEY);
 
+            // 验证两个 cache name 都存了同一个 evict operation(而非仅非空)
             assertThat(result1).isNotNull();
+            assertThat(result1.getName()).isEqualTo("evictOperation");
             assertThat(result2).isNotNull();
+            assertThat(result2.getName()).isEqualTo("evictOperation");
         }
 
         @Test
@@ -375,8 +381,11 @@ class RedisCacheRegisterTest {
             RedisCacheableOperation cacheableResult = register.getCacheableOperation("myCache", ELEMENT_KEY);
             RedisCacheEvictOperation evictResult = register.getCacheEvictOperation("myCache", ELEMENT_KEY);
 
+            // 验证同 cacheName + elementKey 下,两种类型各自独立存储(而非互相覆盖)
             assertThat(cacheableResult).isNotNull();
+            assertThat(cacheableResult.getName()).isEqualTo("cacheable");
             assertThat(evictResult).isNotNull();
+            assertThat(evictResult.getName()).isEqualTo("evict");
         }
     }
 
@@ -425,6 +434,7 @@ class RedisCacheRegisterTest {
             RedisCacheableOperation result =
                     register.getCacheableOperation("cache:with:colons", ELEMENT_KEY);
             assertThat(result).isNotNull();
+            assertThat(result.getName()).isEqualTo("testOperation");
         }
 
         @Test
@@ -440,9 +450,13 @@ class RedisCacheRegisterTest {
                 register.registerCacheableOperation(METHOD, TARGET_CLASS, operation);
             }
 
-            // Verify that at least some operations were stored
-            RedisCacheableOperation result = register.getCacheableOperation("cache5", ELEMENT_KEY);
-            assertThat(result).isNotNull();
+            // 验证多个注册都独立存入:取 cache0 与 cache5,断言各自 name(而非仅非空)
+            RedisCacheableOperation result5 = register.getCacheableOperation("cache5", ELEMENT_KEY);
+            RedisCacheableOperation result0 = register.getCacheableOperation("cache0", ELEMENT_KEY);
+            assertThat(result5).isNotNull();
+            assertThat(result5.getName()).isEqualTo("operation5");
+            assertThat(result0).isNotNull();
+            assertThat(result0.getName()).isEqualTo("operation0");
         }
     }
 }

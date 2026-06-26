@@ -6,10 +6,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.serializer.SerializationException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * SecureJacksonRedisSerializer unit tests
@@ -114,15 +117,15 @@ class SecureJacksonRedisSerializerTest {
         }
 
         @Test
-        @DisplayName("serializes null value returns null")
-        void serialize_nullValue_returnsNull() {
+        @DisplayName("serializes null value returns empty bytes")
+        void serialize_nullValue_returnsEmptyBytes() {
             SecureJacksonRedisSerializer serializer =
                 new SecureJacksonRedisSerializer(objectMapper);
 
+            // serialize(null) 返回 new byte[0](见源码),而非 null —— 名实需一致
             byte[] result = serializer.serialize(null);
 
-            // null input may return empty bytes or null depending on implementation
-            assertThat(result).isNotNull();
+            assertThat(result).isEmpty();
         }
 
         @Test
@@ -146,9 +149,12 @@ class SecureJacksonRedisSerializerTest {
             byte[] serialized = serializer.serialize(original);
             Object deserialized = serializer.deserialize(serialized);
 
-            assertThat(deserialized).isNotNull();
-            // Due to type info being included, deserialized object should be equivalent
-            assertThat(deserialized.getClass().getName()).contains("TestDomainObject");
+            // 验证类型 + 全部字段,而非仅类名(否则字段全 null 测试仍绿)
+            assertThat(deserialized).isInstanceOf(TestDomainObject.class);
+            TestDomainObject restored = (TestDomainObject) deserialized;
+            assertThat(restored.getId()).isEqualTo(1L);
+            assertThat(restored.getName()).isEqualTo("test-name");
+            assertThat(restored.getValue()).isEqualTo(100.0);
         }
 
         @Test
@@ -193,25 +199,29 @@ class SecureJacksonRedisSerializerTest {
     class SecurityTests {
 
         @Test
-        @DisplayName("rejects types outside allowed package prefix")
+        @DisplayName("deserialize rejects @class types outside whitelist (gadget-chain defense)")
         void deserialize_rejectsTypesOutsideWhitelist() {
-            // This type is NOT in io.github.davidhlp package
+            // 白名单只允许 com.notallowed 前缀
             List<String> restrictedPrefixes = List.of("com.notallowed");
             SecureJacksonRedisSerializer serializer =
                 new SecureJacksonRedisSerializer(objectMapper, restrictedPrefixes);
 
-            // Serialize a restricted type
-            RestrictedDomainObject obj = new RestrictedDomainObject("secret");
-            byte[] serialized = serializer.serialize(obj);
+            // 手工构造恶意 envelope：payload 的 @class 指向白名单外的攻击者类型,
+            // 模拟攻击者注入 gadget 链。VersionEnvelope.payload 的 @JsonTypeInfo(Id.CLASS)
+            // 会写出 @class,而 deserialize 的 validateTypeIds() 在反序列化前递归校验所有
+            // @class —— 非白名单类型在此被拒绝(防 RCE)。原测试仅 serialize 不 deserialize,
+            // 从未走到 validateTypeIds,故即使删除白名单校验也通过(虚假安全感)。
+            String maliciousJson = "{\"version\":2,\"payload\":{"
+                + "\"@class\":\"com.attacker.MaliciousGadget\"}}";
 
-            // Deserialize should work at serialization level, but type validation happens at deserialization
-            // The serializer includes type info, so we just verify it serializes without error
-            assertThat(serialized).isNotNull();
-            assertThat(serialized.length).isGreaterThan(0);
+            assertThatThrownBy(
+                    () -> serializer.deserialize(maliciousJson.getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(SerializationException.class)
+                .hasMessageContaining("whitelist");
         }
 
         @Test
-        @DisplayName("allows types within allowed package prefix")
+        @DisplayName("allows types within allowed package prefix (roundtrip preserves type)")
         void serialize_allowsTypesWithinWhitelist() {
             List<String> allowedPrefixes = List.of(
                 "io.github.davidhlp",
@@ -220,10 +230,13 @@ class SecureJacksonRedisSerializerTest {
             SecureJacksonRedisSerializer serializer =
                 new SecureJacksonRedisSerializer(objectMapper, allowedPrefixes);
 
-            // Should not throw - type is in allowed package
-            byte[] result = serializer.serialize("simple-string");
+            // 白名单内类型应能完整往返(类型 + 字段),而非仅"序列化不抛异常"
+            TestDomainObject original = new TestDomainObject(7L, "allowed", 50.0);
+            byte[] serialized = serializer.serialize(original);
+            Object deserialized = serializer.deserialize(serialized);
 
-            assertThat(result).isNotNull();
+            assertThat(deserialized).isInstanceOf(TestDomainObject.class);
+            assertThat(((TestDomainObject) deserialized).getId()).isEqualTo(7L);
         }
     }
 
@@ -247,19 +260,5 @@ class SecureJacksonRedisSerializerTest {
         public void setName(String name) { this.name = name; }
         public Double getValue() { return value; }
         public void setValue(Double value) { this.value = value; }
-    }
-
-    // Test domain object in restricted package
-    static class RestrictedDomainObject {
-        private String secret;
-
-        public RestrictedDomainObject() {}
-
-        public RestrictedDomainObject(String secret) {
-            this.secret = secret;
-        }
-
-        public String getSecret() { return secret; }
-        public void setSecret(String secret) { this.secret = secret; }
     }
 }

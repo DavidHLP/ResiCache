@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Unit tests for AnnotationHandler abstract class.
@@ -108,7 +109,8 @@ class AnnotationHandlerTest {
 
             assertThat(handler.wasCanHandleCalled()).isTrue();
             assertThat(handler.wasDoHandleCalled()).isTrue();
-            assertThat(result).isNotNull();
+            // canHandle=true 且 doHandle 默认返回空列表 → 结果应为空(而非仅 isNotNull)
+            assertThat(result).isEmpty();
         }
 
         @Test
@@ -159,9 +161,13 @@ class AnnotationHandlerTest {
             first.shouldHandle = true;
             second.shouldHandle = true;
 
+            first.setDoHandleResult(List.of(mock(CacheOperation.class)));
+            second.setDoHandleResult(List.of(mock(CacheOperation.class)));
+
             List<CacheOperation> result = first.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
 
-            assertThat(result).isNotNull();
+            // 两个 handler 各返回 1 个 operation,合并后应为 2 个(而非仅 isNotNull)
+            assertThat(result).hasSize(2);
         }
     }
 
