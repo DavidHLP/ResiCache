@@ -44,15 +44,15 @@ public final class RefreshRetryPolicy {
                 return; // 成功，退出
             } catch (Exception ex) {
                 lastException = ex;
-                log.warn("Async early-expiration failed for key: {} (attempt {}/{}): {}",
-                        key, attempt, MAX_RETRY_COUNT, ex.getMessage());
+                log.warn("Async early-expiration failed for key: {} (attempt {}/{})",
+                        key, attempt, MAX_RETRY_COUNT, ex);
 
                 if (attempt < MAX_RETRY_COUNT) {
                     try {
                         Thread.sleep(RETRY_DELAY_MS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.warn("Retry interrupted for key: {}, continuing with next attempt", key);
+                        log.warn("Retry interrupted for key: {}, continuing with next attempt", key, ie);
                         continue; // 继续下一次重试而非退出循环
                     }
                 }

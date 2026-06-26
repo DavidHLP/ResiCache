@@ -153,7 +153,7 @@ class SecureJacksonRedisSerializerTest {
 
         @Test
         @DisplayName("roundtrip CachedValue keeps class in whitelist and preserves payload value")
-        void roundtrip_cachedValue_preservesFields() {
+        void roundtrip_cachedValue_preservesPayloadValue() {
             // 铁律 #6：CachedValue(io.github.davidhlp...cache.CachedValue) 与 payload 必须在白名单
             // （默认前缀 io.github.davidhlp 覆盖）。本用例验证 CachedValue 经 envelope 序列化往返后：
             //   1) @class 类型标识在白名单内（不被 validateTypeIds 拒绝 → 不抛 SecurityException）

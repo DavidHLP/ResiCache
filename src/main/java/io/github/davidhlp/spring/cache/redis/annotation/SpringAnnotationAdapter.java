@@ -48,14 +48,11 @@ final class SpringAnnotationAdapter {
             return;
         }
 
-        if (nativeAnnotationMode == RedisProCacheProperties.NativeAnnotationMode.SELECTIVE
-                && !hasResiCacheAnnotation(target)) {
-            return;
-        }
-
-        // In SELECTIVE mode, skip Spring annotations whose ResiCache counterpart
-        // is already present to avoid duplicate cache operations
         if (nativeAnnotationMode == RedisProCacheProperties.NativeAnnotationMode.SELECTIVE) {
+            // SELECTIVE:无任何 ResiCache 注解则跳过;否则按需转换 Spring 注解(已有 ResiCache 对应项则跳过,避免重复)
+            if (!hasResiCacheAnnotation(target)) {
+                return;
+            }
             if (target instanceof Method method) {
                 if (!hasResiCacheable(method)) { convertSpringCacheable(method, ops); }
                 if (!hasResiCacheEvict(method)) { convertSpringCacheEvict(method, ops); }

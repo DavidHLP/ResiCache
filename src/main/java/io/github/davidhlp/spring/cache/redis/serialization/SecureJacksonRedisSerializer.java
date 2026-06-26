@@ -38,7 +38,6 @@ public class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
 
     private final ObjectMapper objectMapper;
     private final boolean failOnUnknownType;
-    private final List<String> allowedPackagePrefixes;
     private final WhitelistPolicy whitelistPolicy;
 
     /**
@@ -79,7 +78,6 @@ public class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
         this.whitelistPolicy = new WhitelistPolicy(allowedPackagePrefixes);
         this.objectMapper = createSecureObjectMapper(objectMapper, this.whitelistPolicy, typeProperty, polymorphicTypingEnabled);
         this.failOnUnknownType = failOnUnknownType;
-        this.allowedPackagePrefixes = List.copyOf(allowedPackagePrefixes);
     }
 
     private ObjectMapper createSecureObjectMapper(ObjectMapper objectMapper,
