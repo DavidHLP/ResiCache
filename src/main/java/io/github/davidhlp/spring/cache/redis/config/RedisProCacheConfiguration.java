@@ -5,6 +5,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -56,8 +57,8 @@ public class RedisProCacheConfiguration {
     public RedisCacheConfiguration defaultRedisCacheConfiguration(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             RedisProCacheProperties properties) {
-        SecureJackson2JsonRedisSerializer valueSerializer =
-                new SecureJackson2JsonRedisSerializer(
+        SecureJacksonRedisSerializer valueSerializer =
+                new SecureJacksonRedisSerializer(
                         objectMapper,
                         properties.getSerializer().getAllowedPackagePrefixes(),
                         properties.getSerializer().isFailOnUnknownType(),

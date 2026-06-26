@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.config;
+package io.github.davidhlp.spring.cache.redis.serialization;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.AllArgsConstructor;
@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
  * </ul>
  *
  * <p>payload 字段使用 @JsonTypeInfo(Id.CLASS) 保留类型信息，
- * 安全性由 SecureJackson2JsonRedisSerializer 的 validateTypeIds() 二次校验保障，
+ * 安全性由 SecureJacksonRedisSerializer 的 validateTypeIds() 二次校验保障，
  * 确保反序列化时类型在白名单中。
  */
 @Data

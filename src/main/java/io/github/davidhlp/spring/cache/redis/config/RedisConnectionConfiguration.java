@@ -16,6 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -38,8 +39,8 @@ public class RedisConnectionConfiguration {
         template.setConnectionFactory(redisConnectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        SecureJackson2JsonRedisSerializer jsonSerializer =
-                new SecureJackson2JsonRedisSerializer(objectMapper);
+        SecureJacksonRedisSerializer jsonSerializer =
+                new SecureJacksonRedisSerializer(objectMapper);
 
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);
@@ -52,7 +53,7 @@ public class RedisConnectionConfiguration {
         template.afterPropertiesSet();
 
         log.debug(
-                "Created RedisCacheTemplate with StringRedisSerializer for keys and SecureJackson2JsonRedisSerializer for values");
+                "Created RedisCacheTemplate with StringRedisSerializer for keys and SecureJacksonRedisSerializer for values");
         return template;
     }
 
