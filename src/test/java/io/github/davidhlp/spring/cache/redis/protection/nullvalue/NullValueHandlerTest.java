@@ -124,7 +124,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.shouldSkipAll()).isTrue();
+            assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
             assertThat(result.result()).isEqualTo(CacheResult.success());
             verify(nullValuePolicy, never()).toStoreValue(any(), any());
         }
@@ -138,7 +138,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.shouldSkipAll()).isFalse();
+            assertThat(result.decision()).isNotEqualTo(ChainDecision.SKIP_ALL);
             assertThat(context.getOutput().getStoreValue()).isEqualTo("NULL_PLACEHOLDER");
         }
 
@@ -169,7 +169,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.shouldSkipAll()).isFalse();
+            assertThat(result.decision()).isNotEqualTo(ChainDecision.SKIP_ALL);
             assertThat(context.getOutput().getStoreValue()).isEqualTo(storeValue);
         }
 
