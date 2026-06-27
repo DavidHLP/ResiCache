@@ -177,7 +177,77 @@ class CacheHandlerChainFactoryTest {
         }
     }
 
+    @Nested
+    @DisplayName("protection kill-switch (B1 回归)")
+    class ProtectionKillSwitchTests {
+
+        @Test
+        @DisplayName("protection.enabled=false 保留 TTL 与 ActualCache(不禁用基础 TTL)")
+        void protectionDisabled_preservesTtlAndActualCache() {
+            RedisProCacheProperties.ProtectionProperties protection =
+                    new RedisProCacheProperties.ProtectionProperties();
+            protection.setEnabled(false);
+            when(properties.getProtection()).thenReturn(protection);
+
+            List<CacheHandler> handlers = List.of(
+                    new BloomFilterHandler(), new SyncLockHandler(), new EarlyExpirationHandler(),
+                    new TtlHandler(), new NullValueHandler(), new ActualCacheHandler());
+            factory = new CacheHandlerChainFactory(handlers, properties);
+
+            List<String> names = factory.createChain().getHandlerNames();
+
+            // B1:TtlHandler 兼担基础 TTL 计算,禁用会导致 ActualCacheHandler 写无 TTL 永久缓存 → 必须保留
+            assertThat(names).contains("TtlHandler", "ActualCacheHandler");
+            assertThat(names).doesNotContain("BloomFilterHandler", "SyncLockHandler",
+                    "EarlyExpirationHandler", "NullValueHandler");
+        }
+
+        @Test
+        @DisplayName("protection.enabled=true(default) 保留全部 handler")
+        void protectionEnabled_keepsAll() {
+            when(properties.getProtection()).thenReturn(
+                    new RedisProCacheProperties.ProtectionProperties());
+
+            List<CacheHandler> handlers = List.of(
+                    new BloomFilterHandler(), new TtlHandler(), new ActualCacheHandler());
+            factory = new CacheHandlerChainFactory(handlers, properties);
+
+            assertThat(factory.createChain().getHandlerNames())
+                    .contains("BloomFilterHandler", "TtlHandler", "ActualCacheHandler");
+        }
+    }
+
     // ========== Test Handler Implementations ==========
+
+    // B1 回归专用:类名精确匹配真实 handler 简名,使 getHandlerDisableName 输出对应 kebab
+    // (bloom-filter/sync-lock/early-expiration/null-value/ttl/actual-cache)
+    abstract static class NamedHandler implements CacheHandler {
+        @Override
+        public HandlerResult handle(CacheContext context) {
+            return HandlerResult.continueWith(CacheResult.success());
+        }
+
+        @Override
+        public void setNext(CacheHandler next) { }
+
+        @Override
+        public CacheHandler getNext() {
+            return null;
+        }
+    }
+
+    @HandlerPriority(HandlerOrder.BLOOM_FILTER)
+    static class BloomFilterHandler extends NamedHandler { }
+    @HandlerPriority(HandlerOrder.SYNC_LOCK)
+    static class SyncLockHandler extends NamedHandler { }
+    @HandlerPriority(HandlerOrder.EARLY_EXPIRATION)
+    static class EarlyExpirationHandler extends NamedHandler { }
+    @HandlerPriority(HandlerOrder.TTL)
+    static class TtlHandler extends NamedHandler { }
+    @HandlerPriority(HandlerOrder.NULL_VALUE)
+    static class NullValueHandler extends NamedHandler { }
+    @HandlerPriority(HandlerOrder.ACTUAL_CACHE)
+    static class ActualCacheHandler extends NamedHandler { }
 
     static class TestCacheHandler implements CacheHandler {
         @Override

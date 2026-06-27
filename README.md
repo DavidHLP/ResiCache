@@ -146,7 +146,7 @@ All properties use the `resi-cache.*` prefix (bound to `RedisProCacheProperties`
 resi-cache:
   enabled: true                 # master kill-switch; false disables ResiCache entirely
   protection:
-    enabled: true               # false short-circuits the protection chain to native-equivalent
+    enabled: true               # false skips bloom/lock/early-exp/null-value; TTL preserved (startup-only)
 ```
 
 ### Global
