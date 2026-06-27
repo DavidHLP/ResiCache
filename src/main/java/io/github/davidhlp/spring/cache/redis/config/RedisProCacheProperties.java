@@ -235,14 +235,18 @@ public class RedisProCacheProperties {
     /**
      * 防护链配置.
      *
-     * <p>当 {@code enabled=false} 时,责任链短路为仅 ActualCache 执行,
-     * 等价 Spring 原生 RedisCache 行为(ResiCache 的 CacheManager 仍顶替,
-     * 但防护纵深全部关闭)。用于在不移除依赖的前提下快速关闭防护,便于排障或灰度回退。
+     * <p>当 {@code enabled=false} 时,短路掉防护纵深 handler(布隆/锁/提前过期/空值),
+     * 但<b>保留 TTL</b>——TtlHandler 兼担基础 TTL 计算,禁用会导致永久缓存。即:关闭后
+     * 缓存仍按 TTL 正常过期,只是失去防穿透/击穿/雪崩/热 key 能力。
+     *
+     * <p><b>仅启动时生效</b>:责任链单例缓存于首次构建,运行时变更此属性需重启应用。
+     * <b>Blast radius</b>:类级开关关闭整个 {@code RedisCacheAutoConfiguration},
+     * 含 SecureJackson RedisTemplate(序列化器将回退 Spring 默认)。
      */
     @Getter
     @Setter
     public static class ProtectionProperties {
-        /** 是否启用防护链(布隆/锁/提前过期/TTL抖动/空值)。默认 true。 */
+        /** 是否启用防护链(布隆/锁/提前过期/空值;TTL 始终保留)。默认 true。 */
         private boolean enabled = true;
     }
 }

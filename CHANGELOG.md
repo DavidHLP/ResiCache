@@ -26,16 +26,20 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   matchIfMissing = true)`. Set `resi-cache.enabled=false` to fully disable
   ResiCache without removing the dependency.
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
-  responsibility chain short-circuits to native-equivalent behavior (only
-  `ActualCacheHandler` runs) while the `RedisProCacheManager` still backs Redis.
+  protection handlers (bloom/lock/early-expiration/null-value) are skipped but
+  **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
+  cause permanent caching). Startup-only (chain is cached as a singleton).
 - Reactive return-type detection now logs an explicit **"caching will NOT take
   effect"** warning instead of implying a graceful fallback.
 
 ### Changed
-- `nativeAnnotationMode` default changed from `FULL` → **`SELECTIVE`**: plain
-  `@Cacheable` / `@CachePut` / `@CacheEvict` methods are now handled entirely by
-  Spring's native cache infrastructure (no longer intercepted by ResiCache),
-  which removes the dual-advisor risk. Use `@RedisCacheable` for protection.
+- ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
+  **`SELECTIVE`**: plain `@Cacheable` / `@CachePut` / `@CacheEvict` methods are
+  now handled entirely by Spring's native cache infrastructure (no longer
+  intercepted by ResiCache), which removes the dual-advisor risk. **Migration:**
+  if you relied on ResiCache intercepting `@Cacheable`, set
+  `resi-cache.native-annotation-mode=FULL` explicitly. Use `@RedisCacheable`
+  for protection.
 
 ### Fixed
 - Redisson is now a *true* optional dependency: the `RedissonClient` bean and
