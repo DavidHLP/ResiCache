@@ -19,7 +19,7 @@
     <packaging>jar</packaging>
 
     <name>ResiCache</name>
-    <description>ResiCache - 基于 Spring Cache 和 Redis 的高性能缓存防护工具包</description>
+    <description>ResiCache - Spring Cache 防护增强注解生态:基于可编排责任链为 Redis 缓存补齐防穿透/击穿/雪崩/热 key 刷新能力</description>
     <url>https://github.com/davidhlp/ResiCache</url>
 
     <!-- Maven Central 元数据（强烈建议提供） -->

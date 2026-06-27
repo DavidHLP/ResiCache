@@ -75,8 +75,11 @@ public class RedisProCacheProperties {
     /** Handler 配置（支持按 cacheName 细粒度禁用） */
     private Map<String, HandlerConfig> handlerSettings = new HashMap<>();
 
-    /** Spring 原生注解兼容模式: FULL, NONE, SELECTIVE */
-    private NativeAnnotationMode nativeAnnotationMode = NativeAnnotationMode.FULL;
+    /** Spring 原生注解兼容模式: FULL, NONE, SELECTIVE。默认 SELECTIVE,避免双 Advisor。 */
+    private NativeAnnotationMode nativeAnnotationMode = NativeAnnotationMode.SELECTIVE;
+
+    /** 防护链总开关配置(resi-cache.protection.*) */
+    private ProtectionProperties protection = new ProtectionProperties();
 
     /**
      * Spring 原生注解兼容模式.
@@ -227,5 +230,19 @@ public class RedisProCacheProperties {
         /** 重试间隔（毫秒） */
         @Min(1)
         private int retryInterval = 1500;
+    }
+
+    /**
+     * 防护链配置.
+     *
+     * <p>当 {@code enabled=false} 时,责任链短路为仅 ActualCache 执行,
+     * 等价 Spring 原生 RedisCache 行为(ResiCache 的 CacheManager 仍顶替,
+     * 但防护纵深全部关闭)。用于在不移除依赖的前提下快速关闭防护,便于排障或灰度回退。
+     */
+    @Getter
+    @Setter
+    public static class ProtectionProperties {
+        /** 是否启用防护链(布隆/锁/提前过期/TTL抖动/空值)。默认 true。 */
+        private boolean enabled = true;
     }
 }

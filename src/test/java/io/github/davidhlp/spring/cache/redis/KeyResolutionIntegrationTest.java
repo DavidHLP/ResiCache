@@ -29,7 +29,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Asserts that ResiCache's metadata lookup key matches Spring's actual cache key
  * for common annotation scenarios.
  */
-@SpringBootTest(classes = TestApplication.class)
+// 显式启用 FULL:本类验证 Spring 原生注解(@Cacheable)的转换与元数据注册。
+// v0.0.3 起默认为 SELECTIVE(纯 @Cacheable 不再被转换);FULL 转换行为仍需测试覆盖,
+// 故此处显式开启。SELECTIVE 新默认由 RedisCacheOperationSourceSelectiveTest 单测覆盖。
+@SpringBootTest(classes = TestApplication.class, properties = "resi-cache.native-annotation-mode=FULL")
 @ActiveProfiles("integration-test")
 @Import({TestRedisConfiguration.class, KeyResolutionIntegrationTest.TestConfig.class})
 @DisplayName("Key Resolution Integration Tests")

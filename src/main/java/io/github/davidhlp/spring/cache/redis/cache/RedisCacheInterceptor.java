@@ -77,7 +77,7 @@ public class RedisCacheInterceptor extends CacheInterceptor {
      * 检测方法返回类型是否为 Reactive 类型（Mono/Flux）。
      *
      * <p>ResiCache 目前仅支持同步缓存。若检测到 Reactive 返回类型且方法带有缓存注解，
-     * 记录警告日志，提示用户当前行为将回退到 Spring 原生缓存逻辑。
+     * 记录警告日志，明确告知缓存不会按预期生效(拦截器为阻塞式,无法处理 Mono/Flux)。
      *
      * @param method 被调用的方法
      */
@@ -85,8 +85,9 @@ public class RedisCacheInterceptor extends CacheInterceptor {
         Class<?> returnType = method.getReturnType();
         if (isReactiveType(returnType.getName())) {
             log.warn(
-                    "Reactive return type {} is not fully supported by ResiCache. "
-                            + "Method [{}.{}] will use Spring's native cache behavior without ResiCache enhancements.",
+                    "Reactive return type {} is NOT supported by ResiCache — caching will NOT take effect. "
+                            + "Method [{}.{}] bypasses ResiCache; remove the cache annotation or switch to a "
+                            + "synchronous return type.",
                     returnType.getName(),
                     method.getDeclaringClass().getName(),
                     method.getName());

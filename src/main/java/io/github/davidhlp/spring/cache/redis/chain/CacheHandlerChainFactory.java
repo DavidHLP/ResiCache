@@ -59,6 +59,17 @@ public class CacheHandlerChainFactory {
 
             Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
 
+            // 防护链总开关:关闭时短路为仅 ActualCache(等价 Spring 原生行为)
+            // null-safe:测试用 mock/stub 的 properties 可能不设 protection,默认视为开启
+            RedisProCacheProperties.ProtectionProperties protection = properties.getProtection();
+            if (protection != null && !protection.isEnabled()) {
+                disabled.addAll(List.of(
+                        "bloom-filter", "sync-lock", "early-expiration",
+                        "ttl", "null-value"));
+                log.info("Protection chain disabled by resi-cache.protection.enabled=false; "
+                        + "only ActualCacheHandler will run (native-equivalent behavior)");
+            }
+
             // 按 @HandlerPriority 注解排序
             List<CacheHandler> sortedHandlers = handlers.stream()
                 .sorted(Comparator.comparingInt(this::getOrder))

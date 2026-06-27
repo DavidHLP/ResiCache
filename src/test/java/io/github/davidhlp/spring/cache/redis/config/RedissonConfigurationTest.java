@@ -16,21 +16,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * RedisConnectionConfiguration 单元测试
+ * RedissonConfiguration 单元测试
  * 测试 RedissonClient 的不同部署模式配置逻辑
  *
  * 注意：这些测试验证配置构建逻辑，不验证实际 Redis 连接
  */
-@DisplayName("RedisConnectionConfiguration Tests")
-class RedisConnectionConfigurationTest {
+@DisplayName("RedissonConfiguration Tests")
+class RedissonConfigurationTest {
 
-    private RedisConnectionConfiguration configuration;
+    private RedissonConfiguration configuration;
     private RedisProperties redisProperties;
     private RedisProCacheProperties properties;
 
     @BeforeEach
     void setUp() {
-        configuration = new RedisConnectionConfiguration();
+        configuration = new RedissonConfiguration();
         redisProperties = new RedisProperties();
         redisProperties.setHost("localhost");
         redisProperties.setPort(6379);
@@ -48,7 +48,7 @@ class RedisConnectionConfigurationTest {
             properties.getRedis().setHost("redis.example.com");
             properties.getRedis().setPort(6380);
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSingleServer().getAddress())
                     .isEqualTo("redis://redis.example.com:6380");
@@ -63,7 +63,7 @@ class RedisConnectionConfigurationTest {
             redisProperties.setHost("spring-redis.example.com");
             redisProperties.setPort(7000);
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSingleServer().getAddress())
                     .isEqualTo("redis://spring-redis.example.com:7000");
@@ -74,7 +74,7 @@ class RedisConnectionConfigurationTest {
         void singleMode_setsDatabase() {
             properties.getRedis().setDatabase(5);
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSingleServer().getDatabase()).isEqualTo(5);
         }
@@ -84,7 +84,7 @@ class RedisConnectionConfigurationTest {
         void singleMode_setsPassword() {
             properties.getRedis().setPassword("secret");
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSingleServer().getPassword()).isEqualTo("secret");
         }
@@ -94,7 +94,7 @@ class RedisConnectionConfigurationTest {
         void singleMode_setsUsername() {
             properties.getRedis().setUsername("admin");
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSingleServer().getUsername()).isEqualTo("admin");
         }
@@ -114,7 +114,7 @@ class RedisConnectionConfigurationTest {
                     "node3.example.com:6379"
             ));
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useClusterServers().getNodeAddresses()).hasSize(3);
         }
@@ -137,7 +137,7 @@ class RedisConnectionConfigurationTest {
             properties.getRedis().setPassword("cluster-secret");
             properties.getRedis().setClusterNodes(List.of("node1:6379"));
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useClusterServers().getPassword()).isEqualTo("cluster-secret");
         }
@@ -157,7 +157,7 @@ class RedisConnectionConfigurationTest {
                     "sentinel2.example.com:26379"
             ));
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSentinelServers().getMasterName()).isEqualTo("mymaster");
             assertThat(config.useSentinelServers().getSentinelAddresses()).hasSize(2);
@@ -197,7 +197,7 @@ class RedisConnectionConfigurationTest {
             properties.getRedis().setTlsEnabled(true);
             properties.getRedis().setHost("secure.redis.example.com");
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSingleServer().getAddress())
                     .startsWith("rediss://");
@@ -210,7 +210,7 @@ class RedisConnectionConfigurationTest {
             properties.getRedis().setTlsEnabled(true);
             properties.getRedis().setClusterNodes(List.of("node1:6379"));
 
-            Config config = buildTestConfig(properties, redisProperties);
+            Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useClusterServers().getNodeAddresses().get(0).toString())
                     .startsWith("rediss://");
@@ -236,74 +236,10 @@ class RedisConnectionConfigurationTest {
 
             properties.getRedis().setRedissonConfigPath(yamlFile.getAbsolutePath());
 
-            // 验证配置文件可以被解析
-            Config loadedConfig = Config.fromYAML(yamlFile);
+            // 经由真实生产方法 buildConfig 读取 YAML(覆盖 redissonConfigPath 安全敏感分支)
+            Config loadedConfig = configuration.buildConfig(redisProperties, properties);
             assertThat(loadedConfig.useSingleServer().getDatabase()).isEqualTo(3);
         }
     }
 
-    /**
-     * 辅助方法：构建测试用的 Config 对象
-     * 模拟 RedisConnectionConfiguration 的配置逻辑，但不创建实际连接
-     */
-    private Config buildTestConfig(RedisProCacheProperties props, RedisProperties springRedisProps) {
-        Config config = new Config();
-        String scheme = props.getRedis().isTlsEnabled() ? "rediss://" : "redis://";
-
-        switch (props.getRedis().getMode()) {
-            case "cluster" -> {
-                if (!props.getRedis().getClusterNodes().isEmpty()) {
-                    String[] nodes = props.getRedis().getClusterNodes().stream()
-                            .map(n -> scheme + n)
-                            .toArray(String[]::new);
-                    var clusterConfig = config.useClusterServers().addNodeAddress(nodes);
-
-                    if (props.getRedis().getPassword() != null && !props.getRedis().getPassword().isEmpty()) {
-                        clusterConfig.setPassword(props.getRedis().getPassword());
-                    }
-                    if (props.getRedis().getUsername() != null && !props.getRedis().getUsername().isEmpty()) {
-                        clusterConfig.setUsername(props.getRedis().getUsername());
-                    }
-                }
-            }
-            case "sentinel" -> {
-                if (props.getRedis().getSentinelMaster() != null
-                        && !props.getRedis().getSentinelNodes().isEmpty()) {
-                    String[] sentinels = props.getRedis().getSentinelNodes().stream()
-                            .map(n -> scheme + n)
-                            .toArray(String[]::new);
-                    var sentinelConfig = config.useSentinelServers()
-                            .setMasterName(props.getRedis().getSentinelMaster())
-                            .addSentinelAddress(sentinels);
-
-                    if (props.getRedis().getPassword() != null && !props.getRedis().getPassword().isEmpty()) {
-                        sentinelConfig.setPassword(props.getRedis().getPassword());
-                    }
-                    if (props.getRedis().getUsername() != null && !props.getRedis().getUsername().isEmpty()) {
-                        sentinelConfig.setUsername(props.getRedis().getUsername());
-                    }
-                }
-            }
-            default -> {
-                String host = props.getRedis().getHost() != null && !props.getRedis().getHost().isBlank()
-                        ? props.getRedis().getHost()
-                        : springRedisProps.getHost();
-                int port = props.getRedis().getPort() != 0
-                        ? props.getRedis().getPort()
-                        : springRedisProps.getPort();
-                var singleConfig = config.useSingleServer()
-                        .setAddress(scheme + host + ":" + port)
-                        .setDatabase(props.getRedis().getDatabase());
-
-                if (props.getRedis().getPassword() != null && !props.getRedis().getPassword().isEmpty()) {
-                    singleConfig.setPassword(props.getRedis().getPassword());
-                }
-                if (props.getRedis().getUsername() != null && !props.getRedis().getUsername().isEmpty()) {
-                    singleConfig.setUsername(props.getRedis().getUsername());
-                }
-            }
-        }
-
-        return config;
-    }
 }
