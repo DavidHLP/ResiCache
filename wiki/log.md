@@ -20,6 +20,36 @@ wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subj
 
 ---
 
+## [2026-06-27] improve | v0.0.3 文档诚实化 + 代码护栏 + 4 份 ADR
+
+Q1-Q11 对抗审查后的执行轮次。背景与取舍详见 [[0001-positioning]]–[[0004-protection-preset]]。
+
+**代码改动(v0.0.3 路线图)**
+
+- Q9 kill-switch:`RedisCacheAutoConfiguration` 类级加 `@ConditionalOnProperty(resi-cache.enabled, matchIfMissing=true)` 总开关;`RedisProCacheProperties` 增 `protection.enabled`,`CacheHandlerChainFactory.createChain` 在关闭时短路为仅 ActualCache(等价原生行为)。
+- Q9 Redisson 真 optional:Redisson 相关代码从 `RedisConnectionConfiguration` 拆到独立的 `RedissonConfiguration`(类级 `@ConditionalOnClass(RedissonClient.class)`)。PoC `RedissonOptionalConfigurationTest`(FilteredClassLoader)验证 Redisson 缺失时无 NoClassDefFoundError。
+- Q3 双 Advisor:`nativeAnnotationMode` 默认 `FULL`→`SELECTIVE`(`RedisProCacheProperties.java`、`RedisCacheOperationSource.java`)。保留 interceptor+Advisor、弃装饰器(代码证据见 [[0002-keep-interceptor]])。PoC `RedisCacheOperationSourceSelectiveTest`。
+- Q7 Reactive:`RedisCacheInterceptor.warnIfReactiveReturnType` 措辞改为「缓存不会生效」(诚实化)。
+
+**治理文档包(Q11)**
+
+- `CHANGELOG.md`(回填 0.0.1→0.0.2 的 a5ab55b 移除项 + 1.0 前 SemVer 承诺 + v1.0 tag 说明)。
+- `CONTRIBUTING.md` / `SECURITY.md` / `COMPATIBILITY.md`(融合精确版本表 + optional deps + 序列化兼容) / `CODEOWNERS`。
+- 英文 `README.md` 设为 canonical,中文迁移至 `README.zh-CN.md` 并标注「可能滞后,以英文为准」。
+
+**CI 护栏(Q2 + Q9 + Q11)**
+
+- `ci.yml`:build 改 Java{17,21} matrix;新增 Boot{3.3,3.5} 探测性兼容 job(continue-on-error);新增 `docs-link-check` job(黑名单防 a5ab55b 移除特性在 README 复发 + 白名单校验关键类在 src 存在)。
+- pom description 删除「高性能」无 benchmark 措辞,改为「防护增强注解生态」定位。
+
+**ADR**
+
+- [[0001-positioning]](Q1 定位)、[[0002-keep-interceptor]](Q3 弃装饰器)、[[0003-serialization-envelope]](Q4 信封+迁移)、[[0004-protection-preset]](Q6 preset)。
+
+**验证**:`./mvnw clean compile test-compile checkstyle:check` 通过;新增/重命名测试类 3 个共 17 项全绿(含 Redisson-optional PoC、SELECTIVE PoC)。
+
+---
+
 ## [2026-06-21] colorize | graph.json 按目录着色
 
 之前 `improve` 项里 `colorGroups` 用了未加引号的 `path:architecture` + 字符串 palette,被还原。此次按官方规范重写并写入。

@@ -40,7 +40,7 @@ public class RedisCacheOperationSource extends AnnotationCacheOperationSource {
     private final SpringAnnotationAdapter springAnnotationAdapter;
 
     public RedisCacheOperationSource() {
-        this(RedisProCacheProperties.NativeAnnotationMode.FULL);
+        this(RedisProCacheProperties.NativeAnnotationMode.SELECTIVE);
     }
 
     public RedisCacheOperationSource(

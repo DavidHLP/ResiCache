@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.RedisOperations;
@@ -19,9 +20,11 @@ import org.springframework.data.redis.core.RedisOperations;
 @Slf4j
 @AutoConfiguration(after = RedisAutoConfiguration.class)
 @ConditionalOnClass({RedisOperations.class})
+@ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)
 @Import({
     JacksonConfig.class,
     RedisConnectionConfiguration.class,
+    RedissonConfiguration.class,
     RedisCacheRegistryConfiguration.class,
     RedisProxyCachingConfiguration.class,
     RedisProCacheConfiguration.class

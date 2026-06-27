@@ -1,0 +1,16 @@
+# CODEOWNERS — reviewers auto-requested on PRs touching these paths.
+# ResiCache is single-maintainer today; this file documents the critical paths
+# that warrant the most careful review and prepares the structure for future
+# co-maintainers.
+
+# Default owner for everything not listed below
+*                           @davidhlp
+
+# Critical resilience machinery — ordering, control flow, protection logic
+/src/main/java/io/github/davidhlp/spring/cache/redis/chain/       @davidhlp
+/src/main/java/io/github/davidhlp/spring/cache/redis/protection/  @davidhlp
+
+# Auto-configuration wiring + security-sensitive serialization
+/src/main/java/io/github/davidhlp/spring/cache/redis/config/          @davidhlp
+/src/main/java/io/github/davidhlp/spring/cache/redis/serialization/   @davidhlp
+/src/main/resources/META-INF/spring/                                  @davidhlp

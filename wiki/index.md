@@ -38,6 +38,13 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[mechanisms-moc]] —— 机制拓扑 MOC(责任链档位 + 问题 ↔ 防御组合)
 - [[modules-moc]] —— 模块依赖 MOC(三层模型 + 关键调用链)
 
+## 架构决策记录(adr/)
+
+- [[0001-positioning]] —— 定位为「Spring Cache 防护增强注解生态」(Q1)
+- [[0002-keep-interceptor]] —— 保留 interceptor+Advisor、弃装饰器(Q3)
+- [[0003-serialization-envelope]] —— 序列化信封 + 迁移路径,不放松白名单(Q4)
+- [[0004-protection-preset]] —— protection.preset 批量启用,而非默认全开(Q6)
+
 ## 架构(architecture/)
 
 - [[chain-of-responsibility]] —— 责任链脊柱,`HandlerOrder` 顺序真理源

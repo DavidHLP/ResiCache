@@ -11,17 +11,21 @@ env:
 
 jobs:
   build:
-    name: Build and Test
+    name: Build and Test (Java ${{ matrix.java }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21']
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v5
         with:
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: ${{ matrix.java }}
           distribution: 'temurin'
           cache: 'maven'
 
@@ -34,7 +38,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: test-results
+          name: test-results-java-${{ matrix.java }}
           path: target/surefire-reports/
           retention-days: 7
 
@@ -42,9 +46,76 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: jacoco-report
+          name: jacoco-report-java-${{ matrix.java }}
           path: target/site/jacoco/
           retention-days: 7
+
+  compatibility:
+    # 探测性兼容矩阵:验证 ResiCache 对 Spring Boot 3.3/3.5 的编译兼容性。
+    # 注意:-Dspring-boot.version 对 starter-parent 无效(parent 无此 property);
+    # 必须用 versions:set-parent 真正切换 <parent><version>,否则永远编译 3.4.13(假信号)。
+    # continue-on-error:3.5.x 可能因 parent 发布差异失败,不阻塞主干,作为兼容性信号。
+    name: Spring Boot ${{ matrix.boot }} compile check
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        boot: ['3.3.6', '3.5.3']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Switch parent to Spring Boot ${{ matrix.boot }} and compile
+        run: |
+          ./mvnw versions:set-parent -DparentVersion=${{ matrix.boot }} -DgenerateBackupPoms=false -B
+          ./mvnw clean compile -B
+
+  docs-link-check:
+    # 文档一致性护栏:防止 a5ab55b 移除的过度工程特性被对外文档重新宣称,
+    # 并校验 README 宣称的关键类在 src 存在。(Q2 诚实化 + Q11 可推广护栏)
+    name: Docs ↔ Source Consistency
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Guard against removed-feature regressions in docs
+        run: |
+          set -e
+          # 1. 黑名单:被移除的过度工程符号不应再出现在对外 README 中
+          banned="CircuitBreakerCacheWrapper RateLimiterCacheWrapper \
+                  SpelConditionEvaluator CacheEvictedEvent CacheMetricsRecorder \
+                  BloomFilterProvider LockProvider RedissonLockProvider"
+          for sym in $banned; do
+            hits=$(grep -rn "$sym" README.md README.zh-CN.md 2>/dev/null || true)
+            if [ -n "$hits" ]; then
+              echo "::error::Removed symbol '$sym' is still referenced in README:"
+              echo "$hits"
+              exit 1
+            fi
+          done
+          echo "OK: No removed-symbol regressions in README."
+
+          # 2. 白名单:README 宣称的关键类必须在 src 存在
+          for cls in RedisCacheAutoConfiguration RedisProCacheProperties RedisProCache \
+                     RedisProCacheManager CacheHandlerChainFactory RedisCacheInterceptor \
+                     RedisCacheOperationSource RedissonConfiguration; do
+            if ! find src/main/java -name "${cls}.java" | grep -q .; then
+              echo "::error::Key class '$cls' referenced in docs not found in src/main/java"
+              exit 1
+            fi
+          done
+          echo "OK: All key classes referenced in docs exist in src."
 
   checkstyle:
     name: Checkstyle
@@ -115,8 +186,9 @@ jobs:
   build-package:
     name: Build Package
     runs-on: ubuntu-latest
-    needs: [build, checkstyle, qodana, dependency-check]
-    if: always()
+    needs: [build, compatibility, docs-link-check, checkstyle, qodana, dependency-check]
+    # 不用 if: always():恢复 needs 默认门控——仅当 gating job(build/checkstyle/docs-link-check)
+    # 成功时才打包上传。compatibility/qodana/dependency-check 自带 continue-on-error,失败不阻塞。
 
     steps:
       - name: Checkout
