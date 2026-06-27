@@ -32,6 +32,17 @@ public class CacheHandlerChainFactory {
     /** 配置属性 */
     private final RedisProCacheProperties properties;
 
+    /**
+     * 防护纵深 handler 的执行顺序枚举(用于 {@code protection.enabled=false} 时派生 disableName)。
+     * 不含 TTL——TtlHandler 兼担基础 TTL 计算,属于不可禁用的基础缓存契约(禁用会导致永久缓存)。
+     * 从枚举派生而非硬编码字符串,保证短路逻辑与 handler 自报家门同源。
+     */
+    private static final List<HandlerOrder> PROTECTION_HANDLER_ORDERS = List.of(
+            HandlerOrder.BLOOM_FILTER,
+            HandlerOrder.SYNC_LOCK,
+            HandlerOrder.EARLY_EXPIRATION,
+            HandlerOrder.NULL_VALUE);
+
     public CacheHandlerChainFactory(List<CacheHandler> handlers, RedisProCacheProperties properties) {
         this.handlers = handlers;
         this.properties = properties;
@@ -65,9 +76,12 @@ public class CacheHandlerChainFactory {
             // null-safe:测试用 mock/stub 的 properties 可能不设 protection,默认视为开启
             RedisProCacheProperties.ProtectionProperties protection = properties.getProtection();
             if (protection != null && !protection.isEnabled()) {
-                disabled.addAll(List.of(
-                        "bloom-filter", "sync-lock", "early-expiration",
-                        "null-value"));
+                // 从 HandlerOrder 枚举派生防护 handler 的 disableName,与 handler 自报家门保持
+                // 单一事实源——handler 类重命名不会让此短路静默失效。
+                // 注意:TTL 不在列(TtlHandler 兼担基础 TTL 计算,禁用导致永久缓存)。
+                PROTECTION_HANDLER_ORDERS.stream()
+                        .map(HandlerOrder::getDisableName)
+                        .forEach(disabled::add);
                 log.info("Protection chain disabled by resi-cache.protection.enabled=false; "
                         + "protection handlers skipped, TTL preserved (bloom/lock/early-exp/null-value off)");
             }
@@ -101,17 +115,18 @@ public class CacheHandlerChainFactory {
     }
 
     /**
-     * 获取 Handler 的禁用配置名称
-     * 根据类名映射到配置中的名称（kebab-case）
+     * 获取 Handler 的禁用配置名称.
+     *
+     * <p>优先从 {@code @HandlerPriority} 注解关联的 {@link HandlerOrder} 反查
+     * {@link HandlerOrder#getDisableName()}(单一事实源),使 handler 类重命名不影响
+     * 配置禁用语义。未标注注解的 handler 回退到类名派生(kebab-case)以保持兼容。
      */
     private String getHandlerDisableName(CacheHandler handler) {
+        HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
+        if (annotation != null) {
+            return annotation.value().getDisableName();
+        }
         String className = handler.getClass().getSimpleName();
-        // BloomFilterHandler -> bloom-filter
-        // EarlyExpirationHandler -> early-expiration
-        // SyncLockHandler -> sync-lock
-        // NullValueHandler -> null-value
-        // TtlHandler -> ttl
-        // ActualCacheHandler -> actual-cache (always enabled, cannot disable)
         return className.replace("Handler", "")
                         .replaceAll("([a-z])([A-Z])", "$1-$2")  // camelCase to kebab-case
                         .toLowerCase();

@@ -13,9 +13,9 @@ v0.0.2 中 `@RedisCacheable` 的 5 大防护属性(`useBloomFilter`/`cacheNullVa
 
 但"默认全开 true"有隐性风险:
 
-- `sync=true` 防击穿依赖 **Redisson**(见 `DistributedLockManager.java:20`
+- `sync=true` 防击穿依赖 **Redisson**(见 `DistributedLockManager` 类的
   `@ConditionalOnClass(RedissonClient.class)`)。Redisson 缺失时 `SyncSupport`
-  (`SyncSupport.java:49`)降级为 JVM 内锁——**跨实例失效**。默认开 sync 会让没装
+  (`SyncSupport` 类)降级为 JVM 内锁——**跨实例失效**。默认开 sync 会让没装
   Redisson 的用户"以为有分布式锁,实则裸奔"。
 - 布隆/TTL 抖动等有参数(`expectedInsertions`/`variance`),默认值不一定适合所有场景。
 
@@ -30,7 +30,7 @@ v0.0.2 中 `@RedisCacheable` 的 5 大防护属性(`useBloomFilter`/`cacheNullVa
 2. **注解级默认仍 `false`**——preset 只是把"逐个开"变成"一键套餐",不改变显式语义。
 3. `shouldHandle` 在 `cacheOperation == null`(如全局 preset 无注解覆盖)时回退全局配置。
 4. v0.0.3 先落地 `resi-cache.protection.enabled` 总开关(已实现,
-   见 `CacheHandlerChainFactory.createChain` 短路逻辑)。
+   见 `CacheHandlerChainFactory#createChain` 短路逻辑)。
 
 ## Consequences
 

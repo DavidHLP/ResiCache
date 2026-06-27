@@ -8,7 +8,7 @@ tags:
 related: [index, overview, README]
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-27
 ---
 
 
@@ -17,6 +17,28 @@ updated: 2026-06-21
 wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subject>`(op ∈ init / ingest / improve / colorize / query / lint)。
 
 > 解析最近条目:`grep "^## \[" log.md | tail -5`
+
+---
+
+## [2026-06-27] improve | 多 AI CR 修复轮(可维护性 / 合规 / 安全)
+
+对 commit 5ae2da4(v0.0.3)做多 AI 代码审查(Claude + Codex 共识,OpenCode 偏移不采用)后的修复。**P0**(TtlHandler 永久缓存)已由 `b61808b` 兜住;本轮处理可维护性、合规与安全项。
+
+**⚠️ 防回退要点 — TtlHandler 双重职责**
+
+`TtlHandler` 兼担「基础 TTL 计算」与「抖动防护」。`protection.enabled=false` **绝不可**把 `ttl` 纳入禁用集合——否则 `ActualCacheHandler#handlePut` 因 `shouldApplyTtl=false` 走无 TTL 写入 → **永久缓存**(数据陈旧 + Redis 内存泄漏)。防回退三重保障:
+
+1. `CacheHandlerChainFactory#createChain` 短路集合从 `HandlerOrder` 枚举派生(枚举常量 `PROTECTION_HANDLER_ORDERS` 不含 TTL);
+2. `CacheHandlerChainFactoryTest.ProtectionKillSwitchTests` 断言 TTL + ActualCache 保留、防护 handler 跳过;
+3. `RedisProCacheProperties.ProtectionProperties` 注释明示「TTL 始终保留」。
+
+**本轮改动**
+
+- **单一事实源**:`HandlerOrder` 增 `disableName` 字段;`CacheHandlerChainFactory` 从 `@HandlerPriority` 注解反查 disableName(与类名解耦),`protection.enabled=false` 短路集合从枚举派生。补「类名解耦」回归测试(类名刻意与真实 handler 不同,仅靠注解关联)。
+- **Reactive bypass**:`RedisCacheInterceptor#invoke` 检测 Mono/Flux 返回类型时直接 `proceed()`,不再写入损坏的包装值;告警措辞与「完全不读写」行为一致(消解「只 warn 不阻止」的告警-行为分歧)。
+- **安全**:`RedissonConfiguration#buildConfig` 的 `IllegalStateException` message 不再含完整绝对路径(防用户名/敏感目录泄漏);完整路径仅在运维 `log.info` 输出。
+- **CI**:`docs-link-check` 黑名单改为仅匹配反引号包裹的代码标识符(允许纯文本历史叙述,避免误伤「为何移除」说明);`compatibility` job 加 `if: failure()` 的 `::warning::` annotation(失败可见但不阻塞主干)。
+- **文档**:ADR 引用 `文件:行号` → `类#方法` 锚点(防重构漂移);修 CHANGELOG `README.md#-roadmap` 断链 → `#roadmap`(英文 README 标题无 emoji,锚点无前导连字符)。
 
 ---
 

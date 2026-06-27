@@ -8,7 +8,7 @@
 ## Context
 
 ResiCache 注册了独立的 `redisCacheAdvisor`(`BeanFactoryCacheOperationSourceAdvisor`,
-order=50,见 `RedisProxyCachingConfiguration.java:39`)。当方法带 `@Cacheable` 时,它
+order=50,见 `RedisProxyCachingConfiguration` 类)。当方法带 `@Cacheable` 时,它
 与 Spring 原生 `cacheAdvisor` **都可能匹配** → 潜在双拦截(同一方法被两个 advisor 切,
 缓存逻辑执行两次)。
 
@@ -19,13 +19,11 @@ order=50,见 `RedisProxyCachingConfiguration.java:39`)。当方法带 `@Cacheabl
 
 防护 handler 的 `shouldHandle` 依赖 **per-method 的 `cacheOperation`**:
 
-- `BloomFilterHandler.shouldHandle`(`BloomFilterHandler.java:46`):
-  `context.getCacheOperation() != null && isUseBloomFilter()`
-- `SyncLockHandler.shouldHandle`(`SyncLockHandler.java:57`):
-  `cacheOperation == null || !isSync()` → 返回 false
+- `BloomFilterHandler#shouldHandle`:`context.getCacheOperation() != null && isUseBloomFilter()`
+- `SyncLockHandler#shouldHandle`:`cacheOperation == null || !isSync()` → 返回 false
 
 而 `cacheOperation` 的唯一来源是 `CacheOperationMetadataHolder` 的 ThreadLocal,由
-`RedisCacheInterceptor.invoke`(`RedisCacheInterceptor.java:60`)在每次调用时
+`RedisCacheInterceptor#invoke` 在每次调用时
 `setCurrentKey(method, targetClass)` 设置。**删除 interceptor → ThreadLocal 永不填充 →
 `cacheOperation` 永远 null → 全部 handler 的 shouldHandle 返回 false → 责任链空转**。
 
@@ -35,8 +33,8 @@ order=50,见 `RedisProxyCachingConfiguration.java:39`)。当方法带 `@Cacheabl
 ## Decision
 
 1. **保留 interceptor + Advisor**(撤回装饰器方案)。
-2. **`nativeAnnotationMode` 默认改为 `SELECTIVE`**(`RedisProCacheProperties.java:79`、
-   `RedisCacheOperationSource.java:43`):纯 `@Cacheable` 方法在 OperationSource 层返回
+2. **`nativeAnnotationMode` 默认改为 `SELECTIVE`**(`RedisProCacheProperties#nativeAnnotationMode`、
+   `RedisCacheOperationSource` 类):纯 `@Cacheable` 方法在 OperationSource 层返回
    null,`redisCacheAdvisor` 不匹配该方法 → 只有 Spring 原生 `cacheAdvisor` 匹配 →
    **从源头消解双 Advisor**,而非用装饰器错位解决。
 3. `@ConditionalOnMissingBean` 退让:允许用户用自定义 bean 顶替。
@@ -50,3 +48,5 @@ order=50,见 `RedisProxyCachingConfiguration.java:39`)。当方法带 `@Cacheabl
   `resi-cache.native-annotation-mode=FULL`。
 - **验证**:`RedisCacheOperationSourceSelectiveTest` 断言 SELECTIVE 下纯 `@Cacheable`
   返回 null、`@RedisCacheable` 正常解析。
+- **引用规范**:本 ADR 引用源码使用 `类#方法` 锚点(如 `BloomFilterHandler#shouldHandle`)
+  而非 `文件:行号`——行号随重构漂移,符号锚点更稳定(CI `docs-link-check` 已校验关键类存在)。

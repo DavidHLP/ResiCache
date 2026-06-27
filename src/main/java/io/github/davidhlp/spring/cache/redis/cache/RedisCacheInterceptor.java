@@ -53,8 +53,19 @@ public class RedisCacheInterceptor extends CacheInterceptor {
         Object[] args = invocation.getArguments();
         Class<?> targetClass = target.getClass();
 
-        // 检测 Reactive 返回类型并记录警告
-        warnIfReactiveReturnType(method);
+        // Reactive 返回类型(Mono/Flux):ResiCache 拦截器为阻塞式,无法正确处理响应式流。
+        // 自动 bypass 整个缓存路径(不注册操作、不读写缓存),避免把未订阅的 Mono/Flux
+        // 当作同步值写入而污染缓存。使"缓存不会生效"与实际行为一致——既不读也不写。
+        if (isReactiveType(method.getReturnType().getName())) {
+            log.warn(
+                    "Reactive return type {} on [{}.{}] is not supported by ResiCache — "
+                            + "bypassing cache entirely (no read/write will occur). Use a "
+                            + "synchronous return type or remove the cache annotation.",
+                    method.getReturnType().getName(),
+                    method.getDeclaringClass().getName(),
+                    method.getName());
+            return invocation.proceed();
+        }
 
         // 设置当前线程的 AnnotatedElementKey，供 Writer 层进行元数据查找
         CacheOperationMetadataHolder.setCurrentKey(method, targetClass);
@@ -70,27 +81,6 @@ public class RedisCacheInterceptor extends CacheInterceptor {
             return super.invoke(invocation);
         } finally {
             CacheOperationMetadataHolder.clear();
-        }
-    }
-
-    /**
-     * 检测方法返回类型是否为 Reactive 类型（Mono/Flux）。
-     *
-     * <p>ResiCache 目前仅支持同步缓存。若检测到 Reactive 返回类型且方法带有缓存注解，
-     * 记录警告日志，明确告知缓存不会按预期生效(拦截器为阻塞式,无法处理 Mono/Flux)。
-     *
-     * @param method 被调用的方法
-     */
-    private void warnIfReactiveReturnType(Method method) {
-        Class<?> returnType = method.getReturnType();
-        if (isReactiveType(returnType.getName())) {
-            log.warn(
-                    "Reactive return type {} is NOT supported by ResiCache — caching will NOT take effect. "
-                            + "Method [{}.{}] bypasses ResiCache; remove the cache annotation or switch to a "
-                            + "synchronous return type.",
-                    returnType.getName(),
-                    method.getDeclaringClass().getName(),
-                    method.getName());
         }
     }
 

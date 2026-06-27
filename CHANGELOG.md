@@ -10,7 +10,7 @@ pre-1.0 caveat below**.
 While the version is `0.x`, **APIs may change in any release — including patch
 releases.** Breaking changes are marked with ⚠️ and explained in the release
 notes. API stability is only guaranteed from `1.0.0` onward (see the
-[Roadmap](README.md#-roadmap) in README).
+[Roadmap](README.md#roadmap) in README).
 
 > **Note on the `v1.0` git tag.** A `v1.0` tag exists from an early development
 > milestone ("defect remediation complete"). It **does not** denote an API-stable
