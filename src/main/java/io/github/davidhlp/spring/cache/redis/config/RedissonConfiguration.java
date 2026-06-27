@@ -62,12 +62,15 @@ public class RedissonConfiguration {
         // 配置中心),严禁接受终端用户输入。Config.fromYAML 会读取并解析任意路径下的 YAML 文件,
         // 若路径可被外部控制,将导致任意本地文件读取风险。
         if (redis.getRedissonConfigPath() != null && !redis.getRedissonConfigPath().isBlank()) {
+            // 安全:异常 message 不含完整绝对路径(可能含用户名/敏感目录),避免向上传播到
+            // 用户可见的堆栈/响应时泄漏。完整路径仅在下方 log.info 输出(运维预期日志,
+            // 且依 SECURITY.md 该路径必须来自可信配置源)。
             log.info("Loading Redisson configuration from: {}", redis.getRedissonConfigPath());
             try {
                 return Config.fromYAML(new File(redis.getRedissonConfigPath()));
             } catch (IOException e) {
                 throw new IllegalStateException(
-                        "Failed to load Redisson config from: " + redis.getRedissonConfigPath(), e);
+                        "Failed to load Redisson config (see startup log for the configured path)", e);
             }
         }
 

@@ -215,6 +215,43 @@ class CacheHandlerChainFactoryTest {
             assertThat(factory.createChain().getHandlerNames())
                     .contains("BloomFilterHandler", "TtlHandler", "ActualCacheHandler");
         }
+
+        @Test
+        @DisplayName("disableName 派生自 @HandlerPriority 注解,与类名解耦(H1/I3 回归)")
+        void protectionDisabled_disableNameFromAnnotation_notClassName() {
+            // 故意使用与真实 handler 完全不同的类名,仅靠 @HandlerPriority(BLOOM_FILTER)
+            // 关联 disableName="bloom-filter"。证明禁用契约来自枚举注解(单一事实源),
+            // 而非类名派生——handler 类重命名不会让 protection 短路静默失效。
+            RedisProCacheProperties.ProtectionProperties protection =
+                    new RedisProCacheProperties.ProtectionProperties();
+            protection.setEnabled(false);
+            when(properties.getProtection()).thenReturn(protection);
+
+            List<CacheHandler> handlers = List.of(
+                    new OddlyNamedBloomHandler(), new TtlHandler(), new ActualCacheHandler());
+            factory = new CacheHandlerChainFactory(handlers, properties);
+
+            List<String> names = factory.createChain().getHandlerNames();
+
+            assertThat(names).contains("TtlHandler", "ActualCacheHandler");
+            assertThat(names).doesNotContain("OddlyNamedBloomHandler");
+        }
+
+        @Test
+        @DisplayName("全局 disabled-handlers 也通过注解 disableName 匹配(类名解耦)")
+        void globalDisabled_disableNameFromAnnotation_notClassName() {
+            // 类名不匹配任何已知模式,但 @HandlerPriority(SYNC_LOCK) → disableName="sync-lock"
+            when(properties.getDisabledHandlers()).thenReturn(List.of("sync-lock"));
+
+            List<CacheHandler> handlers = List.of(
+                    new WeirdlyNamedLockHandler(), new TtlHandler());
+            factory = new CacheHandlerChainFactory(handlers, properties);
+
+            List<String> names = factory.createChain().getHandlerNames();
+
+            assertThat(names).contains("TtlHandler");
+            assertThat(names).doesNotContain("WeirdlyNamedLockHandler");
+        }
     }
 
     // ========== Test Handler Implementations ==========
@@ -248,6 +285,13 @@ class CacheHandlerChainFactoryTest {
     static class NullValueHandler extends NamedHandler { }
     @HandlerPriority(HandlerOrder.ACTUAL_CACHE)
     static class ActualCacheHandler extends NamedHandler { }
+
+    // H1/I3 回归:类名刻意与真实 handler 不同,证明 disableName 来自注解而非类名派生
+    @HandlerPriority(HandlerOrder.BLOOM_FILTER)
+    static class OddlyNamedBloomHandler extends NamedHandler { }
+
+    @HandlerPriority(HandlerOrder.SYNC_LOCK)
+    static class WeirdlyNamedLockHandler extends NamedHandler { }
 
     static class TestCacheHandler implements CacheHandler {
         @Override

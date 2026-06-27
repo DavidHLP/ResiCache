@@ -79,6 +79,13 @@ jobs:
           ./mvnw versions:set-parent -DparentVersion=${{ matrix.boot }} -DgenerateBackupPoms=false -B
           ./mvnw clean compile -B
 
+      - name: Surface compatibility failure as visible annotation
+        # continue-on-error 让失败 job 在 needs 链中标绿,易被忽略。此处用 ::warning::
+        # annotation 把 3.5.x 失败显式标注到 PR checks,既不阻塞主干又保持可见性。
+        if: failure()
+        run: |
+          echo "::warning file=.github/workflows/ci.yml::Spring Boot ${{ matrix.boot }} compatibility compile FAILED. Non-blocking (continue-on-error), but indicates a real compatibility regression — please investigate."
+
   docs-link-check:
     # 文档一致性护栏:防止 a5ab55b 移除的过度工程特性被对外文档重新宣称,
     # 并校验 README 宣称的关键类在 src 存在。(Q2 诚实化 + Q11 可推广护栏)
@@ -97,14 +104,17 @@ jobs:
                   SpelConditionEvaluator CacheEvictedEvent CacheMetricsRecorder \
                   BloomFilterProvider LockProvider RedissonLockProvider"
           for sym in $banned; do
-            hits=$(grep -rn "$sym" README.md README.zh-CN.md 2>/dev/null || true)
+            # 精准匹配:仅当代码标识符(反引号包裹 \`sym\`)出现时才视为"重新宣称已移除
+            # 特性"的回归。纯文本历史叙述(无反引号,如迁移说明里的 "previously provided
+            # by X")允许存在,避免误伤合法的"为何移除"文档。
+            hits=$(grep -rnF "\`$sym\`" README.md README.zh-CN.md 2>/dev/null || true)
             if [ -n "$hits" ]; then
-              echo "::error::Removed symbol '$sym' is still referenced in README:"
+              echo "::error::Removed symbol '$sym' is still referenced as a code identifier in README:"
               echo "$hits"
               exit 1
             fi
           done
-          echo "OK: No removed-symbol regressions in README."
+          echo "OK: No removed-symbol regressions (as code identifiers) in README."
 
           # 2. 白名单:README 宣称的关键类必须在 src 存在
           for cls in RedisCacheAutoConfiguration RedisProCacheProperties RedisProCache \
