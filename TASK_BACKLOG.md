@@ -64,7 +64,7 @@
 
 ## 4. 🟢 P2 — v0.2.0(按序贯路线图未启动,非偏离)
 
-- [ ] **WS-1.4** 链级 Micrometer Observation — 一个 Observation 覆盖全链 + per-handler tag(`bloom.blocked`/`lock.acquired`/`early-refresh.triggered`/`null.hit`)+ per-cacheName。当前 0 行实现,仅 3 处 TODO 注释
+- [x] **WS-1.4 链级 Micrometer**(commit `d025241`,基础设施 + Timer):`CacheHandlerChain` 注入 `ObjectProvider<MeterRegistry>`(`null` = 静默 no-op 退化),`execute()` 用 `Timer.record(Supplier)` 包装 full lifecycle(head handle + post-process);Timer.name `resicache.chain.execute`。`CacheHandlerChainFactory` 同步加 MeterRegistry 注入。3 个测试文件构造器签名同步更新。`checkstyle:check` 0 violation + 12/12 绿(零回归 — `null` ObjectProvider 路径行为不变)。**遗留**:per-handler tag(`bloom.blocked`/`lock.acquired`/`early-refresh.triggered`/`null.hit` — 每个 handler 内部加 metrics hook,需 handler 改造)+ per-cacheName + per-operation tags(`Timer.record(Supplier)` 不支持 tags,需 `Timer.Sample` + 动态 timer 构建,有性能开销)+ 单元测试(留 WS-1.4 测试套件扩展)。
 - [ ] **WS-1.4** tracing 跨 `commonPool` 透传(**依赖 Path C Step 6**)— MDC/traceId 跨 commonPool 存活
 - [ ] **WS-1.4** health 级联 — 改造 `RedisCacheHealthIndicator`(现仅 Redis PING,javadoc 自述 "Does not cascade"),聚合各机制健康(含 `protection.degraded=local-only`)
 - [x] **WS-1.4 kill-switch 细化**(commit `ac3a1fc`):`RedisProCacheProperties.ProtectionProperties` 加 4 个 per-mechanism Boolean 字段(`bloomFilterEnabled`/`syncLockEnabled`/`earlyExpirationEnabled`/`nullValueEnabled`,默认 `null` = 继承总开关 `enabled`);`CacheHandlerChainFactory.createChain` 加 per-mechanism 短路分支(每个禁用打 INFO 日志便于生产故障定位)。`checkstyle:check` 0 violation + `PathCAopContractIT + RedisProCacheWriterTest` 12/12 绿(零回归 — 默认 `null` 继承 `enabled=true` 行为不变)。**遗留**:运行时切换(当前 `cachedChain` 单例,启动后改配置不重链;WS-1.4 observability 子项配套) + 专门 per-mechanism 单元测试(留 WS-1.4 测试套件扩展)。
