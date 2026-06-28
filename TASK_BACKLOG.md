@@ -39,11 +39,11 @@
   - [ ] Step 7 — 删 `holder/CacheOperationMetadataHolder.java` + `RedisCacheInterceptor.java` + 改写 ADR-0002 为"经 MethodMetadataResolver 解决"
 - [ ] **WS-2.4 首次发 Maven Central 未发生** — `pom.xml:18` 仍 `0.0.2`、`git tag -l` 无 `v0.1.0` tag、Central `numFound=0`、`release.yml` 从未触发
 - [ ] **WS-2.4 发布凭据核验** — `release.yml` 引用 `OSSRH_*` secrets 是旧 OSSRH 命名,与 Sonatype Central Portal(2025 后强制)推荐 `MAVEN_USERNAME`/`MAVEN_PASSWORD` 不一致;`GPG_PRIVATE_KEY`/`GPG_PASSPHRASE` 是否配过**代码库无法验证,需 repo admin 核对**
-- [ ] **WS-1.1 FIRE 文档/代码矛盾**(状态: partial,采纳分歧推荐表 ② 「放弃双构建,统一单构建 Boot 4」决策)— 显式宣告放弃并更新 `COMPATIBILITY.md`/`HANDOFF.md`/`MASTER_PLAN` + CI + pom + ADR。证据: master 源码零 boot3 import,`ci.yml` compatibility job 靠 `versions:set-parent` 切换但本地 `MojoNotFoundException`。
+- [x] **WS-1.1 FIRE 文档/代码矛盾** ✅(commit `53f8eb2` + `6f00471` + `9ad22bf` + `11c088b`,2026-06-29 闭环) — 采纳分歧推荐表 ②「放弃双构建,统一单构建 Boot 4」决策,4 子项(文档修正 / CI 清理 / pom 清理 / ADR-0007)全部落地。证据: master 源码零 boot3 import,`ci.yml` compatibility job 靠 `versions:set-parent` 切换但本地 `MojoNotFoundException`(已删 job);`./mvnw clean verify -B` 672 绿 + JaCoCo 70%/40% 门禁全过(38.2s)。
   - [x] **文档修正**(commit `53f8eb2`): `COMPATIBILITY.md` 改单矩阵 + `HANDOFF.md` 加 §12 post-merge addendum + `MASTER_PLAN.md` 7 处措辞统一。`checkstyle:check -Pboot4` 0 violation。
   - [x] **CI 清理**(commit `6f00471`): 删 `ci-boot4.yml`(65 行);`ci.yml` JAVA_VERSION 17→21 + build job 去 matrix + 删 `compatibility` job + `build-package` 加 `-Pboot4`;`pr-checks.yml` JAVA 17→21 + verify 加 `-Pboot4`。`./mvnw clean verify -Pboot4 -B` 672 绿 + JaCoCo 门禁全过(38.9s)。
   - [x] **pom 清理**(commit `9ad22bf`): `pom.xml` `properties.java.version` 17→21 + `redisson.version` 3.27→3.50 + 删除 `<profiles>` boot4 块 + 删除旧切换机制注释;`ci.yml`/`pr-checks.yml` 同步去掉 `-Pboot4` flag(原 profile 已上移 default,flag 是 no-op)。`./mvnw clean verify -B` 672 绿 + JaCoCo 全过(38.2s)。
-  - [ ] **新建 ADR-0007**: 记录「WS-1.1 FIRE 双分支策略废弃」决策(指向 53f8eb2 + 6f00471 + 9ad22bf)。
+  - [x] **新建 ADR-0007**(commit `11c088b`): `wiki/adr/0007-fire-single-buildline-abandonment.md`(82 行)记录「WS-1.1 FIRE 双分支策略废弃」决策,引用 53f8eb2 + 6f00471 + 9ad22bf + 38c514a + 5a05d0a;经代码核验 4 条矛盾 + 5 条理由 + 3 commit 落地链路 + 正面/负面/不变/重评估 consequences。
 
 ---
 
