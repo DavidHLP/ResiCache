@@ -25,7 +25,7 @@ jobs:
           cache: 'maven'
 
       - name: Run All Checks
-        run: ./mvnw clean verify checkstyle:check -Pboot4 -B
+        run: ./mvnw clean verify checkstyle:check -B
         env:
           MAVEN_OPTS: -Xmx1024m
 
