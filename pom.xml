@@ -74,9 +74,15 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- 用 redisson core 而非 redisson-spring-boot-starter:ResiCache 自带
+             RedissonConfiguration(@ConditionalOnClass + @ConditionalOnMissingBean
+             RedissonClient),不需要 starter 的 auto-config。且 starter 3.x 的
+             RedissonAutoConfigurationV2 硬引用 Boot 3 的 RedisAutoConfiguration.class,
+             在 Boot 4(已重定位为 DataRedisAutoConfiguration)下 context 加载爆炸。
+             core 只提供 RedissonClient/RLock/Config 纯 API,boot3/boot4 皆宜。 -->
         <dependency>
             <groupId>org.redisson</groupId>
-            <artifactId>redisson-spring-boot-starter</artifactId>
+            <artifactId>redisson</artifactId>
             <version>${redisson.version}</version>
             <optional>true</optional>
         </dependency>
