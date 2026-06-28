@@ -58,7 +58,7 @@
 
 - [ ] **WS-1.1 CI** — `ci.yml` compatibility job 在 master 已 parent=4.0.0 且源码无 boot3 import 的情况下无法切回 Boot 3 编译,需移除或重新设计兼容矩阵
 - [ ] **WS-1.1 CI** — `ci-boot4.yml` 触发分支 `[boot4]` 已冗余(boot4 是 master 祖先),改 master 触发或并入 `ci.yml`
-- [ ] **文档治理** — README Roadmap v0.1.0 行(`README.md:284`)仍是 v0.0.2 时代 "Bean-graph redesign (@ConditionalOnMissingBean override contract)",Status Planned;改主题对齐 MASTER_PLAN §5 并据 FIRE+硬化已 merge 调整 Status;同步 `README.zh-CN.md`
+- [x] **文档治理**(commit `ecbbb50`):README + README.zh-CN.md Roadmap v0.1.0 行从 v0.0.2 时代"Bean-graph redesign"过时措辞改为 FIRE + WS-1.2 硬化 + Path C 7 步全部完成 + Central 发版待 user 批准的当前真实状态(Plan/Status/依赖 commit 全部列举);中英同步(避免文档漂移)。
 
 ---
 
@@ -92,8 +92,8 @@
 - [ ] **WS-2.3** 白名单自动探测 — `WhitelistPolicy` 现仅静态 `List.copyOf`(构造后不可变);启动期扫描被缓存类型自动填充 `allowed-package-prefixes`,消除"白名单默认作者包"信任税
 - [ ] **WS-2.3** `@Cacheable`→`@RedisCacheable` 迁移指南 — 可照抄 runbook(聚焦"哪些方法该升级获得防护",SELECTIVE 已共存)
 - [ ] **WS-2.5** 商业支持 on-ramp — 无 `.github/FUNDING.yml`(全仓 grep FUNDING/sponsor 零命中);README 补"生产落地咨询/付费支持"章节
-- [ ] **文档治理** — 补登记 `wiki/index.md`:在 ADR 节追加 `[[0005-kernel-extraction-hedge]]` 与 `[[0006-redisson-companion-positioning]]`,frontmatter `updated` 刷到 2026-06-28
-- [ ] **文档治理** — 补 `wiki/log.md` WS-1.1 FIRE 条目(grep `FIRE|WS-1.1` = 0;FIRE 已 merge 进 master `38c514a` 却未入 wiki 操作日志)
+- [x] **文档治理**(commit `ecbbb50`):补登记 `wiki/index.md` ADR 节追加 `[[0005-kernel-extraction-hedge]]` + `[[0006-redisson-companion-positioning]]` + `[[0007-fire-single-buildline-abandonment]]`(共 3 行);`updated` frontmatter 刷到 2026-06-29;页数统计 28→31;原 0001 标注"已被 0006 取代"。
+- [x] **文档治理**(commit `ecbbb50`):补 `wiki/log.md` WS-1.1 FIRE 条目(`## [2026-06-29] FIRE | WS-1.1 FIRE M0–M4 闭环 + Path C 7 步序列收官`),详细列举 8 commit(FIRE 4 + Path C 7 + 旁支)及 3 个遗留(ADR-0002 改写/PathCAopAsyncIT 补/§3 CI 收尾)。
 - [ ] **WS-2.4** release cadence 与 Spring 主版本对齐策略单独文档化(现仅在 `COMPATIBILITY.md` 隐含)
 
 ---
