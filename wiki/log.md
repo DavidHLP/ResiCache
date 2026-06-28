@@ -226,3 +226,39 @@ Q1-Q11 对抗审查后的执行轮次。背景与取舍详见 [[0001-positioning
 - Obsidian 用户需在 `wiki/` 下重新打开 vault(原 `docs/wiki/.obsidian/` 内的 `workspace.json` 仍记录旧路径,可在 Obsidian 中接受迁移提示或在 vault 根重新配置)。
 
 无内容变更,纯路径重构。
+
+---
+
+## [2026-06-29] FIRE | WS-1.1 FIRE M0–M4 闭环 + Path C 7 步序列收官
+
+WS-1.1 FIRE(Boot 4.0 / SDR 4.0 / Java 21 / Redisson 3.50 兼容)M0–M4 全部完成并合并进 master(`38c514a`)。详情见 `TASK_BACKLOG.md` §2 #4 + `wiki/adr/0007-fire-single-buildline-abandonment.md`。
+
+本批操作日志(共 8 个 commit,2026-06-28 ~ 2026-06-29):
+
+- **FIRE 文档修正**(53f8eb2):`COMPATIBILITY.md` 改单矩阵;`HANDOFF.md` 加 §12 post-merge addendum supersede §1–§11 双分支措辞;`MASTER_PLAN.md` 7 处统一为单构建口径。
+- **CI 清理**(6f00471):删 `ci-boot4.yml`(65 行);`ci.yml` JAVA_VERSION 17→21 + build job 去 matrix + 删 `compatibility` job + `build-package` 加 `-Pboot4`;`pr-checks.yml` 同步。`./mvnw clean verify -Pboot4 -B` 672 绿 + JaCoCo 全过(38.9s)。
+- **pom 清理**(9ad22bf):`pom.xml` `properties.java.version` 17→21 + `redisson.version` 3.27→3.50 + 删 `<profiles>` boot4 块 + 删旧切换机制注释;CI flag 同步清理。`./mvnw clean verify -B` 672 绿(38.2s)。
+- **ADR-0007**(11c088b):`wiki/adr/0007-fire-single-buildline-abandonment.md`(82 行)记录「WS-1.1 FIRE 双分支策略废弃」决策,代码核验 4 条矛盾 + 5 条理由 + 3 commit 落地链路。
+- **Path C Step 0**(6fe4505):`PathCAopContractIT` 4 tests 绿(纯 `@Cacheable` 走 ResiCache 链 + `@RedisCacheable` + useBloomFilter/sync/ttl 走链 + Redis 实际 TTL 严格断言 [119,120]s),为后续 7 步序列提供零回归护栏。
+- **Path C Step 1**(a42a1c1):引入 `MethodMetadataResolver` 接口 + `ScopedActivation` + `DefaultMethodMetadataResolver` @Component,`RedisProCacheWriter.buildContext()` + `RedisProCache.lookupOperation()` 改读 resolver。无操作重构,12/12 绿。
+- **Path C Step 2**(4063968 + 5a7114a + 6904c3c):`CacheInvocationContext` 值对象(82 行 record)+ resolver 加 `currentContext()` API。Lombok + ScopedValue 字段兼容问题通过「不持有 ScopedValue 字段」规避。
+- **Path C Step 3**(ceb3901):`ResiCacheMethodInterceptor` 骨架(64 行,独立 `implements MethodInterceptor`)。
+- **Path C Step 4**(a483de9):`CacheAspectSupportHelper` 包私有 helper(65 行,继承 `CacheAspectSupport` 暴露 `protected execute(...)`)。
+- **Path C Step 5**(b377c16):advisor advice 持有者从 `RedisCacheInterceptor` 换成 `ResiCacheMethodInterceptor`(本类临时 `extends RedisCacheInterceptor`)。
+- **Path C Step 6**(b9d6b40):`RedisProCacheWriter.retrieve()/store()` 加 `withMethodMetadataSnapshot(Supplier)` 做 snapshot/restore,`supportsAsyncRetrieve()` 恢复 true。
+- **Path C Step 7**(cf4e2b1):ThreadLocal 所有权从静态 `CacheOperationMetadataHolder` 迁到 `DefaultMethodMetadataResolver`(Spring 单例 Bean 静态字段),静态 holder 类删除。`ResiCacheMethodInterceptor` 独立 `MethodInterceptor` 目标因 Spring AOP 6.x `BeanFactoryCacheOperationSourceAdvisor` 对 `CacheInterceptor` 子类有特殊处理而部分未达(继承面 = 2 层妥协,Step 3 决策「独立」在 Spring 6.x 限制下不可达)。
+- **TASK_BACKLOG 同步**(10 个小 commit,10de058/59eafb0/72fc300/ace0b2b/70f1454 等):每个 Path C Step + WS-1.1 子项 + 父项 close 时同步勾选状态。
+
+影响:
+
+- **架构**: ThreadLocal 所有权从静态类迁到 Spring 托管 Bean,异步透传边界(`commonPool`)通过 snapshot/restore 安全处理,`supportsAsyncRetrieve()` 恢复 true(SDR 4 默认 async 路径可走)。
+- **耦合面**: ResiCache 拦截器继承面 = 2 层(原计划 0 层被 Spring AOP 6.x 阻挡),但通过 `CacheAspectSupportHelper` 包私有 helper 隔离了 Spring 8-10 内部类型的直接依赖。
+- **测试**: 12/12 绿全程保持(`PathCAopContractIT` 4 + 链契约 3 + Writer unit 5),`./mvnw clean verify -B` 672+ 绿 + JaCoCo 70%/40% 门禁全过。
+
+遗留(发版前可补):
+
+- 改写 ADR-0002 描述「经 MethodMetadataResolver 解决」(原描述基于已删除的静态 holder);
+- 补 `PathCAopAsyncIT` 验证 `supportsAsyncRetrieve=true` 后 async 路径行为;
+- 同步 wiki/index.md ADR 节(本批已补 0005/0006/0007)。
+
+无内容破坏,纯架构演进 + 文档同步。

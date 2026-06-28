@@ -281,7 +281,7 @@ ResiCache deliberately omits these to avoid bloat — pair with dedicated tools:
 | Version | Focus | Status |
 |---|---|---|
 | **v0.0.3** | Docs honesty + `resi-cache.enabled` kill-switch + Reactive explicit exclusion + dual-advisor fix | In progress |
-| **v0.1.0** | Bean-graph redesign (`@ConditionalOnMissingBean` override contract) | Planned |
+| **v0.1.0** | Boot 4.0 / SDR 4.0 / Java 21 single-build (FIRE M0–M4 ✅ `38c514a`) + WS-1.2 P0 hardening (fail-fast sync / Cluster hash-tag / atomic CLEAN rebuild window ✅ `5a05d0a`) + WS-1.3 Path C ThreadLocal destruction (7-step sequence ✅ `a42a1c1`/`ceb3901`/`a483de9`/`b377c16`/`b9d6b40`/`cf4e2b1`) + first Maven Central publish | Pending (publish blocked on `OSSRH_*` → `MAVEN_USERNAME`/`MAVEN_PASSWORD` secret alignment) |
 | **v0.2.0** | `protection.preset` + serialization compatibility + migration tool (single release unit) | Planned |
 | **v0.3.0** | JMH benchmarks + observability (per-handler Micrometer tag) | Planned |
 | **v1.0.0** | API freeze + official launch (sample project / comparison page / articles) | Planned |

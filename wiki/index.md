@@ -8,7 +8,7 @@ tags:
 related: [overview, log, README]
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-29
 ---
 
 # 内容索引
@@ -40,10 +40,13 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ## 架构决策记录(adr/)
 
-- [[0001-positioning]] —— 定位为「Spring Cache 防护增强注解生态」(Q1)
+- [[0001-positioning]] —— 定位为「Spring Cache 防护增强注解生态」(Q1,已被 0006 取代)
 - [[0002-keep-interceptor]] —— 保留 interceptor+Advisor、弃装饰器(Q3)
 - [[0003-serialization-envelope]] —— 序列化信封 + 迁移路径,不放松白名单(Q4)
 - [[0004-protection-preset]] —— protection.preset 批量启用,而非默认全开(Q6)
+- [[0005-kernel-extraction-hedge]] —— 内核无关化仅作长寿对冲,不近期执行
+- [[0006-redisson-companion-positioning]] —— 定位为「ResiCache for Redisson」(取代 0001 定位叙事)
+- [[0007-fire-single-buildline-abandonment]] —— WS-1.1 双分支策略废弃,统一单构建 Boot 4.0
 
 ## 架构(architecture/)
 
@@ -86,4 +89,4 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-06-21 · 共 28 页 · 维护见 [[log]]
+最后更新:2026-06-29 · 共 31 页 · 维护见 [[log]]

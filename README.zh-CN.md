@@ -299,7 +299,7 @@ ResiCache **刻意不做**以下能力，避免过度膨胀——请用专业工
 | 版本 | 重点 | 状态 |
 |---|---|---|
 | **v0.0.3** | 文档诚实化 + `resi-cache.enabled` kill-switch + Reactive 显式排除 + 双 Advisor 修复 | 进行中 |
-| **v0.1.0** | bean 图重设计（`@ConditionalOnMissingBean` 覆盖契约） | 计划 |
+| **v0.1.0** | Boot 4.0 / SDR 4.0 / Java 21 单构建（FIRE M0–M4 ✅ `38c514a`）+ WS-1.2 P0 硬化（fail-fast sync / Cluster hash-tag / 原子 CLEAN 重建窗口 ✅ `5a05d0a`）+ WS-1.3 Path C 销毁 ThreadLocal（7 步序列 ✅ `a42a1c1`/`ceb3901`/`a483de9`/`b377c16`/`b9d6b40`/`cf4e2b1`）+ 首次发 Maven Central | 待发（发版卡在 `OSSRH_*` → `MAVEN_USERNAME`/`MAVEN_PASSWORD` secret 对齐） |
 | **v0.2.0** | `protection.preset` + 序列化兼容 + 迁移工具（同一发布单元） | 计划 |
 | **v0.3.0** | JMH 基准 + 可观测性（per-handler Micrometer tag） | 计划 |
 | **v1.0.0** | API 冻结 + 正式推广（sample 项目 / 对比页 / 文章） | 计划 |
