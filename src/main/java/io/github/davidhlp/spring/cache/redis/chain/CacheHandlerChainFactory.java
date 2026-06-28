@@ -70,20 +70,40 @@ public class CacheHandlerChainFactory {
 
             Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
 
-            // 防护链总开关:关闭时短路掉"防护纵深"handler,但保留 TTL(基础缓存契约)。
-            // 注意:"ttl" 不纳入禁用集合——TtlHandler 同时承担"基础 TTL 计算"与"抖动防护",
+            // 防护链总开关 + per-mechanism 覆盖(WS-1.4):
+            // - 总开关 enabled=false → 全 4 个防护 handler 短路(行为与 Path C 前兼容)
+            // - per-mechanism 字段(非 null) → 单独覆盖该机制(分项关闭便于生产故障定位)
+            // 注意:"ttl" 不纳入禁用集合——TtlHandler 兼担基础 TTL 计算 + 抖动防护,
             // 禁用会导致 ActualCacheHandler 写入无 TTL 的永久缓存(数据陈旧 + 内存泄漏)。
             // null-safe:测试用 mock/stub 的 properties 可能不设 protection,默认视为开启
             RedisProCacheProperties.ProtectionProperties protection = properties.getProtection();
             if (protection != null && !protection.isEnabled()) {
                 // 从 HandlerOrder 枚举派生防护 handler 的 disableName,与 handler 自报家门保持
                 // 单一事实源——handler 类重命名不会让此短路静默失效。
-                // 注意:TTL 不在列(TtlHandler 兼担基础 TTL 计算,禁用导致永久缓存)。
                 PROTECTION_HANDLER_ORDERS.stream()
                         .map(HandlerOrder::getDisableName)
                         .forEach(disabled::add);
                 log.info("Protection chain disabled by resi-cache.protection.enabled=false; "
                         + "protection handlers skipped, TTL preserved (bloom/lock/early-exp/null-value off)");
+            } else if (protection != null) {
+                // per-mechanism 覆盖(WS-1.4):每个 Boolean 字段 null = 继承 enabled,
+                // 非 null = 单独覆盖该机制
+                if (Boolean.FALSE.equals(protection.getBloomFilterEnabled())) {
+                    disabled.add(HandlerOrder.BLOOM_FILTER.getDisableName());
+                    log.info("Bloom filter disabled by resi-cache.protection.bloom-filter.enabled=false");
+                }
+                if (Boolean.FALSE.equals(protection.getSyncLockEnabled())) {
+                    disabled.add(HandlerOrder.SYNC_LOCK.getDisableName());
+                    log.info("Sync lock disabled by resi-cache.protection.sync-lock.enabled=false");
+                }
+                if (Boolean.FALSE.equals(protection.getEarlyExpirationEnabled())) {
+                    disabled.add(HandlerOrder.EARLY_EXPIRATION.getDisableName());
+                    log.info("Early expiration disabled by resi-cache.protection.early-expiration.enabled=false");
+                }
+                if (Boolean.FALSE.equals(protection.getNullValueEnabled())) {
+                    disabled.add(HandlerOrder.NULL_VALUE.getDisableName());
+                    log.info("Null value disabled by resi-cache.protection.null-value.enabled=false");
+                }
             }
 
             // 按 @HandlerPriority 注解排序

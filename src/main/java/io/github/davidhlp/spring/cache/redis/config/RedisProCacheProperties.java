@@ -284,5 +284,18 @@ public class RedisProCacheProperties {
     public static class ProtectionProperties {
         /** 是否启用防护链(布隆/锁/提前过期/空值;TTL 始终保留)。默认 true。 */
         private boolean enabled = true;
+
+        /**
+         * Path C 后续(WS-1.4) — per-mechanism 运行时 kill-switch(分项覆盖)。
+         * <p>每个字段 {@code null} = 继承 {@link #enabled} 总开关;非 {@code null}
+         * = 单独覆盖该机制。便于只关某个机制(例如生产故障时关闭布隆但保留锁)。
+         * <p>对应 handler: bloom-filter / sync-lock / early-expiration / null-value。
+         * <p>TTL 不在此列(TtlHandler 兼担基础 TTL 计算,关闭会导致永久缓存,见
+         * {@code CacheHandlerChainFactory} 注释)。
+         */
+        private Boolean bloomFilterEnabled = null;
+        private Boolean syncLockEnabled = null;
+        private Boolean earlyExpirationEnabled = null;
+        private Boolean nullValueEnabled = null;
     }
 }
