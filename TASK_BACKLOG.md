@@ -41,9 +41,9 @@
 - [ ] **WS-2.4 发布凭据核验** — `release.yml` 引用 `OSSRH_*` secrets 是旧 OSSRH 命名,与 Sonatype Central Portal(2025 后强制)推荐 `MAVEN_USERNAME`/`MAVEN_PASSWORD` 不一致;`GPG_PRIVATE_KEY`/`GPG_PASSPHRASE` 是否配过**代码库无法验证,需 repo admin 核对**
 - [ ] **WS-1.1 FIRE 文档/代码矛盾**(状态: partial,采纳分歧推荐表 ② 「放弃双构建,统一单构建 Boot 4」决策)— 显式宣告放弃并更新 `COMPATIBILITY.md`/`HANDOFF.md`/`MASTER_PLAN` + CI + pom + ADR。证据: master 源码零 boot3 import,`ci.yml` compatibility job 靠 `versions:set-parent` 切换但本地 `MojoNotFoundException`。
   - [x] **文档修正**(commit `53f8eb2`): `COMPATIBILITY.md` 改单矩阵 + `HANDOFF.md` 加 §12 post-merge addendum + `MASTER_PLAN.md` 7 处措辞统一。`checkstyle:check -Pboot4` 0 violation。
-  - [ ] **CI 清理**: `.github/workflows/ci.yml` 删 `compatibility` job(versions:set-parent 已废,line 53–88);`.github/workflows/ci-boot4.yml` 内容并入 `ci.yml`(触发分支 `[master]`),删 `ci-boot4.yml`。
+  - [x] **CI 清理**(commit `6f00471`): 删 `ci-boot4.yml`(65 行);`ci.yml` JAVA_VERSION 17→21 + build job 去 matrix + 删 `compatibility` job + `build-package` 加 `-Pboot4`;`pr-checks.yml` JAVA 17→21 + verify 加 `-Pboot4`。`./mvnw clean verify -Pboot4 -B` 672 绿 + JaCoCo 门禁全过(38.9s)。
   - [ ] **pom 清理**: 把 `boot4` profile 提升为默认,移除旧 boot3 默认(需 verify -Pboot4 不再需要 profile flag)。
-  - [ ] **新建 ADR-0007**: 记录「WS-1.1 FIRE 双分支策略废弃」决策(指向 53f8eb2 + ci/pom 清理 commit)。
+  - [ ] **新建 ADR-0007**: 记录「WS-1.1 FIRE 双分支策略废弃」决策(指向 53f8eb2 + 6f00471 + pom 清理 commit)。
 
 ---
 
