@@ -7,30 +7,31 @@ on:
     branches: [main, master]
 
 env:
-  JAVA_VERSION: '17'
+  JAVA_VERSION: '21'
 
 jobs:
   build:
-    name: Build and Test (Java ${{ matrix.java }})
+    # WS-1.1 FIRE 后(commit 38c514a):master 为单构建 Boot 4.0/SDR 4.0/Java 21/Redisson 3.50。
+    # Boot 4.0 最低 Java 21,故去掉 Java 17 matrix;构建命令统一加 -Pboot4(profile 后续
+    # tick 提升为默认后,此 flag 可移除 — 见 TASK_BACKLOG §2 #4 pom 清理子项)。
+    # 历史:`compatibility` job(versions:set-parent 探测 Boot 3.3/3.5 编译)已删除 —
+    # 双分支策略废弃,boot3 不再维护,继续跑废的兼容矩阵只是噪声 + MojoNotFoundException。
+    name: Build and Test (Java ${{ env.JAVA_VERSION }})
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        java: ['17', '21']
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up JDK ${{ matrix.java }}
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v5
         with:
-          java-version: ${{ matrix.java }}
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
 
       - name: Build with Maven Wrapper
-        run: ./mvnw clean verify -B
+        run: ./mvnw clean verify -Pboot4 -B
         env:
           MAVEN_OPTS: -Xmx1024m
 
@@ -38,7 +39,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: test-results-java-${{ matrix.java }}
+          name: test-results-java-${{ env.JAVA_VERSION }}
           path: target/surefire-reports/
           retention-days: 7
 
@@ -46,45 +47,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: jacoco-report-java-${{ matrix.java }}
+          name: jacoco-report-java-${{ env.JAVA_VERSION }}
           path: target/site/jacoco/
           retention-days: 7
-
-  compatibility:
-    # 探测性兼容矩阵:验证 ResiCache 对 Spring Boot 3.3/3.5 的编译兼容性。
-    # 注意:-Dspring-boot.version 对 starter-parent 无效(parent 无此 property);
-    # 必须用 versions:set-parent 真正切换 <parent><version>,否则永远编译 3.4.13(假信号)。
-    # continue-on-error:3.5.x 可能因 parent 发布差异失败,不阻塞主干,作为兼容性信号。
-    name: Spring Boot ${{ matrix.boot }} compile check
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        boot: ['3.3.6', '3.5.3']
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Switch parent to Spring Boot ${{ matrix.boot }} and compile
-        run: |
-          ./mvnw versions:set-parent -DparentVersion=${{ matrix.boot }} -DgenerateBackupPoms=false -B
-          ./mvnw clean compile -B
-
-      - name: Surface compatibility failure as visible annotation
-        # continue-on-error 让失败 job 在 needs 链中标绿,易被忽略。此处用 ::warning::
-        # annotation 把 3.5.x 失败显式标注到 PR checks,既不阻塞主干又保持可见性。
-        if: failure()
-        run: |
-          echo "::warning file=.github/workflows/ci.yml::Spring Boot ${{ matrix.boot }} compatibility compile FAILED. Non-blocking (continue-on-error), but indicates a real compatibility regression — please investigate."
 
   docs-link-check:
     # 文档一致性护栏:防止 a5ab55b 移除的过度工程特性被对外文档重新宣称,
@@ -196,7 +161,7 @@ jobs:
   build-package:
     name: Build Package
     runs-on: ubuntu-latest
-    needs: [build, compatibility, docs-link-check, checkstyle, qodana, dependency-check]
+    needs: [build, docs-link-check, checkstyle, qodana, dependency-check]
     # 不用 if: always():恢复 needs 默认门控——仅当 gating job(build/checkstyle/docs-link-check)
     # 成功时才打包上传。compatibility/qodana/dependency-check 自带 continue-on-error,失败不阻塞。
 
@@ -212,7 +177,7 @@ jobs:
           cache: 'maven'
 
       - name: Build JAR
-        run: ./mvnw clean package -DskipTests -B
+        run: ./mvnw clean package -Pboot4 -DskipTests -B
 
       - name: Upload JAR Artifact
         uses: actions/upload-artifact@v5
