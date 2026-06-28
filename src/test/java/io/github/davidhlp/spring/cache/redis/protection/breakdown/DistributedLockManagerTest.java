@@ -1,6 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.protection.breakdown;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+
+import io.lettuce.core.cluster.SlotHash;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -45,12 +47,17 @@ class DistributedLockManagerTest {
     @Mock
     private RedisProCacheProperties.SyncLockProperties syncLockProperties;
 
+    @Mock
+    private RedisProCacheProperties.RedisDeploymentProperties redisProperties;
+
     private DistributedLockManager lockManager;
 
     @BeforeEach
     void setUp() {
         when(properties.getSyncLock()).thenReturn(syncLockProperties);
         when(syncLockProperties.getPrefix()).thenReturn("cache:lock:");
+        when(properties.getRedis()).thenReturn(redisProperties);
+        when(redisProperties.getMode()).thenReturn("single");
         lockManager = new DistributedLockManager(redissonClient, properties);
     }
 
@@ -117,6 +124,63 @@ class DistributedLockManagerTest {
             lockManager.tryAcquire(key, 5);
 
             verify(redissonClient).getLock("cache:lock:my:custom:key");
+        }
+    }
+
+    @Nested
+    @DisplayName("buildLockKey / Cluster hash-tag tests (WS-1.2b)")
+    class BuildLockKeyTests {
+
+        @Test
+        @DisplayName("non-cluster (single) mode: lock key is plain prefix + key, no hash-tag wrapping")
+        void buildLockKey_singleMode_plainPrefix() {
+            when(redisProperties.getMode()).thenReturn("single");
+            assertThat(lockManager.buildLockKey("users:123")).isEqualTo("cache:lock:users:123");
+        }
+
+        @Test
+        @DisplayName("sentinel mode behaves like single (no hash-tag wrapping)")
+        void buildLockKey_sentinelMode_plainPrefix() {
+            when(redisProperties.getMode()).thenReturn("sentinel");
+            assertThat(lockManager.buildLockKey("users:123")).isEqualTo("cache:lock:users:123");
+        }
+
+        @Test
+        @DisplayName("cluster mode + key without hash-tag: wraps key in {} to pin slot")
+        void buildLockKey_cluster_noHashTag_wrapsKey() {
+            when(redisProperties.getMode()).thenReturn("cluster");
+            String cacheKey = "users:123";
+            String lockKey = lockManager.buildLockKey(cacheKey);
+
+            assertThat(lockKey).isEqualTo("cache:lock:{users:123}");
+            // 权威校验:锁 key 与缓存 key 同 slot (lettuce SlotHash = Redis CLUSTER KEYSLOT 算法)
+            assertThat(SlotHash.getSlot(lockKey)).isEqualTo(SlotHash.getSlot(cacheKey));
+        }
+
+        @Test
+        @DisplayName("cluster mode + key with hash-tag: preserves key's hash-tag, same slot")
+        void buildLockKey_cluster_withHashTag_preservesTag() {
+            when(redisProperties.getMode()).thenReturn("cluster");
+            String cacheKey = "{tenant1}:user:123";
+            String lockKey = lockManager.buildLockKey(cacheKey);
+
+            assertThat(lockKey).isEqualTo("cache:lock:{tenant1}:user:123");
+            assertThat(SlotHash.getSlot(lockKey)).isEqualTo(SlotHash.getSlot(cacheKey));
+        }
+
+        @Test
+        @DisplayName("cluster mode: many keys all produce same-slot lock keys (incl. cross-slot-prone prefix)")
+        void buildLockKey_cluster_variousKeys_sameSlot() {
+            when(redisProperties.getMode()).thenReturn("cluster");
+            // 若不加 hash-tag,prefix 会使锁 key 落到与缓存 key 不同 slot;这里验证全部对齐
+            String[] keys = {"simple", "a:b:c", "user:1001", "{order}:42:detail",
+                    "no-hashtag-but-long-key:abc", "中文:键"};
+            for (String cacheKey : keys) {
+                String lockKey = lockManager.buildLockKey(cacheKey);
+                assertThat(SlotHash.getSlot(lockKey))
+                        .as("lock key must share slot with cache key: %s -> %s", cacheKey, lockKey)
+                        .isEqualTo(SlotHash.getSlot(cacheKey));
+            }
         }
     }
 

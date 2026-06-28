@@ -180,6 +180,26 @@ public class RedisProCacheProperties {
         private double falseProbability = 0.01;
         /** 本地哈希缓存最大条目数（每个缓存实例） */
         private int hashCacheSize = 10_000;
+
+        /**
+         * CLEAN 后布隆过滤器的 rebuilding 窗口(秒)。默认 {@code 30};{@code 0} = 禁用。
+         *
+         * <p>背景(WS-1.2c):CLEAN({@code @CacheEvict(allEntries=true)})清空布隆后,
+         * 空布隆对所有 key 判定 {@code mightContain=false},导致后续 GET 在
+         * {@code RedisProCache.get(key, loader)} 的前置短路处<b>静默返回 null</b>
+         * (既不查缓存也不调 loader),违反 Spring {@code @Cacheable}"miss 即调 loader
+         * 返回真实值"的契约 —— 是数据正确性缺陷而非 DB 击穿(loader 未被调用)。
+         *
+         * <p>启用后,{@link io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport#clear}
+         * 清空过滤器的同时在 Redis 写入一个 per-cacheName 的 rebuilding 标志(TTL=本窗口),
+         * 期间 {@code mightContain} <b>fail-open</b>(一律返回 true),让请求越过 bloom 短路、
+         * 走正常 sync 锁 + loader 路径,返回 DB 真实值并由 PUT 回填重建布隆。窗口由 Redis
+         * TTL 自动结束,无需猜测重建 key 数量。标志走 Redis 以保证 Cluster 多实例一致
+         * (容忍秒级 local 缓存延迟)。
+         *
+         * <p>{@code 0} 禁用 = 保持 v0.0.x 旧行为(向后兼容),但保留静默 null 缺陷。
+         */
+        private long rebuildWindowSeconds = 30;
     }
 
     @Getter
@@ -204,6 +224,22 @@ public class RedisProCacheProperties {
         private TimeUnit unit = TimeUnit.MILLISECONDS;
         /** 锁键前缀 */
         private String prefix = "cache:lock:";
+
+        /**
+         * 是否显式降级为单 JVM synchronized(无分布式锁后端时).
+         *
+         * <p>默认 {@code false}:声明 {@code sync=true} 但无分布式 LockManager bean
+         * (如 Redisson 缺失)时,ResiCache <b>绝不静默</b>退化为单 JVM —— 而是启动期告警 +
+         * 运行期 fail-fast(首次未命中即抛 {@link IllegalStateException})。多实例部署下,
+         * 单 JVM synchronized 无法防击穿,是最坏失败模式。
+         *
+         * <p>设为 {@code true} 显式接受单 JVM 同步作为合法降级(单实例部署或测试场景),
+         * 此时仍保证 JVM 内线程互斥,但 ResiCache 会发出 {@code protection.degraded=local-only}
+         * 告警使安全属性可观测(WS-1.4 升级为链级 Observation 事件)。
+         *
+         * @see io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport
+         */
+        private boolean localOnly = false;
     }
 
     @Getter

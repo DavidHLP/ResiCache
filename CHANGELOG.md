@@ -18,6 +18,52 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
 > `0.0.x`, and the public 1.0 release is tracked in the Roadmap. The tag is kept
 > for history but carries no stability promise.
 
+## [Unreleased] — v0.1.0 (in development)
+
+### Changed
+- ⚠️ **BREAKING (safety)** `SyncSupport` no longer **silently degrades** to a
+  single-JVM `synchronized` monitor when `sync=true` is declared but no
+  distributed lock backend is present (Redisson absent → no `LockManager`
+  bean). It now **fails fast** with a clear `IllegalStateException` on the
+  first cache miss — single-JVM coordination is useless across instances, and
+  "distributed-but-actually-local" is the worst failure mode. A startup
+  warning is also logged when the empty-backend condition is detected.
+  **Migration:** for explicit single-instance/test degradation, set
+  `resi-cache.sync-lock.local-only=true` (emits a
+  `protection.degraded=local-only` warning; Observation event lands in v0.2.0).
+
+### Added
+- `resi-cache.sync-lock.local-only` (default `false`) — explicit opt-in for
+  single-JVM sync degradation when no distributed lock backend is available.
+- `resi-cache.bloom-filter.rebuild-window-seconds` (default `30`; `0` = disabled) —
+  after `@CacheEvict(allEntries=true)` (CLEAN) wipes the Bloom filter, opens a
+  per-cacheName **rebuilding window** during which `mightContain` **fails open**
+  (returns true), routing requests to the loader instead of silently returning
+  null. See the WS-1.2c Fixed entry below.
+
+### Fixed
+- **Bloom filter CLEAR rebuilding window (WS-1.2c)**: previously, when
+  `@CacheEvict(allEntries=true)` cleared the Bloom filter alongside the cache, the
+  empty filter made every subsequent `mightContain` return false, and
+  `RedisProCache.get(key, loader)`'s pre-check **silently returned null without
+  invoking the loader** — violating the `@Cacheable` contract (a miss should call
+  the loader and return the real value). This is a data-correctness defect, not a
+  DB breakdown (the loader is never called); it only affects methods with
+  `useBloomFilter=true`. `BloomSupport.clear` now opens a per-cacheName rebuilding
+  window (Redis-backed flag, TTL = `rebuild-window-seconds`, Cluster-consistent via
+  Redis + a 1s local cache) during which `mightContain` fails open, routing
+  requests through the normal sync-lock + loader path; the window self-closes via
+  Redis TTL. Set `rebuild-window-seconds=0` to restore v0.0.x behavior. Both the
+  `RedisProCache.get(key, loader)` path and the chain path
+  (`BloomFilterHandler.handleGet`) share `bloomSupport.mightContain`, so both are
+  covered by this single-point fix.
+- **Redis Cluster distributed lock hash-tag pinning (WS-1.2b)**: in Cluster mode,
+  `DistributedLockManager` now ensures the lock key lands in the same slot as the
+  cache key (via Redis hash-tag `{...}`), so the lock and the data it guards live
+  on the same node and future in-lock MULTI/transactions won't hit cross-slot
+  errors. `single`/`sentinel` modes are unchanged; lock-key format is also
+  unchanged when the cache key already carries a hash-tag.
+
 ## [Unreleased] — planned for v0.0.3
 
 ### Added

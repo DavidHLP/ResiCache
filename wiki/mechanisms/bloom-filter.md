@@ -14,7 +14,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/bloom/filter/LocalBloomIFilter.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-28
 ---
 
 # 布隆过滤器(HandlerOrder 100)
@@ -75,7 +75,38 @@ public void afterChainExecution(CacheContext context, CacheResult result) {
 }
 ```
 
-这样 GET miss(空值)不会污染过滤器;CLEAN 清空时会留一条 warning(布隆不支持精确删除,清空后短期有穿透风险,直到新 PUT 重新填充)。
+这样 GET miss(空值)不会污染过滤器;CLEAN 清空过滤器后,会进入 **rebuilding 窗口**(见下节),避免「空布隆 → 所有 key 判不存在 → 静默 null」的数据正确性缺陷。
+
+## Rebuilding 窗口(WS-1.2c)
+
+CLEAN(`@CacheEvict(allEntries=true)`)清空布隆后,空过滤器会让所有 key 的 `mightContain=false`。问题在于:GET 主路径 `RedisProCache.get(key, loader)`(`cache/RedisProCache.java:157`)在调 loader **前**有布隆前置短路——空布隆会使其**直接 `return null`,既不查缓存也不调 loader**,违反 Spring `@Cacheable`「miss 即调 loader 返回真实值」的契约。这是**数据正确性缺陷**(非 DB 击穿,因 loader 未被调用;仅影响 `useBloomFilter=true`)。
+
+`BloomSupport.clear`(`protection/bloom/BloomSupport.java`)在清空过滤器的同时,写一个 per-cacheName 的 **rebuilding 标志**到 Redis(`resicache:bloom:rebuild:{cacheName}`,TTL=`rebuild-window-seconds`,默认 30s):
+
+```
+clear(cacheName)
+  ├─ bloomIFilter.clear(cacheName)              // 真正清空位图
+  └─ markRebuilding: Redis SET rebuild:{name} "1" EX 30s   // 开窗
+```
+
+窗口期内,`BloomSupport.mightContain` **fail-open**(一律返回 true):
+
+```java
+public boolean mightContain(String cacheName, String key) {
+    if (isRebuilding(cacheName)) {
+        return true;   // ← 窗口期放行 → 越过 bloom 短路 → 进 sync 锁 + loader → 真实值
+    }
+    return bloomIFilter.mightContain(cacheName, key);
+}
+```
+
+- **单点覆盖双路径**:`RedisProCache.get(key, loader):157` 与链层 `BloomFilterHandler.handleGet:70` 都调 `bloomSupport.mightContain`,一处修复同时覆盖。
+- **窗口自结束**:Redis TTL 到期标志自动消失,恢复正常 bloom(此时新 PUT 已回填)。
+- **Cluster 一致**:标志走 Redis(非仅 local),多实例一致;Caffeine 1s 本地缓存避每次查询,容忍秒级跨实例偏差。
+- **向后兼容**:`rebuild-window-seconds=0` 禁用 = 保持 v0.0.x 行为(仍保留静默 null 缺陷)。
+- **窗口期权衡**:fail-open 期间 bloom 不拦截不存在的 key(短暂退化为无 bloom),由 `sync` 锁(isSync 路径)+ [[null-value|空值缓存]] 兜底。
+
+> 注:为何不「不清空布隆(no-op)」?—— 固定位数布隆不可逆膨胀,false positive 单调上升长期退化为 no-bloom;rebuilding 窗口让 bloom 能正确清空且不留下静默 null,是更安全的方案(8-agent 设计评审 2:1 共识)。
 
 ## 三种 BloomIFilter 实现
 
@@ -117,6 +148,7 @@ resi-cache:
     enabled: true
     expected-insertions: 100000
     false-probability: 0.01
+    rebuild-window-seconds: 30   # CLEAN 后布隆重建窗口(秒);0=禁用(旧行为)。见上「Rebuilding 窗口」
 ```
 
 注解级(`@RedisCacheable`,见 [[annotations]]):

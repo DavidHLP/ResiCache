@@ -137,6 +137,7 @@ resi-cache:
     expected-insertions: 100000   # 预期插入量
     false-probability: 0.01       # 期望误判率
     hash-cache-size: 10000        # 本地哈希缓存条目数
+    rebuild-window-seconds: 30    # CLEAN 后布隆重建窗口(秒);0=禁用(旧行为)
 ```
 
 ### 分布式锁
@@ -147,6 +148,7 @@ resi-cache:
     timeout: 3000
     unit: MILLISECONDS
     prefix: "cache:lock:"
+    local-only: false   # true = 无 Redisson 时显式单 JVM 降级(否则 fail-fast)
 ```
 
 ### 提前过期（热 key 保护）
@@ -205,7 +207,7 @@ resi-cache:
 | `earlyExpirationThreshold` | 0.3 | 提前过期阈值（TTL 剩余比例） |
 | `sync` / `syncTimeout` | false / 10 | 同步等待与超时 |
 
-> 注：5 大防护属性**默认全 `false`**——须在 `@RedisCacheable` 上逐个显式开启。`sync=true`（防击穿）依赖 Redisson 在 classpath，否则静默降级为 JVM 内锁（跨实例失效）。v0.2.0 将引入 `resi-cache.protection.preset` 简化批量开启。
+> 注：5 大防护属性**默认全 `false`**——须在 `@RedisCacheable` 上逐个显式开启。`sync=true`（防击穿）依赖 Redisson 在 classpath,**缺失时 fail-fast**（拒绝静默降级为单 JVM 锁——跨实例无效）;确需单实例/测试降级,设 `resi-cache.sync-lock.local-only=true`。v0.2.0 将引入 `resi-cache.protection.preset` 简化批量开启。
 
 ### 每缓存覆盖（`caches.<name>`）
 
@@ -281,7 +283,7 @@ v0.0.2 当前已知的硬限制（均在 [Roadmap](#-roadmap) 中修复）：
 - **序列化白名单默认锁作者包名**：`allowed-package-prefixes` 默认仅 `io.github.davidhlp.`，自定义类型须显式配置（见上文 [序列化安全](#序列化安全)）
 - **双 Advisor 风险已消除（v0.0.3）**：`nativeAnnotationMode` 默认已改为 `SELECTIVE`——纯 `@Cacheable` 完全走 Spring 原生、不被 ResiCache 接管，双 Advisor 风险随之消除。需要 FULL 兼容（接管 `@Cacheable`）可显式 `resi-cache.native-annotation-mode=FULL`
 - **不支持 Reactive**（WebFlux / `Mono` / `Flux`）：`RedisCacheInterceptor` 是阻塞式，Reactive 方法不触发缓存
-- **Redis Cluster 分布式锁未做 hash tag**：Cluster 部署下锁 key 可能跨 slot，暂未验证
+- **`@CacheEvict(allEntries=true)`（CLEAN）是 best-effort、非原子**：与 Spring 原生 `RedisCache.clear`/`DefaultRedisCacheWriter.clean` 一致，用 SCAN 游标 + 批量 UNLINK/DEL，CLEAN 期间新写入的 key 可能被遗漏，大 key 集时缓存短暂处于半删状态。刻意不用 Lua/MULTI 原子化（Redis 单线程 O(keyspace) 阻塞、Cluster cross-slot）。启用布隆时，`rebuild-window-seconds` 窗口（v0.1.0）防止擦除后重建期的静默 null。
 - **暂无 JMH 基准**：性能数据待 v0.3.0 补齐
 
 ## 🚫 Not in Scope

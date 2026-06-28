@@ -1,5 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.protection.breakdown;
 
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,10 +29,44 @@ class SyncSupportTest {
     @Mock
     private LockManager lockManager;
 
+    private RedisProCacheProperties properties;
+
+    @BeforeEach
+    void setUp() {
+        // 真实 POJO（默认 sync-lock.local-only=false → 空 managers 时 fail-fast）
+        properties = new RedisProCacheProperties();
+    }
+
     @Test
-    @DisplayName("returns result when no distributed managers")
-    void executeSync_noManagers_returnsResult() {
-        SyncSupport noManagerSupport = new SyncSupport(new ArrayList<>());
+    @DisplayName("fails fast when no distributed managers and local-only disabled (default)")
+    void executeSync_noManagers_failsFastByDefault() {
+        SyncSupport noManagerSupport = new SyncSupport(new ArrayList<>(), properties);
+
+        assertThatThrownBy(() -> noManagerSupport.executeSync("test-key", () -> "value", 5))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("sync=true 已声明但无分布式锁后端")
+                .hasMessageContaining("local-only=true");
+    }
+
+    @Test
+    @DisplayName("does not invoke loader when failing fast on missing distributed backend")
+    void executeSync_noManagers_failsFast_doesNotInvokeLoader() {
+        SyncSupport noManagerSupport = new SyncSupport(new ArrayList<>(), properties);
+        AtomicBoolean loaderCalled = new AtomicBoolean(false);
+
+        assertThatThrownBy(() -> noManagerSupport.executeSync("test-key", () -> {
+            loaderCalled.set(true);
+            return "value";
+        }, 5)).isInstanceOf(IllegalStateException.class);
+
+        assertThat(loaderCalled.get()).isFalse();
+    }
+
+    @Test
+    @DisplayName("degrades to single-JVM sync when no managers but local-only explicitly enabled")
+    void executeSync_noManagers_localOnly_degradesToJvm() {
+        properties.getSyncLock().setLocalOnly(true);
+        SyncSupport noManagerSupport = new SyncSupport(new ArrayList<>(), properties);
 
         String result = noManagerSupport.executeSync("test-key", () -> "value", 5);
 
@@ -41,7 +78,7 @@ class SyncSupportTest {
     void executeSync_lockAcquired_returnsResult() throws InterruptedException {
         when(lockManager.tryAcquire(anyString(), anyLong())).thenReturn(Optional.of(mock(LockManager.LockHandle.class)));
 
-        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)));
+        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)), properties);
         String result = syncSupport.executeSync("test-key", () -> "value", 5);
 
         assertThat(result).isEqualTo("value");
@@ -53,7 +90,7 @@ class SyncSupportTest {
         when(lockManager.tryAcquire(anyString(), anyLong()))
                 .thenThrow(new InterruptedException("Thread interrupted"));
 
-        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)));
+        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)), properties);
         assertThatThrownBy(() -> syncSupport.executeSync("test-key", () -> "value", 5))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Thread interrupted while acquiring distributed lock for key: test-key")
@@ -67,7 +104,7 @@ class SyncSupportTest {
         when(lockManager.tryAcquire(anyString(), anyLong()))
                 .thenThrow(new InterruptedException("Thread interrupted"));
 
-        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)));
+        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)), properties);
         try {
             syncSupport.executeSync("test-key", () -> "value", 5);
         } catch (IllegalStateException e) {
@@ -84,7 +121,7 @@ class SyncSupportTest {
         when(lockManager.tryAcquire(anyString(), anyLong()))
                 .thenThrow(new InterruptedException("Thread interrupted"));
 
-        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)));
+        SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)), properties);
         AtomicBoolean loaderCalled = new AtomicBoolean(false);
 
         try {
