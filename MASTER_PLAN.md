@@ -39,7 +39,7 @@
 
 | 维度 | 现状(v0.0.2/0.0.3) | 目标(v1.0) | 差距性质 |
 |---|---|---|---|
-| 平台 | Boot 3.4.13(**EOL**),Java 17,SDR 3.x | Boot 4.0 + Java 21 + SDR 4.0(主线),3.4 兼容线并行到 EOL+6mo | **P0 火灾** |
+| 平台 | Boot 4.0 + Java 21 + SDR 4.0(单线,master HEAD=38c514a)— Boot 3.4 EOL 不再维护 | Boot 4.0 + Java 21 + SDR 4.0(主线) | **P0 火灾 ✅**;单线 boot3 兼容线废弃(见 §12 addendum / TASK_BACKLOG §2 #4) |
 | 正确性 | sync 静默单 JVM 退化;锁 key 无 hash-tag;CLEAN 非原子+清空布隆 | fail-fast;Cluster hash-tag pinning;原子/延迟 CLEAN+重建 | **P0 硬化** |
 | 架构耦合 | ThreadLocal 双向全耦合 + 继承 ~8–10 个 SDR 内部类型 | Path C: 销毁 ThreadLocal,继承面降到 ~6–7,语义零回归 | **P1 重构** |
 | 可观测性 | 无 per-handler 指标;health 不级联;无 tracing | 链级 Observation + per-handler/per-cache tag + tracing 透传异步边界 | P1 |
@@ -58,11 +58,11 @@
 ### WS-1.1 THE FIRE:Boot 4 / SDR 4 / Java 21 兼容线 `[L][P0]`
 - **为何**: Boot 3.4.x 自 2025-12 起 OSS-EOL,无安全补丁;**对新采用者是当前否决项**。SDR 4.0 恰在 `RedisCache`/反序列化类有 breaking changes(正是 ResiCache subclass 的那 8–10 个);issue #3348 证实 4.x 把 `RedisCacheWriter` 默认 sync→async(恶化 ThreadLocal 异步隐患)。
 - **具体任务**:
-  1. 建 `boot4` 分支/Profile,**双构建矩阵**: CI 同时跑 Boot 3.4.x+Java17 与 Boot 4.0+Java21(扩展现有 17/21 matrix 为 Boot×Java 二维)。
+  1. ~~建 `boot4` 分支/Profile,**双构建矩阵**~~ → **已于 2026-06-28 merge 入 master(38c514a)**,双分支策略废弃。当前**单构建**: `./mvnw verify -Pboot4 -B`(Boot 4.0/Java 21/Redisson 3.50)。
   2. 审计 8–10 个 SDR 内部扩展点对 SDR 4.0 的破坏:`RedisCacheManager.createRedisCache/getMissingCache`、`RedisCache`(super.get/put/evict/clear)、`RedisCacheWriter`、`CacheInterceptor`、3 个 `CacheOperation+Builder` 子类、`AnnotationCacheOperationSource`、autoconfigure 模块化后的类重定位。
   3. 升 Redisson 到与 SDR 4/Spring 7 兼容版本(3.5x+);验证 `RLock`/`RBloomFilter` API。
   4. 把 `RedisProCacheWriter.retrieve()/store()` 异步默认改为**显式接管**(见 Path C Step 6),或临时 `supportsAsyncRetrieve()=false` 作 legacy 线 shim。
-- **完成判据**: `./mvnw verify` 在 Boot 4.0+Java21 全绿(含 Testcontainers);Boot 3.4 兼容线保留至其 EOL+6mo;`COMPATIBILITY.md` 列双矩阵。
+- **完成判据**: ✅ `./mvnw verify -Pboot4 -B` 在 Boot 4.0+Java21 全绿(含 Testcontainers + JaCoCo 70%/40% 门禁,672 测试 0 失败);❌ ~~Boot 3.4 兼容线保留至其 EOL+6mo~~ → 废弃,Boot 3.4 不再维护;✅ `COMPATIBILITY.md` 单矩阵(2026-06-29 改写)。
 - **依赖**: 无(最先做)。**风险**: SDR 4 对 `RedisCache` 内部签名大改可能迫使 subclass 改写——这正是 Path C 降耦合的动机,但 FIRE 不得等 Path C。
 
 ### WS-1.2 P0 企业硬化(三个承重正确性隐患) `[M][P0]`
@@ -111,7 +111,7 @@
 ### WS-2.4 发布与版本治理 `[M][P2]`
 - **激活已配置的 Maven Central**: `central-publishing-maven-plugin`+`maven-gpg-plugin`+source+javadoc 已就位——**做第一次 release**(v0.1.0)。补 CI secret(portal token/gpg)。
 - **semver 策略**(显式): `<1.0` 期间 minor 可破坏(CHANGELOG 标 ⚠️);v1.0 后 API freeze。Path C 作为 v0.1.0 minor(二进制兼容,仅 CHANGELOG 注明 `RedisCacheInterceptor` 子类化的 niche 破坏)。
-- **兼容矩阵**(`COMPATIBILITY.md`): Boot 3.4/4.0 × Java 17/21 × Redisson 有/无 × Redis 单机/哨兵/集群。
+- **兼容矩阵**(`COMPATIBILITY.md`): ~~Boot 3.4/4.0 × Java 17/21~~ → 单线: Boot 4.0 × Java 21 × Redisson 3.50 × Redis 7.x(单机/哨兵/集群)。Boot 3.x 用户停留 v0.0.x 或迁移。
 - **release cadence**: 与 Spring 主版本对齐。
 
 ### WS-2.5 社区与可持续性 `[M][P3]`
@@ -142,12 +142,12 @@
 
 | # | 风险 | 概率 | 影响 | 缓解 | 触发转向 |
 |---|---|---|---|---|---|
-| R1 | SDR 4.0 破坏 subclass 内部签名 | 高 | 高 | WS-1.1 双构建 + Path C 降耦合面 | — |
+| R1 | SDR 4.0 破坏 subclass 内部签名 | 高 | 高 | ~~WS-1.1 双构建~~ → WS-1.1 单构建已合 master;Path C 降耦合面 | — |
 | R2 | JetCache 补 Bloom | 中 | 高 | 差异点上移到"可编排链"(更难抄) | 若 JetCache 出可插拔链 → 转 Wedge 1 |
 | R3 | solo 维护不可持续 | 中 | 致命 | "一 Spring 主版本一主版本"承诺;压窄 scope;找 co-maintainer | 12mo 内 0 生产用户 + 0 star 增长 → maintenance-only 或并 JetCache |
 | R4 | "为何不直接用 Redisson 原语?"质疑 | 高 | 中 | before/after sample + 对比页先发制人;价值在 ~30 缓存规模显现 | — |
 | R5 | Redisson 破坏 `RLock`/`RBloomFilter` API | 低 | 中 | 锁定 Redisson 版本矩阵;兼容层 | — |
-| R6 | Boot 4 迁移超 solo 能力 | 中 | 高 | 优先 FIRE;必要时延长 3.4 兼容线 + 明确 EOL 沟通 | — |
+| R6 | ~~Boot 4 迁移超 solo 能力~~ | ~~中~~ | ~~高~~ | **R6 已消除**:FIRE M0-M4 已 merge,单构建 verify 672 绿。 | — |
 
 **终止/转向判据(kill criteria)**: 12 个月内若 ① 0 已知生产用户 且 ② star 增长 <20 且 ③ 无 co-maintainer 加入 → **转 maintenance-only**,或**贡献进 JetCache 生态**(补 Bloom + 可插拔链)。诚实接受"高质量个人项目/教学项目"作为下限结局。
 
@@ -157,7 +157,7 @@
 
 | 版本 | 主题 | 门禁(可发布的判据) | 推进 North Star |
 |---|---|---|---|
-| **v0.1.0** ★FIRE+硬化 | Boot 4/SDR4/Java21 兼容线 + 3 个 P0 硬化(fail-fast/hash-tag/原子 CLEAN) + Path C 重构(销毁 ThreadLocal) + 第一次发 Maven Central | 双构建 verify 全绿;3 硬化各有故障注入测试;Path C 零回归;Central 可拉取 | 止血:移除 EOL 否决项 + 消灭静默降级;降耦合面 |
+| **v0.1.0** ★FIRE+硬化 | Boot 4/SDR4/Java21 兼容线(单线已合 master)+ 3 个 P0 硬化(fail-fast/hash-tag/原子 CLEAN) + Path C 重构(销毁 ThreadLocal) + 第一次发 Maven Central | ~~双构建 verify 全绿~~ → 单构建 verify -Pboot4 全绿;3 硬化各有故障注入测试;Path C 零回归;Central 可拉取 | 止血:移除 EOL 否决项 + 消灭静默降级;降耦合面 |
 | **v0.2.0** 定位落地 | `protection.preset` + 链级 Micrometer Observation + before/after sample + 诚实对比页 + Redisson 原生 Bloom(`RBloomFilter`) | preset 文档齐;`/actuator/metrics/resicache.*` 可见;sample+对比页上线 | 把"Redisson-companion + 可编排链"做成可感知卖点 |
 | **v0.3.0** 可信度 | per-handler observability 深度 + tracing 异步透传 + JMH 基准 + 序列化迁移工具 + 白名单自动探测 | JMH 报告入 docs;迁移 runbook 可照抄;tracing 跨 commonPool 验证 | 据实恢复性能陈述;消除序列化信任税 |
 | **v1.0.0** 发布 | API freeze + getting-started 网站 + RateLimitHandler composability demo + protection-audit CLI + 治理(Sponsors/咨询 on-ramp) | API 稳定性测试;网站上线;2–3 种部署矩阵验证;launch 文章 | 正式发布:护城河实化 + 可持续路径就位 |
@@ -194,7 +194,7 @@
 
 > 目的: 灭火 + 给项目一个"今天就能被严肃评估"的基线。
 
-1. **Week 1 — FIRE 启动**: 开 `boot4` 分支,升 parent 到 Spring Boot 4.0.0,跑 `verify`,**列出全部编译/运行期破坏点**(预计集中在 `RedisCache`/`RedisCacheWriter`/序列化)。同步升 Redisson 到兼容版。产出: SDR 4 破坏清单 + 双构建 CI matrix。
+1. **Week 1 — FIRE 启动**: ✅ **已于 2026-06-28 完成**(commit 38c514a)。`boot4` 分支已合 master;Boot 4.0/SDR 4.0/Redisson 3.50 适配清单见 `CHANGELOG.md` WS-1.1 FIRE。~~双构建 CI matrix~~ → 单构建 matrix(后续 tick 清理 `ci.yml` compatibility job + `ci-boot4.yml` 并入)。
 2. **Week 2 — P0 硬化**: 实现 `SyncSupport` fail-fast(WS-1.2a)+ Cluster hash-tag(WS-1.2b)。写 Testcontainers 故障注入测试。这两项**改动小、收益大、风险低**,先于 Path C 落地。
 3. **Week 3 — 原子 CLEAN + Path C Step 0–1**: WS-1.2c 原子/延迟 CLEAN;然后 Path C Step 0(回归契约测试)+ Step 1(`MethodMetadataResolver` 无操作重构)。
 4. **Week 4 — 发布 v0.1.0-alpha**: Boot 4 兼容线 + 3 硬化 + Path C Step 0–1,**发 Maven Central**(激活已配置发布插件)。README tagline 改 Redisson-companion 定位。开 GitHub Release + CHANGELOG。

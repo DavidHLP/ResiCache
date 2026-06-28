@@ -1,35 +1,29 @@
 # Compatibility Matrix
 
-ResiCache ships on **two build lines** (dual-branch strategy):
+ResiCache ships on a **single build line** (post-WS-1.1 FIRE; merged into `master`
+at `38c514a`):
 
-- **`master` branch — Spring Boot 3.4.x / Java 17+** (default, maximum compatibility).
-- **`boot4` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50**
-  (FIRE migration; see [CHANGELOG](CHANGELOG.md) WS-1.1 FIRE and `HANDOFF.md`).
+- **`master` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50**.
 
-Both lines pass full `verify` (tests + JaCoCo gate). Pick the branch matching your
-Boot version.
+Builds pass full `verify -Pboot4 -B` (tests + JaCoCo 70%/40% gate + 13 Testcontainers IT).
+
+> **Historical context**: Pre-FIRE (≤ commit `3e72546`), `master` carried a `boot3`
+> line (Boot 3.4.13 / Java 17 / Redisson 3.27). WS-1.1 FIRE M1–M4 migrated to Boot 4
+> and merged into `master` at `38c514a`; the dual-branch (`master` / `boot4`)
+> strategy is **abandoned**. Boot 3.4 has been OSS-EOL since 2025-12; no `boot3`
+> compatibility line is retained. See `CHANGELOG.md` WS-1.1 FIRE and `HANDOFF.md`
+> for migration context.
 
 ## Supported versions
 
-### `master` line — Spring Boot 3.4.x (default)
-
-| Component | Minimum | Recommended | Tested |
-|-----------|---------|-------------|--------|
-| Java | 17 | 21 | 17, 21 |
-| Spring Boot | 3.3.x | 3.4.13 | 3.4.13 (full verify), 3.3.6 / 3.5.3 (compile-only) |
-| Spring Cache | 6.1.x | 6.2.x | (via Boot) |
-| Spring Data Redis | 3.3.x | 3.5.x | (via Boot) |
-| Redis Server | 6.2 | 7.x | 6.2, 7.x |
-| Redisson | 3.27.0 | 3.27.x | 3.27.0 |
-| Caffeine | 3.1.8 | 3.1.x | 3.1.8 |
-
-### `boot4` line — Spring Boot 4.0 (FIRE)
+### `master` line — Spring Boot 4.0 (sole line)
 
 | Component | Version | Tested |
 |-----------|---------|--------|
 | Java | 21 | 21 |
 | Spring Boot | 4.0.0 | 4.0.x (full `verify -Pboot4`) |
 | Spring Framework | 7.x | (via Boot) |
+| Spring Cache | 7.x | (via Boot) |
 | Spring Data Redis | 4.0.x | (via Boot) |
 | Redis Server | 7.x | 7.x |
 | Redisson | 3.50.0 | 3.50.0 |
@@ -37,22 +31,21 @@ Boot version.
 
 ## Spring Boot version policy
 
-- **`master` line (default)**: `spring-boot-starter-parent 3.4.13`.
-- **`boot4` line (FIRE)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0 + Spring 7
-  + Java 21 + Redisson 3.50. Activate locally with `./mvnw verify -Pboot4`; the
-  `boot4` branch pom is pre-configured (no `versions:set-parent` needed).
-- **Dual-branch rationale**: Boot 4 modularized packages
+- **`master` line (sole line)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0 + Spring 7
+  + Java 21 + Redisson 3.50. Activate locally with `./mvnw verify -Pboot4 -B`.
+  The `boot4` Maven profile selects Boot 4 dependencies. The pre-FIRE `boot3`
+  default in `pom.xml` is being removed in a follow-up tick (see `TASK_BACKLOG.md` §2 #4).
+- **Boot 4 modularization note**: Boot 4 relocated packages
   (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*`,
   `o.s.b.actuate.health.*` → `o.s.b.health.contributor.*`) and SDR 4 renamed
-  `RedisCacheWriter` methods (`remove`→`evict`, `clean`→`clear`) — a single source
-  tree cannot `import` both Boot 3 and Boot 4 packages, so the two lines live on
-  separate branches (`master` / `boot4`) with their own CI workflows.
-- **CI coverage**:
-  - `master`: full `verify` (tests + JaCoCo gate) on Java 17 / 21 against Boot 3.4.13
-    (`.github/workflows/ci.yml`); plus a non-blocking compile check against Boot 3.3.6 / 3.5.3.
-  - `boot4`: full `verify -Pboot4` on Java 21 against Boot 4.0
-    (`.github/workflows/ci-boot4.yml`, non-blocking during FIRE stabilization).
-- **Not supported**: Spring Boot 2.x and 3.0.x–3.2.x (may work, untested).
+  `RedisCacheWriter` methods (`remove`→`evict`, `clean`→`clear`). These breaks
+  drove FIRE; all imports are Boot 4-aligned.
+- **CI coverage**: `master` runs full `verify -Pboot4` on Java 21 against Boot 4.0
+  via `.github/workflows/ci.yml`. The historical `.github/workflows/ci-boot4.yml`
+  and the `compatibility` job in `ci.yml` are being consolidated in a follow-up
+  tick (see `TASK_BACKLOG.md` §2 #4 + §3 P1).
+- **Not supported**: Spring Boot 2.x and 3.x. No `boot3` compatibility line is
+  maintained; users on Boot 3.x should remain on ResiCache v0.0.x or migrate.
 - **Pre-1.0 caveat**: matrix coverage is best-effort until 1.0.
 
 ## Optional dependencies
