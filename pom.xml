@@ -48,13 +48,13 @@
     </developers>
 
     <properties>
-        <java.version>17</java.version>
+        <java.version>21</java.version>
         <encoding>UTF-8</encoding>
         <project.build.sourceEncoding>${encoding}</project.build.sourceEncoding>
         <project.reporting.outputEncoding>${encoding}</project.reporting.outputEncoding>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-        <redisson.version>3.27.0</redisson.version>
+        <redisson.version>3.50.0</redisson.version>
     </properties>
 
     <!-- Override Spring Boot parent's testcontainers-bom: parent 管理的 1.20.6 拉入
@@ -277,21 +277,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <!--
-        boot4 profile (WS-1.1 FIRE): 用 -Pboot4 激活。注意 parent 的 <version> 无法用
-        property/profile 切换(starter-parent 限制),必须配合 versions:set-parent:
-          ./mvnw versions:set-parent -DparentVersion=4.0.0 -DgenerateBackupPoms=false -B
-        本 profile 仅 override 属性: Redisson 升到 3.50.0(首个支持 SDR 4 / Spring 7)、Java 21。
-        默认线(无 -Pboot4)仍是 Boot 3.4.13 + Java 17 + Redisson 3.27.0,零污染。
-    -->
-    <profiles>
-        <profile>
-            <id>boot4</id>
-            <properties>
-                <redisson.version>3.50.0</redisson.version>
-                <java.version>21</java.version>
-            </properties>
-        </profile>
-    </profiles>
 </project>

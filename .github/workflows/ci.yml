@@ -31,7 +31,7 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven Wrapper
-        run: ./mvnw clean verify -Pboot4 -B
+        run: ./mvnw clean verify -B
         env:
           MAVEN_OPTS: -Xmx1024m
 
@@ -177,7 +177,7 @@ jobs:
           cache: 'maven'
 
       - name: Build JAR
-        run: ./mvnw clean package -Pboot4 -DskipTests -B
+        run: ./mvnw clean package -DskipTests -B
 
       - name: Upload JAR Artifact
         uses: actions/upload-artifact@v5
