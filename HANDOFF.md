@@ -1,19 +1,23 @@
-# ResiCache — 会话交接(FIRE 进行中)
+# ResiCache — 会话交接(FIRE 已并入 master,2026-06-29 更新)
 
 > **目的**: 把本会话全部上下文存到仓库,供下次会话无缝续接。
-> **生成时间**: 2026-06-28(关机前)· **当前分支**: `boot4`
-> **新会话恢复**: 读本文件 + `MASTER_PLAN.md` + `~/.claude/plans/stateful-crafting-bubble.md`(FIRE 完整方案)。
+> **生成时间**: 2026-06-29(boot4 合并后刷新)· **当前分支**: `master`
+> **新会话恢复**: 读本文件 + `MASTER_PLAN.md` + `~/.claude/plans/stateful-crafting-bubble.md`(FIRE 完整方案)+ `TASK_BACKLOG.md`(未完成项实时清单)。
+> **⚠️ 历史叙事已过时**: §1–§11 是 boot4 合并前(2026-06-28)的会话日志,描述双分支策略(已废弃)。**当前真实状态见 §12 post-merge addendum(2026-06-29)**。
 
 ---
 
 ## 0. TL;DR — 下次从这里恢复
 
-1. **当前在 `boot4` 分支**。两条分支:
-   - `master` (`5a05d0a`): Boot 3.4.13 + **WS-1.2 硬化已完成**(672 测试绿)—— 默认兼容线,不受 boot4 影响。
-   - `boot4` (`726086f` + M4 本提交): Boot 4.0/SDR 4.0/Spring 7/Java 21/Redisson 3.50 —— **FIRE M1/M2/M3/M4 全部完成**(`verify -Pboot4` 672 绿 + JaCoCo 门禁 + CI boot4 workflow)。
-2. **FIRE 进度**: M1(编译绿)✅ → M2(test 672 绿)✅ → M3(verify 672 + JaCoCo 门 + shim)✅ → **M4(CI boot4 workflow + COMPATIBILITY 双矩阵 + CHANGELOG)✅ [2026-06-28]** → 🎉 **FIRE M0-M4 全部完成** → WS-1.3 Path C / v0.1.0 发版准备。
-3. **下次第一件事**: FIRE 已闭环。转入 **WS-1.3 Path C**(销毁 ThreadLocal,7 步序列,Step 0 回归契约先行;`supportsAsyncRetrieve()=false` shim 由其 Step 6 恢复)+ **v0.1.0 发版准备**(WS-2.4 激活 Maven Central;central-publishing/gpg/source/javadoc 已配)。M4 改动见 §4c。
-4. **铁律**: 永不静默降级;IT 绿线前不盲改防护代码;commit/push/merge 需显式批准;默认 master(FIRE 已授权用 boot4 分支)。
+1. **当前在 `master` 分支**,HEAD = `38c514a`(merge boot4 FIRE M1-M4,2026-06-28)。**单构建 Boot 4.0 / Java 21 / Redisson 3.50**。双分支策略已废弃:
+   - `master` = 单线 Boot 4.0/SDR 4.0/Spring 7/Java 21/Redisson 3.50(`verify -Pboot4 -B` 672 绿 + JaCoCo 门禁)。
+   - `boot4` 分支仍存在(历史),已被 `master` 包含,无需切换。
+2. **FIRE 进度**: M0–M4 全部完成,boot4 已 merge 进 master。详见 §12(状态变更) + §4/§4a/§4b/§4c(适配细节历史)。
+3. **下次第一件事**: 按 `TASK_BACKLOG.md` §6 推荐顺序推进:
+   - (a) **WS-1.1 FIRE 矛盾清理**(§2 #4,本会话已起)— 文档/CI/pom 三件套,改为单构建口径。
+   - (b) **WS-1.3 Path C Step 0**(§2 #1)— 销毁 ThreadLocal,7 步序列,Step 0 回归契约先行;`supportsAsyncRetrieve()=false` shim 由其 Step 6 恢复。
+   - (c) **WS-2.4 发布凭据核验**(§2 #3)— Central Portal token + GPG secret 对齐 `release.yml` env 命名(**待用户显式批准,loop 不碰**)。
+4. **铁律**: 永不静默降级;IT 绿线前不盲改防护代码;commit 自动(可逆)但 push/merge/publish 需显式批准;默认 master(本会话已迁移回 master)。
 
 ---
 
@@ -166,4 +170,60 @@
 
 ---
 
-**下次起点**: `git checkout boot4` → M4(CI boot4 job + `COMPATIBILITY.md` 双矩阵,见 §5)。双构建已双向绿。FIRE 方案细节见 `~/.claude/plans/stateful-crafting-bubble.md`。
+**下次起点**(2026-06-28 旧版,已过时): `git checkout boot4` → M4。**见 §12 post-merge addendum 取而代之。**
+
+---
+
+## 12. Post-merge addendum(2026-06-29)— 双构建策略已废弃,master 单线 Boot 4
+
+> **本节为 2026-06-29 合并 `38c514a` 后的状态更新,supersede §1–§11 中所有"双构建"/"boot3 兼容线"/"双分支矩阵"措辞。**
+
+### 12.1 状态变更
+
+- **合并**: `git merge boot4` 入 master,commit `38c514a`。
+- **当前 master HEAD**: `38c514a`,内容 = 旧 boot4 分支(boot4 全部适配) + 旧 master 5a05d0a 的 WS-1.2 硬化。
+- **pom.xml**: 仍含 `boot3` 默认 + `boot4` profile(未清理);`./mvnw verify -Pboot4 -B` 是当前唯一有效的构建命令。
+- **CI**:
+  - `.github/workflows/ci.yml` 仍含 `compatibility` job(versions:set-parent 切 Boot 3.3/3.5/4.0,**实际 MojoNotFoundException 失败**)。
+  - `.github/workflows/ci-boot4.yml` 仍存在(分支触发 `[boot4]`,**冗余** —— boot4 已并入 master)。
+- **git branches**: `master` / `boot4` / `feat/resicache-defect-remediation` 三支并存。`boot4` 已合并,可保留作历史(可清理)。
+
+### 12.2 已废弃的措辞(本会话起禁用,until doc sweep 完成)
+
+- ❌ "双构建 / 双分支 / dual-branch / dual build lines"
+- ❌ "master 保留 boot3 兼容线 / Boot 3.4 兼容线并行到 EOL+6mo"
+- ❌ "Boot 3.4.x 兼容线保留至 EOL+6mo"
+- ❌ "双构建双向绿 / 双构建 verify 全绿"
+- ❌ "git checkout master (boot3) / git checkout boot4 (FIRE)"
+- ❌ "下次第一件事: git checkout boot4"
+
+### 12.3 当前口径(本会话起使用)
+
+- ✅ "ResiCache ships on a single build line"(单构建线)
+- ✅ "master = Boot 4.0 / Java 21 / SDR 4.0 / Spring 7 / Redisson 3.50"
+- ✅ "boot4 分支 = 历史,已被 master 包含"
+- ✅ "构建命令: `./mvnw verify -Pboot4 -B`"
+- ✅ "Pre-FIRE(≤ 3e72546) master 携带 boot3 线;FIRE M1-M4 合并后,boot3 不再维护"
+
+### 12.4 后续清理工作(详见 TASK_BACKLOG §2 #4 + §3 P1)
+
+- **本会话已做**: `COMPATIBILITY.md` 改单矩阵;`HANDOFF.md` 加 §12 addendum + 修 §0 TL;DR;`MASTER_PLAN.md` 措辞统一。
+- **未做**(后续 tick):
+  - `.github/workflows/ci.yml` 删 `compatibility` job(versions:set-parent 已废,line 53–88)。
+  - `.github/workflows/ci-boot4.yml` 内容并入 `ci.yml`,触发分支改为 `[master]`,删 `ci-boot4.yml`。
+  - `pom.xml` 把 `boot4` profile 提升为默认,移除旧 boot3 默认(需 verify -Pboot4 不再需要 profile flag)。
+  - (可选) git branch -d boot4。
+  - 新建 ADR-0007 "WS-1.1 FIRE 双分支策略废弃" 记录本决策。
+
+### 12.5 v0.1.0 门禁更新
+
+- ❌ 旧: "双构建 verify 全绿"
+- ✅ 新: "单构建 verify -Pboot4 全绿 + 3 硬化有故障注入测试 + Path C 零回归 + Central 可拉取"
+
+### 12.6 关键文件引用(更新版)
+
+- `TASK_BACKLOG.md` — 实时未完成项清单(本会话新生成,权威)
+- `MASTER_PLAN.md` — 战略总纲(本会话统一双构建→单构建措辞,见本会话 commit)
+- `COMPATIBILITY.md` — 单矩阵版本说明(本会话改写)
+- `wiki/adr/` — 待补 ADR-0007(双构建废弃决策)
+- `~/.claude/plans/stateful-crafting-bubble.md` — FIRE 完整方案(历史,boot4 分支已合并)
