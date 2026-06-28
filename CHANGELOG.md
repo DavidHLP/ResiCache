@@ -33,6 +33,18 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `protection.degraded=local-only` warning; Observation event lands in v0.2.0).
 
 ### Added
+- ⚙️ **WS-1.1 FIRE — Spring Boot 4.0 build line (dual-branch)**: ResiCache now
+  builds and fully verifies (`verify -Pboot4`, 672 tests + JaCoCo 70%/40% gate)
+  on **Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50** on the dedicated
+  `boot4` branch, coexisting with the Boot 3.4.x `master` line. SDR 4 / Boot 4
+  adaptations: `RedisCacheWriter.remove`→`evict` & `clean`→`clear` (delegating
+  impls), `RedisCacheConfiguration.getTtl()`→`getTtlFunction().getTimeToLive(...)`,
+  `RedisCacheManager` constructor arg reorder, Boot 4 package relocations
+  (`DataRedisAutoConfiguration` / `DataRedisProperties` / `health.contributor`),
+  `redisson-spring-boot-starter`→`redisson` core (the starter's auto-config
+  hard-references Boot 3 classes), and a defensive `supportsAsyncRetrieve()=false`
+  shim (Path C Step 6 will restore it). See [COMPATIBILITY.md](COMPATIBILITY.md)
+  dual matrix and `.github/workflows/ci-boot4.yml`.
 - `resi-cache.sync-lock.local-only` (default `false`) — explicit opt-in for
   single-JVM sync degradation when no distributed lock backend is available.
 - `resi-cache.bloom-filter.rebuild-window-seconds` (default `30`; `0` = disabled) —

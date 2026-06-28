@@ -89,7 +89,16 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     @Override
     public boolean supportsAsyncRetrieve() {
-        return RedisCacheWriter.super.supportsAsyncRetrieve();
+        // FIRE M3 (WS-1.1): 显式声明「不支持异步 retrieve」,锁定同步 get() 路径。
+        // SDR 4.0.5 接口默认值已是 false(经 javap 验证 #supportsAsyncRetrieve → iconst_0);
+        // 这里显式 return false 是【能力如实声明】+【防御性硬化】而非改变当前行为:
+        //   本类的 retrieve()/store() 实现走 CompletableFuture.supplyAsync/runAsync(commonPool),
+        //   会把责任链丢到 ForkJoinPool 线程执行,而 CacheOperationMetadataHolder 是 ThreadLocal ——
+        //   commonPool 线程拿不到方法级元数据,@Cacheable 的 operation 配置(布隆/同步锁/TTL/空值
+        //   等)会静默失效。故在 Path C(WS-1.3)补上 ThreadLocal snapshot/restore 之前,
+        //   永不让 SDR 走异步 retrieve 路径(也防未来 SDR 版本把默认值翻成 true)。
+        // Path C Step 6 落地后,此处恢复 true(届时 retrieve() 已带 snapshot,可在异步边界透传)。
+        return false;
     }
 
     @Override
@@ -210,6 +219,12 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     @Override
+    public void evict(@NonNull String name, @NonNull byte[] key) {
+        // SDR 4.0 把 RedisCacheWriter.remove 重命名为 evict(boot4 新增的抽象方法);委托同一责任链逻辑
+        remove(name, key);
+    }
+
+    @Override
     public void clean(@NonNull String name, @NonNull byte[] pattern) {
         String keyPattern = typeSupport.bytesToString(pattern);
         String actualKey = extractActualKey(name, keyPattern);
@@ -221,6 +236,13 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 执行责任链（使用缓存的 chain 实例）
         getChain().execute(context);
+    }
+
+    @Override
+    public void clear(@NonNull String name, @NonNull byte[] pattern) {
+        // SDR 4.0 把 RedisCacheWriter.clean 重命名为 clear(boot4 新增的抽象方法);
+        // 委托同一责任链逻辑,保持 clean/clear 行为一致。
+        clean(name, pattern);
     }
 
     @Override
