@@ -30,6 +30,7 @@
 
 - [ ] **WS-1.3 Path C**(销毁 ThreadLocal)— v0.1.0 最大块,Step 0 已启动(4/4 绿)。剩余 Step 1–7:
   - [x] Step 0 — AOP 行为回归契约测试(commit `6fe4505`):`PathCAopContractIT` 4 tests 绿(纯 `@Cacheable` 走 ResiCache 链 + `@RedisCacheable` + useBloomFilter/sync/ttl 走链断言 + Redis 实际 TTL [119,120] 秒) — `./mvnw test -Dtest=PathCAopContractIT -B` 6.96s。后续 Step 1 起每改一处须保持本测试 4/4 绿(零回归护栏)。
+  - [x] Step 1 — 引入 `MethodMetadataResolver` 接口 + 默认实现(commit `a42a1c1`):新增 `chain/MethodMetadataResolver`(接口)+ `chain/ScopedActivation`(try-with-resources)+ `chain/DefaultMethodMetadataResolver`(@Component,反射读 `AnnotatedElementKey` 私有字段);`RedisProCacheWriter.buildContext()` + `RedisProCache.lookupOperation()` 改读 resolver;构造链 5 类同步加 resolver 参数 + 配置注入。**无操作重构** — `checkstyle:check` 0 violation + `PathCAopContractIT + RedisProCacheWriterTest` 12/12 绿 + JaCoCo 107 classes(9.275s)。Step 0 契约仍 4/4 绿。
   - [ ] Step 1 — 引入 `MethodMetadataResolver` 接口(`currentMethod`/`currentTargetClass`/`currentKey` + try/finally-scoped activation),默认实现用 private ThreadLocal,改 `RedisProCacheWriter.buildContext()`/`RedisProCache.lookupOperation()` 读 resolver(**无操作重构**)
   - [ ] Step 2 — `CacheInvocationContext` 值对象(`snapshot`/`restore`,JDK21 用 `ScopedValue`)
   - [ ] Step 3 — 新建 `ResiCacheMethodInterceptor implements MethodInterceptor`(**不 extends `CacheInterceptor`**)
