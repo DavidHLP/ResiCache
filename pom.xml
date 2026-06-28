@@ -9,7 +9,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.13</version>
+        <version>4.0.0</version>
         <relativePath/>
     </parent>
 
@@ -74,9 +74,15 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- 用 redisson core 而非 redisson-spring-boot-starter:ResiCache 自带
+             RedissonConfiguration(@ConditionalOnClass + @ConditionalOnMissingBean
+             RedissonClient),不需要 starter 的 auto-config。且 starter 3.x 的
+             RedissonAutoConfigurationV2 硬引用 Boot 3 的 RedisAutoConfiguration.class,
+             在 Boot 4(已重定位为 DataRedisAutoConfiguration)下 context 加载爆炸。
+             core 只提供 RedissonClient/RLock/Config 纯 API,boot3/boot4 皆宜。 -->
         <dependency>
             <groupId>org.redisson</groupId>
-            <artifactId>redisson-spring-boot-starter</artifactId>
+            <artifactId>redisson</artifactId>
             <version>${redisson.version}</version>
             <optional>true</optional>
         </dependency>
@@ -94,11 +100,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
         <dependency>
@@ -276,4 +277,21 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        boot4 profile (WS-1.1 FIRE): 用 -Pboot4 激活。注意 parent 的 <version> 无法用
+        property/profile 切换(starter-parent 限制),必须配合 versions:set-parent:
+          ./mvnw versions:set-parent -DparentVersion=4.0.0 -DgenerateBackupPoms=false -B
+        本 profile 仅 override 属性: Redisson 升到 3.50.0(首个支持 SDR 4 / Spring 7)、Java 21。
+        默认线(无 -Pboot4)仍是 Boot 3.4.13 + Java 17 + Redisson 3.27.0,零污染。
+    -->
+    <profiles>
+        <profile>
+            <id>boot4</id>
+            <properties>
+                <redisson.version>3.50.0</redisson.version>
+                <java.version>21</java.version>
+            </properties>
+        </profile>
+    </profiles>
 </project>

@@ -72,7 +72,7 @@ class RedisProCacheManagerTest {
 
             // 验证传入的 customConfig 确实被采用(TTL=120s),而非回退默认(60s)
             assertThat(cache).isNotNull();
-            assertThat(cache.getCacheConfiguration().getTtl()).isEqualTo(Duration.ofSeconds(120));
+            assertThat(cache.getCacheConfiguration().getTtlFunction().getTimeToLive(null, null)).isEqualTo(Duration.ofSeconds(120));
         }
 
         @Test
@@ -84,7 +84,7 @@ class RedisProCacheManagerTest {
 
             // 验证传 null 时回退到默认配置(TTL=60s,即 defaultConfiguration)
             assertThat(cache).isNotNull();
-            assertThat(cache.getCacheConfiguration().getTtl()).isEqualTo(Duration.ofSeconds(60));
+            assertThat(cache.getCacheConfiguration().getTtlFunction().getTimeToLive(null, null)).isEqualTo(Duration.ofSeconds(60));
         }
     }
 
@@ -138,7 +138,7 @@ class RedisProCacheManagerTest {
 
             // null → 回退默认配置(TTL=60s)
             assertThat(result).isNotNull();
-            assertThat(result.getCacheConfiguration().getTtl()).isEqualTo(Duration.ofSeconds(60));
+            assertThat(result.getCacheConfiguration().getTtlFunction().getTimeToLive(null, null)).isEqualTo(Duration.ofSeconds(60));
         }
 
         @Test
@@ -151,7 +151,7 @@ class RedisProCacheManagerTest {
 
             // 非 null → 采用传入配置(TTL=300s)
             assertThat(result).isNotNull();
-            assertThat(result.getCacheConfiguration().getTtl()).isEqualTo(Duration.ofSeconds(300));
+            assertThat(result.getCacheConfiguration().getTtlFunction().getTimeToLive(null, null)).isEqualTo(Duration.ofSeconds(300));
         }
     }
 

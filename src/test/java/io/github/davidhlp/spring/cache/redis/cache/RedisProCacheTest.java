@@ -88,11 +88,11 @@ class RedisProCacheTest {
         void evict_delegatesToWriter() {
             String key = "key1";
 
-            doNothing().when(cacheWriter).remove(anyString(), any(byte[].class));
+            doNothing().when(cacheWriter).evict(anyString(), any(byte[].class));
 
             cache.evict(key);
 
-            verify(cacheWriter).remove(anyString(), any(byte[].class));
+            verify(cacheWriter).evict(anyString(), any(byte[].class));
         }
 
         @Test
@@ -100,7 +100,7 @@ class RedisProCacheTest {
         void evict_incrementsCounter() {
             String key = "key1";
 
-            doNothing().when(cacheWriter).remove(anyString(), any(byte[].class));
+            doNothing().when(cacheWriter).evict(anyString(), any(byte[].class));
 
             cache.evict(key);
 
@@ -115,7 +115,7 @@ class RedisProCacheTest {
         void evict_recordsTimer() {
             String key = "key1";
 
-            doNothing().when(cacheWriter).remove(anyString(), any(byte[].class));
+            doNothing().when(cacheWriter).evict(anyString(), any(byte[].class));
 
             cache.evict(key);
 

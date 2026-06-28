@@ -1,0 +1,65 @@
+name: CI (Boot 4)
+
+# WS-1.1 FIRE: Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50 构建线。
+# 与 ci.yml(Boot 3.4.x 主线,master 分支)隔离:本 workflow 仅在 boot4 分支触发。
+# 双分支策略下,Boot 4 的 pom(parent 4.0.0 + boot4 profile)与 Boot 3 主线 pom
+# 不兼容 —— 无法在同一 checkout 上用 versions:set-parent 切换(master/boot3 pom
+# 缺 boot4 profile 与 redisson.version=3.50 override),故用独立 workflow + 独立分支。
+# master=Boot 3.4.13(默认兼容线,ci.yml 全量 verify)/ boot4=Boot 4.0(FIRE 主线)。
+
+on:
+  push:
+    branches: [boot4]
+  pull_request:
+    branches: [boot4]
+
+env:
+  JAVA_VERSION: '21'
+
+jobs:
+  build-boot4:
+    name: Boot 4 Build and Test (Java 21)
+    runs-on: ubuntu-latest
+    # M3 已全绿(verify -Pboot4 672 + JaCoCo 70%/40% 门禁 + 13 Testcontainers IT)。
+    # 保留 continue-on-error: true 一段过渡期,确认 GitHub Actions 环境(Testcontainers
+    # Docker service)稳定后再转 false 强制门控。
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build and Verify (Boot 4)
+        run: ./mvnw clean verify -Pboot4 -B
+        env:
+          MAVEN_OPTS: -Xmx1024m
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: boot4-test-results
+          path: target/surefire-reports/
+          retention-days: 7
+
+      - name: Upload JaCoCo Report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: boot4-jacoco-report
+          path: target/site/jacoco/
+          retention-days: 7
+
+      - name: Surface boot4 failure as visible annotation
+        # continue-on-error 让失败 job 在 needs 链中标绿,易被忽略。用 ::warning::
+        # annotation 把 boot4 失败显式标注到 checks,既不阻塞主干又保持可见性。
+        if: failure()
+        run: |
+          echo "::warning file=.github/workflows/ci-boot4.yml::Boot 4 verify FAILED. Non-blocking (continue-on-error) during FIRE stabilization, but indicates a real Boot 4 regression — please investigate."
