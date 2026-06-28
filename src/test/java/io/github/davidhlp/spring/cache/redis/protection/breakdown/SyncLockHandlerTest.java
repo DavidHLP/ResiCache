@@ -45,7 +45,7 @@ class SyncLockHandlerTest {
         lenient().when(properties.getSyncLock()).thenReturn(syncLockProperties);
         lenient().when(syncLockProperties.getTimeout()).thenReturn(3000L);
         lenient().when(syncLockProperties.getUnit()).thenReturn(java.util.concurrent.TimeUnit.MILLISECONDS);
-        handler = new SyncLockHandler(syncSupport, properties);
+        handler = new SyncLockHandler(syncSupport, properties, null);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
