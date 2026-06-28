@@ -40,6 +40,7 @@ resi-cache:
     enabled: true
     expected-insertions: 100000
     false-probability: 0.01
+    rebuild-window-seconds: 30   # CLEAN 后布隆重建窗口(秒);0=禁用(旧行为)。见 WS-1.2c
 ```
 → [[bloom-filter]]
 
@@ -60,8 +61,11 @@ resi-cache:
   sync-lock:
     prefix: "resi-cache:lock:"
     timeout: 10s
+    local-only: false          # true = 无 Redisson 时显式单 JVM 降级(否则 fail-fast)
 ```
 → [[breakdown-lock]]。`prefix` 决定 Redisson 锁 key 前缀,`timeout` + `unit` 是默认锁等待。
+
+`local-only`(默认 `false`)控制无分布式锁后端(Redisson 缺失 → 无 LockManager bean)时 `sync=true` 的行为:**默认 fail-fast**(拒绝静默退化为单 JVM,多实例下无法防击穿——"标榜分布式却单机"是最坏失败模式);设 `true` 显式接受单 JVM 同步降级(单实例/测试场景),并发 `protection.degraded=local-only` 告警(WS-1.4 升级为 Observation 事件)。
 
 ### redisson / redis-deployment(Redis 连接)
 

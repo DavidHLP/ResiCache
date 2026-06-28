@@ -14,7 +14,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/SyncSupport.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-28
 ---
 
 # 分布式锁(HandlerOrder 200)
@@ -75,11 +75,11 @@ protected boolean shouldHandle(CacheContext context) {
 
 `src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/DistributedLockManager.java:22`
 
-基于 Redisson,实现 `LockManager` SPI。`@ConditionalOnClass(RedissonClient.class)`——classpath 无 Redisson 时该 bean 不生效。
+基于 Redisson,实现 `LockManager` SPI。`@ConditionalOnClass(RedissonClient.class)`——classpath 无 Redisson 时该 bean 不生效(此时若声明 `sync=true`,`SyncSupport` **fail-fast**,见下「硬化(WS-1.2a/b)」)。
 
 ```java
 public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) throws InterruptedException {
-    String lockKey = properties.getSyncLock().getPrefix() + key;
+    String lockKey = buildLockKey(key);   // ← Cluster 模式加 hash-tag,与缓存 key 同 slot(WS-1.2b)
     RLock lock = redissonClient.getLock(lockKey);
     long leaseTimeSeconds = Math.max(MIN_LEASE_TIME_SECONDS,        // ≥ 10s
                                      timeoutSeconds * LEASE_TIMEOUT_MULTIPLIER); // ×3
@@ -107,6 +107,28 @@ public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) throws I
 2. `isHeldByCurrentThread()` 确认本线程持锁;
 3. 释放失败重试最多 3 次(间隔 100ms),仍失败则记 error 放弃(锁会随 lease 到期自动释放)。
 
+## 硬化(WS-1.2a / WS-1.2b)
+
+### WS-1.2a:无分布式锁后端时 fail-fast(不再静默降级)
+
+旧 `SyncSupport` 在无 `LockManager` bean(Redisson 缺失)时**静默**降级为单 JVM `synchronized`。多实例下这是最坏失败模式——「标榜分布式击穿保护,实则单机互斥,跨实例仍同时回源」。v0.1.0 起:
+
+- 启动期检测到空后端 → WARN(`SyncSupport.warnIfNoDistributedBackend`);
+- 运行期 `sync=true` 且后端为空 → **fail-fast**(首次未命中抛 `IllegalStateException`),绝不静默降级;
+- 显式单实例/测试降级:设 `resi-cache.sync-lock.local-only=true`(仍发 `protection.degraded=local-only` 告警,使安全属性可观测)。
+
+⚠️ BREAKING:旧行为的静默降级被移除。迁移见 [[configuration]] 的 `sync-lock.local-only`。
+
+### WS-1.2b:Cluster 锁 key hash-tag pinning
+
+Redis Cluster 按 slot 分片。旧锁 key = `prefix + key`,可能落到与缓存 key 不同的 slot(不同节点)。虽 Redisson 锁跨 slot 仍有效,但「锁与数据同节点」语义丢失,且未来锁内 MULTI/事务(要求同 slot)会 cross-slot 失败。`buildLockKey(key)`(package-private 供测试):
+
+- 非 Cluster(single/sentinel):`prefix + key`(不变);
+- Cluster + key 无 hash-tag:`prefix + "{" + key + "}"`(包裹,使 slot = CRC16(key) = 缓存 key slot);
+- Cluster + key 已含 hash-tag:`prefix + key`(保留)。
+
+测试用 lettuce `SlotHash.getSlot()` 权威校验锁 key 与缓存 key 同 slot。
+
 ## 自定义锁后端
 
 `LockManager` 是 `breakdown` 包内的接口,`DistributedLockManager`(Redisson)是默认实现,`@ConditionalOnClass(RedissonClient.class)` 自动装配。要换其他锁后端(如 Zookeeper),实现 `LockManager` 并声明为 `@Bean` / `@Component`,配合 `@ConditionalOnMissingBean` 顶替默认实现。`getOrder()` 返回 0,用于多实现并存时排序。
@@ -120,6 +142,7 @@ resi-cache:
   sync-lock:
     prefix: "resi-cache:lock:"
     timeout: 10s
+    local-only: false   # true = 无 Redisson 时显式单 JVM 降级(否则 fail-fast,WS-1.2a)
 ```
 
 注解级(`@RedisCacheable`):

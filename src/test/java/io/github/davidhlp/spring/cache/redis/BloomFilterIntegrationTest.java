@@ -2,10 +2,12 @@ package io.github.davidhlp.spring.cache.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterConfig;
-import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.RedisBloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomHashStrategy;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.MessageDigestBloomHashStrategy;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.RedisBloomIFilter;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -189,6 +191,73 @@ class BloomFilterIntegrationTest extends AbstractRedisIntegrationTest {
             for (String key : addedKeys) {
                 assertThat(bloomFilter.mightContain(cacheName, key)).isTrue();
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Rebuilding Window (WS-1.2c)")
+    class RebuildingWindowTests {
+
+        private RedisProCacheProperties properties;
+
+        @BeforeEach
+        void setUpRebuilding() {
+            properties = new RedisProCacheProperties();
+        }
+
+        @Test
+        @DisplayName("clear 后写入 Redis rebuilding 标志(带 TTL)")
+        void clear_setsRedisRebuildingFlagWithTtl() {
+            BloomSupport support = new BloomSupport(bloomFilter, redisTemplate, properties);
+            support.clear("rebuild-cache");
+
+            assertThat(redisTemplate.hasKey("resicache:bloom:rebuild:rebuild-cache")).isTrue();
+            Long ttl = redisTemplate.getExpire("resicache:bloom:rebuild:rebuild-cache");
+            assertThat(ttl).isPositive().isLessThanOrEqualTo(30L);
+        }
+
+        @Test
+        @DisplayName("clear 后 rebuilding 期 mightContain fail-open,不 false-miss")
+        void clear_duringRebuilding_mightContainFailOpens() {
+            BloomSupport support = new BloomSupport(bloomFilter, redisTemplate, properties);
+            bloomFilter.add("rebuild-cache", "key:1");
+            assertThat(support.mightContain("rebuild-cache", "key:1")).isTrue();
+
+            support.clear("rebuild-cache");
+
+            // bloom 已空,但 rebuilding 期 fail-open,避免 false-miss(违反 @Cacheable 契约)
+            assertThat(support.mightContain("rebuild-cache", "key:1")).isTrue();
+            assertThat(support.mightContain("rebuild-cache", "never-added")).isTrue();
+        }
+
+        @Test
+        @DisplayName("rebuilding 标志过期后恢复正常 bloom 行为(mightContain=false)")
+        void rebuildingWindowExpires_normalBloomBehavior() {
+            BloomSupport support = new BloomSupport(bloomFilter, redisTemplate, properties);
+            bloomFilter.add("rebuild-cache", "key:1");
+            support.clear("rebuild-cache");
+
+            // 模拟窗口过期:删 rebuilding 标志
+            redisTemplate.delete("resicache:bloom:rebuild:rebuild-cache");
+            // 新实例 → 空 local 缓存,避免命中 1s TTL 的旧结果
+            BloomSupport afterWindow = new BloomSupport(bloomFilter, redisTemplate, properties);
+
+            // 窗口过期 + bloom 已空 → 恢复 false
+            assertThat(afterWindow.mightContain("rebuild-cache", "key:1")).isFalse();
+        }
+
+        @Test
+        @DisplayName("rebuild-window=0(禁用)时 clear 不开窗,保持 v0.0.x 旧行为")
+        void rebuildWindowZero_disabled_keepsLegacyBehavior() {
+            properties.getBloomFilter().setRebuildWindowSeconds(0);
+            BloomSupport support = new BloomSupport(bloomFilter, redisTemplate, properties);
+            bloomFilter.add("rebuild-cache", "key:1");
+
+            support.clear("rebuild-cache");
+
+            // 禁用:无 rebuilding 窗口,bloom 空 → false(旧行为,向后兼容)
+            assertThat(support.mightContain("rebuild-cache", "key:1")).isFalse();
+            assertThat(redisTemplate.hasKey("resicache:bloom:rebuild:rebuild-cache")).isFalse();
         }
     }
 }

@@ -20,6 +20,20 @@ wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subj
 
 ---
 
+## [2026-06-28] update | WS-1.2 硬化(fail-fast + Cluster hash-tag + 布隆 rebuilding 窗口)
+
+v0.1.0「WS-1.2 硬化」三条工作线完成,均经 `./mvnw verify` 守门(672 测试 / 0 失败 / JaCoCo 70%·40% 门禁通过 / checkstyle 0 违规):
+
+- **WS-1.2a — SyncSupport fail-fast(⚠️ BREAKING)**:无分布式锁后端(Redisson 缺失 → 无 `LockManager` bean)时,旧实现**静默**降级为单 JVM `synchronized`(多实例下最坏失败模式)。改为启动期 WARN + 运行期 fail-fast(`IllegalStateException`)。新增 `resi-cache.sync-lock.local-only`(默认 false)作显式单实例/测试降级出口。改 `SyncSupport.java` / `RedisProCacheProperties.java` / `SyncSupportTest.java`(7 测试)。
+- **WS-1.2b — Cluster 锁 key hash-tag pinning**:`DistributedLockManager.buildLockKey` 在 Cluster 模式给锁 key 加 `{...}` hash-tag,确保与缓存 key 同 slot(锁与数据同节点,未来锁内 MULTI 不 cross-slot);single/sentinel 不变。lettuce `SlotHash.getSlot` 权威校验,25 测试。
+- **WS-1.2c — 布隆 CLEAR rebuilding 窗口**:CLEAN(`@CacheEvict(allEntries=true)`)清空布隆后,空布隆使 `RedisProCache.get(key, loader):157` 前置短路**静默 return null**(违反 `@Cacheable` 契约 = 数据正确性缺陷,非 DB 击穿因 loader 未被调)。经 8-agent Workflow 设计评审(2:1 否决「不清 bloom」——固定位数 bloom 不可逆膨胀),采用 per-cacheName rebuilding 窗口:`BloomSupport.clear` 写 Redis 标志(TTL=`rebuild-window-seconds`,默认 30s),窗口期 `mightContain` fail-open → 走 sync 锁 + loader。单点覆盖 RedisProCache + 链层双路径。新增 `resi-cache.bloom-filter.rebuild-window-seconds`(0=禁用=旧行为)。改 `BloomSupport.java` / `RedisProCacheProperties.java` / `BloomSupportTest.java`(13 测试)/ `BloomFilterIntegrationTest.java`(+4 Testcontainers)。
+
+CLEAN 原子性经评审确认**非 bug**(与 Spring 原生 `DefaultRedisCacheWriter.clean` 一致 best-effort;Lua/MULTI 化净负收益:单线程 O(keyspace) 阻塞、Cluster cross-slot),仅在 README Known Limitations 文档化。
+
+文档同步:CHANGELOG(v0.1.0)、README.md / README.zh-CN.md、`[[configuration]]`、`[[bloom-filter]]`、`[[breakdown-lock]]`(后两机制页加「Rebuilding 窗口」/「硬化」节 + frontmatter updated)。
+
+新增配置项:`resi-cache.sync-lock.local-only`、`resi-cache.bloom-filter.rebuild-window-seconds`。
+
 ## [2026-06-27] improve | 多 AI CR 修复轮(可维护性 / 合规 / 安全)
 
 对 commit 5ae2da4(v0.0.3)做多 AI 代码审查(Claude + Codex 共识,OpenCode 偏移不采用)后的修复。**P0**(TtlHandler 永久缓存)已由 `b61808b` 兜住;本轮处理可维护性、合规与安全项。

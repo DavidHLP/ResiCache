@@ -168,6 +168,7 @@ resi-cache:
     expected-insertions: 100000
     false-probability: 0.01
     hash-cache-size: 10000
+    rebuild-window-seconds: 30   # post-CLEAR rebuild window (s); 0 = disabled (v0.0.x behavior)
 ```
 
 ### Distributed lock
@@ -178,6 +179,7 @@ resi-cache:
     timeout: 3000
     unit: MILLISECONDS
     prefix: "cache:lock:"
+    local-only: false   # true = accept single-JVM sync when Redisson absent (else fail-fast)
 ```
 
 ### Early expiration (hot-key)
@@ -225,9 +227,10 @@ resi-cache:
 
 > The five protection attributes default to **`false`** — enable each explicitly
 > on `@RedisCacheable`. `sync=true` (anti-breakdown) requires Redisson on the
-> classpath; otherwise it silently degrades to a JVM-internal lock
-> (**single-instance only**, no cross-JVM coordination). A
-> `resi-cache.protection.preset` to batch-enable them is planned for v0.2.0.
+> classpath; **without it, ResiCache fails fast** (refuses to silently degrade to
+> a single-JVM lock, which is useless across instances). For an explicit
+> single-instance/test degradation, set `resi-cache.sync-lock.local-only=true`.
+> A `resi-cache.protection.preset` to batch-enable them is planned for v0.2.0.
 
 ## How it works
 
@@ -256,8 +259,13 @@ Hard limitations of v0.0.2 (all addressed in the [Roadmap](#roadmap)):
   removing the dual-advisor risk.
 - **No Reactive support** (WebFlux / `Mono` / `Flux`): `RedisCacheInterceptor` is
   blocking; such methods log an explicit "caching will not take effect" warning.
-- **Redis Cluster distributed locks not hash-tag pinned**: lock keys may span
-  slots under Cluster; not yet validated.
+- **`@CacheEvict(allEntries=true)` (CLEAN) is best-effort, not atomic** — parity
+  with Spring's native `RedisCache.clear` / `DefaultRedisCacheWriter.clean`: it uses
+  a SCAN cursor + batched UNLINK/DEL, so keys written mid-CLEAN may be stranded and
+  the cache is briefly half-deleted on large key sets. Lua/MULTI atomicity is
+  intentionally not used (Redis single-thread O(keyspace) block, Cluster
+  cross-slot). When the Bloom filter is enabled, the `rebuild-window-seconds` window
+  (v0.1.0) prevents silent nulls during the post-wipe rebuild.
 - **No JMH benchmarks yet**: performance data lands in v0.3.0.
 
 ## Not in Scope
