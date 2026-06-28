@@ -5,8 +5,11 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.stereotype.Component;
 
@@ -30,7 +33,6 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @HandlerPriority(HandlerOrder.BLOOM_FILTER)
 public class BloomFilterHandler extends AbstractCacheHandler
         implements PostProcessHandler {
@@ -40,6 +42,32 @@ public class BloomFilterHandler extends AbstractCacheHandler
 
     private final BloomSupport bloomSupport;
     private final CacheStatisticsCollector statistics;
+
+    /**
+     * Path C 后续(WS-1.4) — per-handler tag 试点:Bloom 拒绝计数。
+     * <p>ObjectProvider 允许 MeterRegistry 缺失(测试 stub / 无 actuator 环境)——
+     * 没有 registry 时 bloomBlockedCounter 静默 no-op,行为不变。
+     */
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
+    private Counter bloomBlockedCounter;
+
+    public BloomFilterHandler(BloomSupport bloomSupport,
+                              CacheStatisticsCollector statistics,
+                              ObjectProvider<MeterRegistry> meterRegistryProvider) {
+        this.bloomSupport = bloomSupport;
+        this.statistics = statistics;
+        this.meterRegistryProvider = meterRegistryProvider;
+    }
+
+    @PostConstruct
+    void initMetrics() {
+        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
+        if (registry != null) {
+            this.bloomBlockedCounter = Counter.builder("resicache.handler.bloom.blocked")
+                    .description("Bloom filter rejections — key definitely not in cache, request short-circuited")
+                    .register(registry);
+        }
+    }
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
@@ -75,6 +103,10 @@ public class BloomFilterHandler extends AbstractCacheHandler
                     context.getCacheName(),
                     context.getRedisKey());
             statistics.incMisses(context.getCacheName());
+            // WS-1.4 per-handler tag 试点:Bloom 拒绝事件计数
+            if (bloomBlockedCounter != null) {
+                bloomBlockedCounter.increment();
+            }
             return HandlerResult.terminate(CacheResult.miss());
         }
 
