@@ -10,9 +10,9 @@
 
 1. **当前在 `boot4` 分支**。两条分支:
    - `master` (`5a05d0a`): Boot 3.4.13 + **WS-1.2 硬化已完成**(672 测试绿)—— 默认兼容线,不受 boot4 影响。
-   - `boot4` (`fd55bd4`): Boot 4.0/SDR 4.0/Spring 7/Java 21/Redisson 3.50 —— **FIRE M1 已完成**(`compile -Pboot4` 绿)。
-2. **FIRE 进度**: M1(boot4 编译绿)✅ → **M2(`test -Pboot4` 672 绿)✅ [2026-06-28]** → **M3(`verify -Pboot4` + async shim)待续** → M4(CI + 文档)。
-3. **下次第一件事**: `./mvnw verify -Pboot4 -B`(M3:13 Testcontainers IT + JaCoCo 70%/40% 门 + `supportsAsyncRetrieve()=false` shim)。M2 改动见 §4a。
+   - `boot4` (`fb53063` + M3 待提交): Boot 4.0/SDR 4.0/Spring 7/Java 21/Redisson 3.50 —— **FIRE M1/M2/M3 已完成**(`verify -Pboot4` 672 绿 + JaCoCo 门禁)。
+2. **FIRE 进度**: M1(编译绿)✅ → M2(`test -Pboot4` 672 绿)✅ → **M3(`verify -Pboot4` 672 绿 + JaCoCo 70%/40% 门禁通过 + `supportsAsyncRetrieve()=false` shim)✅ [2026-06-28]** → **M4(CI boot4 job + 文档)待续**。
+3. **下次第一件事**: **M4** —— `.github/workflows/ci.yml` 加 boot4 job(JDK 21 + `verify -Pboot4`,起步 `continue-on-error: true`)+ `COMPATIBILITY.md` 双矩阵(见 §5)。**双构建已双向绿**(boot4 verify 672 + master test 672)。M3 改动见 §4b。
 4. **铁律**: 永不静默降级;IT 绿线前不盲改防护代码;commit/push/merge 需显式批准;默认 master(FIRE 已授权用 boot4 分支)。
 
 ---
@@ -66,7 +66,20 @@
 3. **pom.xml**:`redisson-spring-boot-starter` → `redisson`(core)。根因:starter 3.x 的 `RedissonAutoConfigurationV2` 硬引用 Boot 3 `RedisAutoConfiguration.class`,Boot 4(已重定位 `DataRedisAutoConfiguration`)context 加载爆炸(ClassNotFoundException)。ResiCache 自带 `RedissonConfiguration`(`@ConditionalOnClass`+`@ConditionalOnMissingBean RedissonClient`),只需 core API,无需 starter auto-config。master(boot3)零影响(改动仅在 boot4 分支)。
 4. **RedisProCacheTest** evict 测试 ×4:stub/verify `cacheWriter.remove` → `cacheWriter.evict`(SDR 4 `RedisCache.evict`(super)改调 `writer.evict`;`RedisProCacheWriter.evict` 委托 `remove`)。clear 测试仍用 `clean`(SDR 4 `RedisCache.clear` 未改名)。
 
-## 5. M3-M4 待续(FIRE 剩余)
+## 4b. M3 适配详情(boot4 分支,`verify -Pboot4` 672 绿 + JaCoCo 门禁)
+
+1. **`supportsAsyncRetrieve()` shim**(`cache/RedisProCacheWriter.java:90`):`return RedisCacheWriter.super.supportsAsyncRetrieve()` → 显式 `return false`(+ 详注)。**关键核查(反编译 SDR 4.0.5 jar 铁证,纠正原 plan 前提)**:
+   - `RedisCacheWriter.supportsAsyncRetrieve()` 接口默认已是 **false**(javap `iconst_0`),非原 plan/§6 假设的 true。
+   - `RedisCache.put(Object,Object)` 调 **sync `writer.put`**(非 `store`);`RedisCache.get(Object,Callable)` 调 **sync `writer.get(name,key,Supplier,ttl,boolean)`**(非 `retrieve`)。
+   - `RedisProCache` 全 override 走 `super.get/put/evict/clear`(同步),**不 override retrieve/store**。
+   - 结论:ResiCache 实际执行路径**全程同步**,commonPool 异步从未触发,ThreadLocal 无丢失风险。
+   - shim 价值 = **能力如实声明**(本类 `retrieve()`/`store()` 走 `CompletableFuture.supplyAsync/runAsync`(commonPool),会把责任链丢到 ForkJoinPool 丢 `CacheOperationMetadataHolder` ThreadLocal,确属 unsafe)+ **防御性硬化**(防未来 SDR 默认翻 true)。Path C(WS-1.3)Step 6 补 snapshot/restore 后恢复 true。
+2. **`verify -Pboot4` 全绿**:672 测试 0 失败;`jacoco:check` 门禁(70% line/40% branch)通过(check goal 在 verify 阶段触发,M2 的 test 阶段不触发,故 M3 是首次门禁验证);checkstyle 零违规;13 Testcontainers IT(无 failsafe,随 surefire 跑)全绿。
+3. **双构建双向绿**:boot4 `verify -Pboot4` 672 + master(boot3)`test -B` 672(零回归,master 不受 boot4 改动影响,改动隔离在 boot4 分支)。
+
+## 5. M4 待续(FIRE 收尾)
+
+> M2/M3 已完成(见 §4a/§4b)。本节仅留 M4。
 
 ### M2 — `test -Pboot4` 全绿(下次起点)
 - `git checkout boot4 && ./mvnw test -Pboot4 -B` → 收集测试侧 SDR 4 breaking。
@@ -94,7 +107,7 @@
   - `RedisAutoConfiguration` → `DataRedisAutoConfiguration` @ `o.s.b.data.redis.autoconfigure`
   - `RedisProperties` → `DataRedisProperties` @ `o.s.b.data.redis.autoconfigure`
   - 其他已知重定位: `BootstrapRegistry` → `o.s.b.bootstrap`;`@EntityScan` → `o.s.b.persistence.autoconfigure`;`@PropertyMapping` → `o.s.b.test.context`。
-- **SDR 4 RedisCacheWriter 重命名**: `clean`→`clear`、`remove`→`evict`(对齐 Spring Cache 标准术语);#3348 `put` 默认 async。
+- **SDR 4 RedisCacheWriter 重命名**: `clean`→`clear`、`remove`→`evict`(对齐 Spring Cache 标准术语)。`supportsAsyncRetrieve()` 接口默认 **false**(javap 4.0.5 验证);`RedisCache.put/get` 标准路径走 **sync** writer(非 store/retrieve),详见 §4b(纠正早期"#3348 put 默认 async"的粗略说法)。
 - **SDR 4 RedisCacheManager**: 构造参数序变(boolean 与 Map 交换)。
 - **Migration guide**: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide(3.x→4.x 部分不完整,签名级 breaking 靠编译驱动)。
 - **Boot 4.0 GA**: 2025-11-20,Spring Framework 7,Java 17 最低/21 推荐 LTS/25 支持;Jakarta EE 11;Jackson 2→3(ResiCache 用 SecureJackson,需留意)。
@@ -147,4 +160,4 @@
 
 ---
 
-**下次起点**: `git checkout boot4` → `./mvnw test -Pboot4 -B`(用 ctx_execute)→ 按 §5 M2 迭代。FIRE 方案细节见 `~/.claude/plans/stateful-crafting-bubble.md`。
+**下次起点**: `git checkout boot4` → M4(CI boot4 job + `COMPATIBILITY.md` 双矩阵,见 §5)。双构建已双向绿。FIRE 方案细节见 `~/.claude/plans/stateful-crafting-bubble.md`。
