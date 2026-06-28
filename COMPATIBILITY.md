@@ -1,8 +1,17 @@
 # Compatibility Matrix
 
-ResiCache targets the **Spring Boot 3.x / Java 17+** ecosystem.
+ResiCache ships on **two build lines** (dual-branch strategy):
+
+- **`master` branch — Spring Boot 3.4.x / Java 17+** (default, maximum compatibility).
+- **`boot4` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50**
+  (FIRE migration; see [CHANGELOG](CHANGELOG.md) WS-1.1 FIRE and `HANDOFF.md`).
+
+Both lines pass full `verify` (tests + JaCoCo gate). Pick the branch matching your
+Boot version.
 
 ## Supported versions
+
+### `master` line — Spring Boot 3.4.x (default)
 
 | Component | Minimum | Recommended | Tested |
 |-----------|---------|-------------|--------|
@@ -14,13 +23,35 @@ ResiCache targets the **Spring Boot 3.x / Java 17+** ecosystem.
 | Redisson | 3.27.0 | 3.27.x | 3.27.0 |
 | Caffeine | 3.1.8 | 3.1.x | 3.1.8 |
 
+### `boot4` line — Spring Boot 4.0 (FIRE)
+
+| Component | Version | Tested |
+|-----------|---------|--------|
+| Java | 21 | 21 |
+| Spring Boot | 4.0.0 | 4.0.x (full `verify -Pboot4`) |
+| Spring Framework | 7.x | (via Boot) |
+| Spring Data Redis | 4.0.x | (via Boot) |
+| Redis Server | 7.x | 7.x |
+| Redisson | 3.50.0 | 3.50.0 |
+| Caffeine | 3.1.8 | 3.1.8 |
+
 ## Spring Boot version policy
 
-- **Build parent**: `spring-boot-starter-parent 3.4.13` (declared in `pom.xml`).
-- **CI coverage**: full `verify` (tests + JaCoCo gate) runs on **Java 17 / 21**
-  against the build parent (Boot 3.4.13); an additional non-blocking compile
-  check runs against Boot **3.3.6 / 3.5.3** on Java 17. ResiCache uses only
-  stable Spring Cache / Spring Data Redis APIs, so it works across 3.3–3.5.
+- **`master` line (default)**: `spring-boot-starter-parent 3.4.13`.
+- **`boot4` line (FIRE)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0 + Spring 7
+  + Java 21 + Redisson 3.50. Activate locally with `./mvnw verify -Pboot4`; the
+  `boot4` branch pom is pre-configured (no `versions:set-parent` needed).
+- **Dual-branch rationale**: Boot 4 modularized packages
+  (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*`,
+  `o.s.b.actuate.health.*` → `o.s.b.health.contributor.*`) and SDR 4 renamed
+  `RedisCacheWriter` methods (`remove`→`evict`, `clean`→`clear`) — a single source
+  tree cannot `import` both Boot 3 and Boot 4 packages, so the two lines live on
+  separate branches (`master` / `boot4`) with their own CI workflows.
+- **CI coverage**:
+  - `master`: full `verify` (tests + JaCoCo gate) on Java 17 / 21 against Boot 3.4.13
+    (`.github/workflows/ci.yml`); plus a non-blocking compile check against Boot 3.3.6 / 3.5.3.
+  - `boot4`: full `verify -Pboot4` on Java 21 against Boot 4.0
+    (`.github/workflows/ci-boot4.yml`, non-blocking during FIRE stabilization).
 - **Not supported**: Spring Boot 2.x and 3.0.x–3.2.x (may work, untested).
 - **Pre-1.0 caveat**: matrix coverage is best-effort until 1.0.
 
@@ -50,6 +81,7 @@ for v0.2.0. See [README → Known Limitations](README.md#known-limitations).
   Bloom-filter enhancements.
 - **Transaction-aware caching**: supported, but requires explicit
   `resi-cache.transaction-aware=true`.
-- **Redis Cluster distributed locks**: not yet validated — lock keys may span
-  slots (no hash-tag pinning yet). Use single-node or sentinel for `sync=true`
-  until verified.
+- **Redis Cluster distributed locks**: lock keys are **hash-tag pinned** to the
+  same slot as the cache key (WS-1.2b), so the lock and the data it guards
+  co-locate on one node. Validated at the key-construction level; full multi-node
+  Cluster integration testing is planned for v0.2.0.
