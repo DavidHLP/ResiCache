@@ -58,7 +58,7 @@ class EarlyExpirationHandlerRaceConditionTest {
 
     @BeforeEach
     void setUp() {
-        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations, null);
         executor = Executors.newCachedThreadPool();
     }
 

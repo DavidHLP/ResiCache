@@ -52,7 +52,7 @@ class EarlyExpirationHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations, null);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {

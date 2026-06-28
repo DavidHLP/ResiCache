@@ -8,8 +8,11 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlPolicy;
 
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -40,7 +43,6 @@ import java.nio.charset.StandardCharsets;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @HandlerPriority(HandlerOrder.EARLY_EXPIRATION)
 public class EarlyExpirationHandler extends AbstractCacheHandler {
 
@@ -63,6 +65,38 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
+
+    /**
+     * Path C 后续(WS-1.4) — per-handler tag:同步提前过期触发事件计数。
+     * <p>ObjectProvider 允许 MeterRegistry 缺失 — 没有 registry 时 earlyRefreshTriggeredCounter
+     * 静默 no-op,行为不变。
+     */
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
+    private Counter earlyRefreshTriggeredCounter;
+
+    public EarlyExpirationHandler(TtlPolicy ttlPolicy,
+                                  EarlyExpirationSupport earlyExpirationSupport,
+                                  RedisTemplate<String, Object> redisTemplate,
+                                  CacheStatisticsCollector statistics,
+                                  ValueOperations<String, Object> valueOperations,
+                                  ObjectProvider<MeterRegistry> meterRegistryProvider) {
+        this.ttlPolicy = ttlPolicy;
+        this.earlyExpirationSupport = earlyExpirationSupport;
+        this.redisTemplate = redisTemplate;
+        this.statistics = statistics;
+        this.valueOperations = valueOperations;
+        this.meterRegistryProvider = meterRegistryProvider;
+    }
+
+    @PostConstruct
+    void initMetrics() {
+        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
+        if (registry != null) {
+            this.earlyRefreshTriggeredCounter = Counter.builder("resicache.handler.early-refresh.triggered")
+                    .description("Early refresh triggered (sync=true early expiration path, ActualCacheHandler skipped)")
+                    .register(registry);
+        }
+    }
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
@@ -94,6 +128,10 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
             context.setAttribute(CacheContext.AttributeKey.EARLY_EXPIRATION_SKIPPED, true);
             log.debug("Sync early-expiration triggered, skipping actual cache: cacheName={}, key={}",
                       context.getCacheName(), context.getRedisKey());
+            // WS-1.4 per-handler tag:同步提前过期触发事件计数
+            if (earlyRefreshTriggeredCounter != null) {
+                earlyRefreshTriggeredCounter.increment();
+            }
             return HandlerResult.skipAll();
         }
 
