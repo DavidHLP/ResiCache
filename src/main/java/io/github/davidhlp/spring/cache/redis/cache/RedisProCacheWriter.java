@@ -1,10 +1,10 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.holder.CacheOperationMetadataHolder;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
@@ -38,6 +38,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
+    private final MethodMetadataResolver methodMetadataResolver;
     private final CacheStatisticsCollector statistics;
     private final RedisCacheRegister redisCacheRegister;
     private final TypeSupport typeSupport;
@@ -54,13 +55,15 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                                CacheStatisticsCollector statistics,
                                RedisCacheRegister redisCacheRegister,
                                TypeSupport typeSupport,
-                               CacheHandlerChainFactory chainFactory) {
+                               CacheHandlerChainFactory chainFactory,
+                               MethodMetadataResolver methodMetadataResolver) {
         this.redisTemplate = redisTemplate;
         this.valueOperations = valueOperations;
         this.statistics = statistics;
         this.redisCacheRegister = redisCacheRegister;
         this.typeSupport = typeSupport;
         this.chainFactory = chainFactory;
+        this.methodMetadataResolver = methodMetadataResolver;
         log.debug("Initializing handler chain for RedisProCacheWriter");
         this.cachedChain = chainFactory.createChain();
     }
@@ -262,7 +265,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 cacheStatisticsCollector,
                 redisCacheRegister,
                 typeSupport,
-                chainFactory);
+                chainFactory,
+                methodMetadataResolver);
     }
 
     @Override
@@ -293,7 +297,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable Duration ttl) {
 
         // 获取缓存操作配置（优先通过 AnnotatedElementKey 查找，匹配 Spring 的方法级元数据语义）
-        AnnotatedElementKey elementKey = CacheOperationMetadataHolder.getCurrentKey();
+        // Path C Step 1: 从 MethodMetadataResolver 读取,不再直接访问静态 holder
+        AnnotatedElementKey elementKey = methodMetadataResolver.currentKey();
         RedisCacheableOperation cacheOperation = null;
         if (elementKey != null) {
             cacheOperation = redisCacheRegister.getCacheableOperation(cacheName, elementKey);

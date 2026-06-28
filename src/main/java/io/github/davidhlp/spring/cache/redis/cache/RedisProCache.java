@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.holder.CacheOperationMetadataHolder;
+import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
@@ -32,13 +32,14 @@ public class RedisProCache extends RedisCache {
     private final BloomSupport bloomSupport;
     private final RedisCacheRegister redisCacheRegister;
     private final SyncSupport syncSupport;
+    private final MethodMetadataResolver methodMetadataResolver;
 
     public RedisProCache(
             String name,
             RedisCacheWriter cacheWriter,
             RedisCacheConfiguration cacheConfiguration,
             MeterRegistry meterRegistry) {
-        this(name, cacheWriter, cacheConfiguration, meterRegistry, null, null, null);
+        this(name, cacheWriter, cacheConfiguration, meterRegistry, null, null, null, null);
     }
 
     public RedisProCache(
@@ -48,7 +49,7 @@ public class RedisProCache extends RedisCache {
             MeterRegistry meterRegistry,
             BloomSupport bloomSupport,
             RedisCacheRegister redisCacheRegister) {
-        this(name, cacheWriter, cacheConfiguration, meterRegistry, bloomSupport, redisCacheRegister, null);
+        this(name, cacheWriter, cacheConfiguration, meterRegistry, bloomSupport, redisCacheRegister, null, null);
     }
 
     public RedisProCache(
@@ -59,6 +60,18 @@ public class RedisProCache extends RedisCache {
             BloomSupport bloomSupport,
             RedisCacheRegister redisCacheRegister,
             SyncSupport syncSupport) {
+        this(name, cacheWriter, cacheConfiguration, meterRegistry, bloomSupport, redisCacheRegister, syncSupport, null);
+    }
+
+    public RedisProCache(
+            String name,
+            RedisCacheWriter cacheWriter,
+            RedisCacheConfiguration cacheConfiguration,
+            MeterRegistry meterRegistry,
+            BloomSupport bloomSupport,
+            RedisCacheRegister redisCacheRegister,
+            SyncSupport syncSupport,
+            MethodMetadataResolver methodMetadataResolver) {
         super(name, cacheWriter, cacheConfiguration);
         this.getTimer = registerTimer(meterRegistry, "resicache.cache.get",
                 "Time spent getting cache entries", name);
@@ -77,6 +90,7 @@ public class RedisProCache extends RedisCache {
         this.bloomSupport = bloomSupport;
         this.redisCacheRegister = redisCacheRegister;
         this.syncSupport = syncSupport;
+        this.methodMetadataResolver = methodMetadataResolver;
     }
 
     private static Timer registerTimer(MeterRegistry registry, String name,
@@ -186,7 +200,9 @@ public class RedisProCache extends RedisCache {
         if (redisCacheRegister == null) {
             return null;
         }
-        AnnotatedElementKey elementKey = CacheOperationMetadataHolder.getCurrentKey();
+        // Path C Step 1: 从 MethodMetadataResolver 读取,不再直接访问静态 holder
+        AnnotatedElementKey elementKey = methodMetadataResolver == null
+                ? null : methodMetadataResolver.currentKey();
         if (elementKey == null) {
             return null;
         }

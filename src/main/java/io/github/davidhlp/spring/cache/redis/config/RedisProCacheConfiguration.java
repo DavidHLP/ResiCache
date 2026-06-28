@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.config;
 
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
+import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
@@ -40,14 +41,16 @@ public class RedisProCacheConfiguration {
             RedisCacheRegister redisCacheRegister,
             TypeSupport typeSupport,
             CacheHandlerChainFactory chainFactory,
-            CacheStatisticsCollector cacheStatisticsCollector) {
+            CacheStatisticsCollector cacheStatisticsCollector,
+            MethodMetadataResolver methodMetadataResolver) {
         RedisProCacheWriter writer = new RedisProCacheWriter(
                 redisCacheTemplate,
                 redisCacheTemplate.opsForValue(),
                 cacheStatisticsCollector,
                 redisCacheRegister,
                 typeSupport,
-                chainFactory);
+                chainFactory,
+                methodMetadataResolver);
         log.info("Created RedisProCacheWriter with handler chain pattern");
         return writer;
     }
@@ -89,6 +92,7 @@ public class RedisProCacheConfiguration {
             BloomSupport bloomSupport,
             RedisCacheRegister redisCacheRegister,
             SyncSupport syncSupport,
+            MethodMetadataResolver methodMetadataResolver,
             RedisProCacheProperties properties,
             com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
         // 构建 per-cache 配置映射
@@ -107,6 +111,7 @@ public class RedisProCacheConfiguration {
                 bloomSupport,
                 redisCacheRegister,
                 syncSupport,
+                methodMetadataResolver,
                 initialCacheConfigurations,
                 properties.isTransactionAware());
         log.debug("Created RedisProCacheManager with {} initial cache configurations, transactionAware={}",
