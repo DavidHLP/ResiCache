@@ -1,142 +1,143 @@
-# ResiCache — 会话交接(切到 Linux 继续用)
+# ResiCache — 会话交接(FIRE 进行中)
 
-> **目的**: 把本会话(Win/WSL2)的全部上下文存到仓库,供 Linux 上的新会话/你本人**无缝续接**。
-> 新会话只需读本文件 + `MASTER_PLAN.md` + `wiki/adr/0006` 即可立即继续,无需重新推导。
-> **生成时间**: 2026-06-28 · **分支**: master(本会话未 commit,所有产出在工作树)
-
----
-
-## 0. TL;DR — 在 Linux 上从这里恢复
-
-1. **先读** `MASTER_PLAN.md`(完整 v1 战略+工程总纲)与本文件。
-2. **唯一卡点**: 当前网络(WSL2)**访问不了 Docker Hub**(IPv4 `168.143.171.93:443` 与 IPv6 均超时)→ Testcontainers 拉不到 `testcontainers/ryuk` + `redis` 镜像 → **13 个集成测试被 skip** → 无法验证防护行为。
-3. **在 Linux 上第一件事**: 配好 Docker Hub 访问(见 §5),跑 `./mvnw verify`,确认 **13 个 IT 全部执行并变绿**。
-4. **IT 绿后**,按 §4 顺序一口气推 v0.1.0:WS-1.2 硬化 → Path C → Boot 4 FIRE,每步跑测试守门。
-5. **铁律**: 防护代码在 IT 绿线确认前**绝不盲改**(见 §6)。
+> **目的**: 把本会话全部上下文存到仓库,供下次会话无缝续接。
+> **生成时间**: 2026-06-28(关机前)· **当前分支**: `boot4`
+> **新会话恢复**: 读本文件 + `MASTER_PLAN.md` + `~/.claude/plans/stateful-crafting-bubble.md`(FIRE 完整方案)。
 
 ---
 
-## 1. 项目与当前位置
+## 0. TL;DR — 下次从这里恢复
 
-- **项目**: ResiCache v0.0.2→v0.0.3 — Spring Cache + Redis 的缓存**防护增强**(穿透/击穿/雪崩/热 key),~10k LoC Java,Spring Boot 3.4.13,Java 17,Redisson 3.27.0(optional),Caffeine 3.1.8。
-- **链架构**: `Bloom(100)→SyncLock(200)→EarlyExpiration(250)→TTL(300)→NullValue(400)→ActualCache(500)`,`HandlerOrder` 枚举单一真理源,`@HandlerPriority` 自动发现。
-- **本会话进展**: 完成了**战略评估 + 完整总纲 + 定位裁定 + 对比页**;**代码尚未动**(卡在 IT 验证环境)。
-
-## 2. 已锁定的决策(经多轮对抗式多 Agent 评审)
-
-| 决策 | 内容 | 文件 |
-|---|---|---|
-| **北极星定位** | **ResiCache for Redisson** —— "Redisson 忘了做的那条可声明缓存防护链"。理由=信任算术(采用者信 Redisson,不信 solo 核心基建)。3 评委 2:1 裁定。 | `wiki/adr/0006` |
-| **架构方向** | **Path C**(保留 `RedisCacheWriter` 扩展缝,销毁 `CacheOperationMetadataHolder` ThreadLocal + `CacheInterceptor` 继承)。**不**做 Path B(全 JetCache 式重建),**不**原地不动。 | `MASTER_PLAN.md` §6 |
-| **内核抽取** | **不近期做**(handlers 直依赖 `RedisTemplate`/`CacheStatisticsCollector`/`NullValue`,抽出需 3 端口,已验证"便宜抽出"为伪命题),仅作 ADR-0005 长寿对冲。 | `wiki/adr/0005` |
-| **优先级** | **FIRE 先行**: Boot 4 / SDR 4 / Java 21 兼容(Boot 3.4.x 已 EOL,是新采用者否决项)。 | `MASTER_PLAN.md` §2 WS-1.1 |
-| **不与 JetCache 正面竞争** | 永久让出多级缓存/广播失效/API 级访问。差异点=Bloom + 可编排链。 | `docs/comparison.md` |
-
-## 3. 本会话产出文件(工作树,未 commit)
-
-- `MASTER_PLAN.md` — 完整总纲(北极星/3支柱/路线图/Path C 7步/风险/kill criteria/头30天)
-- `wiki/adr/0006-redisson-companion-positioning.md` — 定位裁定(取代 ADR-0001 叙事)
-- `wiki/adr/0005-kernel-extraction-hedge.md` — 否决近期内核抽取
-- `docs/comparison.md` — 诚实对比页(ResiCache vs JetCache vs Caffeine vs raw Redisson)
-- (原有)`wiki/adr/0001..0004`、28 页 wiki 仍在
-
-> ⚠️ **小尾巴**: `wiki/index.md` 的 ADR 列表需补登记 0005/0006(否则 CI `docs-link-check` 可能提示)。
-
-## 4. v0.1.0 执行计划(IT 绿后按序推)
-
-### WS-1.2 P0 企业硬化(3 个承重正确性隐患)
-- **1.2a `SyncSupport` fail-fast**: `src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/SyncSupport.java:49` —— `distributedManagers.isEmpty()` 时走 `synchronized` 单 JVM(静默降级)。改:当声明 `sync=true` 但无 `LockManager` bean(Redisson 缺失)时**启动期 fail-fast**,挂载点 `config/CachingEnablementValidation.java`。配 Testcontainers 故障注入测试。
-- **1.2b Cluster hash-tag**: `protection/breakdown/DistributedLockManager.java:49` —— `lockKey = prefix + key` 无 hash-tag,Cluster 下锁与缓存 key 可能不同 slot → 锁失效。改:锁 key 与缓存 key 同 slot(需 Cluster IT 验证)。
-- **1.2c 原子 CLEAN**: `chain/ActualCacheHandler.java`(CLEAN=非原子 SCAN+DEL)+ `protection/bloom/BloomFilterHandler.java:165 clearBloomFilter()`(`bloomSupport.clear()` 整体清空 → 确定性穿透窗口)。改:原子化(Lua)或延迟重建。
-
-### Path C 重构(销毁 ThreadLocal,行为零回归)— `MASTER_PLAN.md` §6 有验证过的 7 步
-- 关键耦合点: `holder/CacheOperationMetadataHolder.java`(纯 `ThreadLocal<AnnotatedElementKey>`)← 只由 `cache/RedisCacheInterceptor.java:71 setCurrentKey()` 设置 → 被 `cache/RedisProCacheWriter.java:buildContext()` + `cache/RedisProCache.java:lookupOperation()` 读取 → 6 handler 的 `shouldHandle()` 全以 `context.getCacheOperation()!=null` 为前提。
-- Step 0(回归契约测试,AOP 行为保持)→ Step 1(`MethodMetadataResolver` 接口,无操作重构)→ … → Step 7(删 `CacheOperationMetadataHolder`,改写 ADR-0002)。
-- 核心约束(已验证): `Cache.get(Object,Callable)` 签名不可变 → 元数据由 interceptor 拥有、scoped、可 snapshot 的 carrier 在整个 `CacheAspectSupport.execute()` 期间(含同步 `Cache.get()`)active。
-- 顺带红利: Step 6 重新接管 `retrieve()/store()` 异步路径,消灭 `commonPool` 丢 ThreadLocal 的潜伏 bug。
-
-### Boot 4 FIRE — `MASTER_PLAN.md` §2 WS-1.1
-- 开 `boot4` 线,升 parent→Spring Boot 4.0.0,Redisson→兼容版(3.5x+),双构建 CI matrix(Boot 3.4×Java17 / Boot 4×Java21)。审计 8–10 个 SDR 内部扩展点对 SDR 4.0 的破坏(issue #3348: 4.x `RedisCacheWriter` 默认 sync→async)。
-
-## 5. ⛔ 当前卡点 + Linux 上的修复
-
-**现象**: `./mvnw verify` 报 `BUILD SUCCESS` 但是**假绿** —— 13 个 Testcontainers IT 被 skip:
-```
-WARN org.testcontainers... DOCKER_HOST unix:///var/run/docker.sock is not listening  (权限)
-→ 修了权限(chmod 666)后又: Status 500 ... dial tcp [IPv6]:443: i/o timeout  (拉镜像)
-→ 禁 IPv6 后: dial tcp 168.143.171.93:443: i/o timeout  (IPv4 也超时)
-```
-**根因**: 本网络(WSL2/疑似 CN)**访问不了 Docker Hub**(IPv4+IPv6 均超时;`hello-world` 能跑是因已缓存或偶发)。`docker pull testcontainers/ryuk:0.11.0` / `redis:7-alpine` 均失败。
-
-**Linux 上修复(任选其一)**:
-1. **registry 镜像加速**(CN 推荐): 编辑 `/etc/docker/daemon.json`:
-   ```json
-   { "registry-mirrors": ["https://<你的可用镜像地址>"] }
-   ```
-   然后 `sudo systemctl restart docker`。可用镜像需自测(Aliyun `https://<id>.mirror.aliyuncs.com`、各高校镜像等;2024 年后多个公共镜像已关停)。
-2. **代理**: 给 Docker daemon 配 HTTP/HTTPS proxy(`/etc/systemd/system/docker.service.d/http-proxy.conf`)。
-3. **换网**: 切到能直连 Docker Hub 的网络/VPN。
-4. **预拉**: 在能访问的环境 `docker pull` 后 `docker save` → 拷到 Linux `docker load`。
-
-**验证修复**: `docker pull testcontainers/ryuk:0.11.0 && docker pull redis:7-alpine` 成功 → `./mvnw verify` → 13 个 IT 执行变绿。
-
-> 附:本会话曾用 `sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1` 测试(已**还原为 0**);该法无效,因 IPv4 也超时。
-
-## 6. 🔒 不可违背的铁律(防护库的命门)
-
-- **Path C 在 Step-0 回归测试变绿前不得推进**(MASTER_PLAN 非协商原则 #1)。
-- **永不静默降级**(sync 标榜分布式却单 JVM = 最坏失败模式)。
-- **IT 绿线确认前不盲改防护代码**。本会话正是因此停在代码起点。
-- **EOL 平台是采用否决项** → FIRE(Boot 4)是 P0。
-
-## 7. 环境事实(供 Linux 对照)
-
-- Java 17.0.2(vfox),Maven 3.9.6(wrapper)。**Linux 上需另装 Java 21**(双构建矩阵)。
-- 在线 `./mvnw compile` 通过(99 源文件);离线模式失败(本地 `maven-clean-plugin` 损坏,用在线即可)。
-- `./mvnw verify` 现状: **615 单测全绿 + 13 IT skip**(Docker Hub 拉不到镜像)。
-- JaCoCo 门: 70% line / 40% branch。Checkstyle 强制。
-- **Maven Central 发布已配**(`central-publishing-maven-plugin`+`maven-gpg-plugin`+source+javadoc)—— 需 portal token + GPG 密钥才能首次发版(v0.1.0)。
-- CI: `.github/workflows/ci.yml` Java 17/21 matrix + checkstyle + qodana + docs-link-check。
-
-## 8. Linux 新会话第一步(逐条)
-
-```bash
-cd <repo>                              # 切到 ResiCache
-git status                             # 确认工作树: MASTER_PLAN.md / docs/ / wiki/adr/0005,0006 未提交
-cat MASTER_PLAN.md HANDOFF.md          # 读总纲 + 本交接
-docker pull testcontainers/ryuk:0.11.0 # 确认 Docker Hub 可达(见 §5 修复)
-docker pull redis:7-alpine
-./mvnw verify                          # 期待: 615 单测 + 13 IT 全绿(BUILD SUCCESS, Skipped: 0)
-# IT 绿后,按 §4 推 WS-1.2 → Path C → Boot 4
-```
-
-## 9. 关键文件索引(改代码时查)
-
-| 想改/查 | 文件 |
-|---|---|
-| ThreadLocal 持有者(Path C 要销毁) | `holder/CacheOperationMetadataHolder.java` |
-| 拦截器(Path C 要换成自有 MethodInterceptor) | `cache/RedisCacheInterceptor.java` |
-| 责任链工厂 + 防护 kill-switch | `chain/CacheHandlerChainFactory.java` |
-| Writer(buildContext 读 ThreadLocal) | `cache/RedisProCacheWriter.java` |
-| Cache(lookupOperation 读 ThreadLocal) | `cache/RedisProCache.java` |
-| sync 静默降级(1.2a) | `protection/breakdown/SyncSupport.java` |
-| 锁 key 无 hash-tag(1.2b) | `protection/breakdown/DistributedLockManager.java` |
-| CLEAN 非原子 + 布隆清空(1.2c) | `chain/ActualCacheHandler.java` + `protection/bloom/BloomFilterHandler.java` |
-| 启动校验(1.2a fail-fast 挂载点) | `config/CachingEnablementValidation.java` |
-| 配置树 | `config/RedisProCacheProperties.java` |
-| 自动装配 | `config/RedisCacheAutoConfiguration.java` / `RedisProCacheConfiguration.java` |
-| Redisson 装配 | `config/RedissonConfiguration.java` |
-
-## 10. 待办清单
-
-- [ ] Linux 上修好 Docker Hub 访问 → `./mvnw verify` IT 全绿(§5)
-- [ ] WS-1.2a/b/c 硬化 + 各自 Testcontainers 故障注入测试(§4)
-- [ ] Path C Step 0–7(§4 / MASTER_PLAN §6)
-- [ ] Boot 4 FIRE: `boot4` 线 + 双构建矩阵(§4)
-- [ ] `wiki/index.md` 补登记 ADR-0005/0006
-- [ ] 首次发 Maven Central(密钥就位时,v0.1.0)
-- [ ] 后续版本见 `MASTER_PLAN.md` §5 路线图(v0.2 preset+Observation+sample, v0.3 JMH+迁移工具, v1.0 发布)
+1. **当前在 `boot4` 分支**。两条分支:
+   - `master` (`5a05d0a`): Boot 3.4.13 + **WS-1.2 硬化已完成**(672 测试绿)—— 默认兼容线,不受 boot4 影响。
+   - `boot4` (`fd55bd4`): Boot 4.0/SDR 4.0/Spring 7/Java 21/Redisson 3.50 —— **FIRE M1 已完成**(`compile -Pboot4` 绿)。
+2. **FIRE 进度**: M1(boot4 编译绿)✅ → **M2(`test -Pboot4`)待续** → M3(`verify -Pboot4` + async shim)→ M4(CI + 文档)。
+3. **下次第一件事**: `git checkout boot4 && ./mvnw test -Pboot4 -B` → 收集测试侧 SDR 4 breaking → 迭代适配(模式见 §5)。
+4. **铁律**: 永不静默降级;IT 绿线前不盲改防护代码;commit/push/merge 需显式批准;默认 master(FIRE 已授权用 boot4 分支)。
 
 ---
 
-*本会话还产出过两份对抗式评审工作流的完整结构化结论(战略评估 + 定位评审团),已浓缩进 MASTER_PLAN 与 ADR;如需原始 20+12 agent 的逐条 findings/verdicts,可在本会话的 workflow transcript 目录(`/home/DavidHLP/.claude/projects/-home-DavidHLP-ResiCache/<session>/subagents/workflows/`)查 `wf_*.output`。*
+## 1. 项目与北极星
+
+- **项目**: ResiCache — Spring Cache + Redis 的缓存**防护增强**(穿透/击穿/雪崩/热 key),~10k LoC Java。
+- **链架构**: `Bloom(100)→SyncLock(200)→EarlyExpiration(250)→TTL(300)→NullValue(400)→ActualCache(500)`,`HandlerOrder` 枚举单一真理源,`@HandlerPriority` 自动发现,`AbstractCacheHandler.handle` 单一引擎(CONTINUE 推进 / TERMINATE 短路 / SKIP_ALL 物化 skipRemaining)。
+- **北极星**(ADR-0006): **ResiCache for Redisson** — "Redisson 忘了做的那条可声明缓存防护链"。
+- **技术栈**: Boot 3.4.13(EOL)→ 4.0(迁移中);Java 17/21;SDR 3.x/4.0;Redisson 3.27.0/3.50.0;Caffeine 3.1.8;Testcontainers(redis:7-alpine, ryuk:0.11.0);JaCoCo 70%/40% 门禁;checkstyle 强制。
+
+## 2. 已完成(本会话 + 之前)
+
+### ✅ WS-1.2 P0 硬化(master `5a05d0a`,672 测试绿)
+- **1.2a SyncSupport fail-fast**(⚠️ BREAKING): 无分布式锁后端时不再静默降级单 JVM,改启动 WARN + 运行 fail-fast;新增 `resi-cache.sync-lock.local-only`。
+- **1.2b Cluster hash-tag pinning**: `DistributedLockManager.buildLockKey` 给锁 key 加 `{...}`,与缓存 key 同 slot。
+- **1.2c 布隆 CLEAR rebuilding 窗口**: CLEAN 后 bloom 空导致 `RedisProCache.get:157` 静默 return null(违反 @Cacheable 契约);`BloomSupport.clear` 开 Redis-backed rebuilding 窗口(TTL=`rebuild-window-seconds`=30s),期间 `mightContain` fail-open。新增 `resi-cache.bloom-filter.rebuild-window-seconds`。经 8-agent Workflow 评审(2:1 否决"不清 bloom"方案)。
+- 文档全同步: CHANGELOG / README×2 / configuration.md / bloom-filter.md / breakdown-lock.md / log.md。
+
+### ✅ FIRE M1 — boot4 编译绿(boot4 `fd55bd4`)
+见 §4。
+
+## 3. 双分支状态
+
+| 分支 | HEAD | 内容 | 测试 |
+|---|---|---|---|
+| `master` | `5a05d0a` | Boot 3.4.13 + WS-1.2 硬化 | `./mvnw verify` 672 绿 |
+| `boot4` | `fd55bd4` | Boot 4.0 + SDR 4.0 + Spring 7 + Java 21 + Redisson 3.50 | `compile -Pboot4` 绿(M1);test/verify 待续 |
+
+**FIRE 策略(用户选定)**: boot4 独立 git 分支迁移,master 保留 boot3。CI 双分支矩阵。符合 MASTER_PLAN「boot4 分支」本意 —— 自然处理 Boot 4 模块化 package 重定位(同一 .java 无法 import boot3/boot4 不同 package,故用分支隔离)。
+
+## 4. FIRE M1 适配详情(boot4 分支,7 文件)
+
+`compile -Pboot4` BUILD SUCCESS(99 源文件)。适配项:
+
+1. **pom.xml**: 加 `boot4` profile(`redisson.version=3.50.0` / `java.version=21`);parent 改 `4.0.0`;移除冗余 `spring-boot-starter-aop`(Boot 4 改名 `aspectj`,ResiCache 不用 AspectJ,grep 确认无 `@Aspect`)。
+2. **Boot 4 模块化 package 重定位**(规则: 每模块根 package = `org.springframework.boot.<technology>`):
+   - `o.s.b.actuate.health.{Health,HealthIndicator}` → `o.s.b.health.contributor.{Health,HealthIndicator}`
+   - `o.s.b.autoconfigure.data.redis.RedisAutoConfiguration` → `o.s.b.data.redis.autoconfigure.DataRedisAutoConfiguration`(**改名 Redis→DataRedis**)
+   - `o.s.b.autoconfigure.data.redis.RedisProperties` → `o.s.b.data.redis.autoconfigure.DataRedisProperties`(**改名**)
+   - 注: `o.s.b.autoconfigure.condition.*` + `AutoConfiguration` 在 boot4 **保留**(未重定位)。
+   - 受影响文件: `observability/RedisCacheHealthIndicator.java`、`config/MetricsAutoConfiguration.java`、`config/RedisCacheAutoConfiguration.java`、`config/RedissonConfiguration.java`。
+3. **SDR 4 API**:
+   - `RedisProCacheManager:67` super 构造参数序: boot3 `(writer,config,Map,boolean)` → boot4 `(writer,config,boolean,Map)`。
+   - `RedisProCacheWriter` SDR 4 新增抽象方法 `clear(String,byte[])` + `evict(String,byte[])`(SDR 4 把 `clean`/`remove` 重命名对齐 Spring Cache 术语);加 `clear`/`evict` 委托现有 `clean`/`remove` 实现。
+
+## 5. M2-M4 待续(FIRE 剩余)
+
+### M2 — `test -Pboot4` 全绿(下次起点)
+- `git checkout boot4 && ./mvnw test -Pboot4 -B` → 收集测试侧 SDR 4 breaking。
+- **预期错误模式**(基于 M1 经验):
+  - 测试代码 import 旧 package(`actuate.health` / `autoconfigure.data.redis`)→ 换 import(同 §4 规则)。
+  - 测试可能直接调 `clean`/`remove`(SDR 4 重命名)→ 改 `clear`/`evict` 或保留(若 deprecated 仍在)。
+  - Redisson 3.50 API 变化(ResiCache 调用面窄: `RLock` getLock/tryLock/unlock + `Config`;`RLock` public 契约 3.27→3.50 稳定)。
+- 迭代: 每批错误 → 适配 → recompile,直到 test 绿。
+
+### M3 — `verify -Pboot4` 全绿 + async shim(FIRE 完成判据)
+- **shim**: `RedisProCacheWriter.supportsAsyncRetrieve()`(`cache/RedisProCacheWriter.java:90`)从 `return RedisCacheWriter.super.supportsAsyncRetrieve()` 改 `return false`(注释标 Path C Step 6 恢复)。理由: SDR 4 #3348 默认 async 会暴露 commonPool 丢 ThreadLocal 潜伏 bug;FIRE 不越界做 Path C 的 snapshot/restore。
+- `./mvnw verify -Pboot4 -B` 全绿(含 13 Testcontainers IT)+ JaCoCo 门。
+- lock-free writer 默认**不受影响**(已验证: `RedisProCacheManager.createRedisCache`/`getMissingCache` 直接 `new RedisProCache(name, redisProCacheWriter, ...)`,绕过 super writer 选择)。
+
+### M4 — CI boot4 job + 文档
+- `.github/workflows/ci.yml` 加 `boot4` job(仿现有 `compatibility` job: `versions:set-parent 4.0` + JDK 21 + `verify -Pboot4`,`continue-on-error: true` 起步,M3 绿后转 `false`)。
+- **注意**: CI 的 `compatibility` job 用 `versions:set-parent` 切 parent,但**本地 `versions:set-parent` 报 MojoNotFoundException**(versions 插件 goal 未解析)。boot4 分支已用**手动 Edit pom parent** 到 4.0.0(commit fd55bd4)。CI 若用 versions:set-parent 需验证(goal 可能需 full coordinate `org.codehaus.mojo:versions-maven-plugin:2.x:set-parent`)。
+- `COMPATIBILITY.md` 双矩阵;CHANGELOG 记 FIRE。
+
+## 6. 关键技术发现(Boot 4 模块化)
+
+- **模块化 blog**: 2025-10-28 "Modularizing Spring Boot"。Boot 4 拆小模块,每模块 `spring-boot-<technology>` + 根 package `o.s.b.<technology>` + starter `spring-boot-starter-<technology>`。
+- **package 重定位确认**(从本地 `~/.m2` Boot 4 jar `jar tf` 查实):
+  - `HealthIndicator`/`Health` → `o.s.b.health.contributor`(spring-boot-health-4.0.0.jar)
+  - `RedisAutoConfiguration` → `DataRedisAutoConfiguration` @ `o.s.b.data.redis.autoconfigure`
+  - `RedisProperties` → `DataRedisProperties` @ `o.s.b.data.redis.autoconfigure`
+  - 其他已知重定位: `BootstrapRegistry` → `o.s.b.bootstrap`;`@EntityScan` → `o.s.b.persistence.autoconfigure`;`@PropertyMapping` → `o.s.b.test.context`。
+- **SDR 4 RedisCacheWriter 重命名**: `clean`→`clear`、`remove`→`evict`(对齐 Spring Cache 标准术语);#3348 `put` 默认 async。
+- **SDR 4 RedisCacheManager**: 构造参数序变(boolean 与 Map 交换)。
+- **Migration guide**: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide(3.x→4.x 部分不完整,签名级 breaking 靠编译驱动)。
+- **Boot 4.0 GA**: 2025-11-20,Spring Framework 7,Java 17 最低/21 推荐 LTS/25 支持;Jakarta EE 11;Jackson 2→3(ResiCache 用 SecureJackson,需留意)。
+
+## 7. 环境与命令注意事项
+
+- **context-mode hook 拦截 `mvn`/`mvnw` Bash**: 重定向到 `mcp__plugin_context-mode_context-mode__ctx_execute`。**关键**: ctx_execute 的文件写在项目目录(`/home/davidhlp/project/ResiCache`)是持久的(versions:set-parent 改 pom 可见);构建输出被过滤(只回 grep/tail)。
+- **boot4 跑法**:
+  - boot4 分支 pom 已是 parent 4.0.0 + profile(commit fd55bd4)。
+  - `compile -Pboot4` / `test -Pboot4` / `verify -Pboot4`(`-Pboot4` 激活 redisson 3.50 / java 21 属性)。
+  - 不需 `versions:set-parent`(已手动 Edit,parent 已 4.0)。
+- **切分支**: `git checkout master`(boot3)/ `git checkout boot4`(FIRE)。boot4 工作树干净(M1 已 commit)。
+- **Java**: 环境 Java 21 可用(boot4 用 release 21 编译)。
+- **Docker**: Linux 上 Docker Hub 可达,Testcontainers IT 全绿(WSL2 阻塞已解除)。
+
+## 8. MASTER_PLAN 序列约束(牢记)
+
+- **"FIRE 先于一切"**: WS-1.1 是 P0 最高优先级。Path C 不得先于 FIRE。
+- v0.1.0 scope = FIRE + 3 硬化(WS-1.2 ✅) + Path C 重构 + 首次发 Maven Central。
+- v0.1.0 门禁: 双构建 verify 全绿;3 硬化各有故障注入测试(✅);Path C 零回归;Central 可拉取。
+- 序列: FIRE(v0.1)→ Path C 与硬化并行/紧随 → **不在 v1.0 前做内核抽取**(ADR-0005 对冲)。
+
+## 9. 超出 FIRE 的 v0.1.0 待办(M4 之后)
+
+- **WS-1.3 Path C 重构**(销毁 ThreadLocal): 7 步序列,Step 0 回归契约测试先行。`~/.claude/plans/` 无 Path C plan(待规划)。FIRE M3 的 `supportsAsyncRetrieve=false` shim 由 Path C Step 6 恢复(snapshot/restore)。
+- **WS-1.4 可观测性**: per-handler Micrometer tag + tracing 透传异步边界(依赖 Path C snapshot/restore)。
+- **WS-1.5 质量**: JMH 基准 + 故障注入(部分已做: WS-1.2c 的 rebuilding Testcontainers 测试)。
+- **WS-2.4 发布**: 激活 Maven Central(central-publishing + gpg + source/javadoc 已配置),做第一次 release(v0.1.0)。
+- **wiki/index.md**: 补登记 ADR-0005/0006(CI docs-link-check 可能提示)。
+- **README Roadmap**: 对齐 MASTER_PLAN。
+
+## 10. 铁律与约束
+
+1. **永不静默降级**(WS-1.2a 体现)。
+2. **IT 绿线确认前不盲改防护代码**。
+3. **commit/push/merge/publish/改写 git 历史** 需用户显式批准。Conventional commits `<type>: <description>`,结尾 `Co-Authored-By: Claude <noreply@anthropic.com>`。
+4. **默认 master** 直接改(用户偏好);FIRE 已授权用 boot4 分支。
+5. **序列化白名单**默认仅 `io.github.davidhlp.`,用户须加自己包。
+6. **EOL 平台是采用否决项 → FIRE 是 P0**。
+
+## 11. 关键文件索引
+
+- `MASTER_PLAN.md` — v1 完整战略总纲(北极星/3支柱/路线图/Path C 7步/风险)。
+- `~/.claude/plans/stateful-crafting-bubble.md` — FIRE 完整方案(M0-M4、双构建机制、shim 决策、风险)。
+- `wiki/adr/0006-redisson-companion-positioning.md` — 北极星定位。
+- `wiki/adr/0005-kernel-extraction-hedge.md` — 否决近期内核抽取。
+- `CHANGELOG.md` — v0.1.0 [Unreleased](WS-1.2 全部 + 配置项)。
+- `wiki/log.md` — 2026-06-28 WS-1.2 条目(逆序,最新在顶)。
+- `CLAUDE.md` — 项目结构 + 约定(wiki 入口、HandlerOrder、策略替换)。
+
+---
+
+**下次起点**: `git checkout boot4` → `./mvnw test -Pboot4 -B`(用 ctx_execute)→ 按 §5 M2 迭代。FIRE 方案细节见 `~/.claude/plans/stateful-crafting-bubble.md`。
