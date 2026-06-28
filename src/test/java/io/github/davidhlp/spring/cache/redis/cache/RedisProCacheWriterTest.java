@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.holder.CacheOperationMetadataHolder;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
+import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
@@ -78,12 +78,12 @@ class RedisProCacheWriterTest {
                 new DefaultMethodMetadataResolver());
 
         dummyMethod = RedisProCacheWriterTest.class.getMethod("toString");
-        CacheOperationMetadataHolder.setCurrentKey(dummyMethod, RedisProCacheWriterTest.class);
+        DefaultMethodMetadataResolver.activateStatic(dummyMethod, RedisProCacheWriterTest.class);
     }
 
     @AfterEach
     void tearDown() {
-        CacheOperationMetadataHolder.clear();
+        DefaultMethodMetadataResolver.clearStatic();
     }
 
     @Nested

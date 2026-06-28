@@ -5,9 +5,9 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.chain.CacheInvocationContext;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
-import io.github.davidhlp.spring.cache.redis.holder.CacheOperationMetadataHolder;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -219,7 +219,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         } finally {
             // 仅在 restore 过的线程上清,避免误清其他并发调用方设置的状态
             if (restored) {
-                CacheOperationMetadataHolder.clear();
+                DefaultMethodMetadataResolver.clearStatic();
             }
         }
     }

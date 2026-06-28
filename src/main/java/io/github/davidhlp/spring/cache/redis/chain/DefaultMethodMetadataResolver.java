@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.holder.CacheOperationMetadataHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.expression.AnnotatedElementKey;
 import org.springframework.stereotype.Component;
@@ -8,38 +7,55 @@ import org.springframework.stereotype.Component;
 import java.lang.reflect.Method;
 
 /**
- * Path C (WS-1.3) — 方法元数据解析器默认实现.
+ * Path C (WS-1.3) — 方法元数据解析器默认实现(且 ThreadLocal 所有者).
  *
- * <p>Step 1 实现完全基于现有静态 {@link CacheOperationMetadataHolder} 的
- * ThreadLocal(无操作重构):读取直接代理到 {@code getCurrentKey()},激活
- * 委托给 {@code setCurrentKey()} + 返回的 {@link ScopedActivation} 在
- * {@code close()} 时调用 {@code clear()}。
- *
- * <p>数据所有权:
+ * <p>数据所有权(经 7 步迭代后):
  * <ul>
- *   <li>Step 1: ThreadLocal 所有权在 {@code CacheOperationMetadataHolder} 静态类,
- *       本 resolver 仅为调用方门面</li>
+ *   <li>Step 1: ThreadLocal 在 {@code CacheOperationMetadataHolder} 静态类,本 resolver
+ *       仅为调用方门面</li>
  *   <li>Step 2: 引入 {@link CacheInvocationContext} 值对象 + 在 resolver 暴露
- *       {@link #currentContext()} 方法;读路径仍走静态 holder(Step 6 才激活
- *       ScopedValue 替代)</li>
- *   <li>Step 7: ThreadLocal 所有权迁到本 resolver,静态 holder 删除</li>
+ *       {@link #currentContext()};ScopedValue 字段声明但未激活</li>
+ *   <li>Step 7 (本类):<strong>ThreadLocal 所有权从静态类迁到本 resolver 静态字段</strong>,
+ *       {@code CacheOperationMetadataHolder} 静态类删除,所有 set/clear 改走
+ *       {@link #activateStatic}/{@link #clearStatic};instance 方法直接读 OWN ThreadLocal
+ *       (不再委托静态类)</li>
  * </ul>
+ *
+ * <p>设计选择 — 静态方法 vs 实例方法:
+ * <ul>
+ *   <li>写入 API(activateStatic/clearStatic)<strong>保持静态</strong> — 调用方
+ *       (RedisProCacheWriter、ResiCacheMethodInterceptor、tests) 在
+ *       拦截器作用域内不一定持有 resolver 引用,静态 API 降低耦合</li>
+ *   <li>读取 API(currentKey/currentMethod/currentTargetClass/currentContext)
+ *       是实例方法 — 调用方(RedisProCacheWriter.buildContext、
+ *       RedisProCache.lookupOperation) 持有 resolver 引用,直接调</li>
+ * </ul>
+ *
+ * <p>线程安全: 静态 {@code ThreadLocal<AnnotatedElementKey>} 天然线程隔离,
+ * 配合 {@link #clearStatic} 在 finally 调用防 commonPool 线程复用导致
+ * ThreadLocal 跨任务泄漏。
  */
 @Slf4j
 @Component
 public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
 
+    /**
+     * Step 7 落地:ThreadLocal 所有权从 {@code CacheOperationMetadataHolder}
+     * 静态类迁到本 resolver(静态字段 — Spring Bean 单例,所有实例共享
+     * 同一 ThreadLocal 存储)。
+     */
+    private static final ThreadLocal<AnnotatedElementKey> CURRENT_KEY = new ThreadLocal<>();
+
+    // ==================== 实例方法(读取 API) ====================
+
     @Override
     public AnnotatedElementKey currentKey() {
-        return CacheOperationMetadataHolder.getCurrentKey();
+        return CURRENT_KEY.get();
     }
 
     @Override
     public Method currentMethod() {
         AnnotatedElementKey key = currentKey();
-        // AnnotatedElementKey 的 element/targetClass 字段是 private final,无 getter。
-        // Step 1 暂用反射读 — Step 2+ 改用 ScopedValue 替代 ThreadLocal 时,会同时
-        // 改造本 impl 持有 Method/Class 直接引用,不再依赖 AnnotatedElementKey 内部状态。
         if (key == null) {
             return null;
         }
@@ -59,14 +75,52 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
 
     @Override
     public CacheInvocationContext currentContext() {
-        // Step 2:从 currentKey() 反射构造完整上下文。Step 6 改 ScopedValue 后可
-        // 直接读 CONTEXT.get() 跳过反射。
         return CacheInvocationContext.of(currentKey());
     }
 
+    @Override
+    public ScopedActivation activate(Method method, Class<?> targetClass) {
+        Method previousMethod = currentMethod();
+        Class<?> previousTargetClass = currentTargetClass();
+
+        activateStatic(method, targetClass);
+        log.debug("Activated method metadata: method={}, targetClass={}", method.getName(), targetClass.getName());
+
+        return new ScopedActivation(() -> {
+            if (previousMethod == null) {
+                clearStatic();
+            } else {
+                activateStatic(previousMethod, previousTargetClass);
+            }
+        });
+    }
+
+    // ==================== 静态方法(写入 API) ====================
+
+    /**
+     * 设置当前线程的缓存操作元数据键 — Step 7 后所有写入路径都走这里
+     * (替代已删除的 {@code CacheOperationMetadataHolder.setCurrentKey})。
+     *
+     * @param method      被拦截的方法
+     * @param targetClass 目标类(原始类,非代理类)
+     */
+    public static void activateStatic(Method method, Class<?> targetClass) {
+        CURRENT_KEY.set(new AnnotatedElementKey(method, targetClass));
+    }
+
+    /**
+     * 清除当前线程的缓存操作元数据键 — Step 7 后所有清除路径都走这里
+     * (替代已删除的 {@code CacheOperationMetadataHolder.clear})。
+     * 防 commonPool 线程复用导致 ThreadLocal 跨任务泄漏。
+     */
+    public static void clearStatic() {
+        CURRENT_KEY.remove();
+    }
+
+    // ==================== 反射工具 ====================
+
     /**
      * 反射读取 {@link AnnotatedElementKey} 的 private 字段(Spring 6.2 之前无公开 getter)。
-     * 缓存反射结果避免重复 lookup。
      */
     private static Object reflectField(AnnotatedElementKey key, String fieldName) {
         try {
@@ -74,26 +128,8 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
             f.setAccessible(true);
             return f.get(key);
         } catch (NoSuchFieldException | IllegalAccessException e) {
-            log.warn("Failed to reflect field '{}' from AnnotatedElementKey — Step 2+ will replace this", fieldName, e);
+            log.warn("Failed to reflect field '{}' from AnnotatedElementKey", fieldName, e);
             return null;
         }
-    }
-
-    @Override
-    public ScopedActivation activate(Method method, Class<?> targetClass) {
-        // 保存前一个状态(嵌套调用安全);null 表示"无前一个,close 时清空"
-        Method previousMethod = currentMethod();
-        Class<?> previousTargetClass = currentTargetClass();
-
-        CacheOperationMetadataHolder.setCurrentKey(method, targetClass);
-        log.debug("Activated method metadata: method={}, targetClass={}", method.getName(), targetClass.getName());
-
-        return new ScopedActivation(() -> {
-            if (previousMethod == null) {
-                CacheOperationMetadataHolder.clear();
-            } else {
-                CacheOperationMetadataHolder.setCurrentKey(previousMethod, previousTargetClass);
-            }
-        });
     }
 }

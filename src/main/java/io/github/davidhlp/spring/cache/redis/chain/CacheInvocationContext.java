@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.holder.CacheOperationMetadataHolder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.expression.AnnotatedElementKey;
 
 import java.lang.reflect.Method;
@@ -27,6 +27,7 @@ import java.lang.reflect.Method;
  *       留作 Step 6 异步透传使用,Step 2 仅声明 API 不主动调用</li>
  * </ul>
  */
+@Slf4j
 public record CacheInvocationContext(
         Method method,
         Class<?> targetClass,
@@ -90,14 +91,14 @@ public record CacheInvocationContext(
         if (method == null || targetClass == null) {
             return;
         }
-        if (resolver == null) {
-            // Step 2 fallback:写静态 ThreadLocal 以维持向后兼容(Step 6 改 ScopedValue 写入)
-            CacheOperationMetadataHolder.setCurrentKey(method, targetClass);
-            return;
+        // Step 7 落地:ThreadLocal 所有权已迁到 DefaultMethodMetadataResolver,
+        // 静态 holder 已删除。所有写入走 DefaultMethodMetadataResolver.activateStatic。
+        if (resolver instanceof DefaultMethodMetadataResolver) {
+            DefaultMethodMetadataResolver.activateStatic(method, targetClass);
+        } else if (resolver != null) {
+            // Fallback:其他 resolver 实现需自己实现写入路径
+            log.warn("Resolver {} is not DefaultMethodMetadataResolver — restore skipped", resolver.getClass().getName());
         }
-        // Step 6 接入路径:ScopedValue.where(CONTEXT, this).run(...) — 留作后续 Step
-        // 当前 resolver 仍是 ThreadLocal-backed,setCurrentKey 即可
-        CacheOperationMetadataHolder.setCurrentKey(method, targetClass);
     }
 
     private static Object reflectField(AnnotatedElementKey key, String fieldName) {
