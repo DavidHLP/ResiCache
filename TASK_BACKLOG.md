@@ -67,7 +67,7 @@
 - [ ] **WS-1.4** 链级 Micrometer Observation — 一个 Observation 覆盖全链 + per-handler tag(`bloom.blocked`/`lock.acquired`/`early-refresh.triggered`/`null.hit`)+ per-cacheName。当前 0 行实现,仅 3 处 TODO 注释
 - [ ] **WS-1.4** tracing 跨 `commonPool` 透传(**依赖 Path C Step 6**)— MDC/traceId 跨 commonPool 存活
 - [ ] **WS-1.4** health 级联 — 改造 `RedisCacheHealthIndicator`(现仅 Redis PING,javadoc 自述 "Does not cascade"),聚合各机制健康(含 `protection.degraded=local-only`)
-- [ ] **WS-1.4** kill-switch 细化 — 单一全局 `resi-cache.protection.enabled`(`CacheHandlerChainFactory:78`)→ per-mechanism 运行时控制
+- [x] **WS-1.4 kill-switch 细化**(commit `ac3a1fc`):`RedisProCacheProperties.ProtectionProperties` 加 4 个 per-mechanism Boolean 字段(`bloomFilterEnabled`/`syncLockEnabled`/`earlyExpirationEnabled`/`nullValueEnabled`,默认 `null` = 继承总开关 `enabled`);`CacheHandlerChainFactory.createChain` 加 per-mechanism 短路分支(每个禁用打 INFO 日志便于生产故障定位)。`checkstyle:check` 0 violation + `PathCAopContractIT + RedisProCacheWriterTest` 12/12 绿(零回归 — 默认 `null` 继承 `enabled=true` 行为不变)。**遗留**:运行时切换(当前 `cachedChain` 单例,启动后改配置不重链;WS-1.4 observability 子项配套) + 专门 per-mechanism 单元测试(留 WS-1.4 测试套件扩展)。
 - [ ] **WS-1.4** metrics 默认开启评估(现 `MetricsAutoConfiguration` `metrics.enabled=true` 默认关)+ `/actuator/metrics/resicache.*` 端到端测试 + README sample 截图
 - [ ] **WS-1.5** JMH 基准完全缺失(无 jmh 依赖、零 `@Benchmark`、无 `docs/benchmarks`)— 新增 JMH 模块,对比防护链开销 vs 裸 Redisson vs 原生 Spring Cache。亦是 ADR-0001 高性能措辞 v0.3.0 据实恢复的前提
 - [ ] **WS-1.5** 故障注入补 Redis 断连场景(完全缺失)— 用 `RedisContainer.stop()` 或 Toxiproxy 验 fail-open 安全性;现有 4 类多为单元 mock,升级为真 Testcontainers 故障注入
