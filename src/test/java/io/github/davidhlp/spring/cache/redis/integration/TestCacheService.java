@@ -4,6 +4,7 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -95,5 +96,17 @@ public class TestCacheService {
     public String getByIdWithSync(Long id) {
         callCount.incrementAndGet();
         return "sync-value-" + id;
+    }
+
+    /**
+     * 纯 Spring 原生 {@link Cacheable} —— 不带任何 ResiCache 特性(useBloomFilter/sync/ttl)。
+     * 用于 Path C Step 0 契约测试: 验证 ResiCache 链对 Spring 原生 @Cacheable 也正常工作
+     * (Step 3 引入 ResiCacheMethodInterceptor 后,纯 @Cacheable 仍应通过 ResiCache
+     * CacheManager 走链,而不是被绕开)。
+     */
+    @Cacheable(cacheNames = "testCache", key = "#id")
+    public String getByIdWithPureSpring(Long id) {
+        callCount.incrementAndGet();
+        return "pure-" + id;
     }
 }
