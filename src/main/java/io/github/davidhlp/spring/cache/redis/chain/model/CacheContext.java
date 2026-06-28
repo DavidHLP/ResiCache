@@ -60,6 +60,16 @@ public class CacheContext {
     private final CacheOutput output;
 
     /**
+     * 显式 {@code getOutput()} 访问器 — 兼容 {@code ActualCacheHandler} 多处调用
+     * (line 72, 162, 283 等)。{@code @Getter} Lombok 注解处理器在某些编译路径
+     * (增量编译 + record/resolver 混合)可能不生成,显式方法作为兜底;若 Lombok
+     * 已生成,Java 编译会报 duplicate,届时移除本方法即可。
+     */
+    public CacheOutput getOutput() {
+        return output;
+    }
+
+    /**
      * 临时属性（用于 Handler 间传递数据和后置处理标记）
      * 使用 ConcurrentHashMap 支持并发访问
      */
