@@ -74,7 +74,7 @@
 - [ ] **WS-3.1.1** `protection.preset`(STRICT/STANDARD/NONE)— `RedisProCacheProperties.ProtectionProperties` 现仅 `enabled` 布尔;注解级 preset 覆盖未实现
 - [ ] **WS-3.1.5** Bloom 切 Redisson `RBloomFilter` — 现 `RedisBloomIFilter` 仍用 RedisTemplate+RedisCallback 自维护位运算(grep RBloomFilter 零命中)
 - [ ] **WS-3.1.4** per-handler 运行期热重载 — 支持 bloom `expectedInsertions`/TTL `variance` 不重启动态调整(grep hotReload/dynamicConfig 零命中)
-- [ ] **文档治理** — ADR-0002 改写"经 MethodMetadataResolver 解决"(待 Path C Step 7,当前正确推迟)
+- [x] **文档治理**(commit `0df49e6`):ADR-0002 改写「经 MethodMetadataResolver 解决」——Status `Accepted` + 加 Path C 实施落地段(数据所有权链 `ResiCacheMethodInterceptor → DefaultMethodMetadataResolver → RedisProCacheWriter → 链 handler`)+ 取代关系(决策 1/2/3 不变,Context 段落改「历史不可能三角」)+ Consequences 补「取舍」明确继承面 = 2 层妥协 + 后续可选工作 docs-link-check / PathCAopAsyncIT / ScopedValue 迁移。Path C 7 步收官后「不可能三角」不再成立——ThreadLocal 是 Spring Bean 显式 API,可测试 + 可替换 + 可异步透传。
 
 ---
 
