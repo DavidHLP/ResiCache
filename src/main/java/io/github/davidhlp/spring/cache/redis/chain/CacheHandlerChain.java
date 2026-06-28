@@ -1,8 +1,11 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -28,6 +31,25 @@ public class CacheHandlerChain {
     private volatile CacheHandler head;
     /** 读写锁，保证线程安全 */
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    /**
+     * Path C 后续(WS-1.4) — 链级 Micrometer Timer.
+     * <p>ObjectProvider 允许 MeterRegistry 缺失(测试用 stub / 无 actuator 环境) ——
+     * 没有 registry 时 metrics 静默 no-op,行为不变。
+     * <p>Tags: cacheName(链处理哪个 cache)+ operation(GET/PUT/CLEAN)
+     */
+    private final Timer chainExecuteTimer;
+
+    public CacheHandlerChain(ObjectProvider<MeterRegistry> meterRegistryProvider) {
+        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
+        if (registry != null) {
+            this.chainExecuteTimer = Timer.builder("resicache.chain.execute")
+                    .description("Time spent executing the cache protection chain (full lifecycle: head + post-process)")
+                    .register(registry);
+        } else {
+            this.chainExecuteTimer = null;
+        }
+    }
 
     /**
      * 添加处理器到责任链末尾
@@ -92,13 +114,28 @@ public class CacheHandlerChain {
                 context.getRedisKey());
 
         // 执行责任链（注意：此时仍持有 head 的引用快照，clear() 无法修改链）
+        // WS-1.4:链级 Micrometer Timer 记录 full lifecycle(head handle + post-process)
+        // 本 tick 单 Timer(无 tags,简洁)— per-cacheName/per-operation tags
+        // 留后续 tick(WS-1.4 测试套件扩展)添加
+        CacheResult finalResult;
+        if (chainExecuteTimer != null) {
+            finalResult = chainExecuteTimer.record(
+                    () -> executeChainInternal(currentHead, handlersSnapshot, context));
+        } else {
+            // 无 MeterRegistry 时 no-op 计时(测试 stub / 无 actuator 环境)
+            finalResult = executeChainInternal(currentHead, handlersSnapshot, context);
+        }
+        return finalResult;
+    }
+
+    /**
+     * 链执行内部实现(head handle + post-process) — 由 Timer.record 包装。
+     */
+    private CacheResult executeChainInternal(CacheHandler currentHead, List<CacheHandler> handlersSnapshot, CacheContext context) {
         HandlerResult handlerResult = currentHead.handle(context);
         CacheResult result = handlerResult.result();
         CacheResult finalResult = result != null ? result : CacheResult.success();
-
-        // 执行后置处理
         executePostProcess(handlersSnapshot, context, finalResult);
-
         return finalResult;
     }
 

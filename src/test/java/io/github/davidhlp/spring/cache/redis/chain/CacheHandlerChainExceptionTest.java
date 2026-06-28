@@ -21,7 +21,8 @@ class CacheHandlerChainExceptionTest {
 
     @BeforeEach
     void setUp() {
-        chain = new CacheHandlerChain();
+        // null ObjectProvider → chain no-op Timer,行为与未注入 MeterRegistry 时一致
+        chain = new CacheHandlerChain(null);
     }
 
     @Test
