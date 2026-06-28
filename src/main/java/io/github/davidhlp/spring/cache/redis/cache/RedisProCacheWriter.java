@@ -210,6 +210,12 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     @Override
+    public void evict(@NonNull String name, @NonNull byte[] key) {
+        // SDR 4.0 把 RedisCacheWriter.remove 重命名为 evict(boot4 新增的抽象方法);委托同一责任链逻辑
+        remove(name, key);
+    }
+
+    @Override
     public void clean(@NonNull String name, @NonNull byte[] pattern) {
         String keyPattern = typeSupport.bytesToString(pattern);
         String actualKey = extractActualKey(name, keyPattern);
@@ -221,6 +227,13 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 执行责任链（使用缓存的 chain 实例）
         getChain().execute(context);
+    }
+
+    @Override
+    public void clear(@NonNull String name, @NonNull byte[] pattern) {
+        // SDR 4.0 把 RedisCacheWriter.clean 重命名为 clear(boot4 新增的抽象方法);
+        // 委托同一责任链逻辑,保持 clean/clear 行为一致。
+        clean(name, pattern);
     }
 
     @Override

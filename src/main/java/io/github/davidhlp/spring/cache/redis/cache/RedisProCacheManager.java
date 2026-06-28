@@ -64,7 +64,7 @@ public class RedisProCacheManager extends RedisCacheManager {
             SyncSupport syncSupport,
             Map<String, RedisCacheConfiguration> initialCacheConfigurations,
             boolean transactionAware) {
-        super(cacheWriter, defaultCacheConfiguration, initialCacheConfigurations, true);
+        super(cacheWriter, defaultCacheConfiguration, true, initialCacheConfigurations);
         this.redisProCacheWriter = cacheWriter;
         this.defaultConfiguration = defaultCacheConfiguration;
         this.meterRegistry = meterRegistry;
