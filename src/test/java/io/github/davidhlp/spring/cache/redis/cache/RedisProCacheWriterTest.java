@@ -5,6 +5,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
@@ -73,7 +74,8 @@ class RedisProCacheWriterTest {
                 statistics,
                 redisCacheRegister,
                 typeSupport,
-                chainFactory);
+                chainFactory,
+                new DefaultMethodMetadataResolver());
 
         dummyMethod = RedisProCacheWriterTest.class.getMethod("toString");
         CacheOperationMetadataHolder.setCurrentKey(dummyMethod, RedisProCacheWriterTest.class);
