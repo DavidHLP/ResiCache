@@ -42,8 +42,8 @@
 - [ ] **WS-1.1 FIRE 文档/代码矛盾**(状态: partial,采纳分歧推荐表 ② 「放弃双构建,统一单构建 Boot 4」决策)— 显式宣告放弃并更新 `COMPATIBILITY.md`/`HANDOFF.md`/`MASTER_PLAN` + CI + pom + ADR。证据: master 源码零 boot3 import,`ci.yml` compatibility job 靠 `versions:set-parent` 切换但本地 `MojoNotFoundException`。
   - [x] **文档修正**(commit `53f8eb2`): `COMPATIBILITY.md` 改单矩阵 + `HANDOFF.md` 加 §12 post-merge addendum + `MASTER_PLAN.md` 7 处措辞统一。`checkstyle:check -Pboot4` 0 violation。
   - [x] **CI 清理**(commit `6f00471`): 删 `ci-boot4.yml`(65 行);`ci.yml` JAVA_VERSION 17→21 + build job 去 matrix + 删 `compatibility` job + `build-package` 加 `-Pboot4`;`pr-checks.yml` JAVA 17→21 + verify 加 `-Pboot4`。`./mvnw clean verify -Pboot4 -B` 672 绿 + JaCoCo 门禁全过(38.9s)。
-  - [ ] **pom 清理**: 把 `boot4` profile 提升为默认,移除旧 boot3 默认(需 verify -Pboot4 不再需要 profile flag)。
-  - [ ] **新建 ADR-0007**: 记录「WS-1.1 FIRE 双分支策略废弃」决策(指向 53f8eb2 + 6f00471 + pom 清理 commit)。
+  - [x] **pom 清理**(commit `9ad22bf`): `pom.xml` `properties.java.version` 17→21 + `redisson.version` 3.27→3.50 + 删除 `<profiles>` boot4 块 + 删除旧切换机制注释;`ci.yml`/`pr-checks.yml` 同步去掉 `-Pboot4` flag(原 profile 已上移 default,flag 是 no-op)。`./mvnw clean verify -B` 672 绿 + JaCoCo 全过(38.2s)。
+  - [ ] **新建 ADR-0007**: 记录「WS-1.1 FIRE 双分支策略废弃」决策(指向 53f8eb2 + 6f00471 + 9ad22bf)。
 
 ---
 
