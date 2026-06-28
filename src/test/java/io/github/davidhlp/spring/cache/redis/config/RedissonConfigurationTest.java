@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.redisson.config.Config;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.springframework.boot.data.redis.autoconfigure.DataRedisProperties;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -25,13 +25,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class RedissonConfigurationTest {
 
     private RedissonConfiguration configuration;
-    private RedisProperties redisProperties;
+    private DataRedisProperties redisProperties;
     private RedisProCacheProperties properties;
 
     @BeforeEach
     void setUp() {
         configuration = new RedissonConfiguration();
-        redisProperties = new RedisProperties();
+        redisProperties = new DataRedisProperties();
         redisProperties.setHost("localhost");
         redisProperties.setPort(6379);
         redisProperties.setDatabase(0);

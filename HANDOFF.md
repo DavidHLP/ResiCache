@@ -11,8 +11,8 @@
 1. **当前在 `boot4` 分支**。两条分支:
    - `master` (`5a05d0a`): Boot 3.4.13 + **WS-1.2 硬化已完成**(672 测试绿)—— 默认兼容线,不受 boot4 影响。
    - `boot4` (`fd55bd4`): Boot 4.0/SDR 4.0/Spring 7/Java 21/Redisson 3.50 —— **FIRE M1 已完成**(`compile -Pboot4` 绿)。
-2. **FIRE 进度**: M1(boot4 编译绿)✅ → **M2(`test -Pboot4`)待续** → M3(`verify -Pboot4` + async shim)→ M4(CI + 文档)。
-3. **下次第一件事**: `git checkout boot4 && ./mvnw test -Pboot4 -B` → 收集测试侧 SDR 4 breaking → 迭代适配(模式见 §5)。
+2. **FIRE 进度**: M1(boot4 编译绿)✅ → **M2(`test -Pboot4` 672 绿)✅ [2026-06-28]** → **M3(`verify -Pboot4` + async shim)待续** → M4(CI + 文档)。
+3. **下次第一件事**: `./mvnw verify -Pboot4 -B`(M3:13 Testcontainers IT + JaCoCo 70%/40% 门 + `supportsAsyncRetrieve()=false` shim)。M2 改动见 §4a。
 4. **铁律**: 永不静默降级;IT 绿线前不盲改防护代码;commit/push/merge 需显式批准;默认 master(FIRE 已授权用 boot4 分支)。
 
 ---
@@ -59,7 +59,14 @@
    - `RedisProCacheManager:67` super 构造参数序: boot3 `(writer,config,Map,boolean)` → boot4 `(writer,config,boolean,Map)`。
    - `RedisProCacheWriter` SDR 4 新增抽象方法 `clear(String,byte[])` + `evict(String,byte[])`(SDR 4 把 `clean`/`remove` 重命名对齐 Spring Cache 术语);加 `clear`/`evict` 委托现有 `clean`/`remove` 实现。
 
-## 5. M2-M4 待续(FIRE 剩余)
+## 4a. M2 适配详情(boot4 分支,`test -Pboot4` 672 绿)
+
+1. **RedissonConfigurationTest**:`RedisProperties`(import/类型/new)→ `DataRedisProperties`(`o.s.b.data.redis.autoconfigure`),与主代码 RedissonConfiguration 对齐。
+2. **RedisProCacheManagerTest** ×4:`.getCacheConfiguration().getTtl()` → `.getTtlFunction().getTimeToLive(null, null)`(SDR 4 把固定 `Duration` TTL 重构为 `RedisCacheWriter.TtlFunction`,`getTtl()` 移除;`entryTtl(Duration)` 仍存)。
+3. **pom.xml**:`redisson-spring-boot-starter` → `redisson`(core)。根因:starter 3.x 的 `RedissonAutoConfigurationV2` 硬引用 Boot 3 `RedisAutoConfiguration.class`,Boot 4(已重定位 `DataRedisAutoConfiguration`)context 加载爆炸(ClassNotFoundException)。ResiCache 自带 `RedissonConfiguration`(`@ConditionalOnClass`+`@ConditionalOnMissingBean RedissonClient`),只需 core API,无需 starter auto-config。master(boot3)零影响(改动仅在 boot4 分支)。
+4. **RedisProCacheTest** evict 测试 ×4:stub/verify `cacheWriter.remove` → `cacheWriter.evict`(SDR 4 `RedisCache.evict`(super)改调 `writer.evict`;`RedisProCacheWriter.evict` 委托 `remove`)。clear 测试仍用 `clean`(SDR 4 `RedisCache.clear` 未改名)。
+
+## 5. M3-M4 待续(FIRE 剩余)
 
 ### M2 — `test -Pboot4` 全绿(下次起点)
 - `git checkout boot4 && ./mvnw test -Pboot4 -B` → 收集测试侧 SDR 4 breaking。
