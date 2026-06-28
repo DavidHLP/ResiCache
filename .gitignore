@@ -44,3 +44,7 @@ application-myself.yml
 ### CodeGraph ###
 # Local code-graph index (tool artifact)
 .codegraph/
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
