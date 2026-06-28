@@ -11,7 +11,7 @@ import org.redisson.config.SentinelServersConfig;
 import org.redisson.config.SingleServerConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.springframework.boot.data.redis.autoconfigure.DataRedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -42,18 +42,18 @@ public class RedissonConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public RedissonClient redissonClient(
-            RedisProperties redisProperties, RedisProCacheProperties properties) {
+            DataRedisProperties redisProperties, RedisProCacheProperties properties) {
         return Redisson.create(buildConfig(redisProperties, properties));
     }
 
     /**
      * 构建 Redisson Config(包级可见,便于单测覆盖真实配置逻辑)。
      *
-     * <p>从 {@link #redissonClient(RedisProperties, RedisProCacheProperties)} 抽取,使单测
+     * <p>从 {@link #redissonClient(DataRedisProperties, RedisProCacheProperties)} 抽取,使单测
      * 可直接断言 Config 字段(address/password/database/pool),覆盖 configureSingle 的
      * pool 调优与 password/database fallback,而非手写复制品。
      */
-    Config buildConfig(RedisProperties redisProperties, RedisProCacheProperties properties) {
+    Config buildConfig(DataRedisProperties redisProperties, RedisProCacheProperties properties) {
 
         RedisProCacheProperties.RedisDeploymentProperties redis = properties.getRedis();
 
@@ -134,7 +134,7 @@ public class RedissonConfiguration {
     private void configureSingle(
             Config config,
             RedisProCacheProperties.RedisDeploymentProperties redis,
-            RedisProperties redisProperties,
+            DataRedisProperties redisProperties,
             RedisProCacheProperties properties,
             String scheme) {
 
