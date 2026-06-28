@@ -20,7 +20,7 @@ class CacheHandlerChainTest {
 
     @BeforeEach
     void setUp() {
-        chain = new CacheHandlerChain();
+        chain = new CacheHandlerChain(null);
     }
 
     private CacheContext createTestContext() {

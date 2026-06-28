@@ -3,8 +3,10 @@ package io.github.davidhlp.spring.cache.redis.chain;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -32,6 +34,8 @@ public class CacheHandlerChainFactory {
     /** 配置属性 */
     private final RedisProCacheProperties properties;
 
+    /** ObjectProvider for MeterRegistry — WS-1.4 链级 Timer 注入 */
+
     /**
      * 防护纵深 handler 的执行顺序枚举(用于 {@code protection.enabled=false} 时派生 disableName)。
      * 不含 TTL——TtlHandler 兼担基础 TTL 计算,属于不可禁用的基础缓存契约(禁用会导致永久缓存)。
@@ -43,10 +47,15 @@ public class CacheHandlerChainFactory {
             HandlerOrder.EARLY_EXPIRATION,
             HandlerOrder.NULL_VALUE);
 
-    public CacheHandlerChainFactory(List<CacheHandler> handlers, RedisProCacheProperties properties) {
+    public CacheHandlerChainFactory(List<CacheHandler> handlers,
+                                 RedisProCacheProperties properties,
+                                 ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.handlers = handlers;
         this.properties = properties;
+        this.meterRegistryProvider = meterRegistryProvider;
     }
+
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
 
     /** 缓存的责任链实例（单例，避免 handler next 指针被并发修改） */
     private volatile CacheHandlerChain cachedChain;
@@ -66,7 +75,7 @@ public class CacheHandlerChainFactory {
                 return cachedChain;
             }
 
-            CacheHandlerChain chain = new CacheHandlerChain();
+            CacheHandlerChain chain = new CacheHandlerChain(meterRegistryProvider);
 
             Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
 
