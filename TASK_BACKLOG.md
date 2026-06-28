@@ -28,8 +28,8 @@
 
 ## 2. 🔴 P0 — v0.1.0 三大发版门禁(全未达成)
 
-- [ ] **WS-1.3 Path C**(销毁 ThreadLocal)— v0.1.0 最大块,**Step 0 都没启动**。7 步全未做:
-  - [ ] Step 0 — AOP 行为回归契约测试(纯 `@Cacheable` 命中链 + `@RedisCacheable` 获 bloom+sync+ttl 断言),全绿后方进 Step 1
+- [ ] **WS-1.3 Path C**(销毁 ThreadLocal)— v0.1.0 最大块,Step 0 已启动(4/4 绿)。剩余 Step 1–7:
+  - [x] Step 0 — AOP 行为回归契约测试(commit `6fe4505`):`PathCAopContractIT` 4 tests 绿(纯 `@Cacheable` 走 ResiCache 链 + `@RedisCacheable` + useBloomFilter/sync/ttl 走链断言 + Redis 实际 TTL [119,120] 秒) — `./mvnw test -Dtest=PathCAopContractIT -B` 6.96s。后续 Step 1 起每改一处须保持本测试 4/4 绿(零回归护栏)。
   - [ ] Step 1 — 引入 `MethodMetadataResolver` 接口(`currentMethod`/`currentTargetClass`/`currentKey` + try/finally-scoped activation),默认实现用 private ThreadLocal,改 `RedisProCacheWriter.buildContext()`/`RedisProCache.lookupOperation()` 读 resolver(**无操作重构**)
   - [ ] Step 2 — `CacheInvocationContext` 值对象(`snapshot`/`restore`,JDK21 用 `ScopedValue`)
   - [ ] Step 3 — 新建 `ResiCacheMethodInterceptor implements MethodInterceptor`(**不 extends `CacheInterceptor`**)
