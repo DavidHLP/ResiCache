@@ -19,6 +19,9 @@ import java.lang.reflect.Method;
  * <ul>
  *   <li>Step 1: ThreadLocal 所有权在 {@code CacheOperationMetadataHolder} 静态类,
  *       本 resolver 仅为调用方门面</li>
+ *   <li>Step 2: 引入 {@link CacheInvocationContext} 值对象 + 在 resolver 暴露
+ *       {@link #currentContext()} 方法;读路径仍走静态 holder(Step 6 才激活
+ *       ScopedValue 替代)</li>
  *   <li>Step 7: ThreadLocal 所有权迁到本 resolver,静态 holder 删除</li>
  * </ul>
  */
@@ -52,6 +55,13 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
         }
         Object targetClass = reflectField(key, "targetClass");
         return targetClass instanceof Class<?> ? (Class<?>) targetClass : null;
+    }
+
+    @Override
+    public CacheInvocationContext currentContext() {
+        // Step 2:从 currentKey() 反射构造完整上下文。Step 6 改 ScopedValue 后可
+        // 直接读 CONTEXT.get() 跳过反射。
+        return CacheInvocationContext.of(currentKey());
     }
 
     /**

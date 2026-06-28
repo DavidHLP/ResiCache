@@ -40,6 +40,18 @@ public interface MethodMetadataResolver {
     Class<?> currentTargetClass();
 
     /**
+     * Path C Step 2+ — 当前调用上下文的不可变快照(完整 method/targetClass/key 包装).
+     *
+     * <p>Step 2 引入的便捷方法,供 {@code RedisProCacheWriter.retrieve()/store()}
+     * 异步透传场景使用(Step 6 接入)。当前实现从 {@link #currentKey()} 反射构造;
+     * Step 6+ 改用 {@code ScopedValue<CacheInvocationContext>} 时,可直接读
+     * ScopedValue 跳过反射开销。
+     *
+     * @return 当前上下文;若不在作用域内,返回 {@code null}
+     */
+    CacheInvocationContext currentContext();
+
+    /**
      * 激活:临时把当前方法的元数据置入本解析器的作用域。
      * 返回的 {@link ScopedActivation} 用于 try-with-resources,保证
      * {@link ScopedActivation#close()} 时恢复到调用前状态(嵌套调用安全)。
