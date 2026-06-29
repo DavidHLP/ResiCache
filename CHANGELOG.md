@@ -459,6 +459,14 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   CONTRIBUTING.md checklist + a STABILITY.md backward-compatibility prompt.
   Docs/config only — no public API surface touched (STABILITY §2 docs
   may-change). YAML-lint ✅ (3/3 issue templates). (loop round 27)
+- **CODEOWNERS relocated to .github/ (guide §377)**: moved `CODEOWNERS`
+  from repo root to `.github/CODEOWNERS` (conventional location,
+  collocating with the R27 contributor templates). GitHub reads CODEOWNERS
+  from root/.github/docs/, so resolution is unchanged; all in-repo refs
+  (CONTRIBUTING.md L89, wiki/log, guide) cite it by name, not path.
+  Completes the contributor-infra cluster (guide §369-378) minus
+  good-first-issue labels (§378, outward gh label = user gate).
+  Docs/config only. (loop round 28)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
