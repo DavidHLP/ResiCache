@@ -43,7 +43,7 @@ public abstract class AbstractCacheHandler implements CacheHandler {
      * {@code resicache.handler.fired} counter(handler tag = 运行时子类 SimpleName;
      * cardinality bounded = handler 数,见 guide line 261)。幂等:同名同 tag 重复 register 返回既有实例。
      */
-    void attachMeterRegistry(MeterRegistry registry) {
+    public void attachMeterRegistry(MeterRegistry registry) {
         if (registry == null) {
             return;
         }
@@ -52,6 +52,39 @@ public abstract class AbstractCacheHandler implements CacheHandler {
                         + "(guide §223b per-handler observability; tag handler = runtime subclass simple name)")
                 .tag("handler", getClass().getSimpleName())
                 .register(registry);
+        onAttachMetrics(registry);
+    }
+
+    /**
+     * 子类语义 counter 装配钩子。基类 {@link #attachMeterRegistry} 注册完 uniform fired counter 后调用,
+     * 子类 override 以注册自身命名的语义 counter(如 {@code ttl.jittered} / {@code null.hit})。
+     * 默认 no-op。{@code registry} 非空由 {@link #attachMeterRegistry} 前置 null 检查保证。
+     *
+     * <p>深化动机:此前每个 handler 各自 {@code ObjectProvider}+{@code @PostConstruct}+null-check 装配语义
+     * counter,与基类 fired 装配形成双轨(语义 counter 按 bean 存在注册,fired 按进链注册)。
+     * 统一到本钩子后,两类 counter 都走工厂建链时的单一 attach 路径,装配 locality 集中于基类。
+     */
+    protected void onAttachMetrics(MeterRegistry registry) {
+        // 默认 no-op;有语义 counter 的子类 override
+    }
+
+    /**
+     * 语义 counter 注册 helper(无 tag 版)。handler 的 per-handler 命名 counter 名字已隐含 handler
+     * (如 {@code resicache.handler.ttl.jittered}),无需 handler tag;与共享名字、需 tag 的
+     * {@code resicache.handler.fired} 区分。
+     */
+    protected Counter registerCounter(MeterRegistry registry, String name, String description) {
+        return Counter.builder(name).description(description).register(registry);
+    }
+
+    /**
+     * null-safe 自增:registry 缺失时 counter 为 null,no-op。集中消除各 handler 的 {@code if (c != null)}
+     * 自增样板(与 {@code RedisProCache#safeIncrement} 同模式)。
+     */
+    protected void safeIncrement(Counter counter) {
+        if (counter != null) {
+            counter.increment();
+        }
     }
 
     @Override
