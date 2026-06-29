@@ -126,6 +126,10 @@ public class RedisProCacheProperties {
         private String typeProperty = "@class";
         /** 是否启用 Jackson 多态类型信息（默认关闭，更安全） */
         private boolean polymorphicTypingEnabled = false;
+        /** 启动期序列化 pre-flight 探测(guide §115):采样 N keys 检测非 envelope → WARN。默认关闭(opt-in;扫描 Redis 是启动副作用)。 */
+        private boolean probeEnabled = false;
+        /** pre-flight 探测的采样 key 数上限(默认 100)。 */
+        private int probeSampleSize = 100;
     }
 
     /**
