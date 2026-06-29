@@ -355,6 +355,42 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies. Pure docs.
   (loop round 22)
+- **`wiki/architecture/cache-lifecycle.md` minimal touch-up** (round
+  23) — substantive content already correct from R1 (the 5
+  CacheOperation types, the `RedisProCacheWriter` entry point,
+  the GET path with `PREFETCHED_CACHED_VALUE` reuse, the CLEAN
+  SCAN+DEL constants, error handling — all match the source).
+  R23 made three small additions rather than a full sync:
+  - **`updated:` frontmatter** bumped to 2026-06-29
+  - **`source-files` frontmatter** added
+    `PostProcessHandler.java` (referenced in CLEAN-path
+    paragraph; exists at
+    `chain/PostProcessHandler.java` per `CacheHandlerChain`
+    invocation verification)
+  - **`related` list** added `configuration` (cross-link to
+    startup-guard context)
+  - **New opening paragraph** in `## 入口:RedisProCacheWriter`
+    section — disambiguates **runtime lifecycle** (page
+    focus) from **startup-time misconfig defense**
+    (`SerializerWhitelistStartupGuard` R15 + `localOnly`
+    warning; they fire on `ApplicationReadyEvent` BEFORE the
+    first cache call, so they're not part of the per-call
+    lifecycle but a precondition for it)
+  - **`[[cache-avalanche]]` location disambiguation note** —
+    the page referenced `[[cache-avalanche]]` without
+    clarifying it lives in `wiki/concepts/` (concept
+    category), NOT `wiki/mechanisms/` (mechanism category
+    where [[bloom-filter]] / [[breakdown-lock]] /
+    [[early-expiration]] / [[null-value]] / [[ttl-jitter]]
+    live). Obsidian wiki link resolution works by filename
+    regardless of directory, so the link is functional, but
+    the categorization difference is real
+  - **Related-link list** added `configuration` row for
+    startup-guard context
+
+  No public API change. STABILITY.md §1+§3 not invoked; §2
+  (docs may-change pre-1.0) applies. Pure docs.
+  (loop round 23)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
