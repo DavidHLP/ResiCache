@@ -7,14 +7,14 @@ tags:
   - handler
   - HandlerOrder
   - 核心架构
-related: [cache-lifecycle, context-data-flow, handler-result-control, auto-configuration, add-protection-handler]
+related: [cache-lifecycle, context-data-flow, handler-result-control, auto-configuration, add-protection-handler, observability]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChainFactory.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-29
 ---
 
 # 责任链架构(Chain of Responsibility)
@@ -97,6 +97,8 @@ public HandlerResult handle(CacheContext context) {
 - `shouldHandle(CacheContext)` —— 本 handler 要不要管这次操作(看操作类型、注解开关)。
 - `doHandle(CacheContext)` —— 真正的防护逻辑,返回 `HandlerResult` 控制链路走向。
 
+> **可观测性(R24/R25)**:`handle()` 在每个被引擎求值的 handler 处还发出 `[chain] handler={} decision={} key={} requestId={}` DEBUG 日志(一次 GET/PUT 内所有 handler 共享同一 MDC `requestId`,可按 id 串联整条链)+ 自增 `resicache.handler.fired` counter(tag `handler`)。skipRemaining 短路路径未到达该 handler,故不记。详见 [[observability]] 的「责任链执行可观测性」段。
+
 ## 链的装配:CacheHandlerChainFactory
 
 `CacheHandlerChainFactory` 在启动时收集所有 `@Component` + `@HandlerPriority` 的 handler,**按 `order` 升序**串成链,产出 `CacheHandlerChain`。`RedisProCacheWriter` 构造时调用一次 `chainFactory.createChain()` 并**缓存实例**(`cachedChain`),后续每次操作复用同一条链(无需重复装配)。
@@ -123,3 +125,4 @@ public HandlerResult handle(CacheContext context) {
 - [[context-data-flow]] —— 上下文数据模型
 - [[auto-configuration]] —— 链如何随 Spring Boot 自动装配
 - [[add-protection-handler]] —— 如何新增一档 handler
+- [[observability]] —— 链执行可观测性(`[chain]` DEBUG + MDC requestId + `resicache.handler.fired` counter)
