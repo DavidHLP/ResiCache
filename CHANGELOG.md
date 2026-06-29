@@ -475,6 +475,15 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   correct); wiki/overview.md `updated` bumped to 2026-06-29. Closes the
   version-fragment of the P0 "reconcile 自相矛盾" item; COMPATIBILITY.md
   `-Pboot4` refs are a separate sub-item. Docs only. (loop round 29)
+- **COMPATIBILITY.md `-Pboot4` reconcile (guide §87/276, P0)**: the
+  `boot4`/`boot3` Maven profiles were removed in commit `9ad22bf` (Boot 4
+  is configured directly in pom.xml — zero `<profile>` blocks), yet
+  COMPATIBILITY.md still instructed `verify -Pboot4 -B` and claimed a
+  "boot4 Maven profile" exists. Reconciled 4 spots to `verify -B`
+  (matching ci.yml, which already runs `./mvnw clean verify -B`) and
+  replaced the false profile claim. Closes the build-command sub-item of
+  the P0 "reconcile 自相矛盾", pairing with R29's version-table reconcile.
+  Docs only. (loop round 30)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
