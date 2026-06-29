@@ -105,6 +105,14 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   if you relied on ResiCache intercepting `@Cacheable`, set
   `resi-cache.native-annotation-mode=FULL` explicitly. Use `@RedisCacheable`
   for protection.
+- Whitelist rejection message now includes the remediation property key:
+  `resi-cache.serializer.allowed-package-prefixes`. Previously the message
+  read "Type not in deserialization whitelist: <class>", leaving users to
+  round-trip the docs to discover the property name. Per the
+  `COMPETITIVENESS_GUIDE.md` §3 pillar B1 first-contact repair — the most
+  common first-key failure no longer requires a doc round-trip.
+  Diagnostic message text is classified pre-1.0 "may change" per
+  `STABILITY.md` §2 — no public API surface impact.
 
 ### Fixed
 - Redisson is now a *true* optional dependency: the `RedissonClient` bean and
