@@ -423,6 +423,21 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   (`MdcObservabilityTests`: requestId correlates across handlers + MDC cleared
   post-execution + caller MDC restored); full verify 684/0/0/0 ✅ (+2, Skipped:
   0, Testcontainers IT executed). (loop round 24)
+- **Per-handler fired counter (`resicache.handler.fired`, guide §223b)**:
+  `AbstractCacheHandler.handle()` now increments a uniform
+  `resicache.handler.fired` counter (tag `handler` = runtime subclass
+  simple name) for every handler the engine evaluates.
+  `CacheHandlerChainFactory` injects the `MeterRegistry` into each enabled
+  `AbstractCacheHandler` at chain-build time (idempotent; no-op when the
+  registry is absent). Cardinality is bounded (handler count; no `redisKey`
+  tag per guide line 261). Pairs with R24's correlated DEBUG + MDC requestId
+  — counter = structured metric for dashboards/alerts, DEBUG = per-key
+  decision trace. New metric name (pre-1.0 may-change per STABILITY §2,
+  additive); no public API surface touched (`attachMeterRegistry` is
+  package-private). TDD: new `FiredCounterWiringTests` in
+  `CacheHandlerChainFactoryTest` (factory wiring + execute + increment +
+  handler tag); full verify 685/0/0/0 ✅ (+1, Skipped: 0, Testcontainers IT
+  executed). (loop round 25)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
