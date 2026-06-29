@@ -449,6 +449,16 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   wiring). TDD: new `TtlJitteredCounterTests` in `TtlHandlerTest`
   (randomTtl true increments / false does not); full verify 687/0/0/0 ✅
   (+2, Skipped: 0, Testcontainers IT executed). (loop round 26)
+- **GitHub contributor templates (guide §369-374)**: added
+  `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml` and
+  `.github/PULL_REQUEST_TEMPLATE.md`. The bug form captures
+  ResiCache/Spring Boot/Java versions + Redis topology + repro + the R24
+  `[chain]` DEBUG trace hint; the feature form steers submitters away from
+  Resilience4j/Caffeine overlap; `config.yml` disables blank issues and
+  links wiki/ + STABILITY.md + CHANGELOG.md; the PR template mirrors the
+  CONTRIBUTING.md checklist + a STABILITY.md backward-compatibility prompt.
+  Docs/config only — no public API surface touched (STABILITY §2 docs
+  may-change). YAML-lint ✅ (3/3 issue templates). (loop round 27)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
