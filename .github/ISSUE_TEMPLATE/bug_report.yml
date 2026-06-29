@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a defect in ResiCache (crash, wrong behavior, perf regression)
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Before opening this, please
+        skim [STABILITY.md](../../STABILITY.md) (what's stable vs may-change
+        pre-1.0) and search existing issues to avoid duplicates.
+  - type: input
+    id: resicache-version
+    attributes:
+      label: ResiCache version
+      placeholder: "0.0.2 (or git SHA if building from source)"
+    validations:
+      required: true
+  - type: input
+    id: spring-boot-version
+    attributes:
+      label: Spring Boot / Java version
+      placeholder: "Spring Boot 4.0.0, Java 21"
+    validations:
+      required: true
+  - type: dropdown
+    id: redis-setup
+    attributes:
+      label: Redis setup
+      options:
+        - Standalone (single node)
+        - Sentinel
+        - Cluster
+        - Testcontainers (tests)
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: |
+        A clear description of the unexpected behavior. Include the relevant
+        `@RedisCacheable` / `@RedisCacheEvict` annotation and your `resi-cache.*`
+        configuration.
+      placeholder: "When I call ... I expected ... but got ..."
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code/config that reproduces the issue. A failing test is ideal.
+      render: java
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / DEBUG trace
+      description: |
+        Enable `logging.level.io.github.davidhlp.spring.cache.redis=DEBUG` to
+        capture the `[chain] handler=... decision=... key=... requestId=...`
+        trace, which correlates every handler in one cache operation by
+        `requestId`.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Sanity checks
+      options:
+        - label: I searched existing issues and read STABILITY.md.
+          required: true
