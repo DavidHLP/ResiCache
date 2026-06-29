@@ -132,6 +132,16 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   customizability via "Java ServiceLoader" (superseded by Spring
   `@Bean` + `@ConditionalOnMissingBean`). Pointer preserves tool compatibility
   while preventing future drift. (loop round 1)
+- **ADR-0006 JetCache 覆盖机制算术修正(事实错误修复)**:原文 Context
+  §第 1 段把 TTL jitter 计入 JetCache 覆盖(称"4/5"),与 JetCache 实际能力
+  不符。**JetCache Issue #269**(TTL jitter / expiry randomization)状态为
+  **closed unimplemented**——维护者判定不予实现。修正为:**3/5 覆盖**
+  (`@CacheRefresh`≈EarlyExpiration、`@CachePenetrationProtect`≈SyncLock、
+  null-value),并增加 **Amendment 2026-06-29** 段说明修正动机、来源
+  (`COMPETITIVENESS_GUIDE.md` §3 战略执行条目)与版本对齐(`STABILITY.md`
+  §1+§3 不涉及)。ResiCache 真实技术增量相应更正为 **Bloom + TTL jitter +
+  可插拔责任链**(3 项独立、不重叠)。诊断/事实文本按 `STABILITY.md` §2
+  属 pre-1.0 may-change,无 public API surface breaking。(loop round 4)
 
 ## [0.0.2] — current
 
