@@ -98,6 +98,28 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   literal `com.example` still matches `com.exampleX.Foo` per `String.startsWith`
   semantics (no dot-boundary enforcement for literal form), since introducing
   it would break existing users — intentionally deferred as a separate decision.
+- **`SecureJacksonSerializerFactory` (@Component) extracted** — Round 5 fix had
+  to mirror the same 5-arg `SecureJacksonRedisSerializer` constructor across
+  three bean assembly sites (`RedisConnectionConfiguration#redisCacheTemplate`,
+  `RedisProCacheConfiguration#defaultRedisCacheConfiguration`,
+  `TestRedisConfiguration#redisCacheTemplate`). Three sites holding identical
+  wiring is a maintenance trap: any ctor-signature edit silently breaks one
+  and re-introduces the wired/unwired two-track bug Round 5 just fixed. This
+  commit extracts the wiring into a single `@Component` with one
+  `create(ObjectMapper, SerializerProperties)` method; both production configs
+  inject it. Test twin (`TestRedisConfiguration`) is left as-is since it's a
+  `@TestConfiguration` outside the Spring component scan and would actually
+  require MORE wiring to use the factory — net simpler to keep it explicit.
+  New unit test `SecureJacksonSerializerFactoryTest`: 2 tests including the
+  **negative-wiring guard** — explicitly setting
+  `allowedPackagePrefixes=["com.example.round11"]` (no `io.github.davidhlp`)
+  and roundtripping a `CachedValue` (whose `@class` resolves to
+  `io.github.davidhlp...`) must throw `SerializationException` with "whitelist"
+  in the message; if the factory silently used defaults instead of the
+  configured props, the roundtrip would succeed. This is the regression guard
+  for the entire Round 5 + R11 contract. Internal refactor — `STABILITY.md`
+  §2 (internals may-change pre-1.0) applies; no public API surface touched.
+  Full verify 675/0/0/0 ✅ (+2 vs Round 9 baseline 673). (loop round 11)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
