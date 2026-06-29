@@ -505,6 +505,10 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   MDC requestId) and R25 (resicache.handler.fired counter) — both fire
   inside handle(). Added an observability callout + [[observability]]
   cross-link. §1.7 follow-up. Docs only. (loop round 33)
+- **COMPATIBILITY.md test-count fix**: dropped the brittle "13 Testcontainers
+  IT" claim (actual: 12 classes extend AbstractRedisIntegrationTest; the
+  count drifts per round) in favor of drift-proof "Testcontainers-backed
+  integration tests". Factual accuracy. Docs only. (loop round 34)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
