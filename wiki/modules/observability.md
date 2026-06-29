@@ -7,13 +7,14 @@ tags:
   - actuator
   - MeterRegistry
   - 健康检查
-related: [auto-configuration, configuration, cache-core, early-expiration]
+related: [auto-configuration, configuration, cache-core, early-expiration, serialization]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/observability/RedisCacheHealthIndicator.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/MetricsAutoConfiguration.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/config/SerializerWhitelistStartupGuard.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-29
 ---
 
 # 可观测性
@@ -101,6 +102,25 @@ public class MetricsAutoConfiguration { ... }
 ## 相关
 
 - [[auto-configuration]] —— 装配条件与降级路径
-- [[configuration]] —— 无独立配置项(走 actuator 默认)
+- [[configuration]] —— 无独立配置项(走 actuator 默认)+ `SerializerWhitelistStartupGuard` 启动期守卫装配上下文
 - [[cache-core]] —— `RedisProCacheWriter` 持 `CacheStatisticsCollector`
 - [[early-expiration]] —— `getThreadPoolStats()` / `getRefreshingKeyCount()` 补充观测
+- [[serialization]] —— `SerializerWhitelistStartupGuard` 详细 WARN 触发条件与提示内容
+
+## 启动期 misconfig 告警(loud-startup observability)
+
+不走 Micrometer,直接在应用启动时就关键 misconfig 发 WARN 日志 — 部署后第一次启动就能在 `stdout` 看到,不必等到第一次 cache miss 失败才暴露。两条独立 startup 守卫:
+
+### `SerializerWhitelistStartupGuard`(R15)— [[serialization]]
+
+`@EventListener(ApplicationReadyEvent.class)` 触发,检查 `resi-cache.serializer.allowed-package-prefixes` 是否为 `null` 或 `[]`,若空则发 WARN,提示用户补回 host app root package(`com.example.*` 通配 / `com.example.dto` literal 两种写法),并重申默认 `[io.github.davidhlp]` 仅覆盖 framework 内部 types。详见 [[configuration]] 与 [[serialization]]。
+
+防御场景:**用户为「宽松」清空白名单** → 所有非 framework 内部 type 反序列化抛 `SerializationException`;启动期即可在日志看到,不必等到首次 cache miss。
+
+### `SyncLockProperties.localOnly` 启动期告警(早期)— [[breakdown-lock]]
+
+`RedisProCacheConfiguration` 装配 `sync=true` 但无分布式锁后端(Redisson 缺失 → 无 `LockManager` bean)时,启动期发 `protection.degraded=local-only` WARN 提示。这是 pre-existing 行为(早于 R15),由 `SyncLockProperties.localOnly` 字段控制是否显式接受单 JVM 降级(默认 `false` = 默认 fail-fast,见 [[breakdown-lock]])。
+
+防御场景:**多实例部署误以为配置了分布式锁** → 实际是单 JVM synchronized,无法跨实例防击穿。
+
+> 这两条 startup WARN 各自独立,都是 misconfig 防御;不是重复,不是互相替代。`SerializerWhitelistStartupGuard` 守「序列化安全门」,`localOnly` 告警守「分布式锁一致性」。两者都是「在 runtime 第一次失败前先在启动期 hint」的设计哲学 — 把昂贵的 runtime 失败提前到零成本的 startup 日志检查。
