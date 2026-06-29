@@ -56,6 +56,33 @@ class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
     private MethodMetadataResolver methodMetadataResolver;
 
     @Test
+    @DisplayName("RedisDown-2: PUT 路径在 Redis 不可达时走 CacheErrorHandler graceful degradation(不抛异常,行为等价 put 失败被吞)")
+    void redisDown_put_degradesGracefully() {
+        // WS-1.5 PUT 路径故障注入(GET 路径已 commit 59c1f6d):
+        // 与 GET 同样的 graceful degradation 设计 — CacheErrorHandler.handlePutError
+        // log warn + 返回 failed CacheResult,future / sync put 都不抛异常。
+        // **安全属性**: 上游调用方不会因为 Redis 故障被炸 — put 失败被吞,
+        // 业务流继续(下次读会回源 loader)。
+        // **不静默数据**: put 失败意味着 cache 没写入,下次读会触发 loader → 数据
+        // 仍能从数据源获取(不是 fail-open 返损坏数据)。
+        // **trade-off**: put 失败的写丢失(下次 put 重试) — 对 idempotent 操作
+        // 安全;对 non-idempotent 写由调用方决定(ResiCache 不知道写语义)。
+
+        // 不抛异常 — sync put 走通(graceful degradation 模式)
+        // 注: value 必须是 JSON-valid(ResiCache 链对 value 反序列化做类型校验)—
+        // 用 JSON quoted string "\"fault-injection-put-value\"" 而非 raw bytes
+        // (raw bytes 在 chain 早期 deserialize 阶段就抛 SerializationException —
+        // 这是 chain 行为,不是 Redis down 行为,与本测试目标无关)
+        writer.put("testCache", "fault-injection-put-key".getBytes(),
+                "\"fault-injection-put-value\"".getBytes(), null);
+
+        // 验证 1: 不抛异常(已经由不抛异常的事实验证)
+        // 验证 2: Redis 实际没收到该 key(degrade 模式下 ActualCacheHandler
+        // 不调用底层 connection.set — 但 Redis 不可达所以也无法验证)
+        // 完整验证需要 Redis 可达但 connection 失败(Toxiproxy 场景),留 v0.2.0
+    }
+
+    @Test
     @DisplayName("RedisDown-1: GET 路径在 Redis 不可达时走 CacheErrorHandler graceful degradation(不抛异常,future 正常完成,行为等价 cache miss)")
     void redisDown_get_degradesGracefully() throws Exception {
         // WS-1.5 故障注入发现的真实行为(诚实记录 — 重要架构发现):
