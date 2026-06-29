@@ -79,7 +79,7 @@ private CacheResult handleGet(CacheContext context) {
 
 - **避免双重 GET**:若上游 [[early-expiration]] 已经 `valueOperations.get` 过一次,会把结果塞进 `PREFETCHED_CACHED_VALUE`,链尾直接复用,不再多打一次 Redis。
 - **读路径不写**:`processCacheHit` 默认不刷新 TTL,避免读放大。需要 TTI(读刷新)应启用 Spring Data Redis 的 `enableTimeToIdle()`(Redis 6.2 `GETEX`),而非重写 value。
-- **值包装**:读出的 `CachedValue` 经 `NullValuePolicy.toReturnValue(...)` 还原(空值占位 → null),见 [[null-value]]。
+- **值包装**:读出的 `CachedValue` 经 `DefaultNullValuePolicy.toReturnValue(...)` 还原(空值占位 → null),见 [[null-value]]。
 
 ## 命中后:上层回源(Spring Cache 契约)
 

@@ -25,7 +25,7 @@ updated: 2026-06-21
 
 不存在的 key 反复查询,若每次都回源,会持续打 DB。空值缓存用一个带短 TTL 的「占位值」记住「这个 key 确实没有」,短期内直接返回 null。
 
-`NullValueHandler` 依赖 `NullValuePolicy` 策略决定如何包装/还原空值,并把值统一封装进 `CachedValue`。
+`NullValueHandler` 依赖 `DefaultNullValuePolicy` 决定如何包装/还原空值,并把值统一封装进 `CachedValue`。
 
 ## CachedValue:统一值包装
 
@@ -36,13 +36,13 @@ updated: 2026-06-21
 - `ttl` —— 该项 TTL(秒);
 - `getRemainingTtl()` —— 剩余 TTL;
 - `checkExpired()` —— 是否已过期;
-- 配合 [[null-value|NullValuePolicy]] 的 `toReturnValue(...)` 还原给上层。
+- 配合 `DefaultNullValuePolicy` 的 `toReturnValue(...)` 还原给上层。
 
 这套元数据也是 [[early-expiration]] 判定「该不该提前刷新」的依据(读 `createdTime` + `ttl`)。
 
-## NullValuePolicy 策略
+## DefaultNullValuePolicy
 
-`DefaultNullValuePolicy`(`NullValuePolicy` 接口默认实现)提供:
+`DefaultNullValuePolicy`(`@Component` 具体类,C2 后接口已删)提供:
 
 - **写入侧**(PUT):若业务值为 `null` 且开启 `cacheNullValues`,转成空值占位 `CachedValue`(短 TTL),写进 Redis;否则正常包装。
 - **读取侧**(GET):`toReturnValue(value, cacheName, redisKey)` 把读出的 `CachedValue` 还原——若检测到是空值占位,返回业务 `null`(上层据此知道「不存在」而非「未命中」)。
