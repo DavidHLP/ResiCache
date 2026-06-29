@@ -41,7 +41,8 @@ public class CacheHandlerChain {
     private final Timer chainExecuteTimer;
 
     public CacheHandlerChain(ObjectProvider<MeterRegistry> meterRegistryProvider) {
-        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
+        MeterRegistry registry =
+                meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
         if (registry != null) {
             this.chainExecuteTimer = Timer.builder("resicache.chain.execute")
                     .description("Time spent executing the cache protection chain (full lifecycle: head + post-process)")
