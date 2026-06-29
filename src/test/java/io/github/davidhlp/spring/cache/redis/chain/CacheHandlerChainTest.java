@@ -5,7 +5,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -241,6 +244,61 @@ class CacheHandlerChainTest {
             chain.addHandler(new TestCacheHandler());
             chain.addHandler(new TestCacheHandler());
             assertThat(chain.size()).isEqualTo(2);
+        }
+    }
+
+    @Nested
+    @DisplayName("per-handler observability (MDC requestId)")
+    class MdcObservabilityTests {
+
+        // 走真实 AbstractCacheHandler 引擎的 handler:doHandle 内捕获 MDC 中的 requestId。
+        // 用于验证 execute stamp 的 requestId 在整条链内可被每个 handler 观察到。
+        private AbstractCacheHandler recordingHandler(List<String> sink, HandlerResult result) {
+            return new AbstractCacheHandler() {
+                @Override
+                protected boolean shouldHandle(CacheContext context) {
+                    return true;
+                }
+
+                @Override
+                protected HandlerResult doHandle(CacheContext context) {
+                    sink.add(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY));
+                    return result;
+                }
+            };
+        }
+
+        @Test
+        @DisplayName("execute 用单一 requestId 关联所有被求值的 handler,执行后从 MDC 清除")
+        void execute_stampsSingleRequestId_correlatingAllHandlers_thenClears() {
+            List<String> seen = new ArrayList<>();
+            chain.addHandler(recordingHandler(seen, HandlerResult.continueChain()));
+            chain.addHandler(recordingHandler(seen, HandlerResult.continueWith(CacheResult.success())));
+
+            chain.execute(createTestContext());
+
+            // 每个被引擎求值的 handler 都观察到一个非 null requestId
+            assertThat(seen).hasSize(2).doesNotContainNull();
+            // 两个 handler 共享同一个 requestId —— 这是"单次 GET/PUT 的 DEBUG trace 可串联"的契约
+            assertThat(seen.get(0)).isEqualTo(seen.get(1));
+            // 执行结束后 requestId 从 MDC 移除(不泄漏到调用方线程)
+            assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNull();
+        }
+
+        @Test
+        @DisplayName("execute 恢复调用方在 MDC 中预设的 requestId(snapshot/restore,不误清宿主 MDC)")
+        void execute_restoresCallerRequestId_afterCompletion() {
+            chain.addHandler(recordingHandler(new ArrayList<>(),
+                    HandlerResult.continueWith(CacheResult.success())));
+
+            MDC.put(CacheHandlerChain.MDC_REQUEST_ID_KEY, "caller-id");
+            try {
+                chain.execute(createTestContext());
+                // 执行后必须恢复调用方原值,而非残留框架生成的 id 或被清空
+                assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isEqualTo("caller-id");
+            } finally {
+                MDC.remove(CacheHandlerChain.MDC_REQUEST_ID_KEY);
+            }
         }
     }
 
