@@ -467,6 +467,14 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   Completes the contributor-infra cluster (guide §369-378) minus
   good-first-issue labels (§378, outward gh label = user gate).
   Docs/config only. (loop round 28)
+- **Front-door version reconcile (guide §87/276, P0)**: the Dependencies
+  tables in README.md, README.zh-CN.md, and wiki/overview.md still listed
+  the pre-FIRE versions (Spring Boot 3.4.13, Java 17+, Redisson 3.27.0)
+  while pom.xml/CLAUDE.md moved to 4.0.0 / 21 / 3.50.0. Reconciled to
+  Boot 4.0.0 / Java 21+ / Redisson 3.50.0 (Caffeine 3.1.8 was already
+  correct); wiki/overview.md `updated` bumped to 2026-06-29. Closes the
+  version-fragment of the P0 "reconcile 自相矛盾" item; COMPATIBILITY.md
+  `-Pboot4` refs are a separate sub-item. Docs only. (loop round 29)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
