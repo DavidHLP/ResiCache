@@ -4,7 +4,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
-import io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValuePolicy;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +38,7 @@ class ActualCacheHandlerTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Mock
-    private NullValuePolicy nullValuePolicy;
+    private DefaultNullValuePolicy nullValuePolicy;
 
     @Mock
     private EarlyExpirationSupport earlyExpirationSupport;

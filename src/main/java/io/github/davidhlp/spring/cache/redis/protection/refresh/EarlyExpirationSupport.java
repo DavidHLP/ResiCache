@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class EarlyExpirationSupport {
 
-    private final EarlyExpirationExecutor executor;
+    private final ThreadPoolEarlyExpirationExecutor executor;
 
     /**
      * 提交异步提前过期任务

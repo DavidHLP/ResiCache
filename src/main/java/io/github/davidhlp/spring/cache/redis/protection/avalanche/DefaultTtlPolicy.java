@@ -12,7 +12,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Component
 @RequiredArgsConstructor
-public class DefaultTtlPolicy implements TtlPolicy {
+public class DefaultTtlPolicy {
 
     private final Clock clock;
 
@@ -22,7 +22,6 @@ public class DefaultTtlPolicy implements TtlPolicy {
      * @param ttl Duration类型的TTL值
      * @return 如果ttl不为null且不为零且不为负数则返回true，否则返回false
      */
-    @Override
     public boolean shouldApply(Duration ttl) {
         return ttl != null && !ttl.isZero() && !ttl.isNegative();
     }
@@ -35,7 +34,6 @@ public class DefaultTtlPolicy implements TtlPolicy {
      * @param variance 随机化方差
      * @return 计算后的TTL值，如果baseTtl无效则返回-1
      */
-    @Override
     public long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance) {
         if (baseTtl == null || baseTtl <= 0) {
             return -1;
@@ -62,7 +60,6 @@ public class DefaultTtlPolicy implements TtlPolicy {
      * @param threshold 提前过期阈值
      * @return 如果应该提前过期返回true，否则返回false
      */
-    @Override
     public boolean shouldEarlyExpiration(long createdTime, long ttlSeconds, double threshold) {
         if (ttlSeconds <= 0 || threshold <= 0 || threshold >= 1) {
             return false;

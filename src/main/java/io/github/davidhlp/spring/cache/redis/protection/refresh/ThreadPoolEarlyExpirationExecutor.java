@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 在有限的线程池上执行提前过期任务，同时防止每个键的重复提交。
  *
- * <p>本类是对外契约门面（{@link EarlyExpirationExecutor} + {@code @Component} +
+ * <p>本类是对外契约门面（{@code @Component} +
  * 反射可见的 {@code executorService}/{@code cleanupScheduler} 字段），内部职责委托给两个协作类：
  * <ul>
  *   <li>{@link RefreshRetryPolicy} —— 同步重试循环（纯函数，独立可测）</li>
@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Slf4j
 @Component
-public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecutor {
+public class ThreadPoolEarlyExpirationExecutor {
 
     private final ExecutorService executorService;
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
@@ -111,7 +111,6 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
      * @param key  与提前过期任务关联的键
      * @param task 要执行的提前过期任务
      */
-    @Override
     public void submit(String key, Runnable task) {
         if (key == null || task == null) {
             return;
@@ -152,7 +151,6 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
      *
      * @param key 要取消的提前过期任务的键
      */
-    @Override
     public void cancel(String key) {
         if (key == null) {
             return;
@@ -174,7 +172,6 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
      *
      * @return 包含活动线程数、池大小、队列大小和已完成任务数的字符串
      */
-    @Override
     public String getStats() {
         if (executorService instanceof ThreadPoolExecutor tpe) {
             return String.format(
@@ -205,7 +202,6 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
      *
      * @return 正在进行的任务数量
      */
-    @Override
     public int getActiveCount() {
         return inFlight.size();
     }
@@ -221,7 +217,6 @@ public class ThreadPoolEarlyExpirationExecutor implements EarlyExpirationExecuto
      * 关闭执行器，释放所有资源
      * 此方法在应用关闭时自动调用
      */
-    @Override
     @PreDestroy
     public void shutdown() {
         log.info("Shutting down early-expiration executor thread pool...");

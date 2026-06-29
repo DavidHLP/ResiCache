@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
 @HandlerPriority(HandlerOrder.NULL_VALUE)
 public class NullValueHandler extends AbstractCacheHandler {
 
-    private final NullValuePolicy nullValuePolicy;
+    private final DefaultNullValuePolicy nullValuePolicy;
 
     /**
      * Path C 后续(WS-1.4) — per-handler tag:空值命中事件计数。
@@ -39,7 +39,7 @@ public class NullValueHandler extends AbstractCacheHandler {
     private final ObjectProvider<MeterRegistry> meterRegistryProvider;
     private Counter nullHitCounter;
 
-    public NullValueHandler(NullValuePolicy nullValuePolicy,
+    public NullValueHandler(DefaultNullValuePolicy nullValuePolicy,
                             ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.nullValuePolicy = nullValuePolicy;
         this.meterRegistryProvider = meterRegistryProvider;

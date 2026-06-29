@@ -30,7 +30,7 @@ import java.time.Duration;
 @HandlerPriority(HandlerOrder.TTL)
 public class TtlHandler extends AbstractCacheHandler {
 
-    private final TtlPolicy ttlPolicy;
+    private final DefaultTtlPolicy ttlPolicy;
 
     private static final long DEFAULT_TTL = 60;
 

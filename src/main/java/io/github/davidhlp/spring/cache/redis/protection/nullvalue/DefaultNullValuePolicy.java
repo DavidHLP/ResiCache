@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DefaultNullValuePolicy implements NullValuePolicy {
+public class DefaultNullValuePolicy {
 
     private final TypeSupport typeSupport;
 
@@ -24,7 +24,6 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
      * @param cacheOperation 缓存操作配置信息
      * @return 如果应该缓存null值则返回true，否则返回false
      */
-    @Override
     public boolean shouldCacheNull(@Nullable RedisCacheableOperation cacheOperation) {
         return cacheOperation != null && cacheOperation.isCacheNullValues();
     }
@@ -36,7 +35,6 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
      * @param cacheOperation 缓存操作配置信息
      * @return 转换后的存储值
      */
-    @Override
     @Nullable
     public Object toStoreValue(
             @Nullable Object value, @Nullable RedisCacheableOperation cacheOperation) {
@@ -53,7 +51,6 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
      * @param storeValue 存储的值
      * @return 转换后的原始值
      */
-    @Override
     @Nullable
     public Object fromStoreValue(@Nullable Object storeValue) {
         return storeValue;
@@ -65,7 +62,6 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
      * @param value 待判断的值
      * @return 如果是null值则返回true，否则返回false
      */
-    @Override
     public boolean isNullValue(@Nullable Object value) {
         return value == null;
     }
@@ -78,7 +74,6 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
      * @param key 缓存键
      * @return 转换后的字节数组
      */
-    @Override
     @Nullable
     public byte[] toReturnValue(@Nullable Object value, String cacheName, String key) {
         if (isNullValue(value)) {
