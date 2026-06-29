@@ -12,8 +12,8 @@ env:
 jobs:
   build:
     # WS-1.1 FIRE 后(commit 38c514a):master 为单构建 Boot 4.0/SDR 4.0/Java 21/Redisson 3.50。
-    # Boot 4.0 最低 Java 21,故去掉 Java 17 matrix;构建命令统一加 -Pboot4(profile 后续
-    # tick 提升为默认后,此 flag 可移除 — 见 TASK_BACKLOG §2 #4 pom 清理子项)。
+    # Boot 4.0 最低 Java 21,故去掉 Java 17 matrix;Boot 4 为唯一构建线(boot4 profile
+    # 已上移为 pom 默认,见 commit 9ad22bf),构建无需 -Pboot4 flag。
     # 历史:`compatibility` job(versions:set-parent 探测 Boot 3.3/3.5 编译)已删除 —
     # 双分支策略废弃,boot3 不再维护,继续跑废的兼容矩阵只是噪声 + MojoNotFoundException。
     name: Build and Test (Java ${{ env.JAVA_VERSION }})
