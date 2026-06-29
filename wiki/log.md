@@ -20,6 +20,18 @@ wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subj
 
 ---
 
+## [2026-06-30] improve | TTL/NullValue Policy 升为真 seam + 评审候选核验
+
+`/improve-codebase-architecture` 报告 5 候选(HTML:`/tmp/architecture-review-20260630-004529.html`),本轮逐个源码核验 + 落地:
+
+- **候选 3-A(Policy 假 seam → 真 seam)✅ 落地**:新增 `TtlPolicy` / `NullValuePolicy` interface(protection/avalanche、protection/nullvalue),`DefaultTtlPolicy` / `DefaultNullValuePolicy` implements 之;`TtlHandler` / `EarlyExpirationHandler` / `NullValueHandler` 依赖接口而非具体类。自定义实现声明 `@Bean` 即可顶替(对齐 `LockManager` / `BloomIFilter` 纪律,落实 ADR-0005「handlers 可替换」对冲)。此前无接口的 `@Component` 是假 seam(IoC 管理却无法顶替),现升为真 seam。`./mvnw clean verify` 绿:694 测试 / JaCoCo 70%·40% / checkstyle 0。
+- **候选 5(两条 Handler 链命名摩擦)❌ 核验否决**:经源码核验,`AbstractAnnotationHandler`(`handler/`)是注解处理器的**模板方法基类**(`registerOne` 模板 + 4 concrete handler:Cacheable/Put/Evict/Caching),**非责任链**(无 `next` / 链式推进)。报告建议「重命名 AnnotationParserChain」基于误判,会加深误解。命名 friction 不成立(`CacheHandler` 真链 vs `AnnotationHandler` 模板集合,本不同概念)。
+- **候选 2(工厂搬运下沉)⏸ 延后**:`AbstractOperationFactory` javadoc 明确「Builder 字段填充不下沉」(三 Operation Builder 继承不同 Spring 基类,类型不兼容,有技术依据),是有意识设计决策。per-Operation 下沉虽可行但属决策重审,建议开 ADR 评估,不在本轮机械改。
+- **候选 4-B(HandlerEnablingResolver merge locality)⏳ 留下次**:工作量大(新模块 + `CacheHandlerChainFactory` 重构 + 测试),本轮 context 限制未做。
+- **候选 1** 见上一条目(per-handler 语义 counter 装配单轨化,已 commit `999a987`/`521c8a5`)。
+
+---
+
 ## [2026-06-30] improve | per-handler 语义 counter 装配单轨化(metrics deepening)
 
 架构深化候选 1 落地(来自 `/improve-codebase-architecture` 评审,经 grilling 定方案 A + 形状 2 + 范围仅 5 handler)。5 个 protection handler(`TtlHandler`/`NullValueHandler`/`SyncLockHandler`/`BloomFilterHandler`/`EarlyExpirationHandler`)的语义 counter 装配,从各自 `ObjectProvider<MeterRegistry>` + `@PostConstruct initMetrics()` + 运行时 `if (counter != null)` 自增,统一到基类模板:`AbstractCacheHandler#attachMeterRegistry`(工厂建链时调用)注册 uniform `fired` 后调 `protected onAttachMetrics(registry)` 钩子,子类 override 注册语义 counter;基类另提供 `registerCounter(registry, name, desc)` + `safeIncrement(counter)` helper(对齐 cache 层 `RedisProCache` 已有 private 先例)。
