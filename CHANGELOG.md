@@ -146,6 +146,18 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   secrets, no triggers, no env values changed; `STABILITY.md` §2
   (internals may-change pre-1.0) applies; §1+§3 not invoked.
   (loop round 13)
+- **`CONTRIBUTING.md` Releases & CI infrastructure subsection** — new
+  guidance pointing future contributors at the composite action
+  (`.github/actions/setup-jdk-21/action.yml`) as the JDK source of truth,
+  with explicit "JDK bumps must edit only the composite" + "release.yml
+  deploy secrets are configured OOB by the maintainer; do not edit
+  release.yml to add secrets" guard rails. Helps prevent Round 8/R13-style
+  drift if a new contributor comes in and re-adds an inline
+  `actions/setup-java@v5` step unaware of the composite structure. The
+  reference is the rounding-the-loop of Round 13's refactor: useful on
+  its own only if a reader can find it. Docs-only — `STABILITY.md` §2
+  (docs may-change pre-1.0) applies; §1+§3 not invoked.
+  (loop round 14)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
