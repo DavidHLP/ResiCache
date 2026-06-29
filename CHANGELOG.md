@@ -76,7 +76,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   errors. `single`/`sentinel` modes are unchanged; lock-key format is also
   unchanged when the cache key already carries a hash-tag.
 
-## [Unreleased] — planned for v0.0.3
+## [Unreleased] — planned for v0.0.6
 
 ### Added
 - `resi-cache.enabled` master kill-switch — the auto-configuration is now gated
