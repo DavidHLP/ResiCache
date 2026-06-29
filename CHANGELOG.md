@@ -132,6 +132,20 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   Forward-link to STABILITY makes the graduation gate explicit. Docs-only —
   `STABILITY.md` §2 (docs may-change pre-1.0) applies; §1+§3 not invoked.
   (loop round 12)
+- **Composite GitHub Action `.github/actions/setup-jdk-21`** — extracted 6
+  `actions/setup-java@v5` calls across 3 workflows (`ci.yml` × 4,
+  `pr-checks.yml` × 1, `release.yml` × 1) into a single composite action.
+  Eliminates the 6-way drift surface for JDK version + distribution +
+  Maven cache config that Round 8 partially fixed in `release.yml` only;
+  the composite is now the single source of truth. Defaults pin `java-version:
+  '21'` to match `pom.xml <java.version>`; workflow callers override only the
+  release-specific `with:` keys (`server-id`, `server-username`,
+  `server-password`, `gpg-private-key`, `gpg-passphrase`) — `ci.yml` and
+  `pr-checks.yml` need no `with:` at all (defaults suffice). YAML syntax
+  validated via PyYAML for all 4 touched files. Pure YAML refactor — no
+  secrets, no triggers, no env values changed; `STABILITY.md` §2
+  (internals may-change pre-1.0) applies; §1+§3 not invoked.
+  (loop round 13)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
