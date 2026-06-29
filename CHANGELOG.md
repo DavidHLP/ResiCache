@@ -404,6 +404,25 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   never changes without a major bump, and the seven 1.0 graduation
   criteria. Required reading before any public API surface change per the
   loop chicken-egg gate.
+- **Per-handler chain observability — correlated DEBUG + MDC requestId
+  (foundation)**: `CacheHandlerChain.execute` now stamps a per-execution
+  `requestId` into the SLF4J `MDC` (`CacheHandlerChain.MDC_REQUEST_ID_KEY`),
+  and `AbstractCacheHandler` emits a single
+  `[chain] handler={} decision={} key={} requestId={}` DEBUG line at the
+  chain-advance point for every handler the engine evaluates. One GET/PUT's
+  DEBUG trace is now correlated by a single `requestId` across all handlers
+  and their decisions (guide §223d / line 388 / line 248 contract).
+  Defensive snapshot/restore — only its own MDC key is touched (never
+  `MDC.clear()`, so host MDC like `traceId` is preserved); `requestId` uses
+  `ThreadLocalRandom` (non-blocking on the cache hot path, avoiding
+  `SecureRandom` entropy contention). No public API surface touched (internal
+  logging + MDC only; `STABILITY.md` §2 internals may-change). Foundation of
+  the guide §223 per-handler observability item — Observation spans, per-handler
+  `resicache.handler.<name>.fired` counters, and Micrometer tags land in
+  subsequent rounds. TDD: 2 new tests in `CacheHandlerChainTest`
+  (`MdcObservabilityTests`: requestId correlates across handlers + MDC cleared
+  post-execution + caller MDC restored); full verify 684/0/0/0 ✅ (+2, Skipped:
+  0, Testcontainers IT executed). (loop round 24)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →

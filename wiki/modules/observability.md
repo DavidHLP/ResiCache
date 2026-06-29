@@ -6,12 +6,16 @@ tags:
   - HealthIndicator
   - actuator
   - MeterRegistry
+  - chain
+  - MDC
   - 健康检查
-related: [auto-configuration, configuration, cache-core, early-expiration, serialization]
+related: [auto-configuration, configuration, cache-core, early-expiration, serialization, chain-of-responsibility]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/observability/RedisCacheHealthIndicator.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/MetricsAutoConfiguration.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/SerializerWhitelistStartupGuard.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChain.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
 status: stable
 created: 2026-06-21
 updated: 2026-06-29
@@ -72,6 +76,28 @@ public class MetricsAutoConfiguration { ... }
 ```
 
 设计意图:**把统计职责留在发生点**,避免中央 recorder 与 handler 间的耦合。Micrometer / `CacheStatisticsCollector` 已经是 Spring Cache 的标准机制,ResiCache 不重复造轮子。
+
+## 责任链执行可观测性(chain execution observability)
+
+除 handler 内就地统计外,责任链执行本身提供两个独立的 runtime 观测信号(见 [[chain-of-responsponsibility]]):
+
+### `resicache.chain.execute` Micrometer Timer(WS-1.4)
+
+`CacheHandlerChain` 构造时(仅 `MeterRegistry` 在 classpath)注册单个 Timer `resicache.chain.execute`,记录**整条链的 full lifecycle**(head handle + post-process)。`ObjectProvider<MeterRegistry>` 允许 registry 缺失(测试 stub / 无 actuator 环境)—— 缺时计时静默 no-op,行为不变。本 tick 为单 Timer(无 tags);per-cacheName / per-operation tags 与 per-handler Micrometer tags 留后续 release(guide §223,line 291 移至 v0.1.0)。
+
+### Per-handler `[chain]` DEBUG 日志 + MDC requestId 关联(R24)
+
+`CacheHandlerChain.execute(CacheContext)` 每次执行 stamp 一个 `requestId` 进 SLF4J `MDC`(`CacheHandlerChain.MDC_REQUEST_ID_KEY = "requestId"`),`AbstractCacheHandler.handle` 在**单点 chain-advance** 处对每个被引擎求值的 handler 记录:
+
+```
+[chain] handler=BloomFilterHandler decision=CONTINUE key=resicache:users:42 requestId=7f3a9c1b2e0d4
+```
+
+- **关联性**:一次 GET/PUT 内所有 handler 的 DEBUG 行共享同一 `requestId`,可在日志中按 `requestId` 串联整条链的决策序列(guide §223d / line 388 / line 248「单 requestId 串所有 handler + decision」契约)。这是后续 hot-key auto-refresh / adaptive TTL 等「non-deterministic 厚化」的前置可观测性前提。
+- **快照/恢复**:execute 用 snapshot/restore —— 只动自己的 key,finally 恢复调用方原值,**不**用 `MDC.clear()` 误清宿主线程其它 MDC(如 `traceId`),与 `RedisProCacheWriter` 异步路径的防御式 MDC 风格一致。
+- **requestId 生成**:用 `ThreadLocalRandom` 而非 `UUID.randomUUID()` —— execute 是缓存热路径(每次 GET/PUT 必经),规避 `SecureRandom` 熵竞争 / 潜在阻塞;64-bit 无符号十六进制对日志关联已足够。
+- **降级**:DEBUG 关闭时 `log.debug` 静默 no-op(SLF4J 标准门控);`requestId` 仍 stamp(为后续 Observation span 关联预留)。
+- **scope**:这是 guide §223 per-handler observability 大项的**地基**((d));(e) Observation spans、per-handler `resicache.handler.<name>.fired` counter、Micrometer tags 留后续轮次。
 
 ## 前置条件与降级
 
