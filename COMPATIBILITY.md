@@ -11,8 +11,7 @@ Builds pass full `verify -Pboot4 -B` (tests + JaCoCo 70%/40% gate + 13 Testconta
 > line (Boot 3.4.13 / Java 17 / Redisson 3.27). WS-1.1 FIRE M1–M4 migrated to Boot 4
 > and merged into `master` at `38c514a`; the dual-branch (`master` / `boot4`)
 > strategy is **abandoned**. Boot 3.4 has been OSS-EOL since 2025-12; no `boot3`
-> compatibility line is retained. See `CHANGELOG.md` WS-1.1 FIRE and `HANDOFF.md`
-> for migration context.
+> compatibility line is retained. See `CHANGELOG.md` WS-1.1 FIRE for migration context.
 
 ## Supported versions
 
@@ -34,7 +33,7 @@ Builds pass full `verify -Pboot4 -B` (tests + JaCoCo 70%/40% gate + 13 Testconta
 - **`master` line (sole line)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0 + Spring 7
   + Java 21 + Redisson 3.50. Activate locally with `./mvnw verify -Pboot4 -B`.
   The `boot4` Maven profile selects Boot 4 dependencies. The pre-FIRE `boot3`
-  default in `pom.xml` is being removed in a follow-up tick (see `TASK_BACKLOG.md` §2 #4).
+  default in `pom.xml` has been removed (the `boot4` profile is now the sole default; commit `9ad22bf`).
 - **Boot 4 modularization note**: Boot 4 relocated packages
   (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*`,
   `o.s.b.actuate.health.*` → `o.s.b.health.contributor.*`) and SDR 4 renamed
@@ -42,8 +41,7 @@ Builds pass full `verify -Pboot4 -B` (tests + JaCoCo 70%/40% gate + 13 Testconta
   drove FIRE; all imports are Boot 4-aligned.
 - **CI coverage**: `master` runs full `verify -Pboot4` on Java 21 against Boot 4.0
   via `.github/workflows/ci.yml`. The historical `.github/workflows/ci-boot4.yml`
-  and the `compatibility` job in `ci.yml` are being consolidated in a follow-up
-  tick (see `TASK_BACKLOG.md` §2 #4 + §3 P1).
+  and the `compatibility` job in `ci.yml` have been removed (commit `6f00471`).
 - **Not supported**: Spring Boot 2.x and 3.x. No `boot3` compatibility line is
   maintained; users on Boot 3.x should remain on ResiCache v0.0.x or migrate.
 - **Pre-1.0 caveat**: matrix coverage is best-effort until 1.0.
