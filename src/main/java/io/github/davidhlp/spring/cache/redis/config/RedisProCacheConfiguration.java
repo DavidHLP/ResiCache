@@ -7,6 +7,7 @@ import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -59,14 +60,11 @@ public class RedisProCacheConfiguration {
     @ConditionalOnMissingBean(RedisCacheConfiguration.class)
     public RedisCacheConfiguration defaultRedisCacheConfiguration(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
-            RedisProCacheProperties properties) {
+            RedisProCacheProperties properties,
+            SecureJacksonSerializerFactory serializerFactory) {
+        // Round 11:装配走单点 factory,与 RedisConnectionConfiguration 同源。
         SecureJacksonRedisSerializer valueSerializer =
-                new SecureJacksonRedisSerializer(
-                        objectMapper,
-                        properties.getSerializer().getAllowedPackagePrefixes(),
-                        properties.getSerializer().isFailOnUnknownType(),
-                        properties.getSerializer().getTypeProperty(),
-                        properties.getSerializer().isPolymorphicTypingEnabled());
+                serializerFactory.create(objectMapper, properties.getSerializer());
 
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(properties.getDefaultTtl())
