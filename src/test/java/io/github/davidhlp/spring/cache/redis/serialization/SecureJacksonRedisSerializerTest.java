@@ -221,6 +221,29 @@ class SecureJacksonRedisSerializerTest {
         }
 
         @Test
+        @DisplayName("deserialize rejection message contains remediation property key")
+        void deserialize_rejectionMessage_containsRemediationPropertyKey() {
+            // Per COMPETITIVENESS_GUIDE.md §3 pillar B1 + §5.2 friction 2: the
+            // rejection message must tell the user the exact property key to fix
+            // the whitelist, so they don't have to round-trip the docs to debug
+            // the most common first-contact failure. The original message
+            // ("Type not in deserialization whitelist: <class>") left them
+            // guessing the property name. STABILITY.md §2 classifies diagnostic
+            // message text as pre-1.0 "may change" (no public API impact).
+            List<String> restrictedPrefixes = List.of("com.notallowed");
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper, restrictedPrefixes);
+
+            String maliciousJson = "{\"version\":2,\"payload\":{"
+                + "\"@class\":\"com.attacker.MaliciousGadget\"}}";
+
+            assertThatThrownBy(
+                    () -> serializer.deserialize(maliciousJson.getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(SerializationException.class)
+                .hasMessageContaining("resi-cache.serializer.allowed-package-prefixes");
+        }
+
+        @Test
         @DisplayName("allows types within allowed package prefix (roundtrip preserves type)")
         void serialize_allowsTypesWithinWhitelist() {
             List<String> allowedPrefixes = List.of(

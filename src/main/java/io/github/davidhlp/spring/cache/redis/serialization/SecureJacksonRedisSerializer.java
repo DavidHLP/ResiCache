@@ -184,7 +184,8 @@ public class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
                 String className = classNode.asText();
                 if (!isAllowedClass(className)) {
                     throw new SerializationException(
-                            "Type not in deserialization whitelist: " + className);
+                            "Type not in deserialization whitelist: " + className
+                                + ". Add its package to resi-cache.serializer.allowed-package-prefixes.");
                 }
             }
             node.fields().forEachRemaining(entry -> validateTypeIds(entry.getValue()));
