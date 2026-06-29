@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ResiCache documentation (wiki/)
+    url: https://github.com/DavidHLP/ResiCache/tree/master/wiki
+    about: Read wiki/overview.md (start here), wiki/modules/ (mechanisms), and wiki/adr/ (decisions) before asking.
+  - name: STABILITY.md (API stability contract)
+    url: https://github.com/DavidHLP/ResiCache/blob/master/STABILITY.md
+    about: Check what's stable vs may-change before reporting a "behavior changed" issue.
+  - name: CHANGELOG.md
+    url: https://github.com/DavidHLP/ResiCache/blob/master/CHANGELOG.md
+    about: The change may already be documented (especially ⚠️ BREAKING entries).

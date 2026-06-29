@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a new protection mechanism, config option, or DX improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! ResiCache has a strong "don't re-invent, defer to
+        the right tool" culture (see README "Not in Scope") — please check
+        that the feature isn't already covered by Resilience4j / Caffeine /
+        Spring native infrastructure before suggesting.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can't you do today, and why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: The solution you'd like
+      description: |
+        What you'd like ResiCache to do. A config key, annotation attribute,
+        metric, or doc — please be specific.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: How are you working around this today? Why is the workaround insufficient?
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: This feature is...
+      options:
+        - In scope (a cache protection mechanism)
+        - Observability / DX
+        - A new annotation attribute or config option
+        - Documentation
+        - Not sure (may overlap with Resilience4j / Caffeine)
+    validations:
+      required: true
