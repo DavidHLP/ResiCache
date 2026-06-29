@@ -5,7 +5,7 @@ at `38c514a`):
 
 - **`master` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50**.
 
-Builds pass full `verify -Pboot4 -B` (tests + JaCoCo 70%/40% gate + 13 Testcontainers IT).
+Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + 13 Testcontainers IT).
 
 > **Historical context**: Pre-FIRE (≤ commit `3e72546`), `master` carried a `boot3`
 > line (Boot 3.4.13 / Java 17 / Redisson 3.27). WS-1.1 FIRE M1–M4 migrated to Boot 4
@@ -20,7 +20,7 @@ Builds pass full `verify -Pboot4 -B` (tests + JaCoCo 70%/40% gate + 13 Testconta
 | Component | Version | Tested |
 |-----------|---------|--------|
 | Java | 21 | 21 |
-| Spring Boot | 4.0.0 | 4.0.x (full `verify -Pboot4`) |
+| Spring Boot | 4.0.0 | 4.0.x (full `verify -B`) |
 | Spring Framework | 7.x | (via Boot) |
 | Spring Cache | 7.x | (via Boot) |
 | Spring Data Redis | 4.0.x | (via Boot) |
@@ -31,15 +31,16 @@ Builds pass full `verify -Pboot4 -B` (tests + JaCoCo 70%/40% gate + 13 Testconta
 ## Spring Boot version policy
 
 - **`master` line (sole line)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0 + Spring 7
-  + Java 21 + Redisson 3.50. Activate locally with `./mvnw verify -Pboot4 -B`.
-  The `boot4` Maven profile selects Boot 4 dependencies. The pre-FIRE `boot3`
-  default in `pom.xml` has been removed (the `boot4` profile is now the sole default; commit `9ad22bf`).
+  + Java 21 + Redisson 3.50. Build/verify locally with `./mvnw verify -B`
+  (no profile flag needed). Boot 4 is configured directly in `pom.xml` as the
+  sole build line — the historical `boot4`/`boot3` Maven profiles were removed
+  in commit `9ad22bf`.
 - **Boot 4 modularization note**: Boot 4 relocated packages
   (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*`,
   `o.s.b.actuate.health.*` → `o.s.b.health.contributor.*`) and SDR 4 renamed
   `RedisCacheWriter` methods (`remove`→`evict`, `clean`→`clear`). These breaks
   drove FIRE; all imports are Boot 4-aligned.
-- **CI coverage**: `master` runs full `verify -Pboot4` on Java 21 against Boot 4.0
+- **CI coverage**: `master` runs full `verify -B` on Java 21 against Boot 4.0
   via `.github/workflows/ci.yml`. The historical `.github/workflows/ci-boot4.yml`
   and the `compatibility` job in `ci.yml` have been removed (commit `6f00471`).
 - **Not supported**: Spring Boot 2.x and 3.x. No `boot3` compatibility line is
