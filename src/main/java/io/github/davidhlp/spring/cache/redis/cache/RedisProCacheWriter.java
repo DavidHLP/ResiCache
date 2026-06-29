@@ -10,6 +10,7 @@ import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
+import org.slf4j.MDC;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.springframework.context.expression.AnnotatedElementKey;
 
@@ -24,6 +25,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
@@ -210,16 +212,28 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         CacheInvocationContext snapshot =
                 CacheInvocationContext.snapshot(methodMetadataResolver);
         boolean restored = false;
+        // WS-1.4 tracing 跨 commonPool 透传:capture MDC(traceId/spanId 等)在
+        // 提交任务时,async 线程内 restore 保证日志/Trace 上下文可关联;
+        // finally 再清(防 commonPool 线程复用导致 MDC 跨任务泄漏)。
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+        boolean mdcRestored = false;
         try {
             if (snapshot != null) {
                 snapshot.restore(methodMetadataResolver);
                 restored = true;
+            }
+            if (mdcSnapshot != null && !mdcSnapshot.isEmpty()) {
+                MDC.setContextMap(mdcSnapshot);
+                mdcRestored = true;
             }
             return work.get();
         } finally {
             // 仅在 restore 过的线程上清,避免误清其他并发调用方设置的状态
             if (restored) {
                 DefaultMethodMetadataResolver.clearStatic();
+            }
+            if (mdcRestored) {
+                MDC.clear();
             }
         }
     }
