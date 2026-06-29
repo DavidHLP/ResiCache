@@ -158,6 +158,23 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   its own only if a reader can find it. Docs-only — `STABILITY.md` §2
   (docs may-change pre-1.0) applies; §1+§3 not invoked.
   (loop round 14)
+- **Startup-time misconfig WARN** — new `@Component
+  SerializerWhitelistStartupGuard` listens to `ApplicationReadyEvent` and
+  warns at WARN level when `resi-cache.serializer.allowed-package-prefixes`
+  is `null` or `[]`. Without this guard, an over-eager user clearing the
+  whitelist to "be permissive" gets silent runtime
+  `SerializationException` on every custom-type deserialize — the most
+  common misconfig footgun for SecureJackson. Predicate `shouldWarn()` is
+  package-private for unit testability. **Non-breaking** — default value
+  stays `[io.github.davidhlp]`, no property key added/removed, no wire
+  format change. `STABILITY.md` §1+§3 not invoked; §2 (internals
+  may-change pre-1.0) applies. Round 15 TDD: 4 tests in
+  `SerializerWhitelistStartupGuardTest` (null / [] / [io.example.app] /
+  default); full verify 679/0/0/0 ✅ (+4 vs Round 11 baseline 675). This
+  is the **WARN scaffolding** for the larger GUIDE §4 "whitelist
+  auto-derive" item (which would additionally BeanFactory-derive the host
+  app root package — that part is ⚠️ BREAKING and intentionally deferred).
+  (loop round 15)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
