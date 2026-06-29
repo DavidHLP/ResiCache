@@ -108,6 +108,16 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `SyncSupport` degrades to a JVM-internal monitor when no lock manager is
   present.)
 
+### Documentation alignment
+- Reconcile `CLAUDE.md` and `AGENTS.md` to current versions: Java 21 (was
+  "17+"), Spring Boot 4.0.0 (was 3.4.13), Redisson 3.50.0 (was 3.27.0).
+  `AGENTS.md` was reduced to a pointer to `CLAUDE.md` because its prior
+  full-duplicate had drifted — it still listed the `a5ab55b`-removed
+  `wrapper/`/`spi/`/`event/`/`evaluator/`/`CacheMetricsRecorder` and described
+  customizability via "Java ServiceLoader" (superseded by Spring
+  `@Bean` + `@ConditionalOnMissingBean`). Pointer preserves tool compatibility
+  while preventing future drift. (loop round 1)
+
 ## [0.0.2] — current
 
 ### Removed — over-engineering cleanup (commit `a5ab55b`, ~2,989 lines)
