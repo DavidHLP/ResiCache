@@ -270,6 +270,35 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies.
   (loop round 19)
+- **`SerializerWhitelistStartupGuardIntegrationTest`** — new
+  integration test closing the R15 test coverage gap (round 20).
+  R15's `SerializerWhitelistStartupGuardTest` covered the
+  `shouldWarn()` predicate but not the actual Spring event-firing
+  path. This new test uses `ApplicationContextRunner` + Logback
+  `ListAppender` to verify the end-to-end chain:
+  `ApplicationReadyEvent` → `@EventListener` invocation →
+  `shouldWarn()` evaluation → SLF4J WARN emission.
+  Three scenarios: empty list (must warn, message contains
+  remediation hint with both `com.example.*` and
+  `com.example.dto`); populated list (no warn); default
+  `[io.github.davidhlp]` (no warn). Implementation note:
+  `ApplicationContextRunner` does NOT auto-fire
+  `ApplicationReadyEvent` (that's `SpringApplication.run()`'s
+  job), so the test manually publishes the event after context
+  startup. The 4-arg ctor
+  `(SpringApplication, String[], ConfigurableApplicationContext, Duration)`
+  is the Spring Boot 4.0 signature — earlier 3-arg ctor was
+  removed. **Design tradeoff**: beans registered via `withBean(...)`
+  lambdas instead of `@Configuration @Bean` — the latter would be
+  picked up by component scan in other IT test contexts and
+  conflict with the production `@ConfigurationProperties` bean
+  (verified by the verify-red event during R20: 13+ test classes
+  failed "Parameter 2 of method redisCacheTemplate" with
+  duplicate-bean errors before switching to `withBean`).
+  No public API change. Full verify 682/0/0/0 ✅ (+3 vs
+  R15 baseline 679). STABILITY.md §1+§3 not invoked;
+  §2 (tests may evolve pre-1.0) applies.
+  (loop round 20)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
