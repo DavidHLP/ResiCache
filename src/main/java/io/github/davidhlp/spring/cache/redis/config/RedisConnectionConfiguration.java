@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -33,21 +34,18 @@ public class RedisConnectionConfiguration {
     public RedisTemplate<String, Object> redisCacheTemplate(
             RedisConnectionFactory redisConnectionFactory,
             ObjectMapper objectMapper,
-            RedisProCacheProperties properties) {
+            RedisProCacheProperties properties,
+            SecureJacksonSerializerFactory serializerFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(redisConnectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        // 与 RedisProCacheConfiguration#defaultRedisCacheConfiguration(行 63-69)对称:让
-        // resi-cache.serializer.* 属性真正生效,而不是回退 SecureJacksonRedisSerializer
-        // 默认([io.github.davidhlp] 白名单 + 多态类型信息关闭)。Round 5 fix。
+        // Round 11:SecureJacksonSerializerFactory 抽出后,装配走单点
+        // （Round 5 fix 保留 — props 真的传进去）。Round 5 注释里的「与
+        // RedisProCacheConfiguration ... 镜像」警示被工厂吸收,两个装配点
+        // 再不会漂移。
         SecureJacksonRedisSerializer jsonSerializer =
-                new SecureJacksonRedisSerializer(
-                        objectMapper,
-                        properties.getSerializer().getAllowedPackagePrefixes(),
-                        properties.getSerializer().isFailOnUnknownType(),
-                        properties.getSerializer().getTypeProperty(),
-                        properties.getSerializer().isPolymorphicTypingEnabled());
+                serializerFactory.create(objectMapper, properties.getSerializer());
 
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);
