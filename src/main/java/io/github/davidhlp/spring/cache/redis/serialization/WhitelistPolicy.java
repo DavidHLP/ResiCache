@@ -88,9 +88,13 @@ public final class WhitelistPolicy {
     /**
      * 判断给定全限定类名是否在 JSON 反序列化白名单内。
      *
-     * <p>判断规则（与原 {@code SecureJacksonRedisSerializer.isAllowedClass} 完全一致）：
+     * <p>判断规则（与原 {@code SecureJacksonRedisSerializer.isAllowedClass} 完全一致，新增
+     *   {@code .*} 通配符项除外 — 见 step 1）：
      * <ol>
-     *   <li>命中任一允许前缀（{@link #allowedPackagePrefixes}）→ 放行</li>
+     *   <li>命中任一允许前缀（{@link #allowedPackagePrefixes}）→ 放行；若前缀以
+     *       {@code .*} 结尾则视为通配符前缀（如 {@code com.example.*} 匹配
+     *       {@code com.example.Foo} 与 {@code com.example.sub.Bar}），Round 9 增量扩展；
+     *       其他形式按字面 {@code startsWith} 匹配（即原行为，向后兼容）</li>
      *   <li>{@code java.lang.} 前缀 → 放行（基础类型包装、String 等）</li>
      *   <li>{@link #ALLOWED_JAVA_UTIL_CLASSES} 逐项枚举命中 → 放行（集合类）</li>
      *   <li>{@code java.time.} 前缀 → 放行（时间类型）</li>
@@ -103,7 +107,7 @@ public final class WhitelistPolicy {
      */
     public boolean isClassNameAllowed(String className) {
         for (String prefix : allowedPackagePrefixes) {
-            if (className.startsWith(prefix)) {
+            if (matchesPrefix(className, prefix)) {
                 return true;
             }
         }
@@ -111,6 +115,22 @@ public final class WhitelistPolicy {
                 || ALLOWED_JAVA_UTIL_CLASSES.contains(className)
                 || className.startsWith("java.time.")
                 || className.startsWith("java.math.");
+    }
+
+    /**
+     * 单条前缀匹配规则（Round 9 引入）。
+     *
+     * <p>若前缀以 {@code .*} 结尾，视为通配前缀：去掉 {@code .*} 后要求
+     * {@code className} 等于或以 {@code <前缀去.*> + "."} 开头（覆盖
+     * {@code com.example} 与 {@code com.example.foo.bar} 两种情形）。其他形式
+     * 按字面 {@link String#startsWith(String)} 判断（即原行为，向后兼容）。
+     */
+    private static boolean matchesPrefix(String className, String prefix) {
+        if (prefix.endsWith(".*")) {
+            String packageOnly = prefix.substring(0, prefix.length() - 2);
+            return className.equals(packageOnly) || className.startsWith(packageOnly + ".");
+        }
+        return className.startsWith(prefix);
     }
 
     /**
