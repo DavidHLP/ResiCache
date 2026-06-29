@@ -11,9 +11,7 @@ import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
@@ -48,30 +46,20 @@ public class SyncLockHandler extends AbstractCacheHandler {
 
     private final RedisProCacheProperties properties;
 
-    /**
-     * Path C 后续(WS-1.4) — per-handler tag:分布式锁成功获取事件计数。
-     * <p>ObjectProvider 允许 MeterRegistry 缺失 — 没有 registry 时 lockAcquiredCounter
-     * 静默 no-op,行为不变。
-     */
-    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
+    /** Path C 后续(WS-1.4) — 分布式锁成功获取事件计数。 */
     private Counter lockAcquiredCounter;
 
     public SyncLockHandler(SyncSupport syncSupport,
-                           RedisProCacheProperties properties,
-                           ObjectProvider<MeterRegistry> meterRegistryProvider) {
+                           RedisProCacheProperties properties) {
         this.syncSupport = syncSupport;
         this.properties = properties;
-        this.meterRegistryProvider = meterRegistryProvider;
     }
 
-    @PostConstruct
-    void initMetrics() {
-        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
-        if (registry != null) {
-            this.lockAcquiredCounter = Counter.builder("resicache.handler.sync.lock.acquired")
-                    .description("Distributed lock acquired (sync=true cache operation entered critical section)")
-                    .register(registry);
-        }
+    @Override
+    protected void onAttachMetrics(MeterRegistry registry) {
+        this.lockAcquiredCounter = registerCounter(registry,
+                "resicache.handler.sync.lock.acquired",
+                "Distributed lock acquired (sync=true cache operation entered critical section)");
     }
 
     @Override
@@ -108,9 +96,7 @@ public class SyncLockHandler extends AbstractCacheHandler {
         context.setAttribute(LOCK_ACQUIRED_KEY, true);
 
         // WS-1.4 per-handler tag:分布式锁成功获取事件计数
-        if (lockAcquiredCounter != null) {
-            lockAcquiredCounter.increment();
-        }
+        safeIncrement(lockAcquiredCounter);
 
         // 在锁内执行后续 Handler
         CacheResult result = syncSupport.executeSync(

@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Duration;
 
@@ -25,7 +24,6 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -45,7 +43,7 @@ class TtlHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new TtlHandler(ttlPolicy, null);
+        handler = new TtlHandler(ttlPolicy);
     }
 
     private CacheContext createContext(CacheOperation operation, Duration ttl, RedisCacheableOperation cacheOp) {
@@ -70,12 +68,9 @@ class TtlHandlerTest {
         @DisplayName("randomTtl=true → 自增 resicache.handler.ttl.jittered")
         void randomTtlTrue_incrementsJitteredCounter() {
             SimpleMeterRegistry registry = new SimpleMeterRegistry();
-            @SuppressWarnings("unchecked")
-            ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
-            when(provider.getIfAvailable()).thenReturn(registry);
 
-            TtlHandler h = new TtlHandler(ttlPolicy, provider);
-            h.initMetrics();
+            TtlHandler h = new TtlHandler(ttlPolicy);
+            h.attachMeterRegistry(registry);
             when(cacheOperation.getTtl()).thenReturn(60L);
             when(cacheOperation.isRandomTtl()).thenReturn(true);
             when(cacheOperation.getVariance()).thenReturn(0.2f);
@@ -91,12 +86,9 @@ class TtlHandlerTest {
         @DisplayName("randomTtl=false → counter 不自增")
         void randomTtlFalse_doesNotIncrement() {
             SimpleMeterRegistry registry = new SimpleMeterRegistry();
-            @SuppressWarnings("unchecked")
-            ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
-            when(provider.getIfAvailable()).thenReturn(registry);
 
-            TtlHandler h = new TtlHandler(ttlPolicy, provider);
-            h.initMetrics();
+            TtlHandler h = new TtlHandler(ttlPolicy);
+            h.attachMeterRegistry(registry);
             when(cacheOperation.getTtl()).thenReturn(60L);
             when(cacheOperation.isRandomTtl()).thenReturn(false);
             when(cacheOperation.getVariance()).thenReturn(0.2f);

@@ -40,7 +40,7 @@ class NullValueHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new NullValueHandler(nullValuePolicy, null);
+        handler = new NullValueHandler(nullValuePolicy);
     }
 
     private CacheContext createContext(CacheOperation operation, Object deserializedValue) {
