@@ -500,6 +500,11 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `resi-cache.serializer.probe-enabled` / `probe-sample-size` keys in the
   configuration wiki page (yaml example + probe note) — the §1.7
   source-changed→sync-wiki obligation. Docs only. (loop round 32)
+- **chain-of-responsibility.md wiki sync (R24/R25 follow-up)**: the chain
+  architecture page documented handle() but predated R24 ([chain] DEBUG +
+  MDC requestId) and R25 (resicache.handler.fired counter) — both fire
+  inside handle(). Added an observability callout + [[observability]]
+  cross-link. §1.7 follow-up. Docs only. (loop round 33)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
