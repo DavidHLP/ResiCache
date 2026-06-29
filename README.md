@@ -323,9 +323,9 @@ See [CHANGELOG.md](CHANGELOG.md) for details.
 
 | Dependency | Version |
 |------------|---------|
-| Spring Boot | 3.4.13 (parent) |
-| Java | 17+ |
-| Redisson | 3.27.0 (optional) |
+| Spring Boot | 4.0.0 (parent) |
+| Java | 21+ |
+| Redisson | 3.50.0 (optional) |
 | Caffeine | 3.1.8 |
 | Testcontainers | 1.20.4 (CI Docker compatibility override) |
 

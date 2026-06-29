@@ -8,7 +8,7 @@ tags:
 related: [index, chain-of-responsibility, auto-configuration, configuration, cache-lifecycle]
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-29
 ---
 
 # ResiCache 概览
@@ -23,10 +23,10 @@ ResiCache 是 **Spring Cache 的防护增强注解生态**——在 `@Cacheable`
 
 | 层 | 技术 | 版本 |
 |---|---|---|
-| 语言 | Java | 17+ |
-| 框架 | Spring Boot | 3.4.13 |
+| 语言 | Java | 21+ |
+| 框架 | Spring Boot | 4.0.0 |
 | 缓存 | Spring Cache + Spring Data Redis | — |
-| 分布式锁 | Redisson | 3.27.0 |
+| 分布式锁 | Redisson | 3.50.0 |
 | 本地缓存 / 位集 | Caffeine | 3.1.8 |
 | 构建 | Maven | 3.x |
 | 测试 | JUnit 5 + Testcontainers + AssertJ + Awaitility | — |

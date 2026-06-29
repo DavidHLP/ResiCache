@@ -333,9 +333,9 @@ ResiCache **刻意不做**以下能力，避免过度膨胀——请用专业工
 
 | 依赖 | 版本 |
 |------|------|
-| Spring Boot | 3.4.13（parent） |
-| Java | 17+ |
-| Redisson | 3.27.0（optional） |
+| Spring Boot | 4.0.0（parent） |
+| Java | 21+ |
+| Redisson | 3.50.0（optional） |
 | Caffeine | 3.1.8 |
 | Testcontainers | 1.20.4（CI Docker 兼容覆盖） |
 
