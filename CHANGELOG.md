@@ -122,6 +122,32 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `NoClassDefFoundError`. (`DistributedLockManager` was already class-guarded;
   `SyncSupport` degrades to a JVM-internal monitor when no lock manager is
   present.)
+- **`resi-cache.serializer.*` properties were silently dropped by the low-level
+  `RedisTemplate<String, Object> redisCacheTemplate` bean** (the one used by
+  `RedisProCacheWriter` for direct `opsForValue/HashOperations`). Setting e.g.
+  `resi-cache.serializer.allowed-package-prefixes=com.myapp.domain` or
+  `resi-cache.serializer.polymorphic-typing-enabled=true` was honored by the
+  `@Cacheable` path (production `RedisProCacheConfiguration
+  #defaultRedisCacheConfiguration`, lines 63-69) but **not** by the writer
+  path → two code paths, two different whitelists, silent inconsistency. The
+  bug had been latent since v0.0.1: the bean instantiated
+  `new SecureJacksonRedisSerializer(objectMapper)` (no-list ctor = defaults)
+  instead of mirroring the 5-arg ctor that takes property values. Fixed by
+  injecting `RedisProCacheProperties` and passing `getSerializer()
+  .{getAllowedPackagePrefixes, isFailOnUnknownType, getTypeProperty,
+  isPolymorphicTypingEnabled}` — same wiring shape as
+  `RedisProCacheConfiguration`. Test mirror `TestRedisConfiguration
+  #redisCacheTemplate` (`@Primary` IT bean) fixed symmetrically so ITs
+  actually verify the production bean. `STABILITY.md` §1 lists
+  `resi-cache.*` keys as stable, which implies behavior consistency; this
+  fix tightens the contract. Regression test:
+  `RedisConnectionConfigurationTest` (Testcontainers, `@DynamicPropertySource`
+  sets custom whitelist + polymorphic on, roundtrips a POJO from
+  `com.example.round5`, asserts deserialized is the original POJO instance —
+  would fail before this fix with "Type not in deserialization whitelist" or
+  degrade to `LinkedHashMap` if whitelist alone were honored). TDD: failing
+  test → fix → green, full verify 669 tests / 0 failures / 0 skipped.
+  (loop round 5)
 
 ### Documentation alignment
 - Reconcile `CLAUDE.md` and `AGENTS.md` to current versions: Java 21 (was
