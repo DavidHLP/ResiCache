@@ -83,6 +83,21 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   by `@ConditionalOnProperty(prefix = "resi-cache", name = "enabled",
   matchIfMissing = true)`. Set `resi-cache.enabled=false` to fully disable
   ResiCache without removing the dependency.
+- **Wildcard `.*` suffix support in `resi-cache.serializer.allowed-package-prefixes`**:
+  `WhitelistPolicy.isClassNameAllowed` now matches a trailing `.*` on each prefix
+  as a wildcard sentinel (in addition to the existing literal-prefix `startsWith`
+  match). `com.example.*` now matches `com.example.Foo`, `com.example.sub.Bar`,
+  `com.example.foo.bar.baz.Qux`, etc. (any depth) via the new private helper
+  `matchesPrefix(className, prefix)`. Non-wildcard forms keep identical literal
+  behavior — `STABILITY.md` §1 (resi-cache.* keys stable) holds, no key added
+  or removed. Behavior-class: **additive only** — existing configurations
+  behave identically; users adopting `.*` gain capability without affecting
+  anyone. Round 9 TDD: 4 new tests in `WhitelistPolicyTest` (3 wildcard + 1
+  backward-compat); full verify 673/0/0/0 ✅ (+4 vs Round 5 baseline 669).
+  Red-phase correction recorded in the backward-compat test body comment:
+  literal `com.example` still matches `com.exampleX.Foo` per `String.startsWith`
+  semantics (no dot-boundary enforcement for literal form), since introducing
+  it would break existing users — intentionally deferred as a separate decision.
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
