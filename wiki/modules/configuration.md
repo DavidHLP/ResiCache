@@ -12,7 +12,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-06-29
 ---
 
 # 配置体系(`resi-cache.*`)
@@ -75,12 +75,14 @@ Redisson 客户端与 Redis 部署形态(单机/哨兵/集群)配置,由 [[auto-
 
 ```yaml
   serializer:
-    allowed-package-prefixes: [io.github.davidhlp]   # 反序列化白名单
-    fail-on-unknown-type: false                      # 未知类型是否抛错
+    allowed-package-prefixes: [io.github.davidhlp]   # 反序列化白名单(支持 .* 通配)
+    fail-on-unknown-type: true                       # 未知类型是否抛错(默认 true,降级到 miss 由 [[cache-lifecycle]] 处理)
     type-property: "@class"                          # 类型判定属性名
-    polymorphic-typing-enabled: true                 # 多态类型开关
+    polymorphic-typing-enabled: false                # 多态类型开关(默认 false)
 ```
 → [[serialization]],防 Jackson 多态类型攻击。
+
+`allowed-package-prefixes` 通配(R9 起):`com.example.*` 匹配 `com.example.Foo` 与任意深度的 `com.example.sub.bar.Qux`(`WhitelistPolicy.matchesPrefix` dot-boundary 保护);literal 前缀如 `com.example` 沿用 `String.startsWith` 语义(intentional,候选 4 dot-boundary 仍 deferred as BREAKING)。
 
 ## per-cache 覆盖(`caches.<name>`)
 
@@ -114,9 +116,19 @@ Redisson 客户端与 Redis 部署形态(单机/哨兵/集群)配置,由 [[auto-
 
 `@Validated` + JSR-303 约束(如 `default-ttl` 标 `@NotNull`)在启动期 fail-fast。更复杂的缓存注解合法性校验由 `CachingEnablementValidation`(含 `CachingEnabledValidator`)负责,见 [[auto-configuration]]。
 
+## 启动期守卫(SerializerWhitelistStartupGuard,R15)
+
+`src/main/java/io/github/davidhlp/spring/cache/redis/config/SerializerWhitelistStartupGuard.java` — `@Component`,监听 `ApplicationReadyEvent`,检查 `resi-cache.serializer.allowed-package-prefixes` 是否为 `null` 或 `[]`,若空则发 **WARN** 日志,提示用户补回 host app root package。提示包含:
+
+> Set the property to include your host application's root package (e.g. `com.example.*` for wildcard, or `com.example.dto` for literal). Default `[io.github.davidhlp]` only covers ResiCache framework internal types.
+
+谓词 `shouldWarn()` package-private 供单元测试。不动 default value(默认仍是 `[io.github.davidhlp]`),不改 property key,**非 breaking** 改动。本守卫是 [[serialization]] 的运行时补充,也是指南 §4 「whitelist auto-derive」完整项(BEAN FACTORY 自推导 + WARN + explicit override authoritative,标 ⚠️ BREAKING)的 WARN scaffolding 部分。
+
+> 注意:这是 ResiCache 第二个 startup 守卫;另一个是 `SyncLockProperties.localOnly` 启动期告警(在 `RedisProCacheConfiguration` 装配时,见 [[breakdown-lock]])。两个 WARN 各自独立、各自防御一个 misconfig footgun,非重复。
+
 ## 相关
 
-- [[auto-configuration]] —— 这些配置如何被装配消费
+- [[auto-configuration]] —— 这些配置如何被装配消费(含 `SerializerWhitelistStartupGuard` 装配上下文)
 - [[annotations]] —— 注解级覆盖(最高优先级)
 - [[configure-behavior]] —— 三层配置的实操组合
 - [[serialization]] —— `serializer.*` 子节详解
