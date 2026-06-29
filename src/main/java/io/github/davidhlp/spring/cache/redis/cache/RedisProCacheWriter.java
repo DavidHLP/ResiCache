@@ -82,17 +82,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @Override
     @Nullable
     public byte[] get(@NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        String redisKey = typeSupport.bytesToString(key);
-        String actualKey = extractActualKey(name, redisKey);
-
-        // 构建上下文
-        CacheContext context =
-                buildContext(CacheOperation.GET, name, redisKey, actualKey, null, null, ttl);
-
-        // 执行责任链（使用缓存的 chain 实例）
-        CacheResult result = getChain().execute(context);
-
-        return result.getResultBytes();
+        return executeChain(CacheOperation.GET, name, key, null, ttl).getResultBytes();
     }
 
     @Override
@@ -163,18 +153,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        String redisKey = typeSupport.bytesToString(key);
-        String actualKey = extractActualKey(name, redisKey);
-
-        // 反序列化值
-        Object deserializedValue = typeSupport.deserializeFromBytes(value);
-
-        // 构建上下文
-        CacheContext context =
-                buildContext(CacheOperation.PUT, name, redisKey, actualKey, value, deserializedValue, ttl);
-
-        // 执行责任链（使用缓存的 chain 实例）
-        getChain().execute(context);
+        executeChain(CacheOperation.PUT, name, key, value, ttl);
     }
 
     @Override
@@ -245,33 +224,12 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        String redisKey = typeSupport.bytesToString(key);
-        String actualKey = extractActualKey(name, redisKey);
-
-        // 反序列化值
-        Object deserializedValue = typeSupport.deserializeFromBytes(value);
-
-        // 构建上下文
-        CacheContext context =
-                buildContext(CacheOperation.PUT_IF_ABSENT, name, redisKey, actualKey, value, deserializedValue, ttl);
-
-        // 执行责任链（使用缓存的 chain 实例）
-        CacheResult result = getChain().execute(context);
-
-        return result.getResultBytes();
+        return executeChain(CacheOperation.PUT_IF_ABSENT, name, key, value, ttl).getResultBytes();
     }
 
     @Override
     public void remove(@NonNull String name, @NonNull byte[] key) {
-        String redisKey = typeSupport.bytesToString(key);
-        String actualKey = extractActualKey(name, redisKey);
-
-        // 构建上下文
-        CacheContext context =
-                buildContext(CacheOperation.REMOVE, name, redisKey, actualKey, null, null, null);
-
-        // 执行责任链（使用缓存的 chain 实例）
-        getChain().execute(context);
+        executeChain(CacheOperation.REMOVE, name, key, null, null);
     }
 
     @Override
@@ -385,6 +343,34 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             return redisKey.substring(prefix.length());
         }
         return redisKey;
+    }
+
+    /**
+     * 同步执行责任链的统一入口:封装 key 解析 → 值反序列化 → 上下文构建 → 链执行 的公共 pipeline。
+     *
+     * <p>读路径(GET/PUT_IF_ABSENT)取返回字节;写路径(PUT/REMOVE)忽略返回值。
+     * clean(需 setKeyPattern)与带 operation 的 put 重载因上下文构建方式不同,不经此入口。
+     *
+     * @param operation 操作类型
+     * @param name 缓存名称
+     * @param key 原始 key 字节
+     * @param valueBytes 值字节(读路径/REMOVE 为 null)
+     * @param ttl TTL
+     * @return 责任链执行结果
+     */
+    private CacheResult executeChain(
+            CacheOperation operation,
+            String name,
+            byte[] key,
+            @Nullable byte[] valueBytes,
+            @Nullable Duration ttl) {
+        String redisKey = typeSupport.bytesToString(key);
+        String actualKey = extractActualKey(name, redisKey);
+        Object deserializedValue =
+                valueBytes != null ? typeSupport.deserializeFromBytes(valueBytes) : null;
+        CacheContext context =
+                buildContext(operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl);
+        return getChain().execute(context);
     }
 
     // 以下方法用于向后兼容，如果有其他地方调用
