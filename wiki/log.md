@@ -8,7 +8,7 @@ tags:
 related: [index, overview, README]
 status: stable
 created: 2026-06-21
-updated: 2026-06-29
+updated: 2026-06-30
 ---
 
 
@@ -17,6 +17,20 @@ updated: 2026-06-29
 wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subject>`(op ∈ init / ingest / improve / colorize / query / lint)。
 
 > 解析最近条目:`grep "^## \[" log.md | tail -5`
+
+---
+
+## [2026-06-30] improve | per-handler 语义 counter 装配单轨化(metrics deepening)
+
+架构深化候选 1 落地(来自 `/improve-codebase-architecture` 评审,经 grilling 定方案 A + 形状 2 + 范围仅 5 handler)。5 个 protection handler(`TtlHandler`/`NullValueHandler`/`SyncLockHandler`/`BloomFilterHandler`/`EarlyExpirationHandler`)的语义 counter 装配,从各自 `ObjectProvider<MeterRegistry>` + `@PostConstruct initMetrics()` + 运行时 `if (counter != null)` 自增,统一到基类模板:`AbstractCacheHandler#attachMeterRegistry`(工厂建链时调用)注册 uniform `fired` 后调 `protected onAttachMetrics(registry)` 钩子,子类 override 注册语义 counter;基类另提供 `registerCounter(registry, name, desc)` + `safeIncrement(counter)` helper(对齐 cache 层 `RedisProCache` 已有 private 先例)。
+
+- **deletion test**:删 ~60 行 5 处样板,换基类 ~15 行 helper,复杂度被基类吸收(非搬家)。
+- **行为变化**:disabled handler 语义 counter 不再注册(修正现存双轨不一致:`fired` 按进链注册、语义按 bean 存在注册),无监控依赖恒 0 counter,零 break。
+- **测试**:沿用 `CacheHandlerChainFactoryTest.FiredCounterWiringTests` 范式(`SimpleMeterRegistry` + attach 路径);`TtlHandlerTest` 改 `h.attachMeterRegistry(registry)` 触发;7 个 handler 测试构造点删尾部 `null`。`./mvnw clean verify` 绿:694 测试 / 0 失败 / JaCoCo 70%·40% 门禁 / checkstyle 0 违规。
+- **范围外**(已知平行重复,留后续 observability 统一轮次):`RedisBloomIFilter`(2 counter,不继承基类)、`RedisProCache`(private `registerCounter`/`safeIncrement`)、`RefreshTaskMetrics`(独立值对象)。
+- **ADR**:无冲突(不触碰 0002/0007;落实 0005「handlers 可替换」纪律但非其要求)。
+
+`[[observability]]` 加「语义 counter 装配单轨化」节 + frontmatter updated。
 
 ---
 

@@ -18,7 +18,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-29
+updated: 2026-06-30
 ---
 
 # 可观测性
@@ -107,6 +107,16 @@ public class MetricsAutoConfiguration { ... }
 - **查询示例**:`rate(resicache.handler.fired{handler="SyncLockHandler"}[5m])` = 该 handler 被引擎求值的频率 —— 回答「哪个保护机制在 fire、fire 多频繁」。
 - **与 R24 DEBUG 的关系**:counter = 结构化指标(告警 / Grafana 仪表盘),DEBUG log = 详细决策序列(哪个 key、什么 decision);两者互补,均为 guide §223 per-handler observability 的组成。
 - **新 metric 名**:`resicache.handler.fired`(R25)与 `resicache.handler.ttl.jittered`(R26,防雪崩 TTL jitter 应用计数)均为 pre-1.0 新增 metric(STABILITY §2 metric namespace may-change),additive,与既有 `resicache.handler.null.hit` / lock counter 等语义 counter 并存。
+
+### 语义 counter 装配单轨化(metrics deepening,2026-06-30)
+
+各 handler 的语义 counter(`resicache.handler.ttl.jittered` / `null.hit` / `sync.lock.acquired` / `bloom.blocked` / `early-refresh.triggered`)此前各自 `ObjectProvider<MeterRegistry>` + `@PostConstruct initMetrics()` + 运行时 `if (counter != null)` 自增装配,与 `fired` counter 的工厂注入路径形成**双轨**(语义 counter 按 bean 存在注册,`fired` 按进链注册)。
+
+现已统一:`AbstractCacheHandler#attachMeterRegistry`(工厂建链时调用)注册完 `fired` 后调 `protected onAttachMetrics(registry)` 钩子,子类 override 注册自身语义 counter;基类另提供 `protected registerCounter(registry, name, desc)` 与 `protected safeIncrement(counter)` helper,消除 5 处 `ObjectProvider` + `@PostConstruct` + null-check 样板。
+
+- **行为变化**:disabled handler 的语义 counter 不再注册(此前为恒 0 占位),与 `fired` 行为对齐 —— 双轨不一致消除。无监控依赖恒 0 counter,故无 break。
+- **测试范式**:`h.attachMeterRegistry(new SimpleMeterRegistry())` 触发注册,`h.handle(ctx)` 触发自增,直接断言 counter(见 `TtlHandlerTest` / `CacheHandlerChainFactoryTest.FiredCounterWiringTests`)。
+- **范围外(已知平行重复)**:`RedisBloomIFilter`(2 counter,不继承 `AbstractCacheHandler`)、`RedisProCache`(private `registerCounter`/`safeIncrement`)、`RefreshTaskMetrics`(独立值对象)形态各异,留待后续 observability 统一轮次。
 
 ## 前置条件与降级
 
