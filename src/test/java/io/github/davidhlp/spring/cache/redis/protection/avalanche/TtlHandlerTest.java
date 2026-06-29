@@ -6,6 +6,8 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Duration;
 
@@ -22,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -41,7 +45,7 @@ class TtlHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new TtlHandler(ttlPolicy);
+        handler = new TtlHandler(ttlPolicy, null);
     }
 
     private CacheContext createContext(CacheOperation operation, Duration ttl, RedisCacheableOperation cacheOp) {
@@ -56,6 +60,53 @@ class TtlHandlerTest {
                 cacheOp
         );
         return new CacheContext(input);
+    }
+
+    @Nested
+    @DisplayName("ttl.jittered counter (guide §223b1)")
+    class TtlJitteredCounterTests {
+
+        @Test
+        @DisplayName("randomTtl=true → 自增 resicache.handler.ttl.jittered")
+        void randomTtlTrue_incrementsJitteredCounter() {
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            @SuppressWarnings("unchecked")
+            ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
+            when(provider.getIfAvailable()).thenReturn(registry);
+
+            TtlHandler h = new TtlHandler(ttlPolicy, provider);
+            h.initMetrics();
+            when(cacheOperation.getTtl()).thenReturn(60L);
+            when(cacheOperation.isRandomTtl()).thenReturn(true);
+            when(cacheOperation.getVariance()).thenReturn(0.2f);
+            when(ttlPolicy.calculateFinalTtl(eq(60L), eq(true), eq(0.2f))).thenReturn(55L);
+
+            h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60), cacheOperation));
+
+            assertThat(registry.get("resicache.handler.ttl.jittered").counter().count())
+                    .isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("randomTtl=false → counter 不自增")
+        void randomTtlFalse_doesNotIncrement() {
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            @SuppressWarnings("unchecked")
+            ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
+            when(provider.getIfAvailable()).thenReturn(registry);
+
+            TtlHandler h = new TtlHandler(ttlPolicy, provider);
+            h.initMetrics();
+            when(cacheOperation.getTtl()).thenReturn(60L);
+            when(cacheOperation.isRandomTtl()).thenReturn(false);
+            when(cacheOperation.getVariance()).thenReturn(0.2f);
+            when(ttlPolicy.calculateFinalTtl(eq(60L), eq(false), eq(0.2f))).thenReturn(60L);
+
+            h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60), cacheOperation));
+
+            assertThat(registry.get("resicache.handler.ttl.jittered").counter().count())
+                    .isEqualTo(0.0);
+        }
     }
 
     @Nested
