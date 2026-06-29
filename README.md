@@ -209,6 +209,21 @@ resi-cache:
 > ⚠️ The whitelist defaults to **only** `io.github.davidhlp.`. When caching custom
 > business types (e.g. `com.example.User`), you **must** add your package to
 > `allowed-package-prefixes`, otherwise deserialization throws.
+>
+> **Wildcard form (added in v0.0.3):** any prefix ending in `.*` is a wildcard
+> sentinel — it matches the class directly (`com.example.Foo`), all sub-package
+> classes (`com.example.sub.Bar`, `com.example.foo.bar.baz.Qux`, …), and is
+> dot-boundary protected (so `com.example.*` does **not** match `com.exampleX.Foo`).
+> Use it when you want to allow a whole package subtree without listing each
+> sub-package.
+>
+> ```yaml
+> resi-cache:
+>   serializer:
+>     allowed-package-prefixes:
+>       - "io.github.davidhlp."
+>       - "com.example.*"        # entire com.example subtree in one entry
+> ```
 
 ### Annotation attributes (`@RedisCacheable`)
 
