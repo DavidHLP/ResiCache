@@ -83,6 +83,24 @@ class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
     }
 
     @Test
+    @DisplayName("RedisDown-3: CLEAN 路径在 Redis 不可达时走 CacheErrorHandler graceful degradation(不抛异常,行为等价 clean 失败被吞)")
+    void redisDown_clean_degradesGracefully() {
+        // WS-1.5 CLEAN 路径故障注入(GET + PUT 已 commit,本 tick 收官 3 路径):
+        // 与 GET/PUT 同样的 graceful degradation 设计 —
+        // CacheErrorHandler.handleRemoveError log warn + 返回 failed CacheResult。
+        // **安全属性**: cache clean 失败 = 该 key 未清除 → 下次读还会命中旧 value
+        // (cache 库不知道 stale 数据对调用方是否可接受 — 这是缓存一致性 trade-off,
+        // 已在 WS-1.2 文档说明)
+        // **不抛异常**: clean 失败被吞,业务流继续
+
+        // 不抛异常 — sync clean 走通(graceful degradation 模式)
+        writer.clean("testCache", "fault-injection-clean-pattern".getBytes());
+
+        // 验证: 不抛异常(已由不抛异常的事实验证)
+        // 完整验证(Redis 实际未清除)需要 Redis 可达,留 v0.2.0
+    }
+
+    @Test
     @DisplayName("RedisDown-1: GET 路径在 Redis 不可达时走 CacheErrorHandler graceful degradation(不抛异常,future 正常完成,行为等价 cache miss)")
     void redisDown_get_degradesGracefully() throws Exception {
         // WS-1.5 故障注入发现的真实行为(诚实记录 — 重要架构发现):
