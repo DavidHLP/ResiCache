@@ -188,6 +188,36 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   (docs may-change pre-1.0) applies; §1+§3 not invoked. Docs-only
   change, no `./mvnw clean verify` needed.
   (loop round 16)
+- **`wiki/modules/serialization.md` sync to current source** (round 17)
+  — wiki page had drifted significantly since its initial creation:
+  - **`source-files` frontmatter listed `SecureJackson2JsonRedisSerializer.java`
+    which was renamed to `SecureJacksonRedisSerializer.java`** — fixed
+  - **Missing** `SecureJacksonSerializerFactory` (Round 11 extracted it to
+    `@Component` to eliminate the wired/unwired two-track bug Round 5
+    exposed) — added with assembly-flow paragraph explaining "don't
+    `new` the serializer directly, use the factory"
+  - **Missing** `WhitelistPolicy` (Round 9 added `.*` wildcard suffix
+    support with dot-boundary protection via `matchesPrefix` helper) —
+    added with explicit note that literal prefix intentionally lacks
+    dot-boundary (Round 9 design choice, candidate 4 still deferred as
+    BREAKING)
+  - **Missing** `VersionEnvelope` (STABILITY §3 never-change wire
+    format) and `SerializationException` (failure path) — added
+  - **`failOnUnknownType` default corrected** — wiki said "false, 降级";
+    actually `true` (Round 5 confirmed) and the "降级到 miss" is
+    performed downstream by [[cache-lifecycle]] error handling, not
+    silently inside the serializer
+  - **Rejection-message remediation hint** (Round 3 added) — surfaced
+    under `SecureJacksonRedisSerializer` section so the wiki now matches
+    the user-facing string
+  - **`updated:` frontmatter bumped to 2026-06-29**
+
+  No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
+  may-change pre-1.0) applies. The wiki is the LLM-consulted
+  knowledge base per `CLAUDE.md` — if it doesn't reflect the actual
+  state of source, future LLM sessions re-derive from source (the
+  very failure mode the wiki exists to prevent).
+  (loop round 17)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
