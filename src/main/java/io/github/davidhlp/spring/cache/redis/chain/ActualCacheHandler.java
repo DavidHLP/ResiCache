@@ -4,7 +4,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
-import io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValuePolicy;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationSupport;
 
 import lombok.RequiredArgsConstructor;
@@ -47,7 +47,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
-    private final NullValuePolicy nullValuePolicy;
+    private final DefaultNullValuePolicy nullValuePolicy;
     private final EarlyExpirationSupport earlyExpirationSupport;
     private final CacheErrorHandler errorHandler;
 

@@ -27,7 +27,7 @@ import static org.mockito.Mockito.*;
 class EarlyExpirationSupportTest {
 
     @Mock
-    private EarlyExpirationExecutor executor;
+    private ThreadPoolEarlyExpirationExecutor executor;
 
     private EarlyExpirationSupport support;
 

@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.operation;
 
-import io.github.davidhlp.spring.cache.redis.eviction.EvictionStrategy;
 import io.github.davidhlp.spring.cache.redis.eviction.TwoListEvictionStrategy;
 
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +26,7 @@ import java.lang.reflect.Method;
 public class RedisCacheRegister {
 
     /** 缓存操作淘汰策略 */
-    private final EvictionStrategy<String, CacheOperation> operationStrategy;
+    private final TwoListEvictionStrategy<String, CacheOperation> operationStrategy;
 
     public RedisCacheRegister() {
         this(2048, 1024);

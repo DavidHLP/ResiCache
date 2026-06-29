@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 class TtlHandlerTest {
 
     @Mock
-    private TtlPolicy ttlPolicy;
+    private DefaultTtlPolicy ttlPolicy;
 
     @Mock
     private RedisCacheableOperation cacheOperation;

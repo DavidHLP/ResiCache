@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 class NullValueHandlerTest {
 
     @Mock
-    private NullValuePolicy nullValuePolicy;
+    private DefaultNullValuePolicy nullValuePolicy;
 
     @Mock
     private RedisCacheableOperation cacheOperation;

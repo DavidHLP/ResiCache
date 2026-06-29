@@ -6,7 +6,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlPolicy;
+import io.github.davidhlp.spring.cache.redis.protection.avalanche.DefaultTtlPolicy;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,7 +39,7 @@ import static org.mockito.Mockito.lenient;
 class EarlyExpirationHandlerRaceConditionTest {
 
     @Mock
-    private TtlPolicy ttlPolicy;
+    private DefaultTtlPolicy ttlPolicy;
 
     @Mock
     private EarlyExpirationSupport earlyExpirationSupport;

@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("TwoListEvictionStrategy Tests")
 class TwoListEvictionStrategyTest {
 
-    private EvictionStrategy<String, String> strategy;
+    private TwoListEvictionStrategy<String, String> strategy;
 
     @Nested
     @DisplayName("Constructor Tests")

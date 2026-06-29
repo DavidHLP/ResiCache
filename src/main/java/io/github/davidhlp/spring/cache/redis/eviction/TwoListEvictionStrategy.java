@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.function.Predicate;
 
 @Slf4j
-public class TwoListEvictionStrategy<K, V> implements EvictionStrategy<K, V> {
+public class TwoListEvictionStrategy<K, V> {
 
     /** 默认Active List最大容量 */
     private static final int DEFAULT_MAX_ACTIVE_SIZE = 1024;
@@ -41,37 +41,30 @@ public class TwoListEvictionStrategy<K, V> implements EvictionStrategy<K, V> {
         this.lru = new TwoListLRU<>(maxActiveSize, maxInactiveSize, evictionPredicate);
     }
 
-    @Override
     public void put(K key, V value) {
         lru.put(key, value);
     }
 
-    @Override
     public V get(K key) {
         return lru.get(key);
     }
 
-    @Override
     public V remove(K key) {
         return lru.remove(key);
     }
 
-    @Override
     public boolean contains(K key) {
         return lru.contains(key);
     }
 
-    @Override
     public int size() {
         return lru.size();
     }
 
-    @Override
     public void clear() {
         lru.clear();
     }
 
-    @Override
     public EvictionStats getStats() {
         return new EvictionStats(
                 lru.size(),
