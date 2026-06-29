@@ -20,6 +20,16 @@ wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subj
 
 ---
 
+## [2026-06-29] improve | Path C 收官 + WS-1.4/1.5 + 工作集文档归档 + wiki 同步
+
+- **Path C(WS-1.3)7 步收官**:销毁 `holder/CacheOperationMetadataHolder` 静态 ThreadLocal,方法元数据持有迁到 `chain/MethodMetadataResolver`(`DefaultMethodMetadataResolver` @Component);异步透传经 `currentContext()` snapshot/restore(`supportsAsyncRetrieve=true`);`ResiCacheMethodInterceptor` 作 active advisor(继承 `RedisCacheInterceptor`,Spring AOP 6.x 限制下 2 层继承妥协)。Step 0 契约全程绿。
+- **WS-1.4 可观测性**:链级 `resicache.chain.execute` Timer + 4 handler per-handler Counter(bloom/sync/early-refresh/null-value)+ MDC 跨 commonPool 透传 + health 级联(sync degraded)+ per-mechanism kill-switch(`bloomFilterEnabled` 等 4 Boolean,默认 null 继承总开关)。默认 OFF(opt-in)。
+- **WS-1.5 质量**:JMH smoke 基准(hit 210µs / miss 365µs / async 423µs)+ Redis 断连故障注入 3 路径(GET/PUT/CLEAN,graceful-degrade)。
+- **工作集文档归档**(commit `0bc6c2b`):删除 `MASTER_PLAN.md`/`HANDOFF.md`/`TASK_BACKLOG.md`/`LOOP_PROMPTS.md`——会话/规划/loop 过程产物,技术发现已沉淀于 wiki/ADR/CHANGELOG。
+- **wiki 同步**(本批):`[[holder-and-config]]` 改写(CacheOperationMetadataHolder → MethodMetadataResolver);`[[index]]` holder 描述 + 页数修正(39);ADR-0005/0006/0007 对已归档文档加归档注;本 log 条目。
+
+---
+
 ## [2026-06-28] update | WS-1.2 硬化(fail-fast + Cluster hash-tag + 布隆 rebuilding 窗口)
 
 v0.1.0「WS-1.2 硬化」三条工作线完成,均经 `./mvnw verify` 守门(672 测试 / 0 失败 / JaCoCo 70%·40% 门禁通过 / checkstyle 0 违规):
