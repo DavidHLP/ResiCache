@@ -5,8 +5,12 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -32,7 +36,24 @@ public class TtlHandler extends AbstractCacheHandler {
 
     private final DefaultTtlPolicy ttlPolicy;
 
+    /**
+     * guide §223b1:缺失的 TtlHandler counter —— TTL jitter 应用事件(防雪崩:randomTtl=true
+     * 的 variance 展开计数)。{@link ObjectProvider} 允许 MeterRegistry 缺失,counter 为 null 时 no-op。
+     */
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
+    private Counter ttlJitteredCounter;
+
     private static final long DEFAULT_TTL = 60;
+
+    @PostConstruct
+    void initMetrics() {
+        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
+        if (registry != null) {
+            this.ttlJitteredCounter = Counter.builder("resicache.handler.ttl.jittered")
+                    .description("TTL jitter applied (avalanche protection: randomTtl=true variance spread the TTL)")
+                    .register(registry);
+        }
+    }
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
@@ -68,6 +89,11 @@ public class TtlHandler extends AbstractCacheHandler {
             context.getOutput().setFinalTtl(finalTtl);
             context.getOutput().setShouldApplyTtl(true);
             context.getOutput().setTtlFromContext(true);
+
+            // guide §223b1:TTL jitter 应用计数(randomTtl=true 时 variance 展开)
+            if (context.getCacheOperation().isRandomTtl() && ttlJitteredCounter != null) {
+                ttlJitteredCounter.increment();
+            }
 
             log.debug(
                     "Using context TTL configuration: cacheName={}, key={}, baseTtl={}s, finalTtl={}s, randomTtl={}, variance={}",
