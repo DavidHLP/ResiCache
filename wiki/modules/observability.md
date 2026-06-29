@@ -106,7 +106,7 @@ public class MetricsAutoConfiguration { ... }
 - **cardinality**:`handler` tag 数 = handler 数(bounded ~6),**不加** `redisKey`(unbounded,见 guide line 261)。
 - **查询示例**:`rate(resicache.handler.fired{handler="SyncLockHandler"}[5m])` = 该 handler 被引擎求值的频率 —— 回答「哪个保护机制在 fire、fire 多频繁」。
 - **与 R24 DEBUG 的关系**:counter = 结构化指标(告警 / Grafana 仪表盘),DEBUG log = 详细决策序列(哪个 key、什么 decision);两者互补,均为 guide §223 per-handler observability 的组成。
-- **新 metric 名**:`resicache.handler.fired` 是 pre-1.0 新增 metric(STABILITY §2 metric namespace may-change),additive,不替换既有 `resicache.handler.null.hit` / lock counter 等语义 counter。
+- **新 metric 名**:`resicache.handler.fired`(R25)与 `resicache.handler.ttl.jittered`(R26,防雪崩 TTL jitter 应用计数)均为 pre-1.0 新增 metric(STABILITY §2 metric namespace may-change),additive,与既有 `resicache.handler.null.hit` / lock counter 等语义 counter 并存。
 
 ## 前置条件与降级
 
