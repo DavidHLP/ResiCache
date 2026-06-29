@@ -438,6 +438,17 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `CacheHandlerChainFactoryTest` (factory wiring + execute + increment +
   handler tag); full verify 685/0/0/0 ✅ (+1, Skipped: 0, Testcontainers IT
   executed). (loop round 25)
+- **TtlHandler `resicache.handler.ttl.jittered` counter (guide §223b1)**:
+  `TtlHandler` now registers `resicache.handler.ttl.jittered` (via
+  `ObjectProvider<MeterRegistry>` + `@PostConstruct`, mirroring
+  `NullValueHandler`) and increments it when `randomTtl=true` variance is
+  applied (avalanche-protection jitter). Completes the missing-TtlHandler-
+  counter half of guide §223(b1); no-op when `MeterRegistry` absent. New
+  metric name (pre-1.0 may-change per STABILITY §2, additive); no public API
+  surface touched (the added constructor parameter is internal `@Component`
+  wiring). TDD: new `TtlJitteredCounterTests` in `TtlHandlerTest`
+  (randomTtl true increments / false does not); full verify 687/0/0/0 ✅
+  (+2, Skipped: 0, Testcontainers IT executed). (loop round 26)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
