@@ -76,6 +76,9 @@ public class CacheHandlerChainFactory {
             }
 
             CacheHandlerChain chain = new CacheHandlerChain(meterRegistryProvider);
+            // guide §223b:为每个 enabled AbstractCacheHandler 注入 registry 以建 per-handler FIRED counter
+            MeterRegistry registry =
+                    meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
 
             Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
 
@@ -130,6 +133,9 @@ public class CacheHandlerChainFactory {
                 }
 
                 chain.addHandler(handler);
+                if (registry != null && handler instanceof AbstractCacheHandler ach) {
+                    ach.attachMeterRegistry(registry);
+                }
                 log.debug("Added handler to chain: {} (order={})",
                           handler.getClass().getSimpleName(),
                           getOrder(handler));

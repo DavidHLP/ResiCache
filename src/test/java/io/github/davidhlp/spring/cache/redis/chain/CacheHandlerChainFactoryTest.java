@@ -2,11 +2,15 @@ package io.github.davidhlp.spring.cache.redis.chain;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -251,6 +255,53 @@ class CacheHandlerChainFactoryTest {
 
             assertThat(names).contains("TtlHandler");
             assertThat(names).doesNotContain("WeirdlyNamedLockHandler");
+        }
+    }
+
+    @Nested
+    @DisplayName("per-handler fired counter wiring (guide §223b)")
+    class FiredCounterWiringTests {
+
+        @Test
+        @DisplayName("createChain with MeterRegistry 注册 resicache.handler.fired 并在 execute 时自增")
+        void createChain_withRegistry_attachesAndIncrementsFiredCounter() {
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            @SuppressWarnings("unchecked")
+            ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
+            when(provider.getIfAvailable()).thenReturn(registry);
+
+            AbstractCacheHandler probe = new FiredCounterProbe();
+            factory = new CacheHandlerChainFactory(List.of(probe), properties, provider);
+
+            CacheHandlerChain chain = factory.createChain();
+            CacheContext ctx = CacheContext.builder()
+                    .operation(CacheOperation.GET)
+                    .cacheName("probe-cache")
+                    .redisKey("probe:k")
+                    .actualKey("probe:k")
+                    .build();
+            chain.execute(ctx);
+
+            var counters = new ArrayList<>(registry.find("resicache.handler.fired").counters());
+            assertThat(counters).as("factory 应为 probe 注册 fired counter").hasSize(1);
+            assertThat(counters.get(0).count())
+                    .as("probe 被引擎求值一次 → counter 自增 1")
+                    .isEqualTo(1.0);
+            assertThat(counters.get(0).getId().getTag("handler"))
+                    .as("handler tag = 运行时子类 SimpleName")
+                    .isEqualTo("FiredCounterProbe");
+        }
+
+        static class FiredCounterProbe extends AbstractCacheHandler {
+            @Override
+            protected boolean shouldHandle(CacheContext context) {
+                return true;
+            }
+
+            @Override
+            protected HandlerResult doHandle(CacheContext context) {
+                return HandlerResult.continueWith(CacheResult.success());
+            }
         }
     }
 

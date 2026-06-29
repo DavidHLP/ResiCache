@@ -1,6 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 
 
@@ -28,6 +30,29 @@ public abstract class AbstractCacheHandler implements CacheHandler {
 
     /** 下一个处理器 */
     private CacheHandler next;
+
+    /**
+     * guide §223b:per-handler uniform FIRED counter。由 {@link CacheHandlerChainFactory}
+     * 建链后注入 MeterRegistry 时创建(handle 每次求值本 handler 时自增)。registry 缺失时为 null,no-op。
+     * metric: {@code resicache.handler.fired},tag: {@code handler=<运行时子类 SimpleName>}。
+     */
+    private Counter firedCounter;
+
+    /**
+     * 由责任链工厂在建链阶段注入 MeterRegistry(guide §223b)。registry 非空时注册
+     * {@code resicache.handler.fired} counter(handler tag = 运行时子类 SimpleName;
+     * cardinality bounded = handler 数,见 guide line 261)。幂等:同名同 tag 重复 register 返回既有实例。
+     */
+    void attachMeterRegistry(MeterRegistry registry) {
+        if (registry == null) {
+            return;
+        }
+        this.firedCounter = Counter.builder("resicache.handler.fired")
+                .description("Cache protection chain: number of times each handler was evaluated by the engine "
+                        + "(guide §223b per-handler observability; tag handler = runtime subclass simple name)")
+                .tag("handler", getClass().getSimpleName())
+                .register(registry);
+    }
 
     @Override
     public CacheHandler getNext() {
@@ -71,6 +96,10 @@ public abstract class AbstractCacheHandler implements CacheHandler {
                 result.decision(),
                 context.getRedisKey(),
                 MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY));
+        // guide §223b:uniform per-handler FIRED counter(registry 已由工厂注入时;否则 no-op)
+        if (firedCounter != null) {
+            firedCounter.increment();
+        }
         return switch (result.decision()) {
             // 继续：有下一个则推进，否则链尾成功
             case CONTINUE -> getNext() != null ? getNext().handle(context) : result;
