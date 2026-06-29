@@ -21,7 +21,7 @@
 | API 级 `Cache.get/put`(脱离注解) | ✅ | ✅ | ✅ | ❌(走 Spring Cache 抽象) |
 | 防**击穿**(分布式锁串行回源) | ✅ `@CachePenetrationProtect` | ❌ | `RLock` 手写 | ✅ `sync=true`(Redisson) |
 | 防**穿透**(null 缓存) | ✅ | 手写 | `RBucket` 手写 | ✅ `cacheNullValues` |
-| 防**雪崩**(TTL 抖动) | ✅ | 手写 | 手写 | ✅ `randomTtl` |
+| 防**雪崩**(TTL 抖动) | ❌ [¹](#fn-jetcache-269) | 手写 | 手写 | ✅ `randomTtl` |
 | **防真正穿透(Bloom 过滤器)** | ❌ **无** | ❌ | `RBloomFilter` 手写 | ✅ `useBloomFilter` |
 | 热 key 异步提前刷新 | ✅ `@CacheRefresh`+refreshLock | ❌ | 手写 | ✅ `enableEarlyExpiration` |
 | **可编排/可插拔防护链 SPI** | ❌(注解固化) | N/A | ❌ | ✅ **`HandlerOrder` + `@HandlerPriority`** |
@@ -52,3 +52,17 @@
 - 已在 `@Cacheable`+Redisson、要把**穿透/击穿/雪崩/热 key 做成可插拔可观测的一致策略**、不想推翻缓存层 → **ResiCache**。
 
 > ResiCache 不追求"全面",追求"防护纵深这一件事,做得可编排、可关断、可观测、诚实"。
+
+---
+
+## 脚注
+
+<a id="fn-jetcache-269"></a>**[¹] JetCache TTL jitter(防雪崩)状态**:JetCache Issue
+[#269](https://github.com/alibaba/jetcache/issues/269)(TTL jitter / expiry
+randomization)状态为 **closed unimplemented**——维护者收到该特性请求,
+判定不予实现。所以本表此处 JetCache 列为 ❌(不是 ✅),原表中符号错误,
+正确覆盖关系参见[ADR-0006 第 1 段 + Amendment 2026-06-29](../wiki/adr/0006-redisson-companion-positioning.md#amendment-2026-06-29--jetcache-覆盖数修正):
+JetCache 实际覆盖 ResiCache 链中 **3/5** 机制(`@CacheRefresh`≈EarlyExpiration、
+`@CachePenetrationProtect`≈SyncLock、null-value),TTL jitter **不**在其中。
+本脚注是事实错误修复,见 `CHANGELOG.md` v0.0.3 [Unreleased] Documentation
+alignment 第 3 条(loop round 7)。

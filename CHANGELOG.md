@@ -168,6 +168,17 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   §1+§3 不涉及)。ResiCache 真实技术增量相应更正为 **Bloom + TTL jitter +
   可插拔责任链**(3 项独立、不重叠)。诊断/事实文本按 `STABILITY.md` §2
   属 pre-1.0 may-change,无 public API surface breaking。(loop round 4)
+- **`docs/comparison.md` 与 ADR-0006 amendment 一致性补齐**:Round 4 修了
+  ADR-0006 第 1 段的 JetCache 覆盖算术,但用户面对外的 `docs/comparison.md`
+  能力矩阵防雪崩(TTL 抖动)行第 4 列**仍写「JetCache ✅」** —— 与 ADR-0006
+  amendment + JetCache Issue #269 真实状态(JetCache 不实现 TTL jitter)矛盾。
+  改 JetCache 列单元格为 ❌ 并加脚注引用,后置脚注段
+  (`## 脚注`,锚点 `fn-jetcache-269`)说明 JetCache 实际覆盖数为 **3/5**,指向
+  ADR-0006 Amendment 2026-06-29。**重要性**:`docs/comparison.md` 是
+  `STABILITY.md` §4.7 1.0 毕业条件 #7 的 adoption 信号页(外部 referrer 月访问),
+  行级事实错误直接误导读者在 JetCache vs ResiCache 之间做错决策。诊断/事实
+  文本 pre-1.0 may-change 按 `STABILITY.md` §2,无 public API breaking。
+  (loop round 7)
 
 ## [0.0.2] — current
 
