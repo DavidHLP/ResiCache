@@ -60,10 +60,13 @@ resi-cache:
 ```yaml
   sync-lock:
     prefix: "resi-cache:lock:"
-    timeout: 10s
+    timeout: 3000              # 默认 3 秒;单位由 `unit` 字段控制(默认 MILLISECONDS)
+    unit: MILLISECONDS         # 可选:NANOSECONDS / MICROSECONDS / MILLISECONDS / SECONDS
     local-only: false          # true = 无 Redisson 时显式单 JVM 降级(否则 fail-fast)
 ```
 → [[breakdown-lock]]。`prefix` 决定 Redisson 锁 key 前缀,`timeout` + `unit` 是默认锁等待。
+
+> ⚠️ wiki 历史把 `timeout: 10s` 列为示例;实际代码 `SyncLockProperties.timeout = 3000` + `unit = MILLISECONDS`(R5 recon 验证) = **3 秒**。要 10 秒须显式 `timeout: 10000` 或 `timeout: 10 + unit: SECONDS` 两种写法任一。
 
 `local-only`(默认 `false`)控制无分布式锁后端(Redisson 缺失 → 无 LockManager bean)时 `sync=true` 的行为:**默认 fail-fast**(拒绝静默退化为单 JVM,多实例下无法防击穿——"标榜分布式却单机"是最坏失败模式);设 `true` 显式接受单 JVM 同步降级(单实例/测试场景),并发 `protection.degraded=local-only` 告警(WS-1.4 升级为 Observation 事件)。
 

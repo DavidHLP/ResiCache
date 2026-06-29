@@ -332,6 +332,29 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies. Pure docs.
   (loop round 21)
+- **`sync-lock.timeout` wiki fact correction** (round 22) — closes
+  a real stale fact noted in R18 as scope-limit. The
+  `wiki/modules/configuration.md` sync-lock yaml example showed
+  `timeout: 10s` but the actual code default is
+  `SyncLockProperties.timeout = 3000` +
+  `unit = TimeUnit.MILLISECONDS` = **3 seconds** (R5 recon
+  verified). Fixed:
+  - `timeout: 10s` → `timeout: 3000` (raw milliseconds, matches
+    the `unit` field)
+  - Added explicit `unit: MILLISECONDS` line to make the unit
+    choice visible (java.util.concurrent.TimeUnit enum:
+    NANOSECONDS / MICROSECONDS / MILLISECONDS / SECONDS)
+  - Added a ⚠️ historical-discrepancy note: "要 10 秒须显式
+    `timeout: 10000` 或 `timeout: 10 + unit: SECONDS` 两种写法任一"
+  - This is the second fact-correction pass through
+    `wiki/modules/configuration.md` (R18 did
+    `fail-on-unknown-type` + `polymorphic-typing-enabled` defaults;
+    R22 does `sync-lock.timeout` — both pre-existing wiki errors
+    that no prior round caught)
+
+  No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
+  may-change pre-1.0) applies. Pure docs.
+  (loop round 22)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
