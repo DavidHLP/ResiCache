@@ -218,6 +218,31 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   state of source, future LLM sessions re-derive from source (the
   very failure mode the wiki exists to prevent).
   (loop round 17)
+- **`wiki/modules/configuration.md` sync to current source** (round 18)
+  — continued Round 17's bounded wiki-sync pattern (1 page per round).
+  Changes:
+  - **`fail-on-unknown-type` default corrected** in serializer yaml
+    example: was `false` ("降级"); actually `true` (Round 5
+    confirmed) with "降级到 miss" performed downstream by
+    [[cache-lifecycle]] error handling
+  - **`polymorphic-typing-enabled` default corrected**: was `true`;
+    actually `false` (Round 5 confirmed)
+  - **`allowed-package-prefixes` `.*` wildcard** (Round 9) added
+    inline note to serializer section
+  - **New `## 启动期守卫 (SerializerWhitelistStartupGuard, R15)`**
+    section — explains the @Component that fires WARN on
+    `ApplicationReadyEvent` when whitelist is null/[], the property
+    key it guards, and explicitly cross-references the larger
+    guide §4 "whitelist auto-derive" item (⚠️ BREAKING) of which
+    this is the WARN scaffolding
+  - **`updated:` frontmatter bumped to 2026-06-29**
+  - **Related-link list** updated to point at
+    `SerializerWhitelistStartupGuard` assembly context under
+    [[auto-configuration]]
+
+  No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
+  may-change pre-1.0) applies.
+  (loop round 18)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
