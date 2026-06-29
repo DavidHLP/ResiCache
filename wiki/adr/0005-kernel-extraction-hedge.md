@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-06-28
 - **Deciders**: DavidHLP
-- **Related**: ADR-0006、`MASTER_PLAN.md` §0 grafts、`MASTER_PLAN.md` §6 Path C
+- **Related**: ADR-0006、[[overview]](战略总纲)、[[0002-keep-interceptor]](Path C;原 `MASTER_PLAN.md` 已归档 commit `0bc6c2b`)
 
 ## Context
 

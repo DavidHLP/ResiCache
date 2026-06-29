@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-06-29
 - **Deciders**: DavidHLP
-- **Related**: ADR-0005(长寿对冲,不靠双构建对冲)、ADR-0006(Redisson-companion 定位)、`MASTER_PLAN.md` §2 WS-1.1(已统一措辞)、`COMPATIBILITY.md`(已改单矩阵)、`HANDOFF.md` §12 post-merge addendum、`TASK_BACKLOG.md` §2 #4
+- **Related**: ADR-0005(长寿对冲,不靠双构建对冲)、ADR-0006(Redisson-companion 定位)、`COMPATIBILITY.md`(已改单矩阵)、`CHANGELOG.md`(WS-1.1 FIRE 技术史)。原 `MASTER_PLAN.md`/`HANDOFF.md`/`TASK_BACKLOG.md` 已于 2026-06-29 归档(commit `0bc6c2b`),正文章节引用为历史论证
 - **Implementing commits**: `53f8eb2`(docs) · `6f00471`(ci) · `9ad22bf`(pom)
 
 ## Context

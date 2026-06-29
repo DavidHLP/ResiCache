@@ -73,7 +73,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[serialization]] —— 安全序列化:白名单 + NullValue 受限往返
 - [[observability]] —— `RedisCacheHealthIndicator` + actuator 指标
 - [[eviction]] —— `TwoListLRU` 双链表近似 LRU
-- [[holder-and-config]] —— 元数据缓存 + config 装配辅助类
+- [[holder-and-config]] —— 方法元数据解析(`MethodMetadataResolver`) + config 装配辅助类
 
 ## 概念(concepts/)
 
@@ -89,4 +89,4 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-06-29 · 共 31 页 · 维护见 [[log]]
+最后更新:2026-06-29 · 共 39 页 · 维护见 [[log]]
