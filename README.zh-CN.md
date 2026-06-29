@@ -191,6 +191,16 @@ resi-cache:
 ```
 
 > ⚠️ **白名单默认仅含 `io.github.davidhlp.`**。缓存自定义业务类型（如 `com.example.User`）时，**必须**在 `allowed-package-prefixes` 显式添加你的包名，否则反序列化会抛异常。
+>
+> **通配形式（v0.0.3 新增）**：以 `.*` 结尾的前缀被解释为通配符——匹配直接类（`com.example.Foo`）、所有子包内的类（`com.example.sub.Bar`、`com.example.foo.bar.baz.Qux` …），并以 dot 边界保护（`com.example.*` **不会**误匹配 `com.exampleX.Foo`）。当你想允许整个包子树、无需逐子包列出时使用。
+>
+> ```yaml
+> resi-cache:
+>   serializer:
+>     allowed-package-prefixes:
+>       - "io.github.davidhlp."
+>       - "com.example.*"        # 一行搞定整棵 com.example 子树
+> ```
 
 ### 注解级属性（`@RedisCacheable`）
 
