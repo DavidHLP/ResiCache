@@ -148,6 +148,21 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   degrade to `LinkedHashMap` if whitelist alone were honored). TDD: failing
   test → fix → green, full verify 669 tests / 0 failures / 0 skipped.
   (loop round 5)
+- **`.github/workflows/release.yml` `JAVA_VERSION` 滞后:** 该工作流曾是
+  Java 17 时遗留,`env.JAVA_VERSION: '17'` 没在 WS-1.1 FIRE(commit
+  `38c514a`,unify 全栈 Java 21)时被同步,导致 release tag push 时
+  `setup-java` 安装 JDK 17,而 `pom.xml` `<java.version>21</java.version>` +
+  `maven.compiler.{source,target}=21` 要求 JDK 21 编译,Java 21 语法
+  (records / sealed types / pattern matching / switch expressions)在
+  JDK 17 编译必失败。`ci.yml` 同 WS-1.1 FIRE 期间已同步到 `'21'`,
+  `release.yml` 是遗漏(loop round 8 静态 lint 扫描发现)。修复:`17`→
+  `21` + 注释引 WS-1.1 FIRE commit + 解释为何必须对齐 pom.xml。**Only
+ 改动 `env.JAVA_VERSION` 一行 + 注释**,不动 secret / tag 触发器 /
+  `softprops/action-gh-release` 步骤 / 任何 workflow 触发条件(loop §1
+  「no outward-facing/irreversible actions: no push / no deploy / no gh
+  actions / no tags / no merges」)。本地 commit,不 push;下一次 tag push
+  才会真触发该 workflow。STABILITY 不涉及(workflow 配置非 public API
+  surface)。
 
 ### Documentation alignment
 - Reconcile `CLAUDE.md` and `AGENTS.md` to current versions: Java 21 (was
