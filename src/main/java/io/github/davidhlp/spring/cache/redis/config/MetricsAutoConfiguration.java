@@ -4,6 +4,7 @@ import io.github.davidhlp.spring.cache.redis.observability.RedisCacheHealthIndic
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -38,7 +39,10 @@ public class MetricsAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public RedisCacheHealthIndicator redisCacheHealthIndicator(RedisTemplate<String, Object> redisTemplate) {
-        return new RedisCacheHealthIndicator(redisTemplate);
+    public RedisCacheHealthIndicator redisCacheHealthIndicator(
+            RedisTemplate<String, Object> redisTemplate,
+            ObjectProvider<io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport> syncSupportProvider,
+            ObjectProvider<RedisProCacheProperties> propertiesProvider) {
+        return new RedisCacheHealthIndicator(redisTemplate, syncSupportProvider, propertiesProvider);
     }
 }
