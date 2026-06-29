@@ -30,13 +30,23 @@ public class TestRedisConfiguration {
     @Bean
     @Primary
     public RedisTemplate<String, Object> redisCacheTemplate(
-            RedisConnectionFactory redisConnectionFactory, ObjectMapper objectMapper) {
+            RedisConnectionFactory redisConnectionFactory,
+            ObjectMapper objectMapper,
+            RedisProCacheProperties properties) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(redisConnectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
+        // 与生产 RedisConnectionConfiguration#redisCacheTemplate 对称:让
+        // resi-cache.serializer.* 属性在 IT 中也真正生效(Round 5 fix)。
+        // 否则测试 bean 会让 IT 测不到产品 bean,bug fix 无法验证。
         SecureJacksonRedisSerializer jsonSerializer =
-                new SecureJacksonRedisSerializer(objectMapper);
+                new SecureJacksonRedisSerializer(
+                        objectMapper,
+                        properties.getSerializer().getAllowedPackagePrefixes(),
+                        properties.getSerializer().isFailOnUnknownType(),
+                        properties.getSerializer().getTypeProperty(),
+                        properties.getSerializer().isPolymorphicTypingEnabled());
 
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);

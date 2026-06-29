@@ -31,13 +31,23 @@ public class RedisConnectionConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = "redisCacheTemplate")
     public RedisTemplate<String, Object> redisCacheTemplate(
-            RedisConnectionFactory redisConnectionFactory, ObjectMapper objectMapper) {
+            RedisConnectionFactory redisConnectionFactory,
+            ObjectMapper objectMapper,
+            RedisProCacheProperties properties) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(redisConnectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
+        // 与 RedisProCacheConfiguration#defaultRedisCacheConfiguration(行 63-69)对称:让
+        // resi-cache.serializer.* 属性真正生效,而不是回退 SecureJacksonRedisSerializer
+        // 默认([io.github.davidhlp] 白名单 + 多态类型信息关闭)。Round 5 fix。
         SecureJacksonRedisSerializer jsonSerializer =
-                new SecureJacksonRedisSerializer(objectMapper);
+                new SecureJacksonRedisSerializer(
+                        objectMapper,
+                        properties.getSerializer().getAllowedPackagePrefixes(),
+                        properties.getSerializer().isFailOnUnknownType(),
+                        properties.getSerializer().getTypeProperty(),
+                        properties.getSerializer().isPolymorphicTypingEnabled());
 
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);
@@ -50,7 +60,9 @@ public class RedisConnectionConfiguration {
         template.afterPropertiesSet();
 
         log.debug(
-                "Created RedisCacheTemplate with StringRedisSerializer for keys and SecureJacksonRedisSerializer for values");
+                "Created RedisCacheTemplate with StringRedisSerializer for keys and SecureJacksonRedisSerializer for values (allowed-package-prefixes={}, polymorphicTypingEnabled={})",
+                properties.getSerializer().getAllowedPackagePrefixes(),
+                properties.getSerializer().isPolymorphicTypingEnabled());
         return template;
     }
 
