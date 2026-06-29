@@ -120,6 +120,18 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   for the entire Round 5 + R11 contract. Internal refactor — `STABILITY.md`
   §2 (internals may-change pre-1.0) applies; no public API surface touched.
   Full verify 675/0/0/0 ✅ (+2 vs Round 9 baseline 673). (loop round 11)
+- **`CONTRIBUTING.md` requirements + new Maintainers & bus-factor section**:
+  (a) Bumped JDK requirement `17+` → `21+` to match `pom.xml
+  <java.version>21</java.version>` and the WS-1.1 FIRE cut (Round 8 caught the
+  same drift in `.github/workflows/release.yml`; this is the `CONTRIBUTING.md`
+  twin — pre-1.0 docs/harness drift between the source manifest and the
+  human-facing contributor guide). (b) Added `## Maintainers & bus factor`
+  section documenting the current single-maintainer structure honestly (bus
+  factor 1) and the implications for `STABILITY.md` §4 graduation criterion #6
+  (named successor OR documented succession plan required before 1.0 tag).
+  Forward-link to STABILITY makes the graduation gate explicit. Docs-only —
+  `STABILITY.md` §2 (docs may-change pre-1.0) applies; §1+§3 not invoked.
+  (loop round 12)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would

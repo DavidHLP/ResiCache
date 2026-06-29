@@ -13,7 +13,8 @@ welcome, and the bar below keeps the project healthy.
 
 ## Development setup
 
-Requirements: **JDK 17+**, **Maven 3.x** (the wrapper `./mvnw` is bundled),
+Requirements: **JDK 21+** (matches `pom.xml` `<java.version>21</java.version>`
+after the WS-1.1 FIRE cut), **Maven 3.x** (the wrapper `./mvnw` is bundled),
 **Docker** (for Testcontainers-based integration tests).
 
 ```bash
@@ -80,3 +81,30 @@ compiled knowledge base — don't re-derive architecture from source in answers.
 
 Be respectful and constructive. This is a best-effort project; assume good
 intent and keep discussions focused on the code.
+
+## Maintainers & bus factor
+
+ResiCache is currently a **single-maintainer project** — all merges, releases,
+and architectural decisions flow through `DavidHLP` (the only committer with
+`CODEOWNERS` write access on `master`).
+
+**Bus factor: 1** (current). This is honest, not aspirational.
+
+We publicly track this because it matters for downstream evaluation. See
+[`STABILITY.md`](STABILITY.md) §4 1.0 graduation criterion #6 — graduation
+requires either a **named successor** (someone who can carry the project
+forward if the maintainer disappears) **or** a **documented succession plan**
+(e.g. an org transfer, a publisher hard-takeover clause, or a fork governance
+agreement).
+
+What this means in practice today:
+
+- **Pre-1.0**: bus factor 1 is acceptable. The project is explicitly
+  best-effort, no SLA, no production adopters are pinned to it.
+- **At 1.0 graduation**: this section must be rewritten to document either a
+  successor or a plan before the `1.0.0` tag is cut. The graduation criteria
+  are an explicit pre-flight checklist for this kind of risk.
+
+If a serious downstream evaluation finds bus factor 1 unacceptable, file an
+issue — the maintainer is open to succession conversations and to a publisher
+hand-off, not to abandoning the project.
