@@ -243,6 +243,33 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies.
   (loop round 18)
+- **`wiki/modules/observability.md` sync to current source** (round 19)
+  — continued Round 17/18 bounded wiki-sync pattern (1 page per
+  round). R15 startup WARN is observability surface (loud-startup
+  misconfig detection via log, not Micrometer), so it belongs
+  here in addition to its primary home in [[configuration]] and
+  [[serialization]]. Changes:
+  - **`source-files` frontmatter** added
+    `SerializerWhitelistStartupGuard.java`
+  - **`related` list** added `serialization`
+  - **`updated:` frontmatter** bumped to 2026-06-29
+  - **Related-link list** — configuration row updated to mention
+    SerializerWhitelistStartupGuard assembly context; new
+    serialization row for the WARN trigger condition
+  - **New `## 启动期 misconfig 告警 (loud-startup observability)`**
+    section — frames startup WARN as a deliberate observability
+    strategy ("把昂贵的 runtime 失败提前到零成本的 startup 日志
+    检查"). Two startup guards documented:
+    - `SerializerWhitelistStartupGuard` (R15) — guards
+      serialization safety door
+    - `SyncLockProperties.localOnly` (pre-existing) — guards
+      distributed-lock consistency under multi-instance deployment
+  - Explicit note that the two are **independent, not redundant
+    or substitutable** — different misconfig defense surfaces
+
+  No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
+  may-change pre-1.0) applies.
+  (loop round 19)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
