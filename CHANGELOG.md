@@ -89,6 +89,13 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   cause permanent caching). Startup-only (chain is cached as a singleton).
 - Reactive return-type detection now logs an explicit **"caching will NOT take
   effect"** warning instead of implying a graceful fallback.
+- `STABILITY.md`: API stability contract for the pre-1.0 0.x line. Lays out
+  what is stable across all 0.x releases (annotations, `resi-cache.*`
+  property keys, `{version,payload}` wire format), what may change
+  (internals, defaults, package layout, pre-1.0 metric namespace), what
+  never changes without a major bump, and the seven 1.0 graduation
+  criteria. Required reading before any public API surface change per the
+  loop chicken-egg gate.
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
