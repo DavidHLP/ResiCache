@@ -255,6 +255,22 @@ only one request loads the data. **Cache avalanche** — TTL randomization
 (`TTL = baseTtl ± variance × baseTtl` when `randomTtl=true`) avoids mass
 simultaneous expiry.
 
+## Comparison
+
+ResiCache is one of four common options for caching on top of Redis: JetCache,
+Caffeine, raw Redisson, and ResiCache. The detailed feature matrix, honest
+trade-offs, and "when to pick which" guidance live in
+[`docs/comparison.md`](docs/comparison.md) — including the line the project
+ships under (see also [ADR-0006](wiki/adr/0006-redisson-companion-positioning.md):
+"ResiCache for Redisson — the declarative cache protection chain Redisson
+forgot to ship").
+
+Headline takeaway: **the 3 protections JetCache is missing, in one
+Redisson-native chain** — bloom-filter (penetration), TTL jitter (avalanche),
+and distributed breakdown lock (breakdown). ResiCache is the Redisson
+companion that closes those gaps; JetCache is the multi-level / broadcast
+invalidator. The two are complementary in scope, not direct substitutes.
+
 ## Known Limitations
 
 Hard limitations of v0.0.2 (all addressed in the [Roadmap](#roadmap)):

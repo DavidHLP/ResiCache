@@ -175,6 +175,19 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   auto-derive" item (which would additionally BeanFactory-derive the host
   app root package — that part is ⚠️ BREAKING and intentionally deferred).
   (loop round 15)
+- **`## Comparison` section added to `README.md` / `README.zh-CN.md`**
+  promoting [`docs/comparison.md`](docs/comparison.md) to a discoverable
+  README-visible surface (guide §6 line 174). Headline copy: "the 3
+  protections JetCache is missing, in one Redisson-native chain" — bloom
+  (penetration), TTL jitter (avalanche), distributed breakdown lock
+  (breakdown). Cross-references [ADR-0006](wiki/adr/0006-redisson-companion-positioning.md)
+  for the positioning rationale. The detail (feature matrix, honest
+  trade-offs) stays in `docs/comparison.md`; README gets a one-paragraph
+  pointer + headline so readers who land on the repo front door can
+  decide whether to drill in. No public API change. STABILITY.md §2
+  (docs may-change pre-1.0) applies; §1+§3 not invoked. Docs-only
+  change, no `./mvnw clean verify` needed.
+  (loop round 16)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would

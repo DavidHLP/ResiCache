@@ -260,6 +260,19 @@ TTL 随机化避免大量缓存同时过期：
 设置 TTL = baseTtl ± variance × baseTtl   （randomTtl=true 时生效）
 ```
 
+## 🆚 与 JetCache / Caffeine / 裸 Redisson 对比
+
+在 Redis 之上做缓存,常见有四个选项:JetCache、Caffeine、裸 Redisson、
+ResiCache。详细功能矩阵、诚实优缺点对比、选型指引见
+[`docs/comparison.md`](docs/comparison.md)(也参考
+[ADR-0006](wiki/adr/0006-redisson-companion-positioning.md):**ResiCache for
+Redisson — Redisson 忘了做的那条可声明缓存防护链**)。
+
+一句话结论:**JetCache 缺的那 3 项防护,以 Redisson-native 责任链补齐** —
+布隆过滤器(防穿透)、TTL 抖动(防雪崩)、分布式击穿锁(防击穿)。
+ResiCache 是补齐这 3 项空白的 Redisson 搭档;JetCache 主打多级缓存与
+跨实例广播失效。两者**作用域互补,不是直接替代**。
+
 ## 📦 项目结构
 
 ```
