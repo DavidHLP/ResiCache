@@ -97,7 +97,16 @@ public class MetricsAutoConfiguration { ... }
 - **快照/恢复**:execute 用 snapshot/restore —— 只动自己的 key,finally 恢复调用方原值,**不**用 `MDC.clear()` 误清宿主线程其它 MDC(如 `traceId`),与 `RedisProCacheWriter` 异步路径的防御式 MDC 风格一致。
 - **requestId 生成**:用 `ThreadLocalRandom` 而非 `UUID.randomUUID()` —— execute 是缓存热路径(每次 GET/PUT 必经),规避 `SecureRandom` 熵竞争 / 潜在阻塞;64-bit 无符号十六进制对日志关联已足够。
 - **降级**:DEBUG 关闭时 `log.debug` 静默 no-op(SLF4J 标准门控);`requestId` 仍 stamp(为后续 Observation span 关联预留)。
-- **scope**:这是 guide §223 per-handler observability 大项的**地基**((d));(e) Observation spans、per-handler `resicache.handler.<name>.fired` counter、Micrometer tags 留后续轮次。
+- **scope**:guide §223 per-handler observability 大项。(d) DEBUG+MDC requestId 见上(R24);**per-handler `resicache.handler.fired` counter 见下(R25)**;(e) Observation spans、Micrometer handler/decision tags 留后续轮次。
+
+### `resicache.handler.fired` per-handler 计数(R25)
+
+`AbstractCacheHandler.handle()` 单点为每个被引擎求值的 handler 自增 `resicache.handler.fired` counter(tag `handler` = 运行时子类 SimpleName,如 `BloomFilterHandler`)。`MeterRegistry` 由 `CacheHandlerChainFactory` 建链时注入每个 enabled `AbstractCacheHandler`(方法 `attachMeterRegistry`,幂等;registry 缺失时 counter 为 null,no-op)。
+
+- **cardinality**:`handler` tag 数 = handler 数(bounded ~6),**不加** `redisKey`(unbounded,见 guide line 261)。
+- **查询示例**:`rate(resicache.handler.fired{handler="SyncLockHandler"}[5m])` = 该 handler 被引擎求值的频率 —— 回答「哪个保护机制在 fire、fire 多频繁」。
+- **与 R24 DEBUG 的关系**:counter = 结构化指标(告警 / Grafana 仪表盘),DEBUG log = 详细决策序列(哪个 key、什么 decision);两者互补,均为 guide §223 per-handler observability 的组成。
+- **新 metric 名**:`resicache.handler.fired` 是 pre-1.0 新增 metric(STABILITY §2 metric namespace may-change),additive,不替换既有 `resicache.handler.null.hit` / lock counter 等语义 counter。
 
 ## 前置条件与降级
 
