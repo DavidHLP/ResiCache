@@ -299,6 +299,39 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   R15 baseline 679). STABILITY.md §1+§3 not invoked;
   §2 (tests may evolve pre-1.0) applies.
   (loop round 20)
+- **`wiki/architecture/auto-configuration.md` sync to current source**
+  (round 21) — continued Round 17/18/19 bounded wiki-sync pattern
+  (1 page per round; R20 broke to add an integration test, R21
+  back to docs). R11 + R15 both live in the auto-configuration
+  flow and this page is their primary home. Changes:
+  - **`native-annotation-mode` default factually corrected**:
+    wiki said `FULL` (default); actually `SELECTIVE` (R2 onward)
+    — "避免双 Advisor"策略选择。`FULL` 是「旧项目零改动迁移」
+    路径,`SELECTIVE` 是大多数 ResiCache 用户的默认。`NONE`
+    是性能敏感场景的明确切到 ResiCache-only。
+  - **`source-files` frontmatter** added
+    `SecureJacksonSerializerFactory.java` (R11) +
+    `SerializerWhitelistStartupGuard.java` (R15)
+  - **`related` list** added `serialization` + `observability`
+  - **`updated:` frontmatter** bumped to 2026-06-29
+  - **New `## 序列化装配 (避免 wired/unwired 双轨 bug)` section** —
+    documents `SecureJacksonSerializerFactory` as the single
+    entry point for both `defaultRedisCacheConfiguration` and
+    `RedisConnectionConfiguration#redisCacheTemplate` (R5 fix +
+    R11 refactor); explicit warning "不要直接 `new SecureJacksonRedisSerializer(objectMapper)`"
+  - **New `## 启动期守卫 (SerializerWhitelistStartupGuard, R15)`
+    section** — explains the bypass-guard nature ("不在装配链上,
+    是独立旁路"),points at integration test (R20) coverage,
+    cross-references the other startup guard
+    `SyncLockProperties.localOnly` for context
+  - **Related-link list** — configuration row updated;
+    serialization row added for factory assembly context;
+    observability row added for the loud-startup observability
+    strategy
+
+  No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
+  may-change pre-1.0) applies. Pure docs.
+  (loop round 21)
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
