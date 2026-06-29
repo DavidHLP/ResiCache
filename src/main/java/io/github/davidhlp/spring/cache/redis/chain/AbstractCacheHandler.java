@@ -6,6 +6,9 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.slf4j.MDC;
 
 /**
  * 抽象缓存处理器，提供责任链的<b>单一引擎</b>实现。
@@ -20,6 +23,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
+@Slf4j
 public abstract class AbstractCacheHandler implements CacheHandler {
 
     /** 下一个处理器 */
@@ -58,6 +62,15 @@ public abstract class AbstractCacheHandler implements CacheHandler {
         // 不需要处理时等价 continueChain，统一进入 decision 分发，
         // 消除原先"shouldHandle 分支与 decision 分支"两条并行的推进路径
         HandlerResult result = shouldHandle(context) ? doHandle(context) : HandlerResult.continueChain();
+        // guide §223d:单点 chain-advance 日志 —— 每个被引擎求值的 handler 记录其决策 + key +
+        // 本次执行的 requestId(由 CacheHandlerChain.execute stamp 进 MDC),使一次 GET/PUT 的
+        // DEBUG trace 可按 requestId 串联全部 handler 与决策。getClass() 取运行时子类名
+        // (如 BloomFilterHandler);skipRemaining 短路路径未到达此 handler,故不记。
+        log.debug("[chain] handler={} decision={} key={} requestId={}",
+                getClass().getSimpleName(),
+                result.decision(),
+                context.getRedisKey(),
+                MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY));
         return switch (result.decision()) {
             // 继续：有下一个则推进，否则链尾成功
             case CONTINUE -> getNext() != null ? getNext().handle(context) : result;

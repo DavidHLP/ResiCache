@@ -5,11 +5,13 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
+import org.slf4j.MDC;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -25,6 +27,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 @Slf4j
 @Component
 public class CacheHandlerChain {
+
+    /**
+     * MDC key 用于 stamp 每次链执行的关联 id(guide §223d:per-handler chain observability)。
+     * {@link #execute(CacheContext)} 每次执行 stamp 一个新 id,使一次 GET/PUT 内所有 handler 的
+     * {@code [chain]} DEBUG 行可被同一 id 关联。由 {@link AbstractCacheHandler#handle(CacheContext)} 读取。
+     */
+    public static final String MDC_REQUEST_ID_KEY = "requestId";
+
     /** 所有处理器列表（用于调试和后置处理） */
     private final List<CacheHandler> handlers = new ArrayList<>();
     /** 责任链头节点 */
@@ -114,19 +124,41 @@ public class CacheHandlerChain {
                 context.getCacheName(),
                 context.getRedisKey());
 
-        // 执行责任链（注意：此时仍持有 head 的引用快照，clear() 无法修改链）
-        // WS-1.4:链级 Micrometer Timer 记录 full lifecycle(head handle + post-process)
-        // 本 tick 单 Timer(无 tags,简洁)— per-cacheName/per-operation tags
-        // 留后续 tick(WS-1.4 测试套件扩展)添加
-        CacheResult finalResult;
-        if (chainExecuteTimer != null) {
-            finalResult = chainExecuteTimer.record(
-                    () -> executeChainInternal(currentHead, handlersSnapshot, context));
-        } else {
+        // guide §223d:为本次链执行 stamp 一个 requestId 进 MDC,使本次 GET/PUT 内所有 handler 的
+        // [chain] DEBUG 行可被同一 id 关联(falsifiable observability)。
+        // snapshot/restore:只动自己的 key,finally 恢复调用方原值,**不**用 MDC.clear() 误清宿主
+        // 线程其它 MDC(如 traceId);与 RedisProCacheWriter 的防御式 MDC 风格一致。
+        String previousRequestId = MDC.get(MDC_REQUEST_ID_KEY);
+        MDC.put(MDC_REQUEST_ID_KEY, generateRequestId());
+        try {
+            // 执行责任链（注意：此时仍持有 head 的引用快照，clear() 无法修改链）
+            // WS-1.4:链级 Micrometer Timer 记录 full lifecycle(head handle + post-process)
+            // 本 tick 单 Timer(无 tags,简洁)— per-cacheName/per-operation tags
+            // 留后续 tick(WS-1.4 测试套件扩展)添加
+            if (chainExecuteTimer != null) {
+                return chainExecuteTimer.record(
+                        () -> executeChainInternal(currentHead, handlersSnapshot, context));
+            }
             // 无 MeterRegistry 时 no-op 计时(测试 stub / 无 actuator 环境)
-            finalResult = executeChainInternal(currentHead, handlersSnapshot, context);
+            return executeChainInternal(currentHead, handlersSnapshot, context);
+        } finally {
+            if (previousRequestId == null) {
+                MDC.remove(MDC_REQUEST_ID_KEY);
+            } else {
+                MDC.put(MDC_REQUEST_ID_KEY, previousRequestId);
+            }
         }
-        return finalResult;
+    }
+
+    /**
+     * 生成本次链执行的关联 id。
+     *
+     * <p>用 {@link ThreadLocalRandom} 而非 {@code UUID.randomUUID()}:{@code execute} 是缓存热路径
+     * (每次 GET/PUT 必经),需规避 {@code SecureRandom} 的熵竞争/潜在阻塞;64-bit 随机数对 DEBUG
+     * 日志关联已足够(碰撞概率可忽略)。无符号十六进制输出,避免负值的符号扩展噪音。
+     */
+    private static String generateRequestId() {
+        return Long.toUnsignedString(ThreadLocalRandom.current().nextLong(), 16);
     }
 
     /**
