@@ -13,7 +13,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationSupport.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/ThreadPoolEarlyExpirationExecutor.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/TtlPolicy.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/DefaultTtlPolicy.java
 status: stable
 created: 2026-06-21
 updated: 2026-06-21
@@ -25,7 +25,7 @@ updated: 2026-06-21
 
 ## 判定:何时该提前刷新
 
-`EarlyExpirationHandler` 只对 `GET` 且注解 `enableEarlyExpiration=true` 生效。它先 `valueOperations.get` 预取缓存值,交给 `TtlPolicy.shouldEarlyExpiration` 判断:
+`EarlyExpirationHandler` 只对 `GET` 且注解 `enableEarlyExpiration=true` 生效。它先 `valueOperations.get` 预取缓存值,交给 `DefaultTtlPolicy.shouldEarlyExpiration` 判断:
 
 `src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java:111`
 
@@ -78,7 +78,7 @@ end
 
 ## 执行器:EarlyExpirationSupport / Executor
 
-`EarlyExpirationSupport`(`@Component`)是门面,把刷新任务交给 `EarlyExpirationExecutor`:
+`EarlyExpirationSupport`(`@Component`)是门面,把刷新任务交给 `ThreadPoolEarlyExpirationExecutor`:
 
 `src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationSupport.java:24`
 
