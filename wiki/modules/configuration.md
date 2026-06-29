@@ -82,8 +82,12 @@ Redisson 客户端与 Redis 部署形态(单机/哨兵/集群)配置,由 [[auto-
     fail-on-unknown-type: true                       # 未知类型是否抛错(默认 true,降级到 miss 由 [[cache-lifecycle]] 处理)
     type-property: "@class"                          # 类型判定属性名
     polymorphic-typing-enabled: false                # 多态类型开关(默认 false)
+    probe-enabled: false                             # 启动期 pre-flight 探测(R31,默认关闭):采样 N keys 检测非 envelope 遗留值 → WARN
+    probe-sample-size: 100                           # 探测采样 key 数上限(默认 100)
 ```
 → [[serialization]],防 Jackson 多态类型攻击。
+
+`probe-enabled`(R31 起,opt-in 默认 `false`):启动期 `SerializationPreFlightProbe`(`@EventListener(ApplicationReadyEvent)`)采样 `probe-sample-size` 个 Redis key,检测非 `{version,payload}` envelope 的遗留值(Spring 原生 / JDK 序列化),发现则发 prominent WARN 链 v0.2.0 迁移工具。诊断工具,不松 envelope(ADR-0003);默认关闭因扫描 Redis 是启动副作用。详见 [[serialization]]。
 
 `allowed-package-prefixes` 通配(R9 起):`com.example.*` 匹配 `com.example.Foo` 与任意深度的 `com.example.sub.bar.Qux`(`WhitelistPolicy.matchesPrefix` dot-boundary 保护);literal 前缀如 `com.example` 沿用 `String.startsWith` 语义(intentional,候选 4 dot-boundary 仍 deferred as BREAKING)。
 
