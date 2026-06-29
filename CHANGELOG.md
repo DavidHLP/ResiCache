@@ -484,6 +484,18 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   replaced the false profile claim. Closes the build-command sub-item of
   the P0 "reconcile 自相矛盾", pairing with R29's version-table reconcile.
   Docs only. (loop round 30)
+- **Serialization pre-flight probe (guide §115)**: new
+  `SerializationPreFlightProbe` @Component samples N Redis keys at startup
+  (opt-in `resi-cache.serializer.probe-enabled`, default false;
+  `probe-sample-size`, default 100) and detects values NOT in the
+  `{version,payload}` envelope (ADR-0003) — legacy Spring-native /
+  JDK-serialized caches that would silently all-miss on cutover. Emits a
+  prominent WARN linking the v0.2.0 migration tool; diagnostic only (does
+  not loosen the envelope); non-fatal. Detection via pure `isEnvelope`;
+  scan via `RedisConnectionFactory.scan`. New config keys are additive
+  (STABILITY §1 surface growth). TDD: `SerializationPreFlightProbeTest`
+  (4 isEnvelope + 3 scanAndReport mock cases); full verify 694/0/0/0 ✅
+  (+7, Skipped: 0, Testcontainers IT executed). (loop round 31)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
