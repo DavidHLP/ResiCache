@@ -32,7 +32,7 @@ import java.time.Duration;
 @HandlerPriority(HandlerOrder.TTL)
 public class TtlHandler extends AbstractCacheHandler {
 
-    private final DefaultTtlPolicy ttlPolicy;
+    private final TtlPolicy ttlPolicy;
 
     /** guide §223b1:TTL jitter 应用事件计数(防雪崩:randomTtl=true 的 variance 展开)。 */
     private Counter ttlJitteredCounter;

@@ -27,12 +27,12 @@ import org.springframework.stereotype.Component;
 @HandlerPriority(HandlerOrder.NULL_VALUE)
 public class NullValueHandler extends AbstractCacheHandler {
 
-    private final DefaultNullValuePolicy nullValuePolicy;
+    private final NullValuePolicy nullValuePolicy;
 
     /** Path C 后续(WS-1.4) — 空值命中事件计数。 */
     private Counter nullHitCounter;
 
-    public NullValueHandler(DefaultNullValuePolicy nullValuePolicy) {
+    public NullValueHandler(NullValuePolicy nullValuePolicy) {
         this.nullValuePolicy = nullValuePolicy;
     }
 

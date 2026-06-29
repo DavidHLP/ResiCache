@@ -9,10 +9,13 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 默认的TTL策略，利用可注入的时钟以提高可测试性。
+ *
+ * <p>实现 {@link TtlPolicy} seam;自定义实现声明 {@code @Bean} 可顶替(对齐 LockManager /
+ * BloomIFilter 纪律,落实 ADR-0005)。
  */
 @Component
 @RequiredArgsConstructor
-public class DefaultTtlPolicy {
+public class DefaultTtlPolicy implements TtlPolicy {
 
     private final Clock clock;
 

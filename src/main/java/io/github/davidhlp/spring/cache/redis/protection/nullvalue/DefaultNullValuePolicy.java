@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DefaultNullValuePolicy {
+public class DefaultNullValuePolicy implements NullValuePolicy {
 
     private final TypeSupport typeSupport;
 
