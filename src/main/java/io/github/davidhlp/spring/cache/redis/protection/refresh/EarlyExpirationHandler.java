@@ -6,7 +6,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
-import io.github.davidhlp.spring.cache.redis.protection.avalanche.DefaultTtlPolicy;
+import io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlPolicy;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -58,7 +58,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
         "    return 0 " +
         "end";
 
-    private final DefaultTtlPolicy ttlPolicy;
+    private final TtlPolicy ttlPolicy;
     private final EarlyExpirationSupport earlyExpirationSupport;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheStatisticsCollector statistics;
@@ -67,7 +67,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     /** Path C 后续(WS-1.4) — 同步提前过期触发事件计数。 */
     private Counter earlyRefreshTriggeredCounter;
 
-    public EarlyExpirationHandler(DefaultTtlPolicy ttlPolicy,
+    public EarlyExpirationHandler(TtlPolicy ttlPolicy,
                                   EarlyExpirationSupport earlyExpirationSupport,
                                   RedisTemplate<String, Object> redisTemplate,
                                   CacheStatisticsCollector statistics,
