@@ -73,6 +73,19 @@ public class SyncSupport {
     }
 
     /**
+     * Path C 后续(WS-1.4) — 健康查询:同步锁是否降级到 local-only。
+     * <p>{@code true} = 未显式声明 {@code localOnly=true} 且无分布式锁后端(Redisson 缺失),
+     * 任何 sync=true 操作会实际降级为单 JVM {@code synchronized}。多实例部署下不防击穿 —
+     * 暴露此信号供 {@code RedisCacheHealthIndicator} 级联到 /actuator/health。
+     *
+     * @return 是否处于 protection.degraded=local-only 状态
+     */
+    public boolean isDegraded() {
+        return !properties.getSyncLock().isLocalOnly()
+                && distributedManagers.isEmpty();
+    }
+
+    /**
      * 执行同步操作.
      *
      * @param key            缓存键
