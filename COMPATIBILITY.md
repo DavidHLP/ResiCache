@@ -5,7 +5,7 @@ at `38c514a`):
 
 - **`master` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50**.
 
-Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + 13 Testcontainers IT).
+Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backed integration tests).
 
 > **Historical context**: Pre-FIRE (≤ commit `3e72546`), `master` carried a `boot3`
 > line (Boot 3.4.13 / Java 17 / Redisson 3.27). WS-1.1 FIRE M1–M4 migrated to Boot 4
