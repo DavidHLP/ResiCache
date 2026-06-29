@@ -496,6 +496,10 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   (STABILITY §1 surface growth). TDD: `SerializationPreFlightProbeTest`
   (4 isEnvelope + 3 scanAndReport mock cases); full verify 694/0/0/0 ✅
   (+7, Skipped: 0, Testcontainers IT executed). (loop round 31)
+- **configuration.md wiki sync (R31 follow-up)**: documented the R31
+  `resi-cache.serializer.probe-enabled` / `probe-sample-size` keys in the
+  configuration wiki page (yaml example + probe note) — the §1.7
+  source-changed→sync-wiki obligation. Docs only. (loop round 32)
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
