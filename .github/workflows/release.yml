@@ -6,7 +6,11 @@ on:
       - 'v*'
 
 env:
-  JAVA_VERSION: '17'
+  # WS-1.1 FIRE(commit 38c514a)统一 Java 版本到 21 后,该值必须与
+  # pom.xml `<java.version>21</java.version>`(以及 maven.compiler.source/target)
+  # 对齐,否则 release 时会用 JDK 17 编译 Java 21 源码必失败。CI.yml 已修正为
+  # '21',release.yml 此处为遗留(loop round 8 修复)。
+  JAVA_VERSION: '21'
 
 jobs:
   release:
