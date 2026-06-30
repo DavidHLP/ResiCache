@@ -245,7 +245,6 @@ resi-cache:
 > classpath; **without it, ResiCache fails fast** (refuses to silently degrade to
 > a single-JVM lock, which is useless across instances). For an explicit
 > single-instance/test degradation, set `resi-cache.sync-lock.local-only=true`.
-> A `resi-cache.protection.preset` to batch-enable them is planned for v0.2.0.
 
 ## How it works
 
@@ -273,21 +272,18 @@ invalidator. The two are complementary in scope, not direct substitutes.
 
 ## Known Limitations
 
-Hard limitations of v0.0.2 (all addressed in the [Roadmap](#roadmap)):
-
 - **Protection off by default**: the five protection attributes default `false`;
-  enable each explicitly → v0.2.0 adds `resi-cache.protection.preset=STRICT/STANDARD/NONE`.
+  enable each explicitly on `@RedisCacheable`.
 - **Serialization envelope incompatible with Spring native**: ResiCache uses a
   `{version, payload}` envelope, incompatible with Spring's
   `GenericJackson2JsonRedisSerializer` / `JdkSerializer` — **existing projects
-  must migrate**, otherwise the entire cache misses on cutover → v0.2.0 provides
-  a `shadow → dual-write → cutover` migration tool.
+  must migrate**, otherwise the entire cache misses on cutover.
 - **Serialization whitelist defaults to the author's package**:
   `allowed-package-prefixes` defaults to `io.github.davidhlp.`; custom types must
   be added explicitly (see [Serialization safety](#serialization-safety)).
-- **`nativeAnnotationMode` now defaults to `SELECTIVE`** (v0.0.3): plain
-  `@Cacheable` is handled entirely by Spring's native cache infrastructure,
-  removing the dual-advisor risk.
+- **`nativeAnnotationMode` defaults to `SELECTIVE`**: plain `@Cacheable` is
+  handled entirely by Spring's native cache infrastructure, removing the
+  dual-advisor risk. Use `@RedisCacheable` for protection.
 - **No Reactive support** (WebFlux / `Mono` / `Flux`): `RedisCacheInterceptor` is
   blocking; such methods log an explicit "caching will not take effect" warning.
 - **`@CacheEvict(allEntries=true)` (CLEAN) is best-effort, not atomic** — parity
@@ -295,9 +291,8 @@ Hard limitations of v0.0.2 (all addressed in the [Roadmap](#roadmap)):
   a SCAN cursor + batched UNLINK/DEL, so keys written mid-CLEAN may be stranded and
   the cache is briefly half-deleted on large key sets. Lua/MULTI atomicity is
   intentionally not used (Redis single-thread O(keyspace) block, Cluster
-  cross-slot). When the Bloom filter is enabled, the `rebuild-window-seconds` window
-  (v0.1.0) prevents silent nulls during the post-wipe rebuild.
-- **No JMH benchmarks yet**: performance data lands in v0.3.0.
+  cross-slot). When the Bloom filter is enabled, `rebuild-window-seconds` prevents
+  silent nulls during the post-wipe rebuild.
 
 ## Not in Scope
 
@@ -305,19 +300,7 @@ ResiCache deliberately omits these to avoid bloat — pair with dedicated tools:
 
 - **Circuit breaking / rate limiting** → [Resilience4j](https://resilience4j.readthedocs.io/)
 - **Multi-level local + remote cache** → [Caffeine](https://github.com/ben-manes/caffeine) for the local tier
-- **Reactive caching** (WebFlux) → not supported; under roadmap evaluation
-
-## Roadmap
-
-| Version | Focus | Status |
-|---|---|---|
-| **v0.0.3** | Docs honesty + `resi-cache.enabled` kill-switch + Reactive explicit exclusion + dual-advisor fix | In progress |
-| **v0.1.0** | Boot 4.0 / SDR 4.0 / Java 21 single-build (FIRE M0–M4 ✅ `38c514a`) + WS-1.2 P0 hardening (fail-fast sync / Cluster hash-tag / atomic CLEAN rebuild window ✅ `5a05d0a`) + WS-1.3 Path C ThreadLocal destruction (7-step sequence ✅ `a42a1c1`/`ceb3901`/`a483de9`/`b377c16`/`b9d6b40`/`cf4e2b1`) + first Maven Central publish | Pending (publish blocked on `OSSRH_*` → `MAVEN_USERNAME`/`MAVEN_PASSWORD` secret alignment) |
-| **v0.2.0** | `protection.preset` + serialization compatibility + migration tool (single release unit) | Planned |
-| **v0.3.0** | JMH benchmarks + observability (per-handler Micrometer tag) | Planned |
-| **v1.0.0** | API freeze + official launch (sample project / comparison page / articles) | Planned |
-
-See [CHANGELOG.md](CHANGELOG.md) for details.
+- **Reactive caching** (WebFlux) → not supported
 
 ## Dependencies
 

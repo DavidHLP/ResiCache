@@ -49,29 +49,24 @@ If you depend on items in this section, pin to an exact patch version
 These are the absolute minimum a downstream user needs to upgrade between
 0.x patch versions without code changes.
 
-## 4. 1.0 graduation criteria
+## 4. 1.0 graduation (forward markers — pre-1.0)
 
-ResiCache graduates to **1.0** when **all** of the following are true:
+Graduation to 1.0 is a pre-1.0 milestone not yet reached. The markers below
+describe *what 1.0 will mean* and are aspirational until the `1.0.0` tag is cut:
 
-1. **Artifact resolves from Maven Central** under the group
-   `io.github.davidhlp` and a `1.0.x` SemVer.
-2. **STABILITY §1 and §3 hold for ≥ 1 release cycle** — i.e. 1.0 has not
-   broken the surface in §1 / §3 within its first 6 months.
-3. **CycloneDX SBOM is published** with every release.
-4. **dependency-check gate is at HIGH/CRITICAL fail-build**, not advisory.
-5. **At least one production adopter** is publicly listed in `ADOPTERS.md`
-   (truthful at zero pre-1.0; created when the first adopter lands).
-6. **A named successor or documented succession plan** is in place
-   (e.g. `BUS-FACTOR.md` or an equivalent section in `CONTRIBUTING.md`).
-7. **Comparison page** (`docs/comparison.md`) has been visited by ≥ 1
-   external referrer in the previous month (falsifiable adoption signal).
+1. **Public surface stability** — §1 + §3 have held across at least one
+   release cycle without breaking changes.
+2. **Production-grade ops surface** — Maven Central publish under
+   `io.github.davidhlp`, CycloneDX SBOM per release, OWASP dependency-check
+   gate at HIGH/CRITICAL.
+3. **Adoption signal** — at least one production adopter listed in
+   `ADOPTERS.md` (created when the first adopter lands).
+4. **Bus factor** — a named successor or a documented succession plan
+   (see [`CONTRIBUTING.md`](./CONTRIBUTING.md) → *Maintainers & bus factor*).
 
-Once 1.0 is cut, the 1.x line will:
-
-- Honor §1 (public API) and §3 (no-break items) **strictly** — any change
-  is a new major version (2.0).
-- Continue to allow internal refactors, default-value tuning, and metric
-  namespace changes **only** in 0.x — these become locked from 1.0 onward.
+When 1.0 ships, items in §2 (internals, defaults, metric names) become
+**locked** — any change is a new major version (2.0). Until then, §2 keeps
+those areas open for tuning.
 
 ## 5. How to read this document
 
