@@ -331,18 +331,15 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 从完整的Redis key中提取实际的key部分 Redis key格式: {cacheName}::{actualKey}
+     * 从完整的 Redis key 中提取实际的 key 部分。键派生统一收口到 {@link CacheKeys}(ADR-0011),
+     * 与 {@link RedisProCache} 的 loader 路径 bloom 查询同源,杜绝 actualKey/redisKey 漂移。
      *
      * @param cacheName 缓存名称
      * @param redisKey 完整的Redis key
      * @return 实际的key部分
      */
     private String extractActualKey(String cacheName, String redisKey) {
-        String prefix = cacheName + "::";
-        if (redisKey.startsWith(prefix)) {
-            return redisKey.substring(prefix.length());
-        }
-        return redisKey;
+        return CacheKeys.fromRedisKey(cacheName, redisKey).actualKey();
     }
 
     /**

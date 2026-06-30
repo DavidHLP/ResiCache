@@ -20,6 +20,18 @@ wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subj
 
 ---
 
+## [2026-06-30] improve | Bloom 键漂移修复 + CacheKeys 键派生 seam (ADR-0011)
+
+`/improve-codebase-architecture` 报告(`/tmp/architecture-review-1782832306.html`)候选 A(Strong)+ B(Worth)落地。全文精读核实 + 校准:
+
+- **bloom 键漂移(已核实 bug)✅ 修复**:链层 `BloomFilterHandler` 写入/查询 bloom 用 `actualKey`(剥前缀),但 loader 路径 `RedisProCache.get(key,loader):170` 用 `createCacheKey(key)`(带前缀)→ 查的 key 永不在过滤器 → sync+bloom 静默 null。新增 `cache/CacheKeys`(record,键派生单一权威,`bloomKey()≡actualKey()`),两个 bloom 消费者同源派生,漂移结构性杜绝。`RedisProCacheWriter.extractActualKey` 委派 CacheKeys。
+- **保留 C4 双路径**:C4 已裁定双 bloom 检查为有意双层防御(loader 路径防数据源;链层防 Redis GET),本修复不动该设计,仅修键一致性。
+- **报告过度判断修正**:报告称 loader 路径"缺失 TTL/Null/Early"——精读 `executeSyncLoad` 证伪(`super.get/super.put` 经责任链,三机制本就生效),不据此动作。
+- **冷启动 sync+bloom 局限(D3)📄 文档化未实现**:空 bloom 仍会使 loader 前置短路返回 null 违反 @Cacheable(CLEAN 已有 rebuilding 窗口补丁,冷启动未覆盖)。修法(populated-flag fail-open)是行为变更 + 多实例语义 + 测试调整,留后续 ADR。
+- 验证:`./mvnw verify` 绿——692 测试 / JaCoCo 门通过 / checkstyle 0。新增 `CacheKeysTest`(3)+ `PathCAopContractIT` sync+bloom 预热回归(1)。
+
+---
+
 ## [2026-06-30] improve | TTL/NullValue Policy 升为真 seam + 评审候选核验
 
 `/improve-codebase-architecture` 报告 5 候选(HTML:`/tmp/architecture-review-20260630-004529.html`),本轮逐个源码核验 + 落地:

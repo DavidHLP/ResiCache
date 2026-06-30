@@ -44,6 +44,9 @@ class PathCAopContractIT extends AbstractRedisIntegrationTest {
     @Autowired
     private RedisTemplate<String, Object> redisCacheTemplate;
 
+    @Autowired
+    private io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport bloomSupport;
+
     @BeforeEach
     void setUp() {
         redisCacheTemplate.getConnectionFactory().getConnection().flushDb();
@@ -101,6 +104,28 @@ class PathCAopContractIT extends AbstractRedisIntegrationTest {
             assertThat(actualTtl)
                     .as("Redis 实际 TTL 应在 [119, 120] 秒(TtlHandler 未开 randomTtl)")
                     .isBetween(119L, 120L);
+        }
+    }
+
+    @Nested
+    @DisplayName("sync + bloom 组合(ADR-0011 键漂移回归)")
+    class SyncPlusBloomTests {
+
+        @Test
+        @DisplayName("ADR-0011: 预热 bloom 后 sync+bloom 用 actualKey 命中,返回真实值非 null")
+        void syncPlusBloom_warmBloom_usesActualKey_returnsValue() {
+            // createCacheKey(1L) = "testCache::1" → actualKey = "1"(与链层 BloomFilterHandler.add 同源)
+            bloomSupport.add("testCache", "1");
+
+            String result = cacheService.getByIdWithSyncAndBloom(1L);
+
+            assertThat(result)
+                    .as("sync+bloom 预热 actualKey=1 后,loader 前置 bloom 须命中(actualKey) → 继续加载。"
+                            + "键漂移(查带前缀 testCache::1)会静默返回 null,违反 @Cacheable。")
+                    .isEqualTo("sync-bloom-1");
+            assertThat(cacheService.getCallCount())
+                    .as("首次 miss → loader 被调用")
+                    .isEqualTo(1);
         }
     }
 }

@@ -59,6 +59,8 @@ private HandlerResult handleGet(CacheContext context) {
 ```
 
 > 此外,`RedisProCache.get(...)` 在调用业务 loader **前**会再做一次布隆拦截——防止 sync 模式下未命中仍触发数据源查询。两层拦截。
+>
+> **键一致性(ADR-0011)**:两层拦截的 bloom 键都经 `cache/CacheKeys.bloomKey()`(≡ `actualKey`)派生,与链层 `BloomFilterHandler.add` 同源——杜绝历史漂移(loader 路径曾误用带前缀 `createCacheKey`,使 sync+bloom 预热后查询静默返回 null)。注:冷(空)bloom 仍会使 loader 前置短路返回 null 违反 `@Cacheable`,CLEAN 已有 rebuilding 窗口 fail-open 补丁,**冷启动未覆盖**(留后续 ADR)。
 
 ### PostProcess:确认成功才写入
 

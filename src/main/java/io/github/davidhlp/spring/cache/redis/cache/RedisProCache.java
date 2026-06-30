@@ -163,13 +163,18 @@ public class RedisProCache extends RedisCache {
     public <T> T get(Object key, Callable<T> loader) {
         long start = System.nanoTime();
         try {
-            // Bloom Filter 短路检查：在调用 loader 之前拦截，防止缓存穿透真正到达数据源
             RedisCacheableOperation operation = lookupOperation();
+
+            // Bloom Filter 短路检查(仅 sync 路径;Spring 仅对 sync=true 调 get(key,loader)):
+            // 在调用 loader 之前拦截,防止缓存穿透真正到达数据源。属 C4 裁定的有意双层防御
+            // (本处防 loader/数据源;链层 BloomFilterHandler 防 Redis GET),ADR-0011 不移除。
+            // 键一致性(ADR-0011):必须用 actualKey(CacheKeys.bloomKey,与链层 add 同源),
+            // 不可用 createCacheKey 的带前缀 redisKey —— 否则查的 key 永不在过滤器里(键漂移缺陷)。
             if (operation != null && operation.isUseBloomFilter()
                     && bloomSupport != null) {
-                String cacheKey = createCacheKey(key);
-                if (!bloomSupport.mightContain(getName(), cacheKey)) {
-                    log.debug("Bloom filter rejected loader invocation: cacheName={}, key={}", getName(), cacheKey);
+                String bloomKey = CacheKeys.fromRedisKey(getName(), createCacheKey(key)).bloomKey();
+                if (!bloomSupport.mightContain(getName(), bloomKey)) {
+                    log.debug("Bloom filter rejected loader invocation: cacheName={}, key={}", getName(), bloomKey);
                     safeIncrement(missCounter);
                     return null;
                 }
