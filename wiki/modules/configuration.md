@@ -68,7 +68,7 @@ resi-cache:
 
 > ⚠️ wiki 历史把 `timeout: 10s` 列为示例;实际代码 `SyncLockProperties.timeout = 3000` + `unit = MILLISECONDS`(R5 recon 验证) = **3 秒**。要 10 秒须显式 `timeout: 10000` 或 `timeout: 10 + unit: SECONDS` 两种写法任一。
 
-`local-only`(默认 `false`)控制无分布式锁后端(Redisson 缺失 → 无 LockManager bean)时 `sync=true` 的行为:**默认 fail-fast**(拒绝静默退化为单 JVM,多实例下无法防击穿——"标榜分布式却单机"是最坏失败模式);设 `true` 显式接受单 JVM 同步降级(单实例/测试场景),并发 `protection.degraded=local-only` 告警(WS-1.4 升级为 Observation 事件)。
+`local-only`(默认 `false`)控制无分布式锁后端(Redisson 缺失 → 无 LockManager bean)时 `sync=true` 的行为:**默认 fail-fast**(拒绝静默退化为单 JVM,多实例下无法防击穿——"标榜分布式却单机"是最坏失败模式);设 `true` 显式接受单 JVM 同步降级(单实例/测试场景),并发 `protection.degraded=local-only` WARN 日志。
 
 ### redisson / redis-deployment(Redis 连接)
 
@@ -87,7 +87,7 @@ Redisson 客户端与 Redis 部署形态(单机/哨兵/集群)配置,由 [[auto-
 ```
 → [[serialization]],防 Jackson 多态类型攻击。
 
-`probe-enabled`(R31 起,opt-in 默认 `false`):启动期 `SerializationPreFlightProbe`(`@EventListener(ApplicationReadyEvent)`)采样 `probe-sample-size` 个 Redis key,检测非 `{version,payload}` envelope 的遗留值(Spring 原生 / JDK 序列化),发现则发 prominent WARN 链 v0.2.0 迁移工具。诊断工具,不松 envelope(ADR-0003);默认关闭因扫描 Redis 是启动副作用。详见 [[serialization]]。
+`probe-enabled`(R31 起,opt-in 默认 `false`):启动期 `SerializationPreFlightProbe`(`@EventListener(ApplicationReadyEvent)`)采样 `probe-sample-size` 个 Redis key,检测非 `{version,payload}` envelope 的遗留值(Spring 原生 / JDK 序列化),发现则发 prominent WARN 提示接入存量项目须清空旧缓存或自行迁移。诊断工具,不松 envelope(ADR-0003);默认关闭因扫描 Redis 是启动副作用。详见 [[serialization]]。
 
 `allowed-package-prefixes` 通配(R9 起):`com.example.*` 匹配 `com.example.Foo` 与任意深度的 `com.example.sub.bar.Qux`(`WhitelistPolicy.matchesPrefix` dot-boundary 保护);literal 前缀如 `com.example` 沿用 `String.startsWith` 语义(intentional,候选 4 dot-boundary 仍 deferred as BREAKING)。
 
@@ -129,7 +129,7 @@ Redisson 客户端与 Redis 部署形态(单机/哨兵/集群)配置,由 [[auto-
 
 > Set the property to include your host application's root package (e.g. `com.example.*` for wildcard, or `com.example.dto` for literal). Default `[io.github.davidhlp]` only covers ResiCache framework internal types.
 
-谓词 `shouldWarn()` package-private 供单元测试。不动 default value(默认仍是 `[io.github.davidhlp]`),不改 property key,**非 breaking** 改动。本守卫是 [[serialization]] 的运行时补充,也是指南 §4 「whitelist auto-derive」完整项(BEAN FACTORY 自推导 + WARN + explicit override authoritative,标 ⚠️ BREAKING)的 WARN scaffolding 部分。
+谓词 `shouldWarn()` package-private 供单元测试。不动 default value(默认仍是 `[io.github.davidhlp]`),不改 property key,**非 breaking** 改动。本守卫是 [[serialization]] 的运行时补充;后续若引入更深度的 hostname package 自动推导,属 ⚠️ BREAKING 变更,需独立 ADR。
 
 > 注意:这是 ResiCache 第二个 startup 守卫;另一个是 `SyncLockProperties.localOnly` 启动期告警(在 `RedisProCacheConfiguration` 装配时,见 [[breakdown-lock]])。两个 WARN 各自独立、各自防御一个 misconfig footgun,非重复。
 

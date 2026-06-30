@@ -83,7 +83,7 @@ public class MetricsAutoConfiguration { ... }
 
 ### `resicache.chain.execute` Micrometer Timer(WS-1.4)
 
-`CacheHandlerChain` 构造时(仅 `MeterRegistry` 在 classpath)注册单个 Timer `resicache.chain.execute`,记录**整条链的 full lifecycle**(head handle + post-process)。`ObjectProvider<MeterRegistry>` 允许 registry 缺失(测试 stub / 无 actuator 环境)—— 缺时计时静默 no-op,行为不变。本 tick 为单 Timer(无 tags);per-cacheName / per-operation tags 与 per-handler Micrometer tags 留后续 release(guide §223,line 291 移至 v0.1.0)。
+`CacheHandlerChain` 构造时(仅 `MeterRegistry` 在 classpath)注册单个 Timer `resicache.chain.execute`,记录**整条链的 full lifecycle**(head handle + post-process)。`ObjectProvider<MeterRegistry>` 允许 registry 缺失(测试 stub / 无 actuator 环境)—— 缺时计时静默 no-op,行为不变。当前为单 Timer(无 tags);per-cacheName / per-operation tags 与 per-handler Micrometer tags 的更细粒度归属,见 `wiki/adr/0008-observation-spans-attribution.md`(归属划界,Proposed 待用户批准)。
 
 ### Per-handler `[chain]` DEBUG 日志 + MDC requestId 关联(R24)
 
@@ -93,11 +93,11 @@ public class MetricsAutoConfiguration { ... }
 [chain] handler=BloomFilterHandler decision=CONTINUE key=resicache:users:42 requestId=7f3a9c1b2e0d4
 ```
 
-- **关联性**:一次 GET/PUT 内所有 handler 的 DEBUG 行共享同一 `requestId`,可在日志中按 `requestId` 串联整条链的决策序列(guide §223d / line 388 / line 248「单 requestId 串所有 handler + decision」契约)。这是后续 hot-key auto-refresh / adaptive TTL 等「non-deterministic 厚化」的前置可观测性前提。
+- **关联性**:一次 GET/PUT 内所有 handler 的 DEBUG 行共享同一 `requestId`,可在日志中按 `requestId` 串联整条链的决策序列。这是后续 hot-key auto-refresh / adaptive TTL 等「non-deterministic 厚化」的前置可观测性前提。
 - **快照/恢复**:execute 用 snapshot/restore —— 只动自己的 key,finally 恢复调用方原值,**不**用 `MDC.clear()` 误清宿主线程其它 MDC(如 `traceId`),与 `RedisProCacheWriter` 异步路径的防御式 MDC 风格一致。
 - **requestId 生成**:用 `ThreadLocalRandom` 而非 `UUID.randomUUID()` —— execute 是缓存热路径(每次 GET/PUT 必经),规避 `SecureRandom` 熵竞争 / 潜在阻塞;64-bit 无符号十六进制对日志关联已足够。
 - **降级**:DEBUG 关闭时 `log.debug` 静默 no-op(SLF4J 标准门控);`requestId` 仍 stamp(为后续 Observation span 关联预留)。
-- **scope**:guide §223 per-handler observability 大项。(d) DEBUG+MDC requestId 见上(R24);**per-handler `resicache.handler.fired` counter 见下(R25)**;(e) Observation spans、Micrometer handler/decision tags 留后续轮次。
+- **scope**:per-handler observability 三件套。(d) DEBUG+MDC requestId 见上(R24);**per-handler `resicache.handler.fired` counter 见下(R25)**;Observation spans / Micrometer handler·decision tags 的归属,见 `wiki/adr/0008-observation-spans-attribution.md`(Proposed)。
 
 ### `resicache.handler.fired` per-handler 计数(R25)
 
@@ -116,7 +116,7 @@ public class MetricsAutoConfiguration { ... }
 
 - **行为变化**:disabled handler 的语义 counter 不再注册(此前为恒 0 占位),与 `fired` 行为对齐 —— 双轨不一致消除。无监控依赖恒 0 counter,故无 break。
 - **测试范式**:`h.attachMeterRegistry(new SimpleMeterRegistry())` 触发注册,`h.handle(ctx)` 触发自增,直接断言 counter(见 `TtlHandlerTest` / `CacheHandlerChainFactoryTest.FiredCounterWiringTests`)。
-- **范围外(已知平行重复)**:`RedisBloomIFilter`(2 counter,不继承 `AbstractCacheHandler`)、`RedisProCache`(private `registerCounter`/`safeIncrement`)、`RefreshTaskMetrics`(独立值对象)形态各异,留待后续 observability 统一轮次。
+- **范围外(已知平行重复)**:`RedisBloomIFilter`(2 counter,不继承 `AbstractCacheHandler`)、`RedisProCache`(private `registerCounter`/`safeIncrement`)、`RefreshTaskMetrics`(独立值对象)形态各异;统一到同一计数器管理模式的清理属增量工作,非 pre-1.0 阻塞项。
 
 ## 前置条件与降级
 

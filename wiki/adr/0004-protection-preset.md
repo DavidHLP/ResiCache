@@ -23,18 +23,17 @@ v0.0.2 中 `@RedisCacheable` 的 5 大防护属性(`useBloomFilter`/`cacheNullVa
 
 ## Decision
 
-1. **引入 `resi-cache.protection.preset = STRICT / STANDARD / NONE`**(v0.2.0):
-   - `STANDARD`:开启安全默认(布隆 + 空值 + TTL 抖动,不含 sync);
-   - `STRICT`:全开(含 sync,要求 Redisson);
-   - `NONE`:全关(等价 `protection.enabled=false`)。
-2. **注解级默认仍 `false`**——preset 只是把"逐个开"变成"一键套餐",不改变显式语义。
-3. `shouldHandle` 在 `cacheOperation == null`(如全局 preset 无注解覆盖)时回退全局配置。
-4. v0.0.3 先落地 `resi-cache.protection.enabled` 总开关(已实现,
-   见 `CacheHandlerChainFactory#createChain` 短路逻辑)。
+1. **`resi-cache.protection.enabled` 总开关已落地**(短路 `CacheHandlerChainFactory#createChain`,
+   关闭时跳过 protection handlers 但保留 TTL 计算)。`protection.preset` 三个预设
+   `STRICT / STANDARD / NONE` 的设计已记录在本 ADR,实现延后 — pre-1.0 阶段仅暴露
+   总开关。
+2. **注解级默认仍 `false`**——任何机制的开启都必须显式表达。
+3. `shouldHandle` 在 `cacheOperation == null` 时回退全局配置,作为未来 preset 实现的
+   留位点。
 
 ## Consequences
 
-- **正面**:用户一键获得安全默认套餐,同时保留注解级覆盖;避免"默认全开"把未验证防护
-  强加用户。
-- **负面**:v0.2.0 前,用户仍需逐个开启(README 已明示,v0.0.3 仅有总开关)。
-- **不变**:任何防护开启都需用户显式选择(preset 或注解),框架不替用户做隐性决策。
+- **正面**:总开关提供 coarse-grained 关闭路径;注解级显式语义保留,避免"默认全开"
+  把未验证防护强加给用户。
+- **负面**:pre-1.0 阶段用户仍需逐个开启(README 已明示,仅有总开关 + 注解级开关)。
+- **不变**:任何防护开启都需用户显式选择(总开关或注解),框架不替用户做隐性决策。
