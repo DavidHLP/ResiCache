@@ -24,7 +24,7 @@ description)。这带来两个问题:
 - **Spring Cache 只解决"缓存",不解决"防护"**——穿透/击穿/雪崩/热 key 是 ResiCache 的领地。
 - **`@Cacheable` 兼容回退,但不获得防护**;`@RedisCacheable` 是防护入口。
 - **与 JetCache 差异化**:JetCache = 多级缓存;ResiCache = 防护纵深 + 可编排责任链。
-- 删除"高性能"措辞,待 v0.3.0 JMH 补齐后再据实陈述。
+- 删除"高性能"措辞;只有 JMH 数据可用时方能据实陈述性能。
 
 ## Consequences
 

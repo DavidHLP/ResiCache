@@ -22,12 +22,7 @@ ResiCache 用 `SecureJackson` 的 **`VersionEnvelope {version, payload:{@class}}
 ## Decision
 
 1. **保留信封 + 白名单**(安全优先,不放松)。
-2. **提供兼容开关与迁移路径**(v0.2.0,同一发布单元):
-   - `envelope-enabled` 开关:可关闭信封用裸 JSON;
-   - `legacy` fallback:读取时兼容旧格式;
-   - `keyPrefix`:新旧缓存隔离命名空间;
-   - **迁移工具**:`shadow(双读)→ dual-write(双写)→ cutover(切流)` 三阶段。
-3. README / COMPATIBILITY 显式声明不兼容与迁移义务。
+2. README / COMPATIBILITY 显式声明与 Spring 原生序列化格式不兼容,要求接入存量项目清空旧缓存或自行迁移。
 
 ## Consequences
 
