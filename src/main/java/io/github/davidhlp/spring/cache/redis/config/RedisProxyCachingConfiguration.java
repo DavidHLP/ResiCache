@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheOperationSource;
-import io.github.davidhlp.spring.cache.redis.cache.ResiCacheMethodInterceptor;
+import io.github.davidhlp.spring.cache.redis.cache.RedisCacheInterceptor;
 import io.github.davidhlp.spring.cache.redis.handler.CachePutAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.handler.CacheableAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.handler.CachingAnnotationHandler;
@@ -30,12 +30,12 @@ public class RedisProxyCachingConfiguration {
     public BeanFactoryCacheOperationSourceAdvisor redisCacheAdvisor(
             @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
                     CacheOperationSource redisCacheOperationSource,
-            ResiCacheMethodInterceptor resiCacheMethodInterceptor) {
+            RedisCacheInterceptor redisCacheInterceptor) {
         BeanFactoryCacheOperationSourceAdvisor advisor =
                 new BeanFactoryCacheOperationSourceAdvisor();
         advisor.setCacheOperationSource(redisCacheOperationSource);
-        // Path C Step 5 — advisor advice 从 RedisCacheInterceptor 换成 ResiCacheMethodInterceptor
-        advisor.setAdvice(resiCacheMethodInterceptor);
+        // Path C 单一 advice seam — advisor 直接持有 RedisCacheInterceptor
+        advisor.setAdvice(redisCacheInterceptor);
         advisor.setOrder(50);
         return advisor;
     }
@@ -48,26 +48,23 @@ public class RedisProxyCachingConfiguration {
     }
 
     /**
-     * Path C Step 5 — 替换原 {@code redisCacheInterceptor} bean(创建
-     * {@code RedisCacheInterceptor extends CacheInterceptor})为
-     * {@code ResiCacheMethodInterceptor}(Step 5 临时 extends 老类,Step 7
-     * 重写为独立实现)。Spring DI 自动注入全部依赖。
+     * Path C 单一 advice —— advisor 直接持有的拦截器,装配职责与拦截职责收口到同一处
+     * (原 Step 4/5/7 残骸 {@code CacheAspectSupportHelper}/{@code ResiCacheMethodInterceptor}
+     * 已于本轮收敛删除,继承面 3 层 → 2 层,dead-injection 参数同步清理)。
      */
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    public ResiCacheMethodInterceptor resiCacheMethodInterceptor(
+    public RedisCacheInterceptor redisCacheInterceptor(
             @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
                     CacheOperationSource redisCacheOperationSource,
             RedisProCacheManager cacheManager,
             KeyGenerator keyGenerator,
-            RedisCacheRegister redisCacheRegister,
             CacheableAnnotationHandler cacheableAnnotationHandler,
             EvictAnnotationHandler evictAnnotationHandler,
             CachingAnnotationHandler cachingAnnotationHandler,
-            CachePutAnnotationHandler cachePutAnnotationHandler,
-            RedisProCacheProperties redisProCacheProperties) {
+            CachePutAnnotationHandler cachePutAnnotationHandler) {
 
-        return new ResiCacheMethodInterceptor(
+        return new RedisCacheInterceptor(
                 redisCacheOperationSource,
                 cacheManager,
                 keyGenerator,

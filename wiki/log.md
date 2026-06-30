@@ -18,6 +18,16 @@ wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subj
 
 > 解析最近条目:`grep "^## \[" log.md | tail -5`
 
+## [2026-07-01] improve | ADR-0012 interceptor 残骸收敛 + EarlyExpirationSupport 浅模块删除(round 3)
+
+`/improve-codebase-architecture` round 3 报告(`/tmp/architecture-review-1782837301.html`)3 候选裁决落地:
+
+- **A(执行)**:删 `CacheAspectSupportHelper`(死代码,JaCoCo `covered=0/0`)+ 合并 `ResiCacheMethodInterceptor`(pass-through)进 `RedisCacheInterceptor`;advisor 直接持后者,继承面 3→2,`cache/` 拦截器 3 类→1 类
+- **B(执行)**:删 `EarlyExpirationSupport`(纯转发层——null guard 与 Executor 重复、`getThreadPoolStats`/`getRefreshingKeyCount` dead API);两 handler 直注 `ThreadPoolEarlyExpirationExecutor`(已具 `@PreDestroy` + null guard)
+- **C(撤销)**:`SpringAnnotationAdapter`(产出 Spring `CacheableOperation` 给 AOP 决策)与 `SpringCacheableAdapterFactory`(产出 ResiCache `RedisCacheableOperation` 给责任链执行)产出不同类型给不同消费者,非真重复——不合并,ADR 显式封口避免 re-suggest
+
+验证:`mvnw test-compile` PASS + `mvnw test` **BUILD SUCCESS,0 failures**(Path C AOP 契约 + EarlyExpiration 竞态/异步/同步 + ActualCache PUT-cancel + ChainFactory 装配零回归);Testcontainers IT 待 CI/Docker。详见 [[0012-interceptor-consolidation-and-shallow-module-removal]]。
+
 ## [2026-07-01] improve | ADR-0009 ChainEngine + ChainObserver 抽出(autocratic one-shot 3 切片一次落地)
 
 `/improve-codebase-architecture` 报告 + ADR-0009 (Proposed) 三切片全提交,Status 升 Accepted。

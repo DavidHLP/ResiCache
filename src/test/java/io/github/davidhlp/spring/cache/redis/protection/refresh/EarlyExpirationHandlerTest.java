@@ -37,7 +37,7 @@ class EarlyExpirationHandlerTest {
     private DefaultTtlPolicy ttlPolicy;
 
     @Mock
-    private EarlyExpirationSupport earlyExpirationSupport;
+    private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;
@@ -52,7 +52,7 @@ class EarlyExpirationHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationExecutor, redisTemplate, statistics, valueOperations);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
@@ -256,7 +256,7 @@ class EarlyExpirationHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
-            verify(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+            verify(earlyExpirationExecutor).submit(eq("test:key"), any(Runnable.class));
         }
 
         @Test

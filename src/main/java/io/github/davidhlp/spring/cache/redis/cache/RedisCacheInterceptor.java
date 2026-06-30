@@ -8,37 +8,76 @@ import io.github.davidhlp.spring.cache.redis.handler.CachingAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.handler.EvictAnnotationHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInvocation;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.interceptor.CacheInterceptor;
+import org.springframework.cache.interceptor.CacheOperationSource;
+import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.lang.Nullable;
 
 import java.lang.reflect.Method;
 
 /**
- * ResiCache 缓存拦截器(Step 7 改写:用 {@link DefaultMethodMetadataResolver} 静态 API
- * 替代已删除的 {@code CacheOperationMetadataHolder})。
+ * ResiCache 缓存拦截器 —— Path C 单一 advice seam。
  *
- * <p>Spring AOP advisor 链对 {@code CacheInterceptor} 子类有特殊处理(Step 5 验证),
- * 故保留 {@code extends CacheInterceptor} 是必要的。本类与 {@code ResiCacheMethodInterceptor}
- * 的分工:本类保留作"被继承的基类"(提供必要耦合面),{@code ResiCacheMethodInterceptor}
- * 是 advisor advice 实际持有者(Step 5 切换)。
+ * <p>继承 Spring {@link CacheInterceptor} 以满足 {@code BeanFactoryCacheOperationSourceAdvisor}
+ * 对 advice 的硬约束(Spring AOP 6.x 对 {@code CacheInterceptor} 子类有特殊处理:独立
+ * {@code implements MethodInterceptor} 时 {@code @RedisCacheable} 装配会失效)。本类是 advisor
+ * 直接持有的 advice —— 装配职责与拦截职责收口到同一处。
  *
- * <p>Step 7 改写:ThreadLocal 写入/清除从 {@code CacheOperationMetadataHolder.setCurrentKey/clear}
- * 改为 {@link DefaultMethodMetadataResolver#activateStatic}/{@link DefaultMethodMetadataResolver#clearStatic}
- * (ThreadLocal 所有权已迁到 DefaultMethodMetadataResolver,本类不再直接持有)。
+ * <p><strong>历史收敛(本轮)</strong>:Path C 曾经历 Step 4/5/7 三次方案切换,遗留两个冗余类:
+ * <ul>
+ *   <li>{@code CacheAspectSupportHelper}(Step 4 产物,零引用死代码)—— 已删除</li>
+ *   <li>{@code ResiCacheMethodInterceptor}(Step 5 产物,{@code invoke()} 仅 {@code return super.invoke()}
+ *       的 pass-through 中间层)—— 已合并回本类</li>
+ * </ul>
+ * 收敛后继承面 3 层 → 2 层(本类 → {@link CacheInterceptor}),{@code cache/} 拦截器 3 类 → 1 类。
+ *
+ * <p>{@code invoke()} 编排(沿袭 Step 7 契约,行为零变化):
+ * <ol>
+ *   <li>reactive 返回类型({@code Mono}/{@code Flux})旁路 —— 不支持,直接 proceed</li>
+ *   <li>{@link DefaultMethodMetadataResolver#activateStatic} ThreadLocal 激活方法元数据</li>
+ *   <li>责任链 {@code handlerChain.handle} 解析注解 → 注册操作</li>
+ *   <li>{@code super.invoke} 触发 {@code CacheAspectSupport.execute} —— 链增强
+ *       (Bloom/Sync/TTL/NullValue/ActualCache)由 {@code RedisProCacheWriter} 在
+ *       cache.get/put/evict 路径触发</li>
+ *   <li>{@code finally} 清除 ThreadLocal</li>
+ * </ol>
+ *
+ * <p>构造期注入的 {@code cacheOperationSource}/{@code cacheManager}/{@code keyGenerator} 经
+ * setter 落位后调用 {@code afterPropertiesSet()}(原由 {@code ResiCacheMethodInterceptor} 转发,
+ * 现收口到本类构造函数)。
  */
 @Slf4j
 public class RedisCacheInterceptor extends CacheInterceptor {
 
     private final AnnotationHandler handlerChain;
 
+    /**
+     * 构造 advice,组装注解处理责任链并落位 Spring {@link CacheInterceptor} 依赖.
+     *
+     * @param cacheOperationSource 缓存操作源(注解解析入口)
+     * @param cacheManager         缓存管理器
+     * @param keyGenerator         键生成器
+     * @param cacheableHandler     {@code @RedisCacheable} 处理器(责任链头)
+     * @param evictHandler         {@code @RedisCacheEvict} 处理器
+     * @param cachingHandler       {@code @RedisCaching} 处理器
+     * @param cachePutHandler      {@code @RedisCachePut} 处理器
+     */
     public RedisCacheInterceptor(
-            CacheableAnnotationHandler cacheableHandler,
-            EvictAnnotationHandler evictHandler,
-            CachingAnnotationHandler cachingHandler,
-            CachePutAnnotationHandler cachePutHandler) {
+            final CacheOperationSource cacheOperationSource,
+            final CacheManager cacheManager,
+            final KeyGenerator keyGenerator,
+            final CacheableAnnotationHandler cacheableHandler,
+            final EvictAnnotationHandler evictHandler,
+            final CachingAnnotationHandler cachingHandler,
+            final CachePutAnnotationHandler cachePutHandler) {
         cacheableHandler.setNext(evictHandler).setNext(cachingHandler).setNext(cachePutHandler);
         this.handlerChain = cacheableHandler;
-        log.debug("Redis cache interceptor initialized with handler chain (Step 7: uses DefaultMethodMetadataResolver)");
+        setCacheOperationSource(cacheOperationSource);
+        setCacheManager(cacheManager);
+        setKeyGenerator(keyGenerator);
+        afterPropertiesSet();
+        log.debug("RedisCacheInterceptor initialized as Path C advice (handler chain wired, deps injected)");
     }
 
     @Override
@@ -57,7 +96,6 @@ public class RedisCacheInterceptor extends CacheInterceptor {
             return invocation.proceed();
         }
 
-        // Step 7:ThreadLocal 写入走 DefaultMethodMetadataResolver 静态 API
         DefaultMethodMetadataResolver.activateStatic(method, targetClass);
         try {
             handlerChain.handle(method, target, args);

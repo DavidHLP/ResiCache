@@ -59,7 +59,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
         "end";
 
     private final TtlPolicy ttlPolicy;
-    private final EarlyExpirationSupport earlyExpirationSupport;
+    private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
@@ -68,12 +68,12 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     private Counter earlyRefreshTriggeredCounter;
 
     public EarlyExpirationHandler(TtlPolicy ttlPolicy,
-                                  EarlyExpirationSupport earlyExpirationSupport,
+                                  ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
                                   RedisTemplate<String, Object> redisTemplate,
                                   CacheStatisticsCollector statistics,
                                   ValueOperations<String, Object> valueOperations) {
         this.ttlPolicy = ttlPolicy;
-        this.earlyExpirationSupport = earlyExpirationSupport;
+        this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.redisTemplate = redisTemplate;
         this.statistics = statistics;
         this.valueOperations = valueOperations;
@@ -172,7 +172,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
         String redisKey = context.getRedisKey();
         String cacheName = context.getCacheName();
 
-        earlyExpirationSupport.submitAsyncRefresh(redisKey, () -> {
+        earlyExpirationExecutor.submit(redisKey, () -> {
             try {
                 CachedValue liveValue = (CachedValue) valueOperations.get(redisKey);
 

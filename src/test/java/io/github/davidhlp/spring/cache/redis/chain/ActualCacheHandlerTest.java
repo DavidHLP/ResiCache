@@ -5,7 +5,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
-import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationSupport;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.ThreadPoolEarlyExpirationExecutor;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +41,7 @@ class ActualCacheHandlerTest {
     private DefaultNullValuePolicy nullValuePolicy;
 
     @Mock
-    private EarlyExpirationSupport earlyExpirationSupport;
+    private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
 
     @Mock
     private CacheErrorHandler errorHandler;
@@ -54,7 +54,7 @@ class ActualCacheHandlerTest {
             redisTemplate,
             valueOperations,
             nullValuePolicy,
-            earlyExpirationSupport,
+            earlyExpirationExecutor,
             errorHandler
         );
     }
@@ -193,7 +193,7 @@ class ActualCacheHandlerTest {
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
-            verify(earlyExpirationSupport).cancelAsyncRefresh("test:key");
+            verify(earlyExpirationExecutor).cancel("test:key");
             verify(valueOperations).set(eq("test:key"), any(CachedValue.class), eq(Duration.ofSeconds(120)));
         }
 

@@ -5,7 +5,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
-import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationSupport;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.ThreadPoolEarlyExpirationExecutor;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +48,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
     private final DefaultNullValuePolicy nullValuePolicy;
-    private final EarlyExpirationSupport earlyExpirationSupport;
+    private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
     private final CacheErrorHandler errorHandler;
 
     @Override
@@ -163,7 +163,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         try {
             // 取消可能的异步提前过期任务
-            earlyExpirationSupport.cancelAsyncRefresh(context.getRedisKey());
+            earlyExpirationExecutor.cancel(context.getRedisKey());
 
             // 获取存储值
             Object storeValue = context.getOutput().getStoreValue();

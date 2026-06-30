@@ -42,7 +42,7 @@ class EarlyExpirationHandlerRaceConditionTest {
     private DefaultTtlPolicy ttlPolicy;
 
     @Mock
-    private EarlyExpirationSupport earlyExpirationSupport;
+    private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;
@@ -58,7 +58,7 @@ class EarlyExpirationHandlerRaceConditionTest {
 
     @BeforeEach
     void setUp() {
-        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationSupport, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationExecutor, redisTemplate, statistics, valueOperations);
         executor = Executors.newCachedThreadPool();
     }
 
@@ -118,7 +118,7 @@ class EarlyExpirationHandlerRaceConditionTest {
                 }
             });
             return null;
-        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationExecutor).submit(eq("test:key"), any(Runnable.class));
 
         // First call sets up the async refresh
         handler.doHandle(context);
@@ -136,7 +136,7 @@ class EarlyExpirationHandlerRaceConditionTest {
 
         assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(exceptionThrown.get()).isFalse();
-        verify(earlyExpirationSupport, atLeastOnce()).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        verify(earlyExpirationExecutor, atLeastOnce()).submit(eq("test:key"), any(Runnable.class));
     }
 
     @Test
@@ -175,7 +175,7 @@ class EarlyExpirationHandlerRaceConditionTest {
                 }
             });
             return null;
-        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationExecutor).submit(eq("test:key"), any(Runnable.class));
 
         handler.doHandle(context);
 
@@ -211,7 +211,7 @@ class EarlyExpirationHandlerRaceConditionTest {
             capturedKey.set(invocation.getArgument(0));
             allRefreshesSubmitted.countDown();
             return null;
-        }).when(earlyExpirationSupport).submitAsyncRefresh(anyString(), any(Runnable.class));
+        }).when(earlyExpirationExecutor).submit(anyString(), any(Runnable.class));
 
         // Submit multiple refreshes
         handler.doHandle(context1);
@@ -223,7 +223,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         assertThat(allRefreshesSubmitted.await(5, TimeUnit.SECONDS)).isTrue();
 
         // All three should have been submitted
-        verify(earlyExpirationSupport, times(3)).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        verify(earlyExpirationExecutor, times(3)).submit(eq("test:key"), any(Runnable.class));
     }
 
     @Test
@@ -240,7 +240,7 @@ class EarlyExpirationHandlerRaceConditionTest {
             Runnable runnable = invocation.getArgument(1);
             runnable.run();
             return null;
-        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationExecutor).submit(eq("test:key"), any(Runnable.class));
 
         handler.doHandle(context);
 
@@ -264,7 +264,7 @@ class EarlyExpirationHandlerRaceConditionTest {
             Runnable runnable = invocation.getArgument(1);
             runnable.run();
             return null;
-        }).when(earlyExpirationSupport).submitAsyncRefresh(eq("test:key"), any(Runnable.class));
+        }).when(earlyExpirationExecutor).submit(eq("test:key"), any(Runnable.class));
 
         handler.doHandle(context);
 
