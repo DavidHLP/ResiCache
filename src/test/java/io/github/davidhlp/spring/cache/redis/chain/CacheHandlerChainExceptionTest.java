@@ -21,8 +21,10 @@ class CacheHandlerChainExceptionTest {
 
     @BeforeEach
     void setUp() {
-        // null ObjectProvider → chain no-op Timer,行为与未注入 MeterRegistry 时一致
-        chain = new CacheHandlerChain(null);
+        // ADR-0009:facade 改为 thin,execute 委派 ChainEngine —— 单元测试手动装配
+        ChainEngine engine = new ChainEngine();
+        chain = new CacheHandlerChain();
+        chain.setEngine(engine);
     }
 
     @Test

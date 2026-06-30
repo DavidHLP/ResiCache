@@ -8,7 +8,7 @@ tags:
 related: [index, overview, README]
 status: stable
 created: 2026-06-21
-updated: 2026-06-30
+updated: 2026-07-01
 ---
 
 
@@ -17,6 +17,69 @@ updated: 2026-06-30
 wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subject>`(op ∈ init / ingest / improve / colorize / query / lint)。
 
 > 解析最近条目:`grep "^## \[" log.md | tail -5`
+
+## [2026-07-01] improve | ADR-0009 ChainEngine + ChainObserver 抽出(autocratic one-shot 3 切片一次落地)
+
+`/improve-codebase-architecture` 报告 + ADR-0009 (Proposed) 三切片全提交,Status 升 Accepted。
+
+**核心落地(单一 seam):**
+
+- **`chain/ChainEngine.java`** —— 责任链推进引擎(`@Component`),单一责任:
+  节点循环 + decision switch(CONTINUE / SKIP_ALL / TERMINATE)+ 观测编排(4 observer 钩子)+
+  post-process 遍历。`execute(CacheContext)` 全生命周期;`executeChainFragment(CacheContext, CacheHandler)`
+  供 SyncLockHandler 锁内推进(跳过 aroundChain 观测,避免重复 stamp MDC / record Timer)。
+- **`chain/ChainObserver.java`** —— 4 钩子 default no-op 接口:`onChainStart` / `onChainEnd` / `beforeNode` / `afterNode`。
+  aroundChain + perNode 正交,observer 组合可插拔。
+- **5 observer 实现(`chain/observer/`)**:
+  - `NoOpChainObserver` (singleton default)
+  - `MDCStampChainObserver` (aroundChain,onStart stamp requestId,onEnd restore 调用方原值)
+  - `ChainTimerChainObserver` (aroundChain,registry 缺失 no-op,context attr 跨 start/end 传递 start nanos)
+  - `FiredCounterChainObserver` (perNode,按 handler class lazy register fired counter,等价原 AbstractCacheHandler 行为)
+  - `ChainDebugLogChainObserver` (perNode,`[chain] handler=... decision=... key=... requestId=...` DEBUG)
+
+**退化(原双轨 seam → Engine 单一 seam):**
+
+- `AbstractCacheHandler` 从 ~210 SLOC 退化到 ~150 SLOC — 仅保留 next / getNext / setNext /
+  attachMeterRegistry / onAttachMetrics / registerCounter / safeIncrement / shouldHandle / doHandle。
+  `handle()` 退化为 `shouldHandle ? doHandle : continueChain`(不再含 skipRemaining 短路 /
+  decision switch / 推进 / DEBUG / counter — 全迁 Engine)。
+- `CacheHandlerChain` 从 ~250 SLOC 退化到 ~165 SLOC — thin facade,addHandler/size/clear/getHandlerNames
+  维护 + execute 委派 Engine。`MDC_REQUEST_ID_KEY` 常量保留(observer 引用)。
+- `SyncLockHandler.executeChainInLock` 改调 `engine.executeChainFragment(ctx, getNext())` —
+  锁内推进由 Engine 统一驱动(perNode 观测照常,aroundChain 不重复)。
+- `CacheHandlerChainFactory` 构造注入 ChainEngine + 首次 createChain 时注册 4 个标准 observer。
+
+**WS-1.4 OTel/Span 升级路径兑现:**
+
+- 新增 `SpanObserver implements ChainObserver`(~50 SLOC)→ Engine 0 修改 + 4 内置 observer 0 修改 + 5+ handler 子类 0 修改。
+- 这是 ADR-0009 D1+D2 的核心 leverage:把"链推进"和"观测"彻底解耦,Span 作为第 N 个 observer 即插即用。
+
+**行为变化(经核实无回归):**
+
+- 5+ handler 子类 doHandle 实现零修改(均只读 context + 返回 HandlerResult,无对基类模板代码的依赖)
+- 单元测试可直接 `new ChainEngine()` 装配(不再依赖 Spring 容器 + @Autowired 反射)
+- disabled handler 语义 counter 现在统一在进链时注册(原双轨不一致:fired 按进链 / 语义按 bean 存在 → 统一进链注册),无监控依赖恒 0 counter,零 break
+
+**用户破坏性变更(均为有意):**
+
+- `CacheHandlerChain(ObjectProvider<MeterRegistry>)` 构造被移除(Timer 已迁至 ChainTimerChainObserver)
+- `CacheHandlerChainFactory` 构造新增 `ChainEngine` 参数(注入 seam)
+- `SyncLockHandler` 新增 `setEngine(ChainEngine)` 测试用 setter(生产由 @Autowired 字段注入)
+
+→ 详见 [ADR-0009](adr/0009-chain-engine-extraction.md) Status: Accepted
+
+**验证:**
+
+- `mvnw checkstyle:check` — PASS
+- `mvnw verify` — **719 tests, 0 failures, 0 errors; coverage checks met**(原 692 + 25 新增 + 2 升级)
+  新增 ChainEngineTest 16 项 + ChainObserverTest 9 项 + NullValueHandlerTest 2 项升级
+
+**未动:**
+
+- ADR-0008 (Observation spans attribution) — 仍 Proposed(本 ADR 是 span 升级的 *seam*,非 span 本身)
+- ADR-0002 (interceptor+Advisor) / ADR-0007 (single build) — 无影响
+
+---
 
 ---
 

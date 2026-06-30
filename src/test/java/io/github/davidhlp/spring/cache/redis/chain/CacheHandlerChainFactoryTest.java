@@ -31,7 +31,7 @@ class CacheHandlerChainFactoryTest {
     @BeforeEach
     void setUp() {
         properties = mock(RedisProCacheProperties.class);
-        factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, null);
+        factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, null, new ChainEngine());
     }
 
     @Nested
@@ -41,7 +41,7 @@ class CacheHandlerChainFactoryTest {
         @Test
         @DisplayName("creates empty chain when no handlers provided")
         void createChain_noHandlers_createsEmptyChain() {
-            factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, null);
+            factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -56,7 +56,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler(),
                     new YetAnotherTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -71,7 +71,7 @@ class CacheHandlerChainFactoryTest {
                     new BloomFilterTestHandler(),
                     new SyncLockTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -87,7 +87,7 @@ class CacheHandlerChainFactoryTest {
                     new TestCacheHandler(),
                     new PriorityTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -103,7 +103,7 @@ class CacheHandlerChainFactoryTest {
                     new TestCacheHandler(),
                     new AnotherTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -124,7 +124,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(List.of("test-cache"));
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -141,7 +141,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(List.of("test-cache"));
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -157,7 +157,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(Collections.emptyList());
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -173,7 +173,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(List.of("test-cache", "another-test"));
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -196,7 +196,7 @@ class CacheHandlerChainFactoryTest {
             List<CacheHandler> handlers = List.of(
                     new BloomFilterHandler(), new SyncLockHandler(), new EarlyExpirationHandler(),
                     new TtlHandler(), new NullValueHandler(), new ActualCacheHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             List<String> names = factory.createChain().getHandlerNames();
 
@@ -214,7 +214,7 @@ class CacheHandlerChainFactoryTest {
 
             List<CacheHandler> handlers = List.of(
                     new BloomFilterHandler(), new TtlHandler(), new ActualCacheHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             assertThat(factory.createChain().getHandlerNames())
                     .contains("BloomFilterHandler", "TtlHandler", "ActualCacheHandler");
@@ -233,7 +233,7 @@ class CacheHandlerChainFactoryTest {
 
             List<CacheHandler> handlers = List.of(
                     new OddlyNamedBloomHandler(), new TtlHandler(), new ActualCacheHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             List<String> names = factory.createChain().getHandlerNames();
 
@@ -249,7 +249,7 @@ class CacheHandlerChainFactoryTest {
 
             List<CacheHandler> handlers = List.of(
                     new WeirdlyNamedLockHandler(), new TtlHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, null);
+            factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
             List<String> names = factory.createChain().getHandlerNames();
 
@@ -271,7 +271,7 @@ class CacheHandlerChainFactoryTest {
             when(provider.getIfAvailable()).thenReturn(registry);
 
             AbstractCacheHandler probe = new FiredCounterProbe();
-            factory = new CacheHandlerChainFactory(List.of(probe), properties, provider);
+            factory = new CacheHandlerChainFactory(List.of(probe), properties, provider, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
             CacheContext ctx = CacheContext.builder()

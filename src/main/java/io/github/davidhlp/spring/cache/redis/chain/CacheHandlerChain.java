@@ -1,72 +1,88 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-
-import org.slf4j.MDC;
-import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * 缓存处理器责任链管理器
+ * 责任链管理器 — ADR-0009 (Chain Engine extraction) D4 后的 thin facade 形态。
  *
- * <p>支持责任链的前置处理和后置处理模式：
+ * <p>原先在 {@code execute} 中的链推进 + 节点级决策分发 + Timer 装配 / 记录 +
+ * MDC stamp（约 110 SLOC）已全部迁出到 {@link ChainEngine}。本 facade 只保留：
+ *
  * <ul>
- *   <li>前置处理：Handler 在 doHandle() 中决定是否继续链</li>
- *   <li>后置处理：Handler 通过标记请求后置处理，在链执行完成后执行</li>
+ *   <li>{@code List<CacheHandler> handlers} 维护（addHandler / size / clear / getHandlerNames）</li>
+ *   <li>{@code head} 头节点引用（工厂建链时同步设置）</li>
+ *   <li>{@link ReadWriteLock} 守护链结构并发修改</li>
+ *   <li>{@link #execute(CacheContext)} 委派给 {@link ChainEngine#execute(CacheContext)}</li>
+ *   <li>{@link #MDC_REQUEST_ID_KEY} 常量（供 {@code MDCStampChainObserver} 引用）</li>
  * </ul>
+ *
+ * <p>执行流程：facade 在 {@link #addHandler(CacheHandler)} / {@link #clear()} 时
+ * 同步刷新 {@link ChainEngine#setChainSnapshot(List)}，让 Engine 拿到最新链快照；
+ * {@link #execute(CacheContext)} 仅做读锁 + 委派，无任何推进 / 观测逻辑。
+ *
+ * <p><b>back-compat 兜底</b>：保留无参构造（{@code @Autowired} 注入 Engine），
+ * 旧式 {@code CacheHandlerChain(ObjectProvider<MeterRegistry>)} 构造被移除
+ * （Timer 已迁至 {@code ChainTimerChainObserver}，registry 不再由 facade 持有）。
+ * 用户若需自定义 ChainEngine（如额外加 observer），声明
+ * {@code @Bean @ConditionalOnMissingBean ChainEngine} 顶替默认即可。
+ *
+ * <p><b>facade 退化与删除测试</b>：删掉本类 → 用户需在
+ * {@code RedisProCacheWriter} 与测试中直接持 {@link ChainEngine} 引用，复杂度
+ * 重现且失去"facade → engine"职责分层。本 facade 挣得起存在代价（~50 SLOC）。
  */
 @Slf4j
 @Component
 public class CacheHandlerChain {
 
     /**
-     * MDC key 用于 stamp 每次链执行的关联 id(guide §223d:per-handler chain observability)。
-     * {@link #execute(CacheContext)} 每次执行 stamp 一个新 id,使一次 GET/PUT 内所有 handler 的
-     * {@code [chain]} DEBUG 行可被同一 id 关联。由 {@link AbstractCacheHandler#handle(CacheContext)} 读取。
+     * MDC key 用于 stamp 每次链执行的关联 id。
+     * <p>本常量被 {@code MDCStampChainObserver}（在
+     * {@code onChainStart}/{@code onChainEnd}）和
+     * {@code ChainDebugLogChainObserver}（在 {@code afterNode} 读 MDC）共同引用。
+     * 重命名此 key 需同步改两处 observer。
      */
     public static final String MDC_REQUEST_ID_KEY = "requestId";
 
     /** 所有处理器列表（用于调试和后置处理） */
     private final List<CacheHandler> handlers = new ArrayList<>();
-    /** 责任链头节点 */
+    /** 责任链头节点（冗余引用 — handlers[0] 也可拿，但 getNext() 链表遍历更便宜） */
     private volatile CacheHandler head;
-    /** 读写锁，保证线程安全 */
+    /** 读写锁，保证线程安全（addHandler/clear 写，execute/size/getHandlerNames 读） */
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    /**
-     * Path C 后续(WS-1.4) — 链级 Micrometer Timer.
-     * <p>ObjectProvider 允许 MeterRegistry 缺失(测试用 stub / 无 actuator 环境) ——
-     * 没有 registry 时 metrics 静默 no-op,行为不变。
-     * <p>Tags: cacheName(链处理哪个 cache)+ operation(GET/PUT/CLEAN)
-     */
-    private final Timer chainExecuteTimer;
+    /** 推进引擎 — 由 Spring 注入（{@code @Autowired} 字段注入避免构造重排耦合）。 */
+    @Autowired
+    private ChainEngine engine;
 
-    public CacheHandlerChain(ObjectProvider<MeterRegistry> meterRegistryProvider) {
-        MeterRegistry registry =
-                meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
-        if (registry != null) {
-            this.chainExecuteTimer = Timer.builder("resicache.chain.execute")
-                    .description("Time spent executing the cache protection chain (full lifecycle: head + post-process)")
-                    .register(registry);
-        } else {
-            this.chainExecuteTimer = null;
-        }
+    public CacheHandlerChain() {
+        // engine 字段由 Spring 注入；测试可直接 new ChainEngine() 后 setter 注入
     }
 
     /**
-     * 添加处理器到责任链末尾
+     * 测试 / 自定义装配用 setter。运行期由 Spring 通过 {@code @Autowired} 注入。
+     *
+     * @param engine 推进引擎（不为 null）
+     */
+    void setEngine(ChainEngine engine) {
+        this.engine = engine;
+    }
+
+    /**
+     * 添加处理器到责任链末尾 — O(N) 链表遍历。
+     *
+     * <p>每次 addHandler 后同步刷新 {@link ChainEngine#setChainSnapshot(List)}，
+     * Engine 在 {@code execute} 时读取该快照。
      *
      * @param handler 处理器
-     * @return 当前链（支持链式调用）
+     * @return 当前 facade（支持链式调用）
      */
     public CacheHandlerChain addHandler(CacheHandler handler) {
         lock.writeLock().lock();
@@ -82,6 +98,8 @@ public class CacheHandlerChain {
                 current.setNext(handler);
             }
             handlers.add(handler);
+            // 同步刷新 Engine 持有的快照引用 — Engine.execute 直接读 snapshot 避免并发改链
+            engine.setChainSnapshot(List.copyOf(handlers));
             log.debug("Added handler to chain: {}", handler.getClass().getSimpleName());
             return this;
         } finally {
@@ -90,122 +108,32 @@ public class CacheHandlerChain {
     }
 
     /**
-     * 执行责任链
+     * 执行责任链 — 委派给 {@link ChainEngine#execute(CacheContext)}。
      *
-     * <p>执行流程：
-     * <ol>
-     *   <li>从 head 开始执行责任链</li>
-     *   <li>提取最终结果</li>
-     *   <li>执行后置处理（如 BloomFilterHandler 需要在 PUT 成功后添加 key）</li>
-     * </ol>
+     * <p>本 facade 仅做"读锁 + 委派"，所有推进 / 观测 / post-process 逻辑在
+     * Engine 中实现。Engine 通过 {@link ChainEngine#setChainSnapshot(List)} 拿到的快照遍历
+     * handler，本调用方线程在 facade 持有的读锁内做 addHandler 会被阻塞，
+     * Engine 看到的快照与 facade 看到的 head 一致。
      *
      * @param context 缓存上下文
      * @return 处理结果
      */
     public CacheResult execute(CacheContext context) {
-        // 获取 head 的快照并在执行期间持有读锁，防止 clear() 修改链
         lock.readLock().lock();
-        CacheHandler currentHead;
-        List<CacheHandler> handlersSnapshot;
         try {
-            currentHead = head;
-            if (currentHead == null) {
+            // 空链保护：engine 内部也会判，但 facade 提前返回避免不必要的方法调用
+            if (head == null) {
                 log.warn("Handler chain is empty!");
-                return CacheResult.success();
+                return engine.execute(context);
             }
-            handlersSnapshot = List.copyOf(handlers);
         } finally {
             lock.readLock().unlock();
         }
-
-        log.debug(
-                "Executing handler chain for operation: {}, cacheName: {}, key: {}",
-                context.getOperation(),
-                context.getCacheName(),
-                context.getRedisKey());
-
-        // guide §223d:为本次链执行 stamp 一个 requestId 进 MDC,使本次 GET/PUT 内所有 handler 的
-        // [chain] DEBUG 行可被同一 id 关联(falsifiable observability)。
-        // snapshot/restore:只动自己的 key,finally 恢复调用方原值,**不**用 MDC.clear() 误清宿主
-        // 线程其它 MDC(如 traceId);与 RedisProCacheWriter 的防御式 MDC 风格一致。
-        String previousRequestId = MDC.get(MDC_REQUEST_ID_KEY);
-        MDC.put(MDC_REQUEST_ID_KEY, generateRequestId());
-        try {
-            // 执行责任链（注意：此时仍持有 head 的引用快照，clear() 无法修改链）
-            // WS-1.4:链级 Micrometer Timer 记录 full lifecycle(head handle + post-process)
-            // 本 tick 单 Timer(无 tags,简洁)— per-cacheName/per-operation tags
-            // 留后续 tick(WS-1.4 测试套件扩展)添加
-            if (chainExecuteTimer != null) {
-                return chainExecuteTimer.record(
-                        () -> executeChainInternal(currentHead, handlersSnapshot, context));
-            }
-            // 无 MeterRegistry 时 no-op 计时(测试 stub / 无 actuator 环境)
-            return executeChainInternal(currentHead, handlersSnapshot, context);
-        } finally {
-            if (previousRequestId == null) {
-                MDC.remove(MDC_REQUEST_ID_KEY);
-            } else {
-                MDC.put(MDC_REQUEST_ID_KEY, previousRequestId);
-            }
-        }
+        return engine.execute(context);
     }
 
     /**
-     * 生成本次链执行的关联 id。
-     *
-     * <p>用 {@link ThreadLocalRandom} 而非 {@code UUID.randomUUID()}:{@code execute} 是缓存热路径
-     * (每次 GET/PUT 必经),需规避 {@code SecureRandom} 的熵竞争/潜在阻塞;64-bit 随机数对 DEBUG
-     * 日志关联已足够(碰撞概率可忽略)。无符号十六进制输出,避免负值的符号扩展噪音。
-     */
-    private static String generateRequestId() {
-        return Long.toUnsignedString(ThreadLocalRandom.current().nextLong(), 16);
-    }
-
-    /**
-     * 链执行内部实现(head handle + post-process) — 由 Timer.record 包装。
-     */
-    private CacheResult executeChainInternal(CacheHandler currentHead, List<CacheHandler> handlersSnapshot, CacheContext context) {
-        HandlerResult handlerResult = currentHead.handle(context);
-        CacheResult result = handlerResult.result();
-        CacheResult finalResult = result != null ? result : CacheResult.success();
-        executePostProcess(handlersSnapshot, context, finalResult);
-        return finalResult;
-    }
-
-    /**
-     * 执行后置处理
-     *
-     * <p>遍历所有 Handler，如果实现了 PostProcessHandler 接口且满足条件，
-     * 则调用其后置处理方法。
-     *
-     * <p>执行顺序与责任链顺序一致，确保后置处理按照预期顺序执行。
-     *
-     * @param handlers 后置处理器列表快照
-     * @param context 缓存上下文
-     * @param result 责任链执行结果
-     */
-    private void executePostProcess(List<CacheHandler> handlers, CacheContext context, CacheResult result) {
-        for (CacheHandler handler : handlers) {
-            if (handler instanceof PostProcessHandler postHandler) {
-                if (postHandler.requiresPostProcess(context)) {
-                    try {
-                        postHandler.afterChainExecution(context, result);
-                        log.debug("Post-processing executed for: {}",
-                                  handler.getClass().getSimpleName());
-                    } catch (Exception e) {
-                        log.error("Post-processing failed for: {}, operation: {}, key: {}",
-                                  handler.getClass().getSimpleName(),
-                                  context.getOperation(),
-                                  context.getRedisKey(), e);
-                        // 后置处理失败不影响主链结果
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * 获取处理器数量
+     * 获取处理器数量。
      *
      * @return 处理器数量
      */
@@ -219,13 +147,15 @@ public class CacheHandlerChain {
     }
 
     /**
-     * 清空责任链
+     * 清空责任链 — 同步刷新 Engine 快照为 null。
      */
     public void clear() {
         lock.writeLock().lock();
         try {
             head = null;
             handlers.clear();
+            // 同步 Engine 持有的快照引用 — Engine 见到 null/empty 时直接返回 success
+            engine.setChainSnapshot(null);
             log.debug("Handler chain cleared");
         } finally {
             lock.writeLock().unlock();
@@ -233,7 +163,7 @@ public class CacheHandlerChain {
     }
 
     /**
-     * 获取所有处理器名称
+     * 获取所有处理器名称。
      *
      * @return 处理器名称列表
      */

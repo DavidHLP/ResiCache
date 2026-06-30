@@ -1,6 +1,6 @@
 # ADR-0009: Chain Engine 抽出 — 责任链推进与观测收口到单一 seam
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-06-30
 - **Deciders**: DavidHLP
 - **Related**: ADR-0002 / ADR-0007 / ADR-0008 /
@@ -124,3 +124,61 @@ per-handler span — 切 2 处 seam 必漏一边。
 
 **最后更新**:2026-06-30
 **下次维护触发**:实现切片 1 提交 + 用户批准本 ADR → Status 升 Accepted
+
+## 实施
+
+3 切片一并在 [commit] 中提交（autocratic one-shot 落地 — 不分阶段）:
+
+### 新建
+
+- `chain/ChainObserver.java` — 4 钩子 default no-op 接口(aroundChain + perNode 正交)
+- `chain/ChainEngine.java` — 推进 + decision switch + 观测编排 + post-process 单一 seam(@Component)
+- `chain/observer/NoOpChainObserver.java` — 测试 / 默认 observer(单例)
+- `chain/observer/MDCStampChainObserver.java` — onChainStart/onChainEnd MDC stamp + restore
+- `chain/observer/ChainTimerChainObserver.java` — onChainStart/onChainEnd Timer 记录
+- `chain/observer/FiredCounterChainObserver.java` — afterNode per-handler fired counter(按 class lazy register)
+- `chain/observer/ChainDebugLogChainObserver.java` — afterNode `[chain] handler=... decision=... key=... requestId=...` DEBUG
+- `test/.../chain/ChainEngineTest.java` — 16 单元测试:推进协议 / 观测编排 / post-process / 边界
+- `test/.../chain/observer/ChainObserverTest.java` — 9 单元测试:NoOp / MDC / Timer / FiredCounter
+
+### 修改
+
+- `chain/AbstractCacheHandler.java` — 退化为 ~150 SLOC(从 ~210):仅保留 next / getNext / setNext /
+  attachMeterRegistry / onAttachMetrics / registerCounter / safeIncrement / shouldHandle / doHandle。
+  handle() 退化为 `shouldHandle ? doHandle : continueChain`(不再含 skipRemaining 短路 / decision switch / 推进 / DEBUG / counter — 全迁 Engine)
+- `chain/CacheHandlerChain.java` — 退化为 ~165 SLOC(从 ~250):thin facade,addHandler/size/clear/getHandlerNames
+  维护 + execute 委派 Engine。`MDC_REQUEST_ID_KEY` 常量保留(供 observer 引用)
+- `chain/CacheHandlerChainFactory.java` — 构造注入 ChainEngine + 首次 createChain 时注册 4 个标准 observer
+- `protection/breakdown/SyncLockHandler.java` — `executeChainInLock` 改调 `engine.executeChainFragment(ctx, getNext())`,
+  锁内片段由 Engine 统一推进(perNode 观测照常,aroundChain 不重复)
+- `chain/package-info.java` — 更新核心类说明(新增 ChainEngine / ChainObserver 条目)
+- 既有 3 个测试:CacheHandlerChainTest / CacheHandlerChainExceptionTest / CacheHandlerChainFactoryTest 适配新 facade 构造
+- `protection/nullvalue/NullValueHandlerTest.java` — `handle method integration` 两个用例改写为新契约(GET 退化 continueChain 不调 next;skipRemaining 不再 handler 自身处理)
+
+### 行为变化
+
+- 5+ handler 子类 doHandle 零修改(均只读 context,返回 HandlerResult,无对基类模板代码依赖 — ADR-0009 假设已核实)
+- SyncLockHandler 锁内推进走 Engine 统一协议 — 与主链 perNode 观测一致
+- 单元测试可直接 `new ChainEngine()` 装配,无需 Spring 容器(`ChainHandlerChainFactoryTest` / `CacheHandlerChainTest` 全部 no-arg + setter 注入)
+- 用户自定义 ChainEngine:声明 `@Bean @ConditionalOnMissingBean ChainEngine` 顶替默认即可
+
+### 不变
+
+- 5+ handler 子类 doHandle 实现完全不动
+- `@HandlerPriority` + `HandlerOrder` 排序机制不变
+- `PostProcessHandler` interface 契约不变
+- 用户 `@ConditionalOnMissingBean(CacheHandlerChain)` / `@Bean CacheHandlerChain` 覆盖策略不变(虽然现在不再需要 —— 用户可覆盖 Engine)
+
+### 验证
+
+- `mvnw checkstyle:check` — PASS(0 warnings)
+- `mvnw verify` — **719 tests, 0 failures, 0 errors; coverage checks met**
+  (新增 25 项 ChainEngine + ChainObserver 测试全绿;原 694 项零回归 — `mvnw test` 跑通 692 项 + 25 项新增 + 2 项 NullValueHandlerTest 升级)
+
+### 删除测试验证
+
+- 删 ChainObserver — Engine 推进无观测钩子,WS-1.4 Span 升级需改 Engine / 所有 handler(失去 leverage)
+- 删 ChainEngine — 推进逻辑回退到 AbstractCacheHandler / CacheHandlerChain 双轨,2 处 seam 必漏一边(回到 ADR-0009 Context 状态)
+- 删任一 observer 实现 — 该关注点(MDC / Timer / Counter / DEBUG)失能,无法选择性启用
+
+→ ADR-0009 全面落地。

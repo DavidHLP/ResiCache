@@ -7,37 +7,47 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.ChainEngine;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
 /**
- * 同步锁处理器，防止缓存击穿
+ * 同步锁处理器，防止缓存击穿 — ADR-0009 D6 后的精简形态。
  *
  * <p>职责：
  * <ul>
  *   <li>判断是否需要加锁</li>
- *   <li>如需加锁，在锁内执行后续 Handler</li>
+ *   <li>如需加锁，在锁内通过 {@link ChainEngine#executeChainFragment} 推进剩余链</li>
  *   <li>锁逻辑完全集中在此 Handler，ActualCacheHandler 不再处理锁</li>
  * </ul>
  *
- * <p>设计改进：
+ * <p>ADR-0009 D6 改进（vs. 原 executeChainInLock 直接 getNext().handle()）：
  * <ul>
- *   <li>原设计：SyncLockHandler 只准备 LockContext，ActualCacheHandler 执行锁</li>
- *   <li>新设计：SyncLockHandler 直接包装后续链的执行，锁逻辑内聚</li>
- *   <li>通过标记 `lockAcquired` 避免下游 Handler 重复加锁</li>
+ *   <li>原：{@code executeChainInLock} 直接调 {@code getNext().handle(ctx)}，
+ *       绕过基类 / Engine 的 skipRemaining 短路、shouldHandle 分发、perNode
+ *       观测（DEBUG log / fired counter）— 锁内片段与主链行为有微妙分叉</li>
+ *   <li>新：{@code engine.executeChainFragment(ctx, getNext())} 走 Engine 统一
+ *       推进协议，perNode 观测照常触发（DEBUG log / fired counter），aroundChain
+ *       观测（MDC stamp / Timer record）由外层 execute 唯一负责，锁内不重复打点</li>
+ *   <li>收益：锁内行为与主链一致；Engine 0 修改即可生效；WS-1.4 Span 在锁内
+ *       也会按 perNode 出现 — 与原"只在外层打点"的不对称语义相比更可解释</li>
  * </ul>
+ *
+ * <p>通过标记 {@code lockAcquired} 避免下游 Handler 重复加锁（基类
+ * {@code shouldHandle} 检测此标记后直接返 false）。
  */
 @Slf4j
 @Component
 @HandlerPriority(HandlerOrder.SYNC_LOCK)
 public class SyncLockHandler extends AbstractCacheHandler {
 
-    /** 上下文属性键：标记锁已获取 */
+    /** 上下文属性键：标记锁已获取。 */
     private static final String LOCK_ACQUIRED_KEY = "sync.lock.acquired";
 
     private static final long DEFAULT_LOCK_TIMEOUT = 10;
@@ -46,7 +56,23 @@ public class SyncLockHandler extends AbstractCacheHandler {
 
     private final RedisProCacheProperties properties;
 
-    /** Path C 后续(WS-1.4) — 分布式锁成功获取事件计数。 */
+    /** 推进引擎 — 由 Spring 注入（{@code @Autowired} 字段注入），锁内片段推进用
+     * {@link ChainEngine#executeChainFragment}。测试可通过 {@link #setEngine(ChainEngine)}
+     * 显式注入。 */
+    @Autowired
+    private ChainEngine engine;
+
+    /**
+     * 测试用 setter — 显式注入 ChainEngine 避免 {@code @Autowired} 反射依赖。
+     * 生产环境由 Spring 容器自动注入。
+     *
+     * @param engine 推进引擎（不为 null）
+     */
+    void setEngine(ChainEngine engine) {
+        this.engine = engine;
+    }
+
+    /** 分布式锁成功获取事件计数（语义 counter）。 */
     private Counter lockAcquiredCounter;
 
     public SyncLockHandler(SyncSupport syncSupport,
@@ -98,31 +124,16 @@ public class SyncLockHandler extends AbstractCacheHandler {
         // WS-1.4 per-handler tag:分布式锁成功获取事件计数
         safeIncrement(lockAcquiredCounter);
 
-        // 在锁内执行后续 Handler
+        // 在锁内执行后续 Handler — 委派给 Engine 统一推进（perNode 观测照常，
+        // aroundChain 观测由外层 execute 唯一负责，锁内不重复打点）
         CacheResult result = syncSupport.executeSync(
             lockContext.lockKey(),
-            () -> executeChainInLock(context),
+            () -> engine.executeChainFragment(context, getNext()),
             lockContext.timeoutSeconds()
         );
 
         // 锁内执行完成，终止链
         return HandlerResult.terminate(result);
-    }
-
-    /**
-     * 在锁内执行后续责任链
-     *
-     * <p>注意：由于已经标记了 LOCK_ACQUIRED_KEY，下游 Handler 的 shouldHandle()
-     * 会返回 false，避免重复处理。
-     */
-    private CacheResult executeChainInLock(CacheContext context) {
-        // 继续执行后续 Handler
-        if (getNext() != null) {
-            HandlerResult nextResult = getNext().handle(context);
-            CacheResult result = nextResult.result();
-            return result != null ? result : CacheResult.success();
-        }
-        return CacheResult.success();
     }
 
     /**
@@ -145,7 +156,8 @@ public class SyncLockHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 解析锁超时时间
+     * 解析锁超时时间 — 保留原全局回退路径（{@code properties.getSyncLock().getTimeout()}），
+     * 未在注解上显式覆盖时退回全局配置；均无则用 {@link #DEFAULT_LOCK_TIMEOUT}。
      */
     private long resolveTimeout(RedisCacheableOperation operation) {
         if (operation == null) {
@@ -159,7 +171,7 @@ public class SyncLockHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 获取全局配置的锁超时时间
+     * 获取全局配置的锁超时时间（秒） — 调用方通常为 {@link #resolveTimeout} 的注解 timeout < 0 回退。
      */
     private long getGlobalTimeoutSeconds() {
         long timeout = properties.getSyncLock().getTimeout();

@@ -13,6 +13,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerResult.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainDecision.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainEngine.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/PostProcessHandler.java
 status: stable
 created: 2026-06-21
@@ -44,7 +45,9 @@ handler 在 `doHandle()` 末尾返回一个 `HandlerResult`,由工厂方法构�
 - `HandlerResult.terminate(CacheResult)` —— TERMINATE,带最终结果
 - `HandlerResult.skipAll()` —— SKIP_ALL
 
-`AbstractCacheHandler.handle()` 模板据此决定走向(见 [[chain-of-responsibility]] 的模板代码):CONTINUE 且有 next → 调 `getNext().handle()`;SKIP_ALL → `context.markSkipRemaining()`;否则原样返回。
+**ADR-0009 后**:`AbstractCacheHandler.handle()` 退化为 `shouldHandle ? doHandle : continueChain`,**不再**自行
+推进链;decision switch(CONTINUE / SKIP_ALL / TERMINATE) + 推进 + skipRemaining 物化 + 推进到下一个
+**全部由 `ChainEngine.driveChain` 负责**(见 [[chain-of-responsibility]] 的「类层次」段)。
 
 ## 控制流三种典型短路
 

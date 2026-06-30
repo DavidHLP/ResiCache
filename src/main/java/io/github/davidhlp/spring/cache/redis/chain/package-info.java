@@ -28,10 +28,16 @@
  *
  * <h2>核心类说明</h2>
  * <ul>
- *   <li><b>CacheHandler</b>：处理器接口</li>
- *   <li><b>AbstractCacheHandler</b>：抽象处理器，提供模板方法</li>
- *   <li><b>CacheHandlerChain</b>：责任链管理器</li>
- *   <li><b>CacheHandlerChainFactory</b>：责任链工厂</li>
+ *   <li><b>CacheHandler</b>：处理器接口（仅 handle/getNext/setNext 三方法）</li>
+ *   <li><b>AbstractCacheHandler</b>：抽象处理器，handle 退化为
+ *       {@code shouldHandle ? doHandle : continueChain}（ADR-0009 链推进迁出到 Engine）</li>
+ *   <li><b>CacheHandlerChain</b>：责任链 facade —— 维护 handler 列表 + 委派
+ *       {@code execute} 到 {@link io.github.davidhlp.spring.cache.redis.chain.ChainEngine}</li>
+ *   <li><b>CacheHandlerChainFactory</b>：责任链工厂 —— 自动发现 + 排序 + 过滤 +
+ *       装配 + 注册 4 个标准 {@link io.github.davidhlp.spring.cache.redis.chain.ChainObserver}</li>
+ *   <li><b>ChainEngine</b>：责任链推进引擎 —— 节点推进 + decision switch +
+ *       观测编排 + post-process，ADR-0009 单一 seam</li>
+ *   <li><b>ChainObserver</b>：观测注入点 —— aroundChain + perNode 四钩子 default no-op</li>
  *   <li><b>CacheContext</b>：上下文对象，贯穿整个责任链</li>
  *   <li><b>CacheResult</b>：结果对象</li>
  *   <li><b>CacheOperation</b>：操作类型枚举</li>

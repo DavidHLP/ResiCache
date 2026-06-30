@@ -14,16 +14,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheHandlerChain 单元测试
+ * CacheHandlerChain 单元测试 — ADR-0009 后 thin facade 形态。
+ *
+ * <p>facade 仅做"维护 handler 列表 + 委派 execute 到 Engine"两件事；
+ * 推进 / 观测 / post-process 已迁出到 {@link ChainEngine}，相关行为由
+ * {@code ChainEngineTest} 覆盖。本测试只覆盖 facade 自身的契约。
  */
 @DisplayName("CacheHandlerChain Tests")
 class CacheHandlerChainTest {
 
     private CacheHandlerChain chain;
+    private ChainEngine engine;
 
     @BeforeEach
     void setUp() {
-        chain = new CacheHandlerChain(null);
+        // 单元测试：手动装配 facade + engine（避免拉起 Spring 容器）
+        engine = new ChainEngine();
+        chain = new CacheHandlerChain();
+        chain.setEngine(engine);
     }
 
     private CacheContext createTestContext() {
@@ -62,6 +70,17 @@ class CacheHandlerChainTest {
             CacheHandler handler = new TestCacheHandler();
             CacheHandlerChain returned = chain.addHandler(handler);
             assertThat(returned).isSameAs(chain);
+        }
+
+        @Test
+        @DisplayName("addHandler 同步刷新 Engine 持有的链快照")
+        void addHandler_refreshesEngineSnapshot() {
+            chain.addHandler(new TestCacheHandler());
+            // Engine 应能从 snapshot 读到这个 handler —— execute 行为可观察
+            assertThat(engine.observers()).isEmpty(); // observers 仍空（facade 不注册）
+            // snapshot 已就绪 — 跑一次 execute 不报"空链"
+            CacheResult result = chain.execute(createTestContext());
+            assertThat(result.isSuccess()).isTrue();
         }
     }
 
@@ -107,7 +126,7 @@ class CacheHandlerChainTest {
                 @Override
                 public HandlerResult handle(CacheContext context) {
                     firstCalled.set(true);
-                    return getNext() != null ? getNext().handle(context) : HandlerResult.continueWith(CacheResult.success());
+                    return HandlerResult.continueChain();
                 }
             };
 
@@ -205,6 +224,16 @@ class CacheHandlerChainTest {
             CacheResult result = chain.execute(context);
             assertThat(result.isSuccess()).isTrue();
         }
+
+        @Test
+        @DisplayName("clear 同步刷新 Engine 持有的链快照为 null")
+        void clear_refreshesEngineSnapshotToNull() {
+            chain.addHandler(new TestCacheHandler());
+            chain.clear();
+            // execute 不应进入主循环（空链短路）
+            CacheResult result = chain.execute(createTestContext());
+            assertThat(result.isSuccess()).isTrue();
+        }
     }
 
     @Nested
@@ -248,11 +277,13 @@ class CacheHandlerChainTest {
     }
 
     @Nested
-    @DisplayName("per-handler observability (MDC requestId)")
+    @DisplayName("per-handler observability (MDC requestId) — via Engine observer")
     class MdcObservabilityTests {
 
         // 走真实 AbstractCacheHandler 引擎的 handler:doHandle 内捕获 MDC 中的 requestId。
-        // 用于验证 execute stamp 的 requestId 在整条链内可被每个 handler 观察到。
+        // 用于验证 Engine 中 MDCStampChainObserver stamp 的 requestId 在整条链内可被
+        // 每个 handler 观察到（facade.execute → engine.execute → MDCStampChainObserver.onChainStart
+        // → 节点循环 → each handler doHandle reads MDC）。
         private AbstractCacheHandler recordingHandler(List<String> sink, HandlerResult result) {
             return new AbstractCacheHandler() {
                 @Override
@@ -268,9 +299,14 @@ class CacheHandlerChainTest {
             };
         }
 
+        private void installDefaultObservers() {
+            engine.addObserver(new io.github.davidhlp.spring.cache.redis.chain.observer.MDCStampChainObserver());
+        }
+
         @Test
         @DisplayName("execute 用单一 requestId 关联所有被求值的 handler,执行后从 MDC 清除")
         void execute_stampsSingleRequestId_correlatingAllHandlers_thenClears() {
+            installDefaultObservers();
             List<String> seen = new ArrayList<>();
             chain.addHandler(recordingHandler(seen, HandlerResult.continueChain()));
             chain.addHandler(recordingHandler(seen, HandlerResult.continueWith(CacheResult.success())));
@@ -288,6 +324,7 @@ class CacheHandlerChainTest {
         @Test
         @DisplayName("execute 恢复调用方在 MDC 中预设的 requestId(snapshot/restore,不误清宿主 MDC)")
         void execute_restoresCallerRequestId_afterCompletion() {
+            installDefaultObservers();
             chain.addHandler(recordingHandler(new ArrayList<>(),
                     HandlerResult.continueWith(CacheResult.success())));
 
@@ -302,15 +339,12 @@ class CacheHandlerChainTest {
         }
     }
 
-    // Test handler implementations
+    // Test handler implementations — 简化为"返回结果不主动推进" — Engine 负责推进
     static class TestCacheHandler implements CacheHandler {
         private CacheHandler next;
 
         @Override
         public HandlerResult handle(CacheContext context) {
-            if (next != null) {
-                return next.handle(context);
-            }
             return HandlerResult.continueWith(CacheResult.success());
         }
 
@@ -360,7 +394,7 @@ class CacheHandlerChainTest {
 
         @Override
         public HandlerResult handle(CacheContext context) {
-            return getNext() != null ? getNext().handle(context) : HandlerResult.continueWith(CacheResult.success());
+            return HandlerResult.continueWith(CacheResult.success());
         }
 
         @Override

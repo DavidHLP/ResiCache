@@ -11,10 +11,14 @@ related: [cache-lifecycle, context-data-flow, handler-result-control, auto-confi
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChain.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChainFactory.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainEngine.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainObserver.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/observer/
 status: stable
 created: 2026-06-21
-updated: 2026-06-29
+updated: 2026-07-01
 ---
 
 # 责任链架构(Chain of Responsibility)
@@ -51,53 +55,53 @@ public class SyncLockHandler extends AbstractCacheHandler { ... }
 
 `@Component` 让它被 Spring 扫描,`@HandlerPriority` 让链工厂认得它该排哪一档。
 
-## 类层次
+## 类层次(ADR-0009 后双层 seam:Engine 推进 + Observer 观测)
 
 ```
-CacheHandler (接口)
-   └── AbstractCacheHandler (抽象,模板方法 handle)
+CacheHandler (接口: handle / getNext / setNext)
+   └── AbstractCacheHandler (抽象, handle 退化为 shouldHandle ? doHandle : continueChain)
           ├── BloomFilterHandler      (100)
           ├── SyncLockHandler         (200)
           ├── EarlyExpirationHandler  (250)
           ├── TtlHandler              (300)
           ├── NullValueHandler        (400)
-          └── ActualCacheHandler      (500, 链尾, shouldHandle 恒 true)
+          └── ActualCacheHandler      (500, 链尾)
+
+ChainObserver (接口: 4 default no-op 钩子)
+   ├── NoOpChainObserver            (单例 default)
+   ├── MDCStampChainObserver        (aroundChain)
+   ├── ChainTimerChainObserver      (aroundChain)
+   ├── FiredCounterChainObserver    (perNode)
+   └── ChainDebugLogChainObserver   (perNode)
+
+CacheHandlerChain (thin facade)
+   └── 委派给 ChainEngine.execute(ctx)
+            └── 调用 observer 列表
+                  ├── onChainStart
+                  ├── beforeNode → handler.handle → afterNode
+                  └── onChainEnd → post-process
 ```
 
 - **`CacheHandler`** —— 接口:`handle(CacheContext)` / `getNext()` / `setNext()`。
-- **`AbstractCacheHandler`** —— 抽象基类,提供 `handle()` 模板方法,把「判断 + 执行 + 控制流」固定下来,子类只实现两个钩子。
+- **`AbstractCacheHandler`** —— 抽象基类。**ADR-0009 后** `handle()` 退化为 `shouldHandle ? doHandle : continueChain`,
+  链推进(skipRemaining 短路 / decision switch / 推进 / DEBUG log / fired counter)**全部迁出到 `ChainEngine`**。
+  子类只实现 `shouldHandle` / `doHandle` 两个钩子,自身不再调 `getNext().handle(ctx)`。
+- **`CacheHandlerChain`** —— **thin facade**(`@Component`):维护 handler 列表(`addHandler` / `size` / `clear` /
+  `getHandlerNames`)+ 委派 `execute` 到 `ChainEngine`。保留 `MDC_REQUEST_ID_KEY` 常量(供 observer 引用)。
+- **`ChainEngine`** —— **推进引擎**(`@Component`):节点循环 + decision switch + 观测编排 +
+  post-process 遍历。`execute(CacheContext)` 全生命周期;`executeChainFragment(CacheContext, CacheHandler)` 供
+  `SyncLockHandler` 锁内推进(跳过 aroundChain 观测,避免重复 stamp MDC / record Timer)。
+- **`ChainObserver`** —— 4 default no-op 钩子接口:
+  - `onChainStart(ctx)` / `onChainEnd(ctx, result)` —— aroundChain(MDC / Timer)
+  - `beforeNode(handler, ctx)` / `afterNode(handler, ctx, result)` —— perNode(DEBUG / fired counter)
+  - 5 个标准实现见 `chain/observer/` 子包。
+- **WS-1.4 OTel/Span 升级路径**:`SpanObserver implements ChainObserver`(~50 SLOC)→ Engine 0 修改 +
+  4 内置 observer 0 修改 + 5+ handler 子类 0 修改。详见 [[observability]] 与 [[ADR-0009]]。
 
-### 模板方法 handle()
-
-`src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java:60`
-
-```java
-public HandlerResult handle(CacheContext context) {
-    if (context.isSkipRemaining()) {            // ① 已被标记跳过 → 直接放过
-        return HandlerResult.continueWith(CacheResult.success());
-    }
-    if (shouldHandle(context)) {                 // ② 本 handler 是否感兴趣
-        HandlerResult result = doHandle(context);
-        if (result.decision() == ChainDecision.CONTINUE && getNext() != null) {
-            return getNext().handle(context);   //    继续 → 走下一个
-        }
-        if (result.decision() == ChainDecision.SKIP_ALL) {
-            context.markSkipRemaining();         //    跳过剩余 → 标记上下文
-        }
-        return result;                           //    TERMINATE / SKIP_ALL → 在此返回
-    }
-    if (getNext() != null) {                     // ③ 不处理 → 交给下一个
-        return getNext().handle(context);
-    }
-    return HandlerResult.continueWith(CacheResult.success());  // 链尾兜底
-}
-```
-
-子类只需实现:
-- `shouldHandle(CacheContext)` —— 本 handler 要不要管这次操作(看操作类型、注解开关)。
-- `doHandle(CacheContext)` —— 真正的防护逻辑,返回 `HandlerResult` 控制链路走向。
-
-> **可观测性(R24/R25)**:`handle()` 在每个被引擎求值的 handler 处还发出 `[chain] handler={} decision={} key={} requestId={}` DEBUG 日志(一次 GET/PUT 内所有 handler 共享同一 MDC `requestId`,可按 id 串联整条链)+ 自增 `resicache.handler.fired` counter(tag `handler`)。skipRemaining 短路路径未到达该 handler,故不记。详见 [[observability]] 的「责任链执行可观测性」段。
+> **可观测性(ADR-0009 后由 `ChainObserver` 收口)**:DEBUG 日志 + fired counter + MDC stamp + Timer
+> 全部迁出到 `chain/observer/` 子包的 5 个 observer 实现。`ChainEngine` 在每个节点循环
+> 调 `beforeNode` / `afterNode`,在链入口/出口调 `onChainStart` / `onChainEnd`。
+> 详见 [[observability]] 与 [[ADR-0009]]。
 
 ## 链的装配:CacheHandlerChainFactory
 

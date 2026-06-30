@@ -18,7 +18,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-30
+updated: 2026-07-01
 ---
 
 # 可观测性
@@ -85,9 +85,16 @@ public class MetricsAutoConfiguration { ... }
 
 `CacheHandlerChain` 构造时(仅 `MeterRegistry` 在 classpath)注册单个 Timer `resicache.chain.execute`,记录**整条链的 full lifecycle**(head handle + post-process)。`ObjectProvider<MeterRegistry>` 允许 registry 缺失(测试 stub / 无 actuator 环境)—— 缺时计时静默 no-op,行为不变。当前为单 Timer(无 tags);per-cacheName / per-operation tags 与 per-handler Micrometer tags 的更细粒度归属,见 `wiki/adr/0008-observation-spans-attribution.md`(归属划界,Proposed 待用户批准)。
 
-### Per-handler `[chain]` DEBUG 日志 + MDC requestId 关联(R24)
+### Per-handler `[chain]` DEBUG 日志 + MDC requestId 关联(R24,ADR-0009 后由 ChainObserver 收口)
 
-`CacheHandlerChain.execute(CacheContext)` 每次执行 stamp 一个 `requestId` 进 SLF4J `MDC`(`CacheHandlerChain.MDC_REQUEST_ID_KEY = "requestId"`),`AbstractCacheHandler.handle` 在**单点 chain-advance** 处对每个被引擎求值的 handler 记录:
+**ADR-0009 后**:DEBUG 日志 + MDC stamp + fired counter + Timer 全部从
+`CacheHandlerChain` / `AbstractCacheHandler` 迁出到 5 个 `ChainObserver` 实现(`chain/observer/`),
+`ChainEngine` 在节点循环 / 链入口 / 链出口统一调 observer 钩子。**handler 子类 0 修改,Engine 0 修改(只
+新增一个钩子)即可加新观测能力**——这是 ADR-0009 D1+D2 的核心 leverage。
+
+`ChainEngine.execute(CacheContext)` 每次执行通过 `MDCStampChainObserver.onChainStart` stamp 一个 `requestId`
+进 SLF4J `MDC`(`CacheHandlerChain.MDC_REQUEST_ID_KEY = "requestId"`,`onChainEnd` 恢复调用方原值),
+通过 `ChainDebugLogChainObserver.afterNode` 对每个被引擎求值的 handler 记录:
 
 ```
 [chain] handler=BloomFilterHandler decision=CONTINUE key=resicache:users:42 requestId=7f3a9c1b2e0d4
@@ -99,9 +106,16 @@ public class MetricsAutoConfiguration { ... }
 - **降级**:DEBUG 关闭时 `log.debug` 静默 no-op(SLF4J 标准门控);`requestId` 仍 stamp(为后续 Observation span 关联预留)。
 - **scope**:per-handler observability 三件套。(d) DEBUG+MDC requestId 见上(R24);**per-handler `resicache.handler.fired` counter 见下(R25)**;Observation spans / Micrometer handler·decision tags 的归属,见 `wiki/adr/0008-observation-spans-attribution.md`(Proposed)。
 
-### `resicache.handler.fired` per-handler 计数(R25)
+### `resicache.handler.fired` per-handler 计数(R25,ADR-0009 后由 `FiredCounterChainObserver` 接管)
 
-`AbstractCacheHandler.handle()` 单点为每个被引擎求值的 handler 自增 `resicache.handler.fired` counter(tag `handler` = 运行时子类 SimpleName,如 `BloomFilterHandler`)。`MeterRegistry` 由 `CacheHandlerChainFactory` 建链时注入每个 enabled `AbstractCacheHandler`(方法 `attachMeterRegistry`,幂等;registry 缺失时 counter 为 null,no-op)。
+`FiredCounterChainObserver.afterNode(handler, ctx, result)` 按 handler 运行时类懒注册
+`resicache.handler.fired` counter(tag `handler` = 运行时子类 SimpleName,如 `BloomFilterHandler`)并自增。
+`MeterRegistry` 由 `CacheHandlerChainFactory` 建链时通过 `CacheHandlerChainFactory.registerObserversOnce`
+注入到 `FiredCounterChainObserver`(registry 缺失时内部 no-op)。
+
+**行为变化(ADR-0009 一致性修正)**:原 `AbstractCacheHandler.attachMeterRegistry` 把 fired counter 注册
+职责放在基类,但语义 counter 走子类 `onAttachMetrics` 钩子——双轨不一致;**新设计统一到 `ChainObserver`
+在进链时按 handler class 集中注册**,语义 counter 与 fired counter 路径一致。
 
 - **cardinality**:`handler` tag 数 = handler 数(bounded ~6),**不加** `redisKey`(unbounded,见 guide line 261)。
 - **查询示例**:`rate(resicache.handler.fired{handler="SyncLockHandler"}[5m])` = 该 handler 被引擎求值的频率 —— 回答「哪个保护机制在 fire、fire 多频繁」。
