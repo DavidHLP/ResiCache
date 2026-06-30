@@ -111,29 +111,15 @@ hand-off, not to abandoning the project.
 
 ## Releases & CI infrastructure
 
-Three GitHub Actions workflows (`.github/workflows/ci.yml`,
-`pr-checks.yml`, `release.yml`) call a single composite action
+CI runs on every push to `master` and every PR via
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). The composite action
 [`.github/actions/setup-jdk-21/action.yml`](.github/actions/setup-jdk-21/action.yml)
-to set up Java + Maven cache. The composite is the **single source of truth**
-for `java-version`, `distribution`, and `cache` settings across the project.
+is the single source of truth for `java-version` / `distribution` / Maven
+cache across all three workflows (`ci.yml`, `pr-checks.yml`, `release.yml`).
+**Edit only the composite when bumping the project JDK**; re-introducing
+inline `actions/setup-java@v5` steps re-opens the drift this composite was
+created to close.
 
-When bumping the project JDK version (e.g. following `pom.xml`'s
-`<java.version>` from 21 → 25):
-
-1. **Edit only the composite action's default input.** Don't add a new
-   inline `actions/setup-java@v5` step in any workflow — re-introducing
-   inline setup re-opens the drift surface that this composite
-   structure was created to close.
-2. If a workflow genuinely needs different JDK settings from the default
-   (only `release.yml` does today — Maven Central deploy secrets), pass
-   the deviation via `with:` inputs on the composite, **not** by adding
-   a separate `actions/setup-java@v5` step alongside.
-3. CI runs on every push to `master` and every PR. If your change touches
-   any workflow file or the composite action, expect CI to run with your
-   change before merge — design the change to be self-consistent.
-
-Secrets used by `release.yml` (`OSSRH_USERNAME`, `OSSRH_PASSWORD`,
-`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`) are configured at the repository /
-environment level. The maintainer coordinates these out of band — do
-not edit `.github/workflows/release.yml` to add secrets; ask the
-maintainer via issue first.
+Release-time secrets (`OSSRH_*`, `GPG_*`) are configured at the repository /
+environment level out of band by the maintainer. Do not edit `release.yml`
+to add secrets — open an issue first.

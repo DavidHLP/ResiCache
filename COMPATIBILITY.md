@@ -61,8 +61,7 @@ Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backe
 `SecureJackson` for safe deserialization. This is **not** wire-compatible with
 Spring's `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. Existing
 caches must be **migrated** when adopting ResiCache, otherwise the entire cache
-misses on cutover. A `shadow → dual-write → cutover` migration tool is planned
-for v0.2.0. See [README → Known Limitations](README.md#known-limitations).
+misses on cutover. See [README → Known Limitations](README.md#known-limitations).
 
 ## Known limitations
 
@@ -75,5 +74,4 @@ for v0.2.0. See [README → Known Limitations](README.md#known-limitations).
   `resi-cache.transaction-aware=true`.
 - **Redis Cluster distributed locks**: lock keys are **hash-tag pinned** to the
   same slot as the cache key (WS-1.2b), so the lock and the data it guards
-  co-locate on one node. Validated at the key-construction level; full multi-node
-  Cluster integration testing is planned for v0.2.0.
+  co-locate on one node. Validated at the key-construction level.

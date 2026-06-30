@@ -217,7 +217,7 @@ resi-cache:
 | `earlyExpirationThreshold` | 0.3 | 提前过期阈值（TTL 剩余比例） |
 | `sync` / `syncTimeout` | false / 10 | 同步等待与超时 |
 
-> 注：5 大防护属性**默认全 `false`**——须在 `@RedisCacheable` 上逐个显式开启。`sync=true`（防击穿）依赖 Redisson 在 classpath,**缺失时 fail-fast**（拒绝静默降级为单 JVM 锁——跨实例无效）;确需单实例/测试降级,设 `resi-cache.sync-lock.local-only=true`。v0.2.0 将引入 `resi-cache.protection.preset` 简化批量开启。
+> 注：5 大防护属性**默认全 `false`**——须在 `@RedisCacheable` 上逐个显式开启。`sync=true`（防击穿）依赖 Redisson 在 classpath,**缺失时 fail-fast**（拒绝静默降级为单 JVM 锁——跨实例无效）;确需单实例/测试降级,设 `resi-cache.sync-lock.local-only=true`。
 
 ### 每缓存覆盖（`caches.<name>`）
 
@@ -299,15 +299,14 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 
 ## ⚠️ Known Limitations / 已知限制
 
-v0.0.2 当前已知的硬限制（均在 [Roadmap](#-roadmap) 中修复）：
+v0.0.x 当前已知限制：
 
-- **防护默认全关**：`@RedisCacheable` 的 5 大防护属性默认 `false`，须逐个显式开启 → v0.2.0 引入 `resi-cache.protection.preset=STRICT/STANDARD/NONE`
-- **序列化信封与 Spring 原生不兼容**：ResiCache 用 `{version, payload}` 信封序列化，与 Spring 默认 `GenericJackson2JsonRedisSerializer` / `JdkSerializer` 不兼容——**存量项目接入需迁移**，否则全量缓存失效 → v0.2.0 提供 `shadow → dual-write → cutover` 迁移工具
+- **防护默认全关**：`@RedisCacheable` 的 5 大防护属性默认 `false`，须逐个显式开启
+- **序列化信封与 Spring 原生不兼容**：ResiCache 用 `{version, payload}` 信封序列化，与 Spring 默认 `GenericJackson2JsonRedisSerializer` / `JdkSerializer` 不兼容——**存量项目接入需迁移**，否则全量缓存失效
 - **序列化白名单默认锁作者包名**：`allowed-package-prefixes` 默认仅 `io.github.davidhlp.`，自定义类型须显式配置（见上文 [序列化安全](#序列化安全)）
-- **双 Advisor 风险已消除（v0.0.3）**：`nativeAnnotationMode` 默认已改为 `SELECTIVE`——纯 `@Cacheable` 完全走 Spring 原生、不被 ResiCache 接管，双 Advisor 风险随之消除。需要 FULL 兼容（接管 `@Cacheable`）可显式 `resi-cache.native-annotation-mode=FULL`
+- **双 Advisor 风险已消除**：`nativeAnnotationMode` 默认 `SELECTIVE`——纯 `@Cacheable` 完全走 Spring 原生、不被 ResiCache 接管。需要 FULL 兼容（接管 `@Cacheable`）可显式 `resi-cache.native-annotation-mode=FULL`
 - **不支持 Reactive**（WebFlux / `Mono` / `Flux`）：`RedisCacheInterceptor` 是阻塞式，Reactive 方法不触发缓存
-- **`@CacheEvict(allEntries=true)`（CLEAN）是 best-effort、非原子**：与 Spring 原生 `RedisCache.clear`/`DefaultRedisCacheWriter.clean` 一致，用 SCAN 游标 + 批量 UNLINK/DEL，CLEAN 期间新写入的 key 可能被遗漏，大 key 集时缓存短暂处于半删状态。刻意不用 Lua/MULTI 原子化（Redis 单线程 O(keyspace) 阻塞、Cluster cross-slot）。启用布隆时，`rebuild-window-seconds` 窗口（v0.1.0）防止擦除后重建期的静默 null。
-- **暂无 JMH 基准**：性能数据待 v0.3.0 补齐
+- **`@CacheEvict(allEntries=true)`（CLEAN）是 best-effort、非原子**：与 Spring 原生 `RedisCache.clear`/`DefaultRedisCacheWriter.clean` 一致，用 SCAN 游标 + 批量 UNLINK/DEL，CLEAN 期间新写入的 key 可能被遗漏，大 key 集时缓存短暂处于半删状态。刻意不用 Lua/MULTI 原子化（Redis 单线程 O(keyspace) 阻塞、Cluster cross-slot）。启用布隆时，`rebuild-window-seconds` 窗口防止擦除后重建期的静默 null。
 
 ## 🚫 Not in Scope
 
@@ -315,19 +314,7 @@ ResiCache **刻意不做**以下能力，避免过度膨胀——请用专业工
 
 - **熔断 / 限流** → 配 [Resilience4j](https://resilience4j.readthedocs.io/) 保护下游
 - **多级本地 + 远端缓存** → 配 [Caffeine](https://github.com/ben-manes/caffeine) 做本地层
-- **Reactive 缓存**（WebFlux）→ 暂不支持，计划在路线图评估
-
-## 🗺️ Roadmap
-
-| 版本 | 重点 | 状态 |
-|---|---|---|
-| **v0.0.3** | 文档诚实化 + `resi-cache.enabled` kill-switch + Reactive 显式排除 + 双 Advisor 修复 | 进行中 |
-| **v0.1.0** | Boot 4.0 / SDR 4.0 / Java 21 单构建（FIRE M0–M4 ✅ `38c514a`）+ WS-1.2 P0 硬化（fail-fast sync / Cluster hash-tag / 原子 CLEAN 重建窗口 ✅ `5a05d0a`）+ WS-1.3 Path C 销毁 ThreadLocal（7 步序列 ✅ `a42a1c1`/`ceb3901`/`a483de9`/`b377c16`/`b9d6b40`/`cf4e2b1`）+ 首次发 Maven Central | 待发（发版卡在 `OSSRH_*` → `MAVEN_USERNAME`/`MAVEN_PASSWORD` secret 对齐） |
-| **v0.2.0** | `protection.preset` + 序列化兼容 + 迁移工具（同一发布单元） | 计划 |
-| **v0.3.0** | JMH 基准 + 可观测性（per-handler Micrometer tag） | 计划 |
-| **v1.0.0** | API 冻结 + 正式推广（sample 项目 / 对比页 / 文章） | 计划 |
-
-详见 [CHANGELOG.md](CHANGELOG.md)。
+- **Reactive 缓存**（WebFlux）→ 不支持
 
 ## 🔧 依赖版本
 
