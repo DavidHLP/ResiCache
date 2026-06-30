@@ -31,7 +31,9 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 - [[README]] —— Wiki 维护规范(schema:目录/命名/链接/工作流)
 - [[overview]] —— 项目概览与技术栈,阅读入口
-- [[log]] —— 操作日志(append-only)
+- [[log]] —— 操作日志(append-only,「日期 + 主题」摘要风格)
+- [[log/archive-2026-q2]] —— 2026 Q2 归档(autonomous-loop v1/v2 round 1–42)
+- [[milestone-2026-q3]] —— **Active 里程碑**:项目优化(2026 Q3)
 - [[index]] —— 本页
 - [[dashboard]] —— Dataview 仪表盘(近期更新 / 分类 / 待完善)
 - [[lint-report-2026-06-21]] —— Lint 健康检查报告
@@ -47,6 +49,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0005-kernel-extraction-hedge]] —— 内核无关化仅作长寿对冲,不近期执行
 - [[0006-redisson-companion-positioning]] —— 定位为「ResiCache for Redisson」(取代 0001 定位叙事)
 - [[0007-fire-single-buildline-abandonment]] —— WS-1.1 双分支策略废弃,统一单构建 Boot 4.0
+- [[0008-observation-spans-attribution]] —— Observation spans 归属(v0.1.0 + 不归 ADR-0005 范畴,Proposed 待 review)
 
 ## 架构(architecture/)
 

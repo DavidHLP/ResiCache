@@ -119,7 +119,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   configured props, the roundtrip would succeed. This is the regression guard
   for the entire Round 5 + R11 contract. Internal refactor — `STABILITY.md`
   §2 (internals may-change pre-1.0) applies; no public API surface touched.
-  Full verify 675/0/0/0 ✅ (+2 vs Round 9 baseline 673). (loop round 11)
+  Full verify 675/0/0/0 ✅ (+2 vs Round 9 baseline 673).
 - **`CONTRIBUTING.md` requirements + new Maintainers & bus-factor section**:
   (a) Bumped JDK requirement `17+` → `21+` to match `pom.xml
   <java.version>21</java.version>` and the WS-1.1 FIRE cut (Round 8 caught the
@@ -131,7 +131,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   (named successor OR documented succession plan required before 1.0 tag).
   Forward-link to STABILITY makes the graduation gate explicit. Docs-only —
   `STABILITY.md` §2 (docs may-change pre-1.0) applies; §1+§3 not invoked.
-  (loop round 12)
+ 
 - **Composite GitHub Action `.github/actions/setup-jdk-21`** — extracted 6
   `actions/setup-java@v5` calls across 3 workflows (`ci.yml` × 4,
   `pr-checks.yml` × 1, `release.yml` × 1) into a single composite action.
@@ -145,7 +145,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   validated via PyYAML for all 4 touched files. Pure YAML refactor — no
   secrets, no triggers, no env values changed; `STABILITY.md` §2
   (internals may-change pre-1.0) applies; §1+§3 not invoked.
-  (loop round 13)
+ 
 - **`CONTRIBUTING.md` Releases & CI infrastructure subsection** — new
   guidance pointing future contributors at the composite action
   (`.github/actions/setup-jdk-21/action.yml`) as the JDK source of truth,
@@ -157,7 +157,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   reference is the rounding-the-loop of Round 13's refactor: useful on
   its own only if a reader can find it. Docs-only — `STABILITY.md` §2
   (docs may-change pre-1.0) applies; §1+§3 not invoked.
-  (loop round 14)
+ 
 - **Startup-time misconfig WARN** — new `@Component
   SerializerWhitelistStartupGuard` listens to `ApplicationReadyEvent` and
   warns at WARN level when `resi-cache.serializer.allowed-package-prefixes`
@@ -174,7 +174,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   is the **WARN scaffolding** for the larger GUIDE §4 "whitelist
   auto-derive" item (which would additionally BeanFactory-derive the host
   app root package — that part is ⚠️ BREAKING and intentionally deferred).
-  (loop round 15)
+ 
 - **`## Comparison` section added to `README.md` / `README.zh-CN.md`**
   promoting [`docs/comparison.md`](docs/comparison.md) to a discoverable
   README-visible surface (guide §6 line 174). Headline copy: "the 3
@@ -187,7 +187,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   decide whether to drill in. No public API change. STABILITY.md §2
   (docs may-change pre-1.0) applies; §1+§3 not invoked. Docs-only
   change, no `./mvnw clean verify` needed.
-  (loop round 16)
+ 
 - **`wiki/modules/serialization.md` sync to current source** (round 17)
   — wiki page had drifted significantly since its initial creation:
   - **`source-files` frontmatter listed `SecureJackson2JsonRedisSerializer.java`
@@ -217,7 +217,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   knowledge base per `CLAUDE.md` — if it doesn't reflect the actual
   state of source, future LLM sessions re-derive from source (the
   very failure mode the wiki exists to prevent).
-  (loop round 17)
+ 
 - **`wiki/modules/configuration.md` sync to current source** (round 18)
   — continued Round 17's bounded wiki-sync pattern (1 page per round).
   Changes:
@@ -242,7 +242,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
 
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies.
-  (loop round 18)
+ 
 - **`wiki/modules/observability.md` sync to current source** (round 19)
   — continued Round 17/18 bounded wiki-sync pattern (1 page per
   round). R15 startup WARN is observability surface (loud-startup
@@ -269,7 +269,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
 
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies.
-  (loop round 19)
+ 
 - **`SerializerWhitelistStartupGuardIntegrationTest`** — new
   integration test closing the R15 test coverage gap (round 20).
   R15's `SerializerWhitelistStartupGuardTest` covered the
@@ -298,7 +298,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   No public API change. Full verify 682/0/0/0 ✅ (+3 vs
   R15 baseline 679). STABILITY.md §1+§3 not invoked;
   §2 (tests may evolve pre-1.0) applies.
-  (loop round 20)
+ 
 - **`wiki/architecture/auto-configuration.md` sync to current source**
   (round 21) — continued Round 17/18/19 bounded wiki-sync pattern
   (1 page per round; R20 broke to add an integration test, R21
@@ -331,7 +331,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
 
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies. Pure docs.
-  (loop round 21)
+ 
 - **`sync-lock.timeout` wiki fact correction** (round 22) — closes
   a real stale fact noted in R18 as scope-limit. The
   `wiki/modules/configuration.md` sync-lock yaml example showed
@@ -354,7 +354,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
 
   No public API change. STABILITY.md §1+§3 not invoked; §2 (docs
   may-change pre-1.0) applies. Pure docs.
-  (loop round 22)
+ 
 - **`wiki/architecture/cache-lifecycle.md` minimal touch-up** (round
   23) — substantive content already correct from R1 (the 5
   CacheOperation types, the `RedisProCacheWriter` entry point,
@@ -390,7 +390,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
 
   No public API change. STABILITY.md §1+§3 not invoked; §2
   (docs may-change pre-1.0) applies. Pure docs.
-  (loop round 23)
+ 
 - `resi-cache.protection.enabled` protection-chain switch — when `false`, the
   protection handlers (bloom/lock/early-expiration/null-value) are skipped but
   **TTL is preserved** (TtlHandler also computes the base TTL; disabling it would
@@ -422,7 +422,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   subsequent rounds. TDD: 2 new tests in `CacheHandlerChainTest`
   (`MdcObservabilityTests`: requestId correlates across handlers + MDC cleared
   post-execution + caller MDC restored); full verify 684/0/0/0 ✅ (+2, Skipped:
-  0, Testcontainers IT executed). (loop round 24)
+  0, Testcontainers IT executed).
 - **Per-handler fired counter (`resicache.handler.fired`, guide §223b)**:
   `AbstractCacheHandler.handle()` now increments a uniform
   `resicache.handler.fired` counter (tag `handler` = runtime subclass
@@ -437,7 +437,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   package-private). TDD: new `FiredCounterWiringTests` in
   `CacheHandlerChainFactoryTest` (factory wiring + execute + increment +
   handler tag); full verify 685/0/0/0 ✅ (+1, Skipped: 0, Testcontainers IT
-  executed). (loop round 25)
+  executed).
 - **TtlHandler `resicache.handler.ttl.jittered` counter (guide §223b1)**:
   `TtlHandler` now registers `resicache.handler.ttl.jittered` (via
   `ObjectProvider<MeterRegistry>` + `@PostConstruct`, mirroring
@@ -448,7 +448,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   surface touched (the added constructor parameter is internal `@Component`
   wiring). TDD: new `TtlJitteredCounterTests` in `TtlHandlerTest`
   (randomTtl true increments / false does not); full verify 687/0/0/0 ✅
-  (+2, Skipped: 0, Testcontainers IT executed). (loop round 26)
+  (+2, Skipped: 0, Testcontainers IT executed).
 - **GitHub contributor templates (guide §369-374)**: added
   `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml` and
   `.github/PULL_REQUEST_TEMPLATE.md`. The bug form captures
@@ -458,7 +458,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   links wiki/ + STABILITY.md + CHANGELOG.md; the PR template mirrors the
   CONTRIBUTING.md checklist + a STABILITY.md backward-compatibility prompt.
   Docs/config only — no public API surface touched (STABILITY §2 docs
-  may-change). YAML-lint ✅ (3/3 issue templates). (loop round 27)
+  may-change). YAML-lint ✅ (3/3 issue templates).
 - **CODEOWNERS relocated to .github/ (guide §377)**: moved `CODEOWNERS`
   from repo root to `.github/CODEOWNERS` (conventional location,
   collocating with the R27 contributor templates). GitHub reads CODEOWNERS
@@ -466,7 +466,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   (CONTRIBUTING.md L89, wiki/log, guide) cite it by name, not path.
   Completes the contributor-infra cluster (guide §369-378) minus
   good-first-issue labels (§378, outward gh label = user gate).
-  Docs/config only. (loop round 28)
+  Docs/config only.
 - **Front-door version reconcile (guide §87/276, P0)**: the Dependencies
   tables in README.md, README.zh-CN.md, and wiki/overview.md still listed
   the pre-FIRE versions (Spring Boot 3.4.13, Java 17+, Redisson 3.27.0)
@@ -474,7 +474,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   Boot 4.0.0 / Java 21+ / Redisson 3.50.0 (Caffeine 3.1.8 was already
   correct); wiki/overview.md `updated` bumped to 2026-06-29. Closes the
   version-fragment of the P0 "reconcile 自相矛盾" item; COMPATIBILITY.md
-  `-Pboot4` refs are a separate sub-item. Docs only. (loop round 29)
+  `-Pboot4` refs are a separate sub-item. Docs only.
 - **COMPATIBILITY.md `-Pboot4` reconcile (guide §87/276, P0)**: the
   `boot4`/`boot3` Maven profiles were removed in commit `9ad22bf` (Boot 4
   is configured directly in pom.xml — zero `<profile>` blocks), yet
@@ -483,7 +483,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   (matching ci.yml, which already runs `./mvnw clean verify -B`) and
   replaced the false profile claim. Closes the build-command sub-item of
   the P0 "reconcile 自相矛盾", pairing with R29's version-table reconcile.
-  Docs only. (loop round 30)
+  Docs only.
 - **Serialization pre-flight probe (guide §115)**: new
   `SerializationPreFlightProbe` @Component samples N Redis keys at startup
   (opt-in `resi-cache.serializer.probe-enabled`, default false;
@@ -495,20 +495,20 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   scan via `RedisConnectionFactory.scan`. New config keys are additive
   (STABILITY §1 surface growth). TDD: `SerializationPreFlightProbeTest`
   (4 isEnvelope + 3 scanAndReport mock cases); full verify 694/0/0/0 ✅
-  (+7, Skipped: 0, Testcontainers IT executed). (loop round 31)
+  (+7, Skipped: 0, Testcontainers IT executed).
 - **configuration.md wiki sync (R31 follow-up)**: documented the R31
   `resi-cache.serializer.probe-enabled` / `probe-sample-size` keys in the
   configuration wiki page (yaml example + probe note) — the §1.7
-  source-changed→sync-wiki obligation. Docs only. (loop round 32)
+  source-changed→sync-wiki obligation. Docs only.
 - **chain-of-responsibility.md wiki sync (R24/R25 follow-up)**: the chain
   architecture page documented handle() but predated R24 ([chain] DEBUG +
   MDC requestId) and R25 (resicache.handler.fired counter) — both fire
   inside handle(). Added an observability callout + [[observability]]
-  cross-link. §1.7 follow-up. Docs only. (loop round 33)
+  cross-link. §1.7 follow-up. Docs only.
 - **COMPATIBILITY.md test-count fix**: dropped the brittle "13 Testcontainers
   IT" claim (actual: 12 classes extend AbstractRedisIntegrationTest; the
   count drifts per round) in favor of drift-proof "Testcontainers-backed
-  integration tests". Factual accuracy. Docs only. (loop round 34)
+  integration tests". Factual accuracy. Docs only.
 
 ### Changed
 - ⚠️ **BREAKING** `nativeAnnotationMode` default changed from `FULL` →
@@ -560,7 +560,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   would fail before this fix with "Type not in deserialization whitelist" or
   degrade to `LinkedHashMap` if whitelist alone were honored). TDD: failing
   test → fix → green, full verify 669 tests / 0 failures / 0 skipped.
-  (loop round 5)
+ 
 - **`.github/workflows/release.yml` `JAVA_VERSION` 滞后:** 该工作流曾是
   Java 17 时遗留,`env.JAVA_VERSION: '17'` 没在 WS-1.1 FIRE(commit
   `38c514a`,unify 全栈 Java 21)时被同步,导致 release tag push 时
@@ -568,12 +568,12 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `maven.compiler.{source,target}=21` 要求 JDK 21 编译,Java 21 语法
   (records / sealed types / pattern matching / switch expressions)在
   JDK 17 编译必失败。`ci.yml` 同 WS-1.1 FIRE 期间已同步到 `'21'`,
-  `release.yml` 是遗漏(loop round 8 静态 lint 扫描发现)。修复:`17`→
+  `release.yml` 是遗漏(静态 lint 扫描发现)。修复:`17`→
   `21` + 注释引 WS-1.1 FIRE commit + 解释为何必须对齐 pom.xml。**Only
  改动 `env.JAVA_VERSION` 一行 + 注释**,不动 secret / tag 触发器 /
-  `softprops/action-gh-release` 步骤 / 任何 workflow 触发条件(loop §1
-  「no outward-facing/irreversible actions: no push / no deploy / no gh
-  actions / no tags / no merges」)。本地 commit,不 push;下一次 tag push
+  `softprops/action-gh-release` 步骤 / 任何 workflow 触发条件
+  (无 outward-facing / irreversible actions: no push / no deploy / no gh
+  actions / no tags / no merges)。本地 commit,不 push;下一次 tag push
   才会真触发该 workflow。STABILITY 不涉及(workflow 配置非 public API
   surface)。
 
@@ -585,7 +585,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `wrapper/`/`spi/`/`event/`/`evaluator/`/`CacheMetricsRecorder` and described
   customizability via "Java ServiceLoader" (superseded by Spring
   `@Bean` + `@ConditionalOnMissingBean`). Pointer preserves tool compatibility
-  while preventing future drift. (loop round 1)
+  while preventing future drift.
 - **ADR-0006 JetCache 覆盖机制算术修正(事实错误修复)**:原文 Context
   §第 1 段把 TTL jitter 计入 JetCache 覆盖(称"4/5"),与 JetCache 实际能力
   不符。**JetCache Issue #269**(TTL jitter / expiry randomization)状态为
@@ -595,7 +595,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   (`COMPETITIVENESS_GUIDE.md` §3 战略执行条目)与版本对齐(`STABILITY.md`
   §1+§3 不涉及)。ResiCache 真实技术增量相应更正为 **Bloom + TTL jitter +
   可插拔责任链**(3 项独立、不重叠)。诊断/事实文本按 `STABILITY.md` §2
-  属 pre-1.0 may-change,无 public API surface breaking。(loop round 4)
+  属 pre-1.0 may-change,无 public API surface breaking。
 - **`docs/comparison.md` 与 ADR-0006 amendment 一致性补齐**:Round 4 修了
   ADR-0006 第 1 段的 JetCache 覆盖算术,但用户面对外的 `docs/comparison.md`
   能力矩阵防雪崩(TTL 抖动)行第 4 列**仍写「JetCache ✅」** —— 与 ADR-0006
@@ -606,7 +606,7 @@ notes. API stability is only guaranteed from `1.0.0` onward (see the
   `STABILITY.md` §4.7 1.0 毕业条件 #7 的 adoption 信号页(外部 referrer 月访问),
   行级事实错误直接误导读者在 JetCache vs ResiCache 之间做错决策。诊断/事实
   文本 pre-1.0 may-change 按 `STABILITY.md` §2,无 public API breaking。
-  (loop round 7)
+ 
 
 ## [0.0.2] — current
 
