@@ -74,7 +74,7 @@ public @interface RedisCacheEvict {
     /**
      * 同步锁超时时间（秒）.
      */
-    long syncTimeout() default -1;
+    long syncTimeout() default 10;
 
     /**
      * 缓存过期时间（秒）.

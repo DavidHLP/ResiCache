@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.operation;
 
-import io.github.davidhlp.spring.cache.redis.eviction.TwoListEvictionStrategy;
+import io.github.davidhlp.spring.cache.redis.eviction.EvictionStats;
+import io.github.davidhlp.spring.cache.redis.eviction.TwoListLRU;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,22 +20,30 @@ import java.lang.reflect.Method;
  * {@code AbstractAnnotationHandler} 方法引用的目标（{@code redisCacheRegister::registerCacheableOperation} 等），
  * 其第三参数为具体操作类型，规避泛型方法引用的类型推断陷阱。
  *
+ * <p><strong>Candidate B：策略层删除</strong>。原 105 SLOC 的 {@code TwoListEvictionStrategy}
+ * 仅做 1:1 委托（{@code get/put/remove/size/clear} 等），唯一非平凡方法 {@code getStats()}
+ * 9 行聚合已抽出到 {@link EvictionStats#of(TwoListLRU, int, int)}。本类<em>直接</em>绑
+ * {@link TwoListLRU}，省略中间包装。
+ *
  * <p>查找键 = {@code <type>:<cacheName>:<elementKey.toString()>}，由 {@link #buildKey} 统一构造。
  * operation 自身的 {@code key} 字段（SpEL/字面量）是运行时缓存键的来源，与这里的注册查找键无关。
  */
 @Slf4j
 public class RedisCacheRegister {
 
-    /** 缓存操作淘汰策略 */
-    private final TwoListEvictionStrategy<String, CacheOperation> operationStrategy;
+    /** 缓存操作淘汰策略（直接 TwoListLRU，无策略包装） */
+    private final TwoListLRU<String, CacheOperation> operationLru;
+    private final int maxActiveSize;
+    private final int maxInactiveSize;
 
     public RedisCacheRegister() {
         this(2048, 1024);
     }
 
     public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
-        this.operationStrategy =
-                new TwoListEvictionStrategy<>(maxActiveSize, maxInactiveSize);
+        this.maxActiveSize = maxActiveSize;
+        this.maxInactiveSize = maxInactiveSize;
+        this.operationLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
     }
 
     // ============================ 注册（薄包装）============================
@@ -69,10 +78,10 @@ public class RedisCacheRegister {
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
         for (String cacheName : cacheOperation.getCacheNames()) {
             String key = buildKey(cacheName, elementKey, type);
-            operationStrategy.put(key, cacheOperation);
+            operationLru.put(key, cacheOperation);
             log.debug(
                     "Registered {} operation: cacheName={}, elementKey={}, stats={}",
-                    type, cacheName, elementKey, operationStrategy.getStats());
+                    type, cacheName, elementKey, snapshotStats());
         }
     }
 
@@ -103,12 +112,19 @@ public class RedisCacheRegister {
     private <O extends CacheOperation> O getInternal(
             String name, AnnotatedElementKey elementKey, String type, Class<O> operationType) {
         String operationKey = buildKey(name, elementKey, type);
-        CacheOperation operation = operationStrategy.get(operationKey);
+        CacheOperation operation = operationLru.get(operationKey);
         if (operationType.isInstance(operation)) {
             return operationType.cast(operation);
         }
         log.debug("{} operation not found: name={}, elementKey={}", type, name, elementKey);
         return null;
+    }
+
+    // ============================ 统计 ============================
+
+    /** 当前淘汰策略的统计快照（封装 {@link EvictionStats#of} 调用） */
+    public EvictionStats snapshotStats() {
+        return EvictionStats.of(operationLru, maxActiveSize, maxInactiveSize);
     }
 
     // ============================ 键构造 ============================

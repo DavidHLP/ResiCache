@@ -389,3 +389,37 @@ Q2 autonomous-loop v1/v2(round 1–42)已 CLOSED,新一轮项目优化里程碑�
 **验证**:ADR 文本 0 编译依赖(纯 wiki),无需跑测试;commit diff 137+/0- 单文件。
 
 **下一步**(Round 44+):以 `wiki/adr/0009-chain-engine-extraction.md` 切片计划为唯一参考,按切片顺序执行;具体落实进度见后续 commit。
+
+---
+
+## [2026-06-30] ADR-0010 | Attributes 投影层 + TwoListEvictionStrategy 删除 (A+B+C 三候选合并落地)
+
+延续架构评审 (`/tmp/architecture-review-1782816491.html` v2) 三个候选全部收敛,落地 seam 治理:
+
+**ADR 主体** (wiki/adr/0010-attributes-projection-and-strategy-deletion.md, Accepted):
+- **D1** `factory/RedisCacheAttributes` POJO + `RedisCacheAttributesProjector` 投影器 → 收敛 18/18 builder 字段逐字复制 + `cacheNames/value` merge 规则
+- **D2** 3 处 drift 默认值修复:`@RedisCacheable.expectedInsertions` 10000→100000、`falseProbability` 0.03→0.01;`@RedisCachePut / @RedisCacheEvict.syncTimeout` -1→10
+- **D3** 删除 `eviction/TwoListEvictionStrategy` (105 SLOC pass-through);聚合下沉到 `EvictionStats.of(TwoListLRU, int, int)`
+- **D4** 新增 `factory/SpringCacheableAdapterFactory`,把 `CacheableAnnotationHandler` 47 行内联 if-Builder 模板下放到 factory
+
+**文件变更**:
+- 新建 4: `RedisCacheAttributes.java`、`RedisCacheAttributesProjector.java`、`SpringCacheableAdapterFactory.java`、`RedisCacheAttributesProjectorTest.java`
+- 修改 12: 3 个注解 + 5 factory/abstract + 1 handler + 1 register + 1 EvictionStats + 3 个工厂测试 + 1 handler 测试
+- 删除 2: `TwoListEvictionStrategy.java`、`TwoListEvictionStrategyTest.java`
+
+**用户契约变更** (发版时需 release note):
+- `@RedisCacheable.expectedInsertions` 默认 `10000 → 100000` (Bloom 更保守)
+- `@RedisCacheable.falseProbability` 默认 `0.03 → 0.01` (Bloom 更严)
+- `@RedisCachePut/@RedisCacheEvict.syncTimeout` 默认 `-1 → 10` (锁等待最长 10 秒,防御性收紧)
+
+**杠杆兑现** (增删字段/改默认值/修 drift → 只需动 3 处而非 9 处):
+1. `RedisCacheAttributes` POJO 加字段
+2. `RedisCacheAttributesProjector.from(annotation)` 加一行
+3. 对应 factory `materialize(...)` 加一行 builder 调用
+
+**Review CR findings (留 Round 45 polish)**:
+- F1 (low): 三个注解的 Javadoc 字段说明未同步更新 (默认值改了,文档未改) — 待 polish
+
+**验证**: `mvnw checkstyle:check` PASS;`mvnw verify` 689 tests, 0 failures,coverage checks met。
+
+**下一步**: 无 — ADR-0010 已完整落地,Round 45 待 polish F1 (Javadoc sync)。

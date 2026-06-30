@@ -18,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("CacheableOperationFactory Tests")
 class CacheableOperationFactoryTest {
 
-    private final CacheableOperationFactory factory = new CacheableOperationFactory();
+    private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
+    private final CacheableOperationFactory factory = new CacheableOperationFactory(projector);
 
     private RedisCacheable createAnnotation(
             String[] cacheNames,
@@ -256,12 +257,12 @@ class CacheableOperationFactoryTest {
 
         @Override
         public int expectedInsertions() {
-            return 10000;
+            return 100_000;
         }
 
         @Override
         public double falseProbability() {
-            return 0.03;
+            return 0.01;
         }
 
         @Override

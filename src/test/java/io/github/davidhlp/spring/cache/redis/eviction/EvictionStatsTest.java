@@ -31,6 +31,41 @@ class EvictionStatsTest {
     }
 
     @Nested
+    @DisplayName("EvictionStats.of(TwoListLRU, ...) 工厂")
+    class OfFactoryTests {
+
+        @Test
+        @DisplayName("from empty LRU — sizes 0; config 透传")
+        void of_emptyLru_carriesConfigThrough() {
+            TwoListLRU<String, String> lru = new TwoListLRU<>(1024, 512);
+
+            EvictionStats stats = EvictionStats.of(lru, 1024, 512);
+
+            assertThat(stats.totalEntries()).isZero();
+            assertThat(stats.activeEntries()).isZero();
+            assertThat(stats.inactiveEntries()).isZero();
+            assertThat(stats.maxActiveSize()).isEqualTo(1024);
+            assertThat(stats.maxInactiveSize()).isEqualTo(512);
+            assertThat(stats.totalEvictions()).isZero();
+        }
+
+        @Test
+        @DisplayName("from populated LRU — active/inactive 反映 size/计数")
+        void of_populatedLru_reflectsSizeAndCounters() {
+            TwoListLRU<String, String> lru = new TwoListLRU<>(10, 5);
+            lru.put("k1", "v1");
+            lru.put("k2", "v2");
+            lru.put("k3", "v3");
+
+            EvictionStats stats = EvictionStats.of(lru, 10, 5);
+
+            assertThat(stats.totalEntries()).isEqualTo(3);
+            assertThat(stats.activeEntries()).isEqualTo(3);
+            assertThat(stats.inactiveEntries()).isZero();
+        }
+    }
+
+    @Nested
     @DisplayName("toString")
     class ToStringTests {
 

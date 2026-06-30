@@ -85,9 +85,9 @@ public @interface RedisCacheable {
      */
     boolean useBloomFilter() default false;
 
-    int expectedInsertions() default 10000;
+    int expectedInsertions() default 100000;
 
-    double falseProbability() default 0.03;
+    double falseProbability() default 0.01;
 
     /**
      * 是否使用 TTL 随机化防缓存雪崩.

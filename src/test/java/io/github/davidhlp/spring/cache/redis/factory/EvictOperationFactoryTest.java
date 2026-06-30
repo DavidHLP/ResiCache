@@ -23,7 +23,8 @@ class EvictOperationFactoryTest {
     @RedisCacheEvict(cacheNames = "c1", key = "k1", allEntries = true, beforeInvocation = true)
     public void evictMethod() { }
 
-    private final EvictOperationFactory factory = new EvictOperationFactory();
+    private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
+    private final EvictOperationFactory factory = new EvictOperationFactory(projector);
     private Method method;
     private RedisCacheEvict annotation;
 

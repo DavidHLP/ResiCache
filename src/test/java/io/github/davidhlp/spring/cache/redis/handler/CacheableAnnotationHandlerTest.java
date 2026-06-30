@@ -36,11 +36,15 @@ class CacheableAnnotationHandlerTest {
     @Mock
     private CacheableOperationFactory cacheableOperationFactory;
 
+    @Mock
+    private io.github.davidhlp.spring.cache.redis.factory.SpringCacheableAdapterFactory springCacheableAdapterFactory;
+
     private CacheableAnnotationHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new CacheableAnnotationHandler(redisCacheRegister, keyGenerator, cacheableOperationFactory);
+        handler = new CacheableAnnotationHandler(
+                redisCacheRegister, keyGenerator, cacheableOperationFactory, springCacheableAdapterFactory);
     }
 
     private Method getMethod(String name) throws NoSuchMethodException {

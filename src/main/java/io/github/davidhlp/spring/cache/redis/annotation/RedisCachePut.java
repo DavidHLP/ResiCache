@@ -100,7 +100,7 @@ public @interface RedisCachePut {
     /**
      * 同步锁超时时间（秒）.
      */
-    long syncTimeout() default -1;
+    long syncTimeout() default 10;
 
     /**
      * 是否使用 TTL 随机化防缓存雪崩.

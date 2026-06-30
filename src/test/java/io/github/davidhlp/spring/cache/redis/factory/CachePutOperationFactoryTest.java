@@ -18,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("CachePutOperationFactory Tests")
 class CachePutOperationFactoryTest {
 
-    private final CachePutOperationFactory factory = new CachePutOperationFactory();
+    private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
+    private final CachePutOperationFactory factory = new CachePutOperationFactory(projector);
 
     private RedisCachePut createAnnotation(
             String[] cacheNames,
