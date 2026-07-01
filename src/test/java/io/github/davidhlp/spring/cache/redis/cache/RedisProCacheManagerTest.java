@@ -14,6 +14,7 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import java.time.Duration;
+import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,7 +44,16 @@ class RedisProCacheManagerTest {
         defaultConfiguration = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofSeconds(60));
         meterRegistry = new SimpleMeterRegistry();
-        cacheManager = new RedisProCacheManager(cacheWriter, defaultConfiguration, meterRegistry);
+        cacheManager = new RedisProCacheManager(
+                cacheWriter,
+                defaultConfiguration,
+                meterRegistry,
+                null,   // bloomSupport disabled
+                null,   // redisCacheRegister disabled
+                null,   // syncSupport disabled
+                null,   // methodMetadataResolver disabled
+                Collections.emptyMap(),
+                false);  // transactionAware
     }
 
     @Nested

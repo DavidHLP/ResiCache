@@ -39,7 +39,15 @@ class RedisProCacheTest {
     void setUp() {
         cacheConfiguration = RedisCacheConfiguration.defaultCacheConfig();
         meterRegistry = new SimpleMeterRegistry();
-        cache = new RedisProCache("testCache", cacheWriter, cacheConfiguration, meterRegistry);
+        cache = new RedisProCache(
+                "testCache",
+                cacheWriter,
+                cacheConfiguration,
+                meterRegistry,
+                null,   // bloomSupport disabled
+                null,   // redisCacheRegister disabled
+                null,   // syncSupport disabled
+                null);  // methodMetadataResolver disabled
     }
 
     private Callable<String> createLoader(String value) {

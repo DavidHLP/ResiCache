@@ -34,35 +34,36 @@ public class RedisProCache extends RedisCache {
     private final SyncSupport syncSupport;
     private final MethodMetadataResolver methodMetadataResolver;
 
-    public RedisProCache(
-            String name,
-            RedisCacheWriter cacheWriter,
-            RedisCacheConfiguration cacheConfiguration,
-            MeterRegistry meterRegistry) {
-        this(name, cacheWriter, cacheConfiguration, meterRegistry, null, null, null, null);
-    }
-
-    public RedisProCache(
-            String name,
-            RedisCacheWriter cacheWriter,
-            RedisCacheConfiguration cacheConfiguration,
-            MeterRegistry meterRegistry,
-            BloomSupport bloomSupport,
-            RedisCacheRegister redisCacheRegister) {
-        this(name, cacheWriter, cacheConfiguration, meterRegistry, bloomSupport, redisCacheRegister, null, null);
-    }
-
-    public RedisProCache(
-            String name,
-            RedisCacheWriter cacheWriter,
-            RedisCacheConfiguration cacheConfiguration,
-            MeterRegistry meterRegistry,
-            BloomSupport bloomSupport,
-            RedisCacheRegister redisCacheRegister,
-            SyncSupport syncSupport) {
-        this(name, cacheWriter, cacheConfiguration, meterRegistry, bloomSupport, redisCacheRegister, syncSupport, null);
-    }
-
+    /**
+     * 构造 ResiCache 实例 — Round 5 / ADR-0014 收敛后的唯一构造入口.
+     *
+     * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点,
+     * 全部 8 个依赖以命名参数显式传入,无任何构造重载。调用方需传递 {@code null}
+     * 表示"该特性未启用"(对应运行时 null-safe 路径,行为与原 4-重载 null 委派一致)。
+     *
+     * <p><b>为什么不做"便利重载"</b>:
+     * <ul>
+     *   <li>4 个构造重载 = 4 套参数子集 = 调用方必须记住"哪个用哪个" = 接口与实现等宽
+     *       (浅模块)</li>
+     *   <li>测试用 {@code null} 显式禁用不使用的特性,反而比"猜重载"更清晰</li>
+     *   <li>Spring 装配路径已稳定,生产仅 1 个 8 参构造,4-参重载从未被生产代码使用
+     *       (仅 2 个测试使用,见 ADR-0014)</li>
+     * </ul>
+     *
+     * <p><b>参数契约</b>:
+     * <ul>
+     *   <li>{@code name / cacheWriter / cacheConfiguration} —— 必传,转发给
+     *       {@link RedisCache#super(String, RedisCacheWriter, RedisCacheConfiguration)}</li>
+     *   <li>{@code meterRegistry} —— 可为 null(此时所有 timer/counter 为 null,
+     *       {@link #safeIncrement} / {@link #safeRecord} 静默 no-op)</li>
+     *   <li>{@code bloomSupport} —— 可为 null(关闭缓存穿透防护,GET 路径跳过 bloom 短路)</li>
+     *   <li>{@code redisCacheRegister} —— 可为 null(关闭方法级 metadata 查找,
+     *       {@link #lookupOperation()} 返回 null)</li>
+     *   <li>{@code syncSupport} —— 可为 null(关闭分布式锁,GET 走 Spring 默认本地锁)</li>
+     *   <li>{@code methodMetadataResolver} —— 可为 null(关闭 ThreadLocal 路径,
+     *       与 {@code redisCacheRegister} 协同)</li>
+     * </ul>
+     */
     public RedisProCache(
             String name,
             RedisCacheWriter cacheWriter,
