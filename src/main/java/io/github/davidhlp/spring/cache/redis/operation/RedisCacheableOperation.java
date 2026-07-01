@@ -50,18 +50,21 @@ public class RedisCacheableOperation extends CacheableOperation {
 
     /**
      * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCacheableOperation} — 单一字段映射 seam
-     * (ADR-0017)。
+     * (ADR-0017 + ADR-0021)。
      *
-     * <p>本方法替代原 {@code CacheableOperationFactory.materialize} 的 18 行 builder 链,
-     * 把"attribute → operation field"的归属放在 Operation 类自己(Builder 知道自己的字段)。
-     * Factory 现在退化为单行委派:
+     * <p>本方法在 ADR-0017 之前是 18 行 builder 链;在 ADR-0017 退化 22 行 builder 链内联
+     * 委派;在 <strong>ADR-0021</strong> 进一步退化为 1 行委派,把"attribute → operation field"
+     * 的映射知识完全下放给 {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)}
+     * (字段拥有者)。
+     *
+     * <p>Factory 调用形态不变:
      * <pre>
      *   return RedisCacheableOperation.fromAttributes(method, key, attributes);
      * </pre>
      *
-     * <p>字段映射规则:21 个 ResiCache 字段全量应用;{@code expectedInsertions} 在 Cacheable
-     * 中是 {@code int} 类型(继承自 Spring {@code CacheableOperation} 的字段约定),故做
-     * {@code long → int} 窄化 + 边界裁剪(0..Integer.MAX_VALUE)。
+     * <p>字段映射规则:22 字段全量应用;{@code expectedInsertions} 在 Cacheable 是 {@code int}
+     * 槽位,故 {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)} 内部
+     * 做 {@code long → int} 窄化 + 边界裁剪(0..Integer.MAX_VALUE),与原契约 byte-for-byte 一致。
      *
      * <p>本方法<strong>不是</strong> Spring {@code @Cacheable} 适配路径,后者经
      * {@code SpringCacheableAdapterFactory} 处理(走 hasText 守卫,因
@@ -69,29 +72,7 @@ public class RedisCacheableOperation extends CacheableOperation {
      */
     public static RedisCacheableOperation fromAttributes(
             java.lang.reflect.Method method, String key, RedisCacheAttributes a) {
-        Builder b = builder();
-        b.name(method.getName())
-                .key(key)
-                .cacheNames(a.getCacheNames())
-                .keyGenerator(a.getKeyGenerator())
-                .cacheManager(a.getCacheManager())
-                .cacheResolver(a.getCacheResolver())
-                .condition(a.getCondition())
-                .unless(a.getUnless())
-                .ttl(a.getTtl())
-                .type(a.getType())
-                .cacheNullValues(a.isCacheNullValues())
-                .useBloomFilter(a.isUseBloomFilter())
-                .expectedInsertions((int) Math.min(Integer.MAX_VALUE, Math.max(0L, a.getExpectedInsertions())))
-                .falseProbability(a.getFalseProbability())
-                .randomTtl(a.isRandomTtl())
-                .variance(a.getVariance())
-                .enableEarlyExpiration(a.isEnableEarlyExpiration())
-                .earlyExpirationThreshold(a.getEarlyExpirationThreshold())
-                .earlyExpirationMode(a.getEarlyExpirationMode())
-                .sync(a.isSync())
-                .syncTimeout(a.getSyncTimeout());
-        return b.build();
+        return a.applyTo(builder().name(method.getName()).key(key)).build();
     }
 
 

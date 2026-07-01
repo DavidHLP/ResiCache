@@ -52,11 +52,15 @@ public class RedisCachePutOperation extends CachePutOperation {
 
     /**
      * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCachePutOperation} — 单一字段映射 seam
-     * (ADR-0017)。
+     * (ADR-0017 + ADR-0021)。
      *
-     * <p>本方法替代原 {@code CachePutOperationFactory.materialize} 的 18 行 builder 链;
-     * Put 的字段集与 Cacheable <strong>完全相同</strong>(21 字段),唯一区别是
-     * {@code expectedInsertions} 在 Put 中是 {@code long} 类型(无窄化,直传)。
+     * <p>本方法在 ADR-0017 退化 22 行 builder 链内联委派;在 <strong>ADR-0021</strong> 进一步
+     * 退化为 1 行委派,把"attribute → operation field"的映射知识完全下放给
+     * {@link RedisCacheAttributes#applyTo(RedisCachePutOperation.Builder)} (字段拥有者)。
+     *
+     * <p>与 Cacheable.fromAttributes 唯一字段类型差异:{@code expectedInsertions} 在 Put
+     * 是 {@code long} 槽位,直传(无窄化),由 {@link RedisCacheAttributes#applyTo(RedisCachePutOperation.Builder)}
+     * 内部决定。
      *
      * <p>Factory 退化为单行委派:
      * <pre>
@@ -65,29 +69,7 @@ public class RedisCachePutOperation extends CachePutOperation {
      */
     public static RedisCachePutOperation fromAttributes(
             java.lang.reflect.Method method, String key, RedisCacheAttributes a) {
-        Builder b = builder();
-        b.name(method.getName())
-                .key(key)
-                .cacheNames(a.getCacheNames())
-                .keyGenerator(a.getKeyGenerator())
-                .cacheManager(a.getCacheManager())
-                .cacheResolver(a.getCacheResolver())
-                .condition(a.getCondition())
-                .unless(a.getUnless())
-                .ttl(a.getTtl())
-                .type(a.getType())
-                .cacheNullValues(a.isCacheNullValues())
-                .useBloomFilter(a.isUseBloomFilter())
-                .expectedInsertions(a.getExpectedInsertions())
-                .falseProbability(a.getFalseProbability())
-                .sync(a.isSync())
-                .syncTimeout(a.getSyncTimeout())
-                .randomTtl(a.isRandomTtl())
-                .variance(a.getVariance())
-                .enableEarlyExpiration(a.isEnableEarlyExpiration())
-                .earlyExpirationThreshold(a.getEarlyExpirationThreshold())
-                .earlyExpirationMode(a.getEarlyExpirationMode());
-        return b.build();
+        return a.applyTo(builder().name(method.getName()).key(key)).build();
     }
 
 

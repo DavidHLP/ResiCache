@@ -1,3 +1,62 @@
+## [2026-07-01] ADR-0021 | RedisCacheAttributes.applyTo(B) seam + ProtectionToggle Function 化 (Round 13 autocratic one-shot)
+
+`/improve-codebase-architecture` round 13 autocratic one-shot 报告基于 round 1–12 已落地
+ADR-0009/0010/.../0020 后,扫描 `operation/` + `chain/` 两域,筛出 5 候选,2 强候选(候选 A + B)
+同 commit 合并落地,3 候选(C/D/E)继续延后(YAGNI/不可共享/形态正交):
+
+**ADR 主体**(`wiki/adr/0021-...md`, ~340 行, Accepted):
+
+- **D1** `RedisCacheAttributes.applyTo(B)` 抽出 — 3 个重载(Cacheable / Put / Evict)把
+  22 字段 → Builder 的映射知识完全下放给字段拥有者;3 个 `fromAttributes` 退化为 1 行
+  委派;`narrowToInt(long)` helper 保留原 `int` 窄化契约(byte-for-byte)
+- **D2** `ProtectionToggle` record + Function 化 — `CacheHandlerChainFactory` 4 disabled-handler
+  if-block 收敛为 list iteration;record 持 `Function<ProtectionProperties, Boolean>` getter
+  字段(方法引用直接绑定),`getEnabledFor` switch 整个删除,无静态状态,不可能 drift
+- **D3** Cacheable 与 Put 的 2 个 `applyTo` 在 21/22 字段上 byte-for-byte 一致(仅 expectedInsertions
+  cast 不同)— extract 共用 helper 需 Functional interface 包装或反射,YAGNI(留 Round 14 polish)
+- **D4** 候选 C/D/E 决策记录(3 Operation Builder 类 setter / 5 ChainObserver DRY / SyncSupport
+  234 SLOC)留作未来触发器
+
+**文件变更**:
+- 新增 0(全部为现有类内部扩展)
+- 修改 5: `RedisCacheAttributes.java` (+122), `RedisCacheableOperation.java` (+11 -30),
+  `RedisCachePutOperation.java` (+11 -25), `RedisCacheEvictOperation.java` (+10 -30),
+  `CacheHandlerChainFactory.java` (+79 -17)
+- 净变化:**+129 SLOC** (含 javadoc;code-only 净减 ~30 SLOC)
+
+**leverage 兑现**:
+1. 新加 RedisCacheAttributes 字段 → 改 1 文件 3 处(applyTo × 3),而非 6 处(原 3 fromAttributes + 3 applyTo)
+2. 新加 protection 机制 → 改 CacheHandlerChainFactory 1 行(PROTECTION_TOGGLES 列表追加),而非 12 行
+3. 字段映射与字段定义原子同源 — `applyTo(B)` 在字段拥有者(RedisCacheAttributes)上,
+   `ProtectionToggle` 持 Function getter(record 字段绑定),不可能 drift
+
+**Review CR findings**(自我攻击 → 修复):
+- F1 (high,已修):初版用 `protectionHolder` 静态字段 + `getEnabledFor` switch — 静态状态跨 context
+  泄漏 + switch 与列表 drift 风险。**修复**:Function 化 — record 持 `Function<ProtectionProperties, Boolean>` getter,
+  无静态状态,无 switch,无 drift
+- F2 (medium,已修):初版加 `enabled == null → throw ISE` 防御性守卫 — 但 null 是合法状态(per-mechanism
+  字段未设 = "继承 enabled"),守卫破坏 `protectionEnabled_keepsAll` 测试。**修复**:删除守卫,保留
+  `Boolean.FALSE.equals(...)` 短路,与原 4 if-block byte-for-byte 等价
+- F3 (low,留 polish):Function 化用方法引用,若未来 `getXxxEnabled` 改返回类型,record 构造编译失败
+  (早暴露优于晚暴露);无需额外防御
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw verify -Dmaven.javadoc.skip=true` —— **BUILD SUCCESS, 782 tests, 0 failures, 0 errors**;
+  All coverage checks have been met
+  - 注:javadoc generation 失败为<em>预存在</em>问题(Lombok @Builder 生成 inner class 在
+    javadoc 工具下不可见,与本轮 refactor 无关;git stash 后 javadoc 同样失败)
+- `OperationFromAttributesTest` 13 case 全过(22 字段映射 byte-for-byte)
+- `CacheHandlerChainFactoryTest` 12 case 全过(4 if-block 等价行为)
+
+**下一步**: 无 — ADR-0021 完整落地。下轮(Round 14)可考虑候选 C 残余:Cacheable 与 Put 的
+2 applyTo 21/22 字段 byte-for-byte 一致,extract 共用 helper 需 Functional interface 包装,
+类型推导与可读性权衡 — YAGNI 留 polish。
+
+详见 [[0021-redis-cache-attributes-applyto-seam-and-protection-toggle]]。
+
+---
+
 ## [2026-07-01] improve | ADR-0020 AnnotationTargets 反射多态 seam (annotation 包 23 处 instanceof Method/Class 收敛为 AnnotatedElement) (round 10)
 
 `/improve-codebase-architecture` round 10 autocratic one-shot 报告(`/tmp/architecture-review-round-10.Txo2.html`)基于 round 1–9 已落地 ADR-0009/0010/0011/0012/0013/0014/0015/0016/0017/0018/0019 状态,扫描 `annotation/` + `factory/` + `chain/` + `config/` + `cache/` + `protection/refresh/` 六域,筛出 1 强候选(候选 A)落地,2 候选(B/C)继续延后(YAGNI / 行为差异有意),5 候选(D/E/F/G/H)继续显式 defer(触发条件未达):

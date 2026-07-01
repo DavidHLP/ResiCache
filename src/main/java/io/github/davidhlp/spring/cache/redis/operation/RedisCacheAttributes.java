@@ -33,6 +33,11 @@ import lombok.Value;
  * <p><strong>public by package</strong>：仅 factory 与 projector 内部使用，未声明 public
  * 构造器；外部应通过 {@link RedisCacheAttributesProjector} 构造。
  *
+ * <p><strong>ADR-0021 — {@code applyTo(B)} seam</strong>: 本类<em>也是</em>字段映射的
+ * 单一事实源 — 三个 Operation 的 {@code fromAttributes} 不再持有 22 行的 builder 链,
+ * 改为单行委派到本类的 {@code applyTo(B)} 重载(3 个),字段映射知识归属字段拥有者。
+ * 新加字段触点:6 → 3(均集中在本类)。
+ *
  * @see RedisCacheAttributesProjector
  * @see RedisCacheableOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
  * @see RedisCachePutOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
@@ -85,4 +90,121 @@ public class RedisCacheAttributes {
 
     /** Evict-only：是否在方法执行前清除 */
     boolean beforeInvocation;
+
+    // ============================ ADR-0021 applyTo(B) seam ============================
+
+    /**
+     * 把本 POJO 全部 22 字段映射到 {@link RedisCacheableOperation.Builder}。
+     *
+     * <p>本方法<strong>唯一拥有</strong>"22 字段 → Builder" 的映射知识(ADR-0021);
+     * 三个 Operation.fromAttributes 退化为单行委派,新加字段触点 6 → 3。
+     *
+     * <p>{@code expectedInsertions} 在 Cacheable Builder 是 {@code int} 槽位 — 用
+     * {@link #narrowToInt(long)} 窄化(同 RedisCacheableOperation 原有逻辑),防御性裁剪到
+     * {@code [0, Integer.MAX_VALUE]}。
+     *
+     * @param b 已有 {@code name} / {@code key} 设值的 builder(由 fromAttributes 传入)
+     * @return 同一 builder(支持链式)
+     */
+    public RedisCacheableOperation.Builder applyTo(RedisCacheableOperation.Builder b) {
+        return b
+                .cacheNames(cacheNames)
+                .keyGenerator(keyGenerator)
+                .cacheManager(cacheManager)
+                .cacheResolver(cacheResolver)
+                .condition(condition)
+                .unless(unless)
+                .ttl(ttl)
+                .type(type)
+                .cacheNullValues(cacheNullValues)
+                .useBloomFilter(useBloomFilter)
+                .expectedInsertions(narrowToInt(expectedInsertions))
+                .falseProbability(falseProbability)
+                .randomTtl(randomTtl)
+                .variance(variance)
+                .enableEarlyExpiration(enableEarlyExpiration)
+                .earlyExpirationThreshold(earlyExpirationThreshold)
+                .earlyExpirationMode(earlyExpirationMode)
+                .sync(sync)
+                .syncTimeout(syncTimeout);
+    }
+
+    /**
+     * 把本 POJO 全部 22 字段映射到 {@link RedisCachePutOperation.Builder}。
+     *
+     * <p>与 {@link #applyTo(RedisCacheableOperation.Builder)} 在 21/22 字段上完全一致
+     * (语义相同),仅 {@code expectedInsertions} 走 {@code long} 直传(无窄化) — Put Builder
+     * 槽位是 {@code long},这是 Cacheable 与 Put 唯一字段类型差异。
+     *
+     * @param b 已有 {@code name} / {@code key} 设值的 builder
+     * @return 同一 builder(支持链式)
+     */
+    public RedisCachePutOperation.Builder applyTo(RedisCachePutOperation.Builder b) {
+        return b
+                .cacheNames(cacheNames)
+                .keyGenerator(keyGenerator)
+                .cacheManager(cacheManager)
+                .cacheResolver(cacheResolver)
+                .condition(condition)
+                .unless(unless)
+                .ttl(ttl)
+                .type(type)
+                .cacheNullValues(cacheNullValues)
+                .useBloomFilter(useBloomFilter)
+                .expectedInsertions(expectedInsertions)
+                .falseProbability(falseProbability)
+                .randomTtl(randomTtl)
+                .variance(variance)
+                .enableEarlyExpiration(enableEarlyExpiration)
+                .earlyExpirationThreshold(earlyExpirationThreshold)
+                .earlyExpirationMode(earlyExpirationMode)
+                .sync(sync)
+                .syncTimeout(syncTimeout);
+    }
+
+    /**
+     * 把本 POJO 的 14 共享字段 + 2 Evict-only 字段映射到
+     * {@link RedisCacheEvictOperation.Builder}。
+     *
+     * <p>Evict 是 Cacheable/Put 的<em>子集 + Evict-only</em>:
+     * <ul>
+     *   <li><strong>缺失</strong>(语义不适用,Evict 不持有 builder 槽位):{@code unless} /
+     *       {@code type} / {@code cacheNullValues} / {@code randomTtl} / {@code variance}</li>
+     *   <li><strong>Evict-only</strong> 直传:{@code allEntries} / {@code beforeInvocation}</li>
+     * </ul>
+     *
+     * @param b 已有 {@code name} / {@code key} 设值的 builder
+     * @return 同一 builder(支持链式)
+     */
+    public RedisCacheEvictOperation.Builder applyTo(RedisCacheEvictOperation.Builder b) {
+        return b
+                .cacheNames(cacheNames)
+                .keyGenerator(keyGenerator)
+                .cacheManager(cacheManager)
+                .cacheResolver(cacheResolver)
+                .condition(condition)
+                .allEntries(allEntries)
+                .beforeInvocation(beforeInvocation)
+                .sync(sync)
+                .syncTimeout(syncTimeout)
+                .ttl(ttl)
+                .useBloomFilter(useBloomFilter)
+                .expectedInsertions(expectedInsertions)
+                .falseProbability(falseProbability)
+                .enableEarlyExpiration(enableEarlyExpiration)
+                .earlyExpirationThreshold(earlyExpirationThreshold)
+                .earlyExpirationMode(earlyExpirationMode);
+    }
+
+    /**
+     * long → int 窄化(防御性裁剪到 {@code [0, Integer.MAX_VALUE]})。
+     *
+     * <p>与原 {@code RedisCacheableOperation.fromAttributes} 的窄化表达式
+     * {@code (int) Math.min(Integer.MAX_VALUE, Math.max(0L, a.getExpectedInsertions()))}
+     * <em>byte-for-byte</em> 保留(契约不变,OperationFromAttributesTest 现有断言覆盖)。
+     * Put/Evict Builder 的 {@code expectedInsertions} 是 {@code long},不走本 helper。
+     */
+    private static int narrowToInt(long v) {
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, v));
+    }
 }

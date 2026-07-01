@@ -137,23 +137,9 @@ public class CacheHandlerChainFactory {
                         + "protection handlers skipped, TTL preserved (bloom/lock/early-exp/null-value off)");
             } else if (protection != null) {
                 // per-mechanism 覆盖(WS-1.4):每个 Boolean 字段 null = 继承 enabled,
-                // 非 null = 单独覆盖该机制
-                if (Boolean.FALSE.equals(protection.getBloomFilterEnabled())) {
-                    disabled.add(HandlerOrder.BLOOM_FILTER.getDisableName());
-                    log.info("Bloom filter disabled by resi-cache.protection.bloom-filter.enabled=false");
-                }
-                if (Boolean.FALSE.equals(protection.getSyncLockEnabled())) {
-                    disabled.add(HandlerOrder.SYNC_LOCK.getDisableName());
-                    log.info("Sync lock disabled by resi-cache.protection.sync-lock.enabled=false");
-                }
-                if (Boolean.FALSE.equals(protection.getEarlyExpirationEnabled())) {
-                    disabled.add(HandlerOrder.EARLY_EXPIRATION.getDisableName());
-                    log.info("Early expiration disabled by resi-cache.protection.early-expiration.enabled=false");
-                }
-                if (Boolean.FALSE.equals(protection.getNullValueEnabled())) {
-                    disabled.add(HandlerOrder.NULL_VALUE.getDisableName());
-                    log.info("Null value disabled by resi-cache.protection.null-value.enabled=false");
-                }
+                // 非 null = 单独覆盖该机制 — 收敛到 PROTECTION_TOGGLES 列表迭代
+                // (ADR-0021,本类内嵌套 ProtectionToggle record)
+                collectPerMechanismDisables(protection, disabled);
             }
 
             // 按 @HandlerPriority 注解排序
@@ -235,5 +221,81 @@ public class CacheHandlerChainFactory {
     private int getOrder(CacheHandler handler) {
         HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
         return annotation != null ? annotation.value().getOrder() : Integer.MAX_VALUE;
+    }
+    /**
+     * 每机制禁用 toggle record — 收敛 "if FALSE → add to disabled + log" 4 行模板
+     * (ADR-0021,本类内嵌套)。
+     *
+     * <p>3 字段:
+     * <ul>
+     *   <li>{@code order} — 对应 {@link HandlerOrder} 枚举值,供 {@link HandlerOrder#getDisableName()}
+     *       反查配置禁用名</li>
+     *   <li>{@code getter} — {@link RedisProCacheProperties.ProtectionProperties} 上的
+     *       {@code Boolean} 字段 getter(可能返回 null,代表"继承 enabled" — null 不触发短路);
+     *       用方法引用直接绑定<strong>消除</strong>先前 switch 设计的"加新机制要改 2 处"
+     *       drift 风险(getter 是 record 字段,与 PROTECTION_TOGGLES 列表原子绑定)</li>
+     *   <li>{@code configPath} — 配置文件中的 kebab-case 路径段,用于日志 (e.g. "bloom-filter")</li>
+     * </ul>
+     */
+    private record ProtectionToggle(
+            HandlerOrder order,
+            java.util.function.Function<
+                    RedisProCacheProperties.ProtectionProperties, Boolean> getter,
+            String configPath) {
+    }
+
+    /**
+     * 4 个 protection 机制 toggle 单一事实源 — 新加第 5 机制时<strong>仅追加一行</strong>到本列表
+     * (ADR-0021,本类内嵌套),getter 字段直接绑定到 ProtectionProperties 的 Boolean 字段,
+     * 无需另写 switch 映射。
+     *
+     * <p>注意:本列表仅含 4 个可禁用的防护机制(Bloom / SyncLock / EarlyExpiration / NullValue),
+     * 不含 TTL — TtlHandler 兼担基础 TTL 计算,禁用会导致 ActualCacheHandler 写入无 TTL 的
+     * 永久缓存(数据陈旧 + 内存泄漏)。
+     */
+    private static final List<ProtectionToggle> PROTECTION_TOGGLES = List.of(
+            new ProtectionToggle(HandlerOrder.BLOOM_FILTER,
+                    RedisProCacheProperties.ProtectionProperties::getBloomFilterEnabled,
+                    "bloom-filter"),
+            new ProtectionToggle(HandlerOrder.SYNC_LOCK,
+                    RedisProCacheProperties.ProtectionProperties::getSyncLockEnabled,
+                    "sync-lock"),
+            new ProtectionToggle(HandlerOrder.EARLY_EXPIRATION,
+                    RedisProCacheProperties.ProtectionProperties::getEarlyExpirationEnabled,
+                    "early-expiration"),
+            new ProtectionToggle(HandlerOrder.NULL_VALUE,
+                    RedisProCacheProperties.ProtectionProperties::getNullValueEnabled,
+                    "null-value"));
+
+    /**
+     * Per-mechanism 禁用集合收集 — 遍历 {@link #PROTECTION_TOGGLES},把显式 {@code Boolean.FALSE}
+     * 的机制加到 {@code disabled} 集合 + 记 INFO 日志。
+     *
+     * <p>本方法抽取自原 4 if-block 重复模板(ADR-0021):
+     * <pre>
+     *   if (Boolean.FALSE.equals(protection.getXEnabled())) {
+     *       disabled.add(HandlerOrder.X.getDisableName());
+     *       log.info("X disabled by resi-cache.protection.x.enabled=false");
+     *   }
+     * </pre>
+     *
+     * <p>getter 字段在 PROTECTION_TOGGLES 列表初始化时已绑定方法引用,无运行时 switch / 查表;
+     * 字段映射与列表定义原子同源,不可能 drift。
+     *
+     * @param protection 配置对象(由调用方 null-check 保障)
+     * @param disabled 输出集合(原 4 if-block 共享的 {@code Set<String>})
+     */
+    private static void collectPerMechanismDisables(
+            RedisProCacheProperties.ProtectionProperties protection,
+            Set<String> disabled) {
+        for (ProtectionToggle toggle : PROTECTION_TOGGLES) {
+            // Boolean.FALSE.equals(null) → false,null 表示"继承 enabled"(per-mechanism 字段未设),
+            // 等同原 4 if-block 的 Boolean.FALSE.equals(...) 语义 — null 不触发短路。
+            if (Boolean.FALSE.equals(toggle.getter().apply(protection))) {
+                disabled.add(toggle.order().getDisableName());
+                log.info("{} disabled by resi-cache.protection.{}.enabled=false",
+                        toggle.order().getDescription(), toggle.configPath());
+            }
+        }
     }
 }
