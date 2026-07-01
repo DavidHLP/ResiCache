@@ -1,3 +1,44 @@
+
+## [2026-07-01] improve | ADR-0019 RedisCacheAttributesProjector FieldSource seam (3 from() 26-line 重复墙收敛) + int/long type-drift 留待 1.0 毕业 (round 9)
+
+`/improve-codebase-architecture` round 9 autocratic one-shot 报告基于 round 1–8 已落地 ADR-0009/0010/0011/0012/0013/0014/0015/0016/0017/0018 状态,扫描 `factory/` + `annotation/` + `chain/observer/` 三域,筛出 1 强候选(候选 A)落地 + 1 type-drift finding 显式 defer(候选 B),3 候选(C/D/E)继续延后(YAGNI / ADR-0016 F / ADR-0017 C):
+
+**ADR 主体** (`wiki/adr/0019-...md`, 323 行, Accepted):
+- **D1** `FieldSource` 私有 record + 单一 `project(FieldSource, UnaryOperator<Builder>)` seam + 3 轻量 `extractFrom(annotation)` —— 3 个 `from(annotation)` 26-line 重复墙收敛为 3 个 1-liner 委派
+- **D2** `RedisCacheable.expectedInsertions` `int` 与 `RedisCachePut/Evict/RedisCacheAttributes` `long` 的 type-drift 显式记录在 ADR + Javadoc + `Adr0019TypeDriftSentinel` nested test —— **不静默修复**(违反 STABILITY.md §1 注解属性类型稳定契约, 留待 1.0 毕业时统一)
+- **D3** 5 个 ChainObserver 实现不收敛(YAGNI, 各 observer 已正交最简)
+- **D4** 4 disabled-handler if-block 不收敛(ADR-0016 F 触发条件未发生)
+- **D5** Spring adapter 不参与 `Operation.fromAttributes`(ADR-0017 C 已封口)
+
+**文件变更**:
+- 修改 2: `factory/RedisCacheAttributesProjector.java`(3 from() 78 SLOC body → 6 SLOC body 1-liner + 新增 1 FieldSource record 24 SLOC + 1 project() 24 SLOC + 3 extractFrom() 36 SLOC; +60 SLOC Javadoc), `factory/RedisCacheAttributesProjectorTest.java`(新增 4 nested classes, 8 contract tests)
+- **总代码净变化: +26 SLOC body / +60 SLOC Javadoc** (换取 1 处 seam + 3 处显式字段读站点)
+
+**leverage 兑现**:
+1. 新增第 24 个共享字段 → 1 处改 `FieldSource` + 1 处改 `project()` body + 1-3 处改 `extractFrom(annotation)`, 不再 3 处 `from()` 全部逐字修改
+2. `extractFrom` 是显式 "字段读" 站点, `project()` 是显式 "字段写" 站点, 中间 `FieldSource` 是显式 "数据形状" 站点 — 三站分离, 维护时定位精确
+3. 隐藏 22 字段长链于私有 `project()` 内部, 公开 `from(annotation)` 3 个 1-liner 体现 "本类对外做什么" 而非 "怎么映射字段"
+4. type-drift 显式记录于 `Adr0019TypeDriftSentinel` nested test — 防止后续漂移恶化, 1.0 毕业时显式 BREAKING 统一
+
+**Review CR findings**: 零 — autocratic 阶段已 self-review(Java annotation type system 约束不能 shared interface + Lombok `@Builder` 生成 `RedisCacheAttributesBuilder` 而非 `.Builder` + 公开 API 零变化 + Cacheable ≡ Put byte-for-byte 一致测试 + 3 注解默认 100_000L 投影测试 + type-drift 契约钉住测试 + import 清洁度 + Evict delta locality 保留 + `cacheNames/value` 合并逻辑在 project 内部保持单一职责),无 CR 问题待修
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw test`(全量)—— **BUILD SUCCESS, 773 unit tests + 8 IT, 3 IT 失败为 pre-existing Testcontainers 环境问题**
+  (原 765 unit tests + 8 新增 ADR-0019 contract = 773 unit; IT 3 失败与 round 8 之前一致 — git stash ADR-0019 diff 后跑 `mvnw test -Dtest='RedisCacheSemanticsIT'` 同样 3 失败)
+- `RedisCacheAttributesProjectorTest` 单测 —— **19 tests, 0 failures** (原 11 + 新增 8)
+- `mvnw verify` —— JaCoCo gate 通过, `RedisCacheAttributesProjector` 行覆盖维持 100%
+
+**下一步**: 无 — ADR-0019 完整落地。下轮(Round 10)候选空间:
+- 5 ChainObserver 实现 DRY(继续 YAGNI)
+- 4 disabled-handler if-block 收敛(继续 YAGNI, 等第 5 个 protection 机制)
+- Spring adapter fromAttributes 合并(继续不动, ADR-0017 C 已封口)
+- 1.0 毕业时 `int→long` 统一(STABILITY.md §4 触发)
+
+详见 [[0019-projector-fieldsource-seam-and-type-drift-deferral]]。
+
+---
+
 ## [2026-07-01] improve | ADR-0018 AbstractCacheHandler 语义 counter 模板方法 seam (5 个 onAttachMetrics handler 子类样板收敛) (round 8)
 
 `/improve-codebase-architecture` round 8 autocratic one-shot 报告(`/tmp/architecture-review-1782889446.html`)基于 round 1–7 已落地 ADR-0009/0010/0011/0012/0013/0014/0015/0016/0017 后,扫描 5 个 protection handler + AbstractCacheHandler,筛出 1 强候选(候选 A)落地,2 候选(B/C)继续延后(YAGNI/不动):

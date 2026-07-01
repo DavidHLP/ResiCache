@@ -158,6 +158,145 @@ class RedisCacheAttributesProjectorTest {
         }
     }
 
+
+    @Nested
+    @DisplayName("ADR-0019 FieldSource seam — Cacheable ≡ Put identity")
+    class Adr0019CacheableEqualsPut {
+
+        @Test
+        @DisplayName("from(Cacheable) 与 from(Put) 在相同输入下产出 byte-for-byte 一致的 RedisCacheAttributes")
+        void cacheableAndPut_produceIdenticalProjection() {
+            // Arrange: 用相同字段值构造两个 stub
+            RedisCacheable c = stubCacheable(s -> {
+                s.cacheNames = new String[]{"ns-a"};
+                s.key = "k1";
+                s.ttl = 120L;
+                s.useBloomFilter = true;
+                s.expectedInsertions = 200_000;
+                s.falseProbability = 0.005;
+                s.sync = true;
+                s.syncTimeout = 30L;
+            });
+            RedisCachePut p = stubPut(pp -> {
+                pp.cacheNames = new String[]{"ns-a"};
+                pp.key = "k1";
+                pp.ttl = 120L;
+                pp.useBloomFilter = true;
+                pp.expectedInsertions = 200_000L;
+                pp.falseProbability = 0.005;
+                pp.sync = true;
+                pp.syncTimeout = 30L;
+            });
+
+            // Act
+            RedisCacheAttributes ac = projector.from(c);
+            RedisCacheAttributes ap = projector.from(p);
+
+            // Assert: 22 共享字段逐一对比（Evict-only 字段应均为 false）
+            assertThat(ac.getCacheNames()).containsExactly(ap.getCacheNames());
+            assertThat(ac.getKey()).isEqualTo(ap.getKey());
+            assertThat(ac.getTtl()).isEqualTo(ap.getTtl());
+            assertThat(ac.getType()).isEqualTo(ap.getType());
+            assertThat(ac.isCacheNullValues()).isEqualTo(ap.isCacheNullValues());
+            assertThat(ac.getExpectedInsertions()).isEqualTo(ap.getExpectedInsertions());
+            assertThat(ac.getFalseProbability()).isEqualTo(ap.getFalseProbability());
+            assertThat(ac.isRandomTtl()).isEqualTo(ap.isRandomTtl());
+            assertThat(ac.getVariance()).isEqualTo(ap.getVariance());
+            assertThat(ac.isSync()).isEqualTo(ap.isSync());
+            assertThat(ac.getSyncTimeout()).isEqualTo(ap.getSyncTimeout());
+            // Evict-only 字段：Cacheable/Put 走 NO_EVICT_DELTA（@Builder 默认 false）
+            assertThat(ac.isAllEntries()).isFalse();
+            assertThat(ap.isAllEntries()).isFalse();
+            assertThat(ac.isBeforeInvocation()).isFalse();
+            assertThat(ap.isBeforeInvocation()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("ADR-0019 FieldSource seam — Evict 默认字段 fallback")
+    class Adr0019EvictDefaults {
+
+        @Test
+        @DisplayName("Evict 不持有 type/cacheNullValues/randomTtl/variance,extractFrom 填入合理默认")
+        void evictMissingFields_filledWithSensibleDefaults() {
+            RedisCacheEvict e = stubEvict(ee -> {});
+
+            RedisCacheAttributes a = projector.from(e);
+
+            // type → Object.class (no Class<?>) override
+            assertThat(a.getType()).isEqualTo(Object.class);
+            // cacheNullValues → false (Evict 不缓存值, 无意义)
+            assertThat(a.isCacheNullValues()).isFalse();
+            // randomTtl → false (Evict 不写, TTL 抖动无意义)
+            assertThat(a.isRandomTtl()).isFalse();
+            // variance → 0.0F (同上, randomTtl 关闭时无意义)
+            assertThat(a.getVariance()).isEqualTo(0.0F);
+        }
+
+        @Test
+        @DisplayName("Evict 持有 ttl=0 语义(不设置过期),原样传入")
+        void evictTtl_passThrough() {
+            // Evict 注解 ttl 默认 0,与 Cacheable/Put 默认 60 不同
+            RedisCacheEvict e = stubEvict(ee -> {});
+            assertThat(projector.from(e).getTtl()).isEqualTo(0L);
+        }
+    }
+
+    @Nested
+    @DisplayName("ADR-0019 已知 type-drift (STABILITY.md §1 不静默修复)")
+    class Adr0019TypeDriftSentinel {
+
+        @Test
+        @DisplayName("Put/Evict 的 expectedInsertions 是 long, 可承载 > Integer.MAX_VALUE 的值")
+        void putEvict_expectedInsertions_isLong_acceptsLargeValues() {
+            long largeValue = 5_000_000_000L; // 5B > Integer.MAX_VALUE (~2.147B)
+            RedisCachePut p = stubPut(pp -> pp.expectedInsertions = largeValue);
+            RedisCacheEvict e = stubEvict(ee -> ee.expectedInsertions = largeValue);
+
+            assertThat(projector.from(p).getExpectedInsertions()).isEqualTo(largeValue);
+            assertThat(projector.from(e).getExpectedInsertions()).isEqualTo(largeValue);
+        }
+
+        @Test
+        @DisplayName("Cacheable 的 expectedInsertions 是 int (类型漂移), 经隐式拓宽到 long 容器 — 不修,留待 1.0 毕业")
+        void cacheable_expectedInsertions_isInt_widensToLong() {
+            // @RedisCacheable.expectedInsertions() 是 int, 上限 Integer.MAX_VALUE
+            // 这里能设置的"安全大值"是 Integer.MAX_VALUE 本身
+            int maxInt = Integer.MAX_VALUE;
+            RedisCacheable c = stubCacheable(s -> s.expectedInsertions = maxInt);
+
+            // 隐式 int→long 拓宽: 投影到 long 容器 OK
+            assertThat(projector.from(c).getExpectedInsertions()).isEqualTo((long) maxInt);
+        }
+    }
+
+    @Nested
+    @DisplayName("ADR-0019 文档化的类型漂移不影响现有契约")
+    class Adr0019DriftNoRegression {
+
+        @Test
+        @DisplayName("Cacheable 默认 expectedInsertions=100000 投影为 long 100_000L")
+        void cacheableDefaultExpectedInsertions_projectsTo100_000L() {
+            // 这是现存 DriftFix 锁定的契约, 本 refactor 必须保持
+            RedisCacheable c = stubCacheable(s -> {});
+            assertThat(projector.from(c).getExpectedInsertions()).isEqualTo(100_000L);
+        }
+
+        @Test
+        @DisplayName("Put 默认 expectedInsertions=100000L 投影为 long 100_000L")
+        void putDefaultExpectedInsertions_projectsTo100_000L() {
+            RedisCachePut p = stubPut(pp -> {});
+            assertThat(projector.from(p).getExpectedInsertions()).isEqualTo(100_000L);
+        }
+
+        @Test
+        @DisplayName("Evict 默认 expectedInsertions=100000L 投影为 long 100_000L")
+        void evictDefaultExpectedInsertions_projectsTo100_000L() {
+            RedisCacheEvict e = stubEvict(ee -> {});
+            assertThat(projector.from(e).getExpectedInsertions()).isEqualTo(100_000L);
+        }
+    }
+
     // ----- Test stubs -----
 
     static RedisCacheable stubCacheable(java.util.function.Consumer<TestRedisCacheable> config) {
