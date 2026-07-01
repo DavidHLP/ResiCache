@@ -220,33 +220,36 @@ public class ThreadPoolEarlyExpirationExecutor {
     @PreDestroy
     public void shutdown() {
         log.info("Shutting down early-expiration executor thread pool...");
+        shutdownGracefully(cleanupScheduler, 5, "Pre-refresh cleanup scheduler");
+        shutdownGracefully(executorService, 10, "Pre-refresh executor");
+    }
 
-        cleanupScheduler.shutdown();
+    /**
+     * 优雅关闭单个 ExecutorService：先 {@code shutdown()} 拒收新任务，等待已有任务在
+     * {@code timeoutSeconds} 内结束；超时则 {@code shutdownNow()} 强制中断，中断期间同样强制关闭。
+     *
+     * <p>收敛自 {@link #shutdown()} 中 {@code cleanupScheduler} 与 {@code executorService} 两段
+     * 逐字重复的关闭样板（仅超时阈值与日志名称不同）——优雅关闭策略变更现只改本方法一处，
+     * 不再两处同步维护（locality）。两段调用 byte-for-byte 行为等价：{@code cleanupScheduler}
+     * 走 5s + "Pre-refresh cleanup scheduler"，{@code executorService} 走 10s + "Pre-refresh executor"。
+     *
+     * @param executor       待关闭的执行器
+     * @param timeoutSeconds 优雅等待超时（秒）
+     * @param name           日志中标识该执行器的名称
+     */
+    private void shutdownGracefully(ExecutorService executor, long timeoutSeconds, String name) {
+        executor.shutdown();
         try {
-            if (!cleanupScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                cleanupScheduler.shutdownNow();
-                log.warn("Pre-refresh cleanup scheduler did not terminate gracefully, forced shutdown");
+            if (!executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                log.warn("{} did not terminate gracefully, forced shutdown", name);
             } else {
-                log.info("Pre-refresh cleanup scheduler shut down successfully");
+                log.info("{} shut down successfully", name);
             }
         } catch (InterruptedException e) {
-            cleanupScheduler.shutdownNow();
+            executor.shutdownNow();
             Thread.currentThread().interrupt();
-            log.error("Pre-refresh cleanup scheduler shutdown interrupted", e);
-        }
-
-        executorService.shutdown();
-        try {
-            if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
-                executorService.shutdownNow();
-                log.warn("Pre-refresh executor did not terminate gracefully, forced shutdown");
-            } else {
-                log.info("Pre-refresh executor shut down successfully");
-            }
-        } catch (InterruptedException e) {
-            executorService.shutdownNow();
-            Thread.currentThread().interrupt();
-            log.error("Pre-refresh executor shutdown interrupted", e);
+            log.error("{} shutdown interrupted", name, e);
         }
     }
 

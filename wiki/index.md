@@ -64,6 +64,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0020-annotation-targets-annotatedelement-seam]] —— `AnnotationTargets` 反射多态 utility seam(annotation 包 23 处 `instanceof Method/Class` 收敛为 `AnnotatedElement` 多态路径,6 对 Method/Class 重载合并为 6 个多态方法)
 - [[0021-redis-cache-attributes-applyto-seam-and-protection-toggle]] —— `RedisCacheAttributes.applyTo(B)` seam(3 fromAttributes 22-line 重复墙收敛为 1 行委派)+ `ProtectionToggle` Function 化(CacheHandlerChainFactory 4 disabled-handler if-block 收敛为 list iteration)
 - [[0022-chain-single-representation-seam]] —— Chain single-representation seam(消除 ADR-0009 残留的 next 指针 × List 快照双轨,`CacheHandler` 接口删 setNext/getNext + `driveChain` 改 index 推进 + 修复并发隔离漏洞)
+- [[0023-executor-graceful-shutdown-seam]] —— Executor graceful-shutdown seam(`ThreadPoolEarlyExpirationExecutor.shutdown()` 两段逐字重复的优雅关闭样板收敛为单一 `shutdownGracefully` 私有 seam,byte-for-byte 行为等价;round 15 扫尽未触及域后唯一经 deletion test 通过的 friction)
 
 ## 架构(architecture/)
 

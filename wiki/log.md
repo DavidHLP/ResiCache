@@ -1,3 +1,42 @@
+## [2026-07-01] ADR-0023 | Executor graceful-shutdown seam (ThreadPoolEarlyExpirationExecutor.shutdown 两段优雅关闭样板收敛) (round 15)
+
+`/improve-codebase-architecture` round 15 autocratic one-shot 报告基于 round 1–14 已落地 ADR-0009~0022 状态,系统化扫描前 14 轮**未触及的域**:`serialization/` + `config/`(序列化侧 + `RedisProCacheProperties`) + `eviction/` + `observability/` + `cache/RedisProCache.get` + `protection/{refresh, bloom/filter, breakdown}` 实现内部。两枚 Explore agent + codebase-memory-mcp 图谱(复杂度 / SIMILAR_TO / 接口实现数 / Leiden cluster)+ 逐文件 Read 核验。
+
+**架构饱和度核验**(未触及域绝大多数健康):
+- serialization:`WhitelistPolicy` 已是深模块(2 seam 收敛白名单);`SecureJacksonRedisSerializer.deserialize` 高复杂度(8)是安全防护必要复杂性;`JacksonConfig` × `createSecureObjectMapper` 是分层非重复;`@class` 是协议常量(已 `RedisProCacheProperties.typeProperty` 收敛)
+- eviction:`TwoListLRU` 是 fan_in 56 核心算法,promote/demote/evict 紧密耦合是正确性要求;`EvictionStats.of()` 已是深 record(2026-06-29 C2 删 `TwoListEvictionStrategy` 后收敛)
+- observability:`RedisCacheHealthIndicator` 职责单一(PING + protection 降级),83 行无 shallow 转发
+- protection/bloom/filter:Local/Redis/Hierarchical 三实现正交真 seam(3 adapter),`HierarchicalBloomIFilter` 是组合器非转发
+- protection/refresh:`RefreshRetryPolicy` 纯函数独立可测(5 caller)
+- protection/breakdown:`RedissonLockHandle.close` 高复杂度(8)是幂等 + 持有者检查 + unlock 重试的必要锁释放防御
+- config/`RedisProCacheProperties`:306 行 9 配置类,Lombok 消样板,0 手写 getter
+
+**红蓝博弈扼杀的候选**(Explore agent 提出 + 自审,逐个否决):
+- `RedisProCache.get` 拆 bloom/sync 私有方法 —— **readability 拆分非 deepening**(私有方法不创造 seam / locality),且该路径是 ADR-0011 + WS-1.2c 精心设计的双层防御
+- `RedisCacheHealthIndicator` 抽 `RedisHealthChecker` 接口 —— **单实现假 seam**,撞项目 2026-06-29 C2「删 4 个单实现接口」纪律
+- `TwoListLRU` 抽 `PromotionDecision` / `DoublyLinkedList` —— Speculative,核心算法紧密耦合是正确性要求,分离引入协调风险
+- `EvictionStats` 泛化 —— YAGNI(无调用方)
+- `NullValuePolicy` 单实现 —— **2026-06-30 候选 3-A 有意升的真 seam**(对标 LockManager / BloomIFilter 可替换纪律,先被 C2 删后又加回),re-suggest 即违规
+
+**ADR 主体**(`wiki/adr/0023-...md`, Accepted):唯一经 deletion test 通过的真实 friction —— `ThreadPoolEarlyExpirationExecutor.shutdown()` 对 `cleanupScheduler`(5s)与 `executorService`(10s)**逐字重复 ~13 行优雅关闭样板**:
+- **D1** 抽 `private shutdownGracefully(ExecutorService, long, String)` seam,`shutdown()` 退化为 2 行委派
+- **D2** byte-for-byte 行为等价(关闭顺序 / 超时 / 日志消息 / `InterruptedException` 处理全保留)
+- **D3** 撤销歧路:不抽 `ExecutorServiceShutdown` 工具类到 util 包(只此一处 2 副本 = 假 seam,撞 C2 纪律;等第 3 消费者出现再提升,同 ADR-0011 纪律)
+
+**规模诚实声明**:2 处类内重复(对比 ADR-0018 的 5 处、ADR-0021 的 3 处),性质为 locality 收敛非 cross-module seam;对标 ADR-0014(2 类构造墙收敛)小规模 locality 先例。架构经 14 轮 deepening 已趋饱和,本 ADR 是 round 15 唯一「在挣价值」的落地项。
+
+**文件变更**:1 main(`ThreadPoolEarlyExpirationExecutor.java`,`shutdown` 32 行 → 4 行委派 + 13 行 helper + javadoc,净减 ~15 body SLOC),0 test(既有 `ShutdownTests` 3 项含反射取 `executorService` + `cleanupScheduler` 双字段断言 `isShutdown() && isTerminated()` 直接保障等价)。
+
+**附带发现(非 deepening,不落地)**:`RedisBloomIFilter` 的 Micrometer counter 名用 `bloomsift.check.failures` / `bloomsift.add.failures` 前缀,与项目统一 `resicache.*` 命名约定不一致(疑似 BloomSift 历史遗留)。属命名 polish 非 architecture friction,不配 ADR;强行抽 `MetricNames` 常量集中类是 over-engineering(各指标已合理归属)。留作未来 observability 统一轮的可选清理项。
+
+**验证**:`mvnw checkstyle:check` —— 0 violations;`mvnw test -Dtest='ThreadPoolEarlyExpirationExecutorTest'` —— `ShutdownTests` 3 项全过(byte-for-byte 行为等价)。
+
+**下一步**:无 — ADR-0023 完整落地。架构未触及域已扫尽,round 16+ 候选空间收窄至:5 ChainObserver DRY(YAGNI)/ CacheKeys 第 3 use case / `int→long` 1.0 毕业(STABILITY.md §4)/ `bloomsift` counter 命名 polish(非 deepening)/ 各 ADR 显式 defer 项的触发条件评估。
+
+详见 [[0023-executor-graceful-shutdown-seam]]。
+
+---
+
 ## [2026-07-01] ADR-0022 | Chain single-representation seam (消除 next 指针双轨,统一 List 快照 index 推进) (round 14)
 
 `/improve-codebase-architecture` round 14 autocratic one-shot 报告基于 round 1–13 已落地 ADR-0009~0021 状态,扫描 `chain/` 域,裁决 1 候选落地(Explore agent Top 3 全部扼杀:D1 撞 ADR-0012/0017 双重封口、B2 诊断夸大仅 2/5 handler 真重复、E1 模板方法损伤 Redis Pipeline+Caffeine 性能路径),自主定位 ADR-0009 抽 Engine 后残留的 next 指针 × List 快照**双轨 friction**(deletion test 通过,同款 ADR-0012 删 EarlyExpirationSupport 浅转发层模式):
