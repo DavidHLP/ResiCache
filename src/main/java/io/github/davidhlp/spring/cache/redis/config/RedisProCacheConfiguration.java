@@ -5,6 +5,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.ThreadPoolEarlyExpirationExecutor;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
@@ -174,6 +175,26 @@ public class RedisProCacheConfiguration {
     @ConditionalOnMissingBean
     public Clock systemClock() {
         return Clock.systemUTC();
+    }
+
+    /**
+     * 提前过期异步刷新执行器（ADR-0024）：从 {@code resi-cache.early-expiration.*}
+     * 读池参数构造，兑现配置承诺（旧 {@code @Component} 无参硬编码 2/10/100 使配置失效）。
+     * 用户可自定义同类型 bean 顶替（{@code @ConditionalOnMissingBean}）。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor(
+            RedisProCacheProperties properties,
+            ObjectProvider<MeterRegistry> meterRegistryProvider) {
+        RedisProCacheProperties.EarlyExpirationProperties ee = properties.getEarlyExpiration();
+        log.info("Creating ThreadPoolEarlyExpirationExecutor: core={}, max={}, queue={}",
+                ee.getPoolSize(), ee.getMaxPoolSize(), ee.getQueueCapacity());
+        return new ThreadPoolEarlyExpirationExecutor(
+                ee.getPoolSize(),
+                ee.getMaxPoolSize(),
+                ee.getQueueCapacity(),
+                meterRegistryProvider.getIfAvailable());
     }
 }
 

@@ -43,7 +43,7 @@ updated: 2026-06-21
 
 ## 如何识别热 key
 
-框架内 `TwoListLRU`([[eviction]])的 active/inactive 双链表可辅助识别高频访问的 key(active 链表即「热」集)。`EarlyExpirationSupport.getRefreshingKeyCount()` / `getThreadPoolStats()` 可观测刷新压力。
+框架内 `TwoListLRU`([[eviction]])的 active/inactive 双链表可辅助识别高频访问的 key(active 链表即「热」集)。`ThreadPoolEarlyExpirationExecutor.getActiveCount()` / `getStats()` 可观测刷新压力。
 
 ## 局限
 

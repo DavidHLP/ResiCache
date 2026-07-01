@@ -1,3 +1,31 @@
+## [2026-07-01] ADR-0024 | early-expiration 线程池配置接入 seam (兑现 dead config + EarlyExpirationSupport stale wiki 清理) (round 16)
+
+`/improve-codebase-architecture` round 16 autocratic one-shot。round 15(ADR-0023)已宣告「架构经 14 轮 deepening 已趋饱和,未触及域扫尽」,本轮**不再单域重复扫描**,转而审视 round 1–15 各轮单域内聚扫描的**结构性盲区:跨域接缝**。
+
+**唯一命中**(config ↔ refresh 跨域):`RedisProCacheProperties.EarlyExpirationProperties` 暴露 `poolSize/maxPoolSize/queueCapacity`(默认 2/10/100),但 `ThreadPoolEarlyExpirationExecutor` 是 `@Component` 无参构造 → `createExecutor()` 硬编码 2/10/100,全 `config/` 无 `@Bean` 读 properties,`getPoolSize()` 等 main 零调用 = **dead config**(用户配 `pool-size: 8` 不生效)。Interface(配置承诺 + wiki 文档)≠ Implementation(硬编码),shallow interface 变体。**The interface is the test surface**:读 properties 字段或 wiki 文档者皆被误导。
+
+**deletion test**:删配置字段 → complexity 消失但移除 interface 承诺的「池可调」能力(字段在 interface 上 earning its keep)→ 正确深化是让 impl 兑现,而非删字段。关键安全属性:properties 默认 2/10/100 与旧硬编码逐字一致 → 兑现配置**零行为回归**。
+
+**ADR 主体**(`wiki/adr/0024-...md`, Accepted):
+- **D1** `createExecutor()` → `createExecutor(int,int,int)` 参数化
+- **D2** 新增公开构造 `(core,max,queue,meterRegistry)`(`@Bean` 主路径,委派包级 4 参构造)
+- **D3** 无参构造委派 `this(2,10,100,null)`(测试 fallback,byte-for-byte 等价旧无参)
+- **D4** executor 去 `@Component`;`RedisProCacheConfiguration` 加 `@Bean @ConditionalOnMissingBean earlyExpirationExecutor(properties, meterRegistryProvider)`(对齐既有 redisProCacheWriter/cacheManager @Bean 模式)
+- **D5** wiki 6 处 `EarlyExpirationSupport` stale 引用清理(early-expiration.md 4 + observability.md 1 + hot-key.md 1;ADR-0012 删除残骸,CI `docs-link-check` 未捕获因属正文文件路径引用非 wikilink)
+- **D6** 撤销:不复活 `EarlyExpirationSupport` / 新 `EarlyExpirationRefresher` 门面(撞 ADR-0012 deletion test,本场景单一调用点 + 业务闭包仅 ~35 行,总复杂度不减只搬家)
+
+**性质诚实声明**:与 ADR-0023 同属 refresh 域 locality 级 deepening,但**性质更强**——修复真实 dead config + 文档撒谎(正确性 + AI-navigability 价值),非纯样板收敛。发现路径 = 跨域接缝审视(单域扫描盲区);同源排查可推广至其他「properties 暴露字段 ↔ 实际消费者」接缝(本轮仅 early-expiration 命中,其余 properties 字段经核验均有 main 消费者)。
+
+**验证**:`mvnw clean compile checkstyle:check` —— 0 violations;`mvnw test -Dtest='ThreadPoolEarlyExpirationExecutorTest'` —— 15 项全过(含 ShutdownTests);`mvnw test` —— 782 项仅 1 失败 `ChainEngineTest.executeFragment_skipsAroundChain`,经 `git stash` 本 ADR diff + bare master 复现确认为 **pre-existing**(ADR-0022 executeChainFragment 改 "from 之后" subList 后测试期望未同步,断言 h1/h2 各 2 次 → 实际只执行 h2),非本 ADR 引入。test 源码零修改(3 处包级 4 参构造 + 无参构造均保留)。
+
+**文件变更**:2 main(`ThreadPoolEarlyExpirationExecutor.java` 去 @Component + 参数化 + 新构造 + 诚实化 init 日志(从实际 executor 读 core/max 而非硬编码撒谎);`RedisProCacheConfiguration.java` 加 @Bean)+ 1 新 ADR + 5 wiki(early-expiration/observability/hot-key stale 清理 + index + 本 log)。
+
+**下一步**:无 — ADR-0024 完整落地。round 17+ 候选空间仍收窄(5 ChainObserver DRY YAGNI / CacheKeys 第 3 use case / int→long 1.0 毕业 / bloomsift 命名 polish / 跨域接缝同源排查可推广)。
+
+详见 [[0024-early-expiration-pool-config-seam]]。
+
+---
+
 ## [2026-07-01] ADR-0023 | Executor graceful-shutdown seam (ThreadPoolEarlyExpirationExecutor.shutdown 两段优雅关闭样板收敛) (round 15)
 
 `/improve-codebase-architecture` round 15 autocratic one-shot 报告基于 round 1–14 已落地 ADR-0009~0022 状态,系统化扫描前 14 轮**未触及的域**:`serialization/` + `config/`(序列化侧 + `RedisProCacheProperties`) + `eviction/` + `observability/` + `cache/RedisProCache.get` + `protection/{refresh, bloom/filter, breakdown}` 实现内部。两枚 Explore agent + codebase-memory-mcp 图谱(复杂度 / SIMILAR_TO / 接口实现数 / Leiden cluster)+ 逐文件 Read 核验。

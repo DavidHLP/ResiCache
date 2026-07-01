@@ -11,12 +11,12 @@ tags:
 related: [hot-key, cache-avalanche, ttl-jitter, handler-result-control]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationSupport.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/ThreadPoolEarlyExpirationExecutor.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheConfiguration.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/DefaultTtlPolicy.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-07-01
 ---
 
 # 提前过期(HandlerOrder 250)
@@ -76,25 +76,16 @@ end
 
 配合 `atomicShortenTtlIfValueUnchanged` —— 只有 CAS 成功(返回 1)才真正回源,否则说明已有别的线程在刷新,本次跳过。还有 `REFRESH_GRACE_PERIOD_SECONDS = 5` 宽限期:若剩余 TTL 已不足 5 秒,认为即将自然过期,不再异步刷新(等它过期触发正常 miss 即可)。
 
-## 执行器:EarlyExpirationSupport / Executor
+## 执行器:ThreadPoolEarlyExpirationExecutor
 
-`EarlyExpirationSupport`(`@Component`)是门面,把刷新任务交给 `ThreadPoolEarlyExpirationExecutor`:
+ADR-0012 删除了纯转发的 `EarlyExpirationSupport` 门面后,`EarlyExpirationHandler` 与 `ActualCacheHandler`(PUT 时 `cancel`)直接持有 `ThreadPoolEarlyExpirationExecutor`。它内聚去重提交 / 重试 / 指标 / 优雅关闭:
 
-`src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationSupport.java:24`
-
-```java
-public void submitAsyncRefresh(String key, Runnable refreshTask) {
-    if (key == null || refreshTask == null) { /* warn */ return; }
-    executor.submit(key, refreshTask);
-}
-```
-
-- `submit(key, task)` —— 按 key 去重(同 key 并发刷新只跑一个);
+- `submit(key, task)` —— 按 key 去重(同 key 并发刷新只跑一个),失败由 `RefreshRetryPolicy` 自动重试最多 3 次;
 - `cancel(key)` —— 取消某 key 的待执行任务;
 - `getStats()` / `getActiveCount()` —— 线程池观测(见 [[observability]]);
-- `@PreDestroy shutdown()` —— 优雅关闭。
+- `@PreDestroy shutdown()` —— 两段优雅关闭(ADR-0023 `shutdownGracefully` seam)。
 
-`ThreadPoolEarlyExpirationExecutor` 是基于线程池的默认实现,池参数由 `resi-cache.early-expiration.{pool-size,max-pool-size,queue-capacity}` 配置。
+**池参数配置(ADR-0024)**:`ThreadPoolEarlyExpirationExecutor` 由 `RedisProCacheConfiguration` 的 `@Bean` 装配,从 `resi-cache.early-expiration.{pool-size,max-pool-size,queue-capacity}` 读池参数构造(`@ConditionalOnMissingBean`,用户可自定义同类型 bean 顶替)。ADR-0024 前 executor 是 `@Component` 无参构造硬编码 2/10/100,配置项失效(dead config);现已兑现。
 
 ## 预取复用:避免双重 GET
 

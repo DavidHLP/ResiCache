@@ -6,7 +6,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
-import org.springframework.stereotype.Component;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -15,19 +14,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 在有限的线程池上执行提前过期任务，同时防止每个键的重复提交。
  *
- * <p>本类是对外契约门面（{@code @Component} +
- * 反射可见的 {@code executorService}/{@code cleanupScheduler} 字段），内部职责委托给两个协作类：
+ * <p>装配（ADR-0024）：本类是 {@code resi-cache.early-expiration.*} 配置兑现的 seam ——
+ * 由 {@link io.github.davidhlp.spring.cache.redis.config.RedisProCacheConfiguration#earlyExpirationExecutor}
+ * {@code @Bean} 从 {@code RedisProCacheProperties.EarlyExpirationProperties} 读池参数
+ * ({@code pool-size}/{@code max-pool-size}/{@code queue-capacity}) 构造；用户可自定义
+ * 同类型 bean 顶替（{@code @ConditionalOnMissingBean}）。无参 / 包级构造保留为测试入口。
+ *
+ * <p>内部职责委托给两个协作类：
  * <ul>
  *   <li>{@link RefreshRetryPolicy} —— 同步重试循环（纯函数，独立可测）</li>
  *   <li>{@link RefreshTaskMetrics} —— Micrometer 指标注册与计数（无锁）</li>
  * </ul>
  * 去重提交（{@code inFlight} + {@code executorService}）与生命周期（清理调度、shutdown）
- * 因与门面反射字段紧耦合而保留在此。
+ * 因与反射可见的 {@code executorService}/{@code cleanupScheduler} 字段（测试断言用）紧耦合而保留在此。
  *
  * <p>失败的任务由 {@link RefreshRetryPolicy} 自动重试，最多 {@value RefreshRetryPolicy#MAX_RETRY_COUNT} 次。
  */
 @Slf4j
-@Component
 public class ThreadPoolEarlyExpirationExecutor {
 
     private final ExecutorService executorService;
@@ -44,14 +47,33 @@ public class ThreadPoolEarlyExpirationExecutor {
     private final RefreshTaskMetrics metrics;
 
     /**
-     * 默认构造函数，创建具有默认配置的线程池执行器
+     * 默认构造函数（测试 / 无配置 fallback）：硬编码 {@code 2/10/100} 池参数，
+     * 行为等价 ADR-0024 前 {@code @Component} 无参装配。
+     *
+     * <p>生产装配走 {@link io.github.davidhlp.spring.cache.redis.config.RedisProCacheConfiguration#earlyExpirationExecutor}
+     * {@code @Bean}，从 {@code resi-cache.early-expiration.*} properties 读池参数。
      */
     public ThreadPoolEarlyExpirationExecutor() {
-        this(createExecutor(), new ConcurrentHashMap<>(), null, 30_000L);
+        this(2, 10, 100, null);
     }
 
     /**
-     * 构造函数，允许注入自定义的执行器服务和进行中的任务映射
+     * 配置化构造（ADR-0024，生产 {@code @Bean} 主路径）：用 {@code resi-cache.early-expiration}
+     * 池参数创建线程池。
+     *
+     * @param corePoolSize   核心线程数
+     * @param maxPoolSize    最大线程数
+     * @param queueCapacity  任务队列容量
+     * @param meterRegistry  Micrometer registry（可选，为 {@code null} 时不注册指标）
+     */
+    public ThreadPoolEarlyExpirationExecutor(int corePoolSize, int maxPoolSize, int queueCapacity, MeterRegistry meterRegistry) {
+        this(createExecutor(corePoolSize, maxPoolSize, queueCapacity),
+             new ConcurrentHashMap<>(), meterRegistry, 30_000L);
+    }
+
+    /**
+     * 构造函数，允许注入自定义的执行器服务和进行中的任务映射（测试主路径：直接控制
+     * {@code ExecutorService} / {@code inFlight} / 清理周期，绕开配置化构造）。
      *
      * @param executorService 线程池执行器服务
      * @param inFlight        正在进行中的任务映射
@@ -78,8 +100,12 @@ public class ThreadPoolEarlyExpirationExecutor {
         try {
             // 初始化 Micrometer 指标（注册逻辑收敛于 RefreshTaskMetrics）
             this.metrics = new RefreshTaskMetrics(meterRegistry, inFlight, executorService);
-            log.info("ThreadPoolEarlyExpirationExecutor initialized with thread pool: core=2, max=10, queue=100, maxRetries={}",
-                    RefreshRetryPolicy.MAX_RETRY_COUNT);
+            // ADR-0024: 池容量参数化后从实际 executor 读取打印，避免日志撒谎（旧硬编码 core=2/max=10/queue=100）
+            String poolDesc = (executorService instanceof ThreadPoolExecutor tpe)
+                    ? "core=" + tpe.getCorePoolSize() + ", max=" + tpe.getMaximumPoolSize()
+                    : executorService.getClass().getSimpleName();
+            log.info("ThreadPoolEarlyExpirationExecutor initialized: {}, maxRetries={}",
+                    poolDesc, RefreshRetryPolicy.MAX_RETRY_COUNT);
         } catch (RuntimeException e) {
             // 初始化失败时，确保清理已创建的资源
             cleanupScheduler.shutdownNow();
@@ -89,17 +115,20 @@ public class ThreadPoolEarlyExpirationExecutor {
     }
 
     /**
-     * 创建具有预定义配置的线程池执行器
+     * 创建线程池执行器（ADR-0024：参数化，池容量由调用方传入而非硬编码）。
      *
+     * @param corePoolSize   核心线程数
+     * @param maxPoolSize    最大线程数
+     * @param queueCapacity  任务队列容量
      * @return 配置好的线程池执行器
      */
-    private static ExecutorService createExecutor() {
+    private static ExecutorService createExecutor(int corePoolSize, int maxPoolSize, int queueCapacity) {
         return new ThreadPoolExecutor(
-                2,
-                10,
+                corePoolSize,
+                maxPoolSize,
                 60L,
                 TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(100),
+                new LinkedBlockingQueue<>(queueCapacity),
                 new EarlyExpirationThreadFactory(),
                 new ThreadPoolExecutor.CallerRunsPolicy());
     }

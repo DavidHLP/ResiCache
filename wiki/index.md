@@ -65,6 +65,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0021-redis-cache-attributes-applyto-seam-and-protection-toggle]] —— `RedisCacheAttributes.applyTo(B)` seam(3 fromAttributes 22-line 重复墙收敛为 1 行委派)+ `ProtectionToggle` Function 化(CacheHandlerChainFactory 4 disabled-handler if-block 收敛为 list iteration)
 - [[0022-chain-single-representation-seam]] —— Chain single-representation seam(消除 ADR-0009 残留的 next 指针 × List 快照双轨,`CacheHandler` 接口删 setNext/getNext + `driveChain` 改 index 推进 + 修复并发隔离漏洞)
 - [[0023-executor-graceful-shutdown-seam]] —— Executor graceful-shutdown seam(`ThreadPoolEarlyExpirationExecutor.shutdown()` 两段逐字重复的优雅关闭样板收敛为单一 `shutdownGracefully` 私有 seam,byte-for-byte 行为等价;round 15 扫尽未触及域后唯一经 deletion test 通过的 friction)
+- [[0024-early-expiration-pool-config-seam]] —— early-expiration 线程池配置接入 seam(兑现 dead config:`@Component` 无参硬编码 → `@Bean` 从 `EarlyExpirationProperties` 读池参数;+ 6 处 `EarlyExpirationSupport` stale wiki 引用清理;round 16 跨域接缝盲区排查唯一命中)
 
 ## 架构(architecture/)
 

@@ -151,10 +151,10 @@ public class MetricsAutoConfiguration { ... }
 
 ## 与 [[early-expiration|早期过期]] 的观测
 
-`EarlyExpirationSupport` 暴露两个补充观测点(不属于 Micrometer):
+`ThreadPoolEarlyExpirationExecutor`(ADR-0012 删除 `EarlyExpirationSupport` 门面后由 handler 直持)暴露两个补充观测点(不属于 Micrometer):
 
-- `getThreadPoolStats()`:返回线程池统计字符串(活跃数 / 队列长度 / 完成任务数)
-- `getRefreshingKeyCount()`:正在刷新的 key 数
+- `getStats()`:返回线程池统计字符串(活跃数 / 队列长度 / 完成任务数)
+- `getActiveCount()`:正在刷新的 key 数
 
 适合写入自定义 `/actuator/info` 或业务日志,作为热 key 刷新压力的旁路信号。
 
