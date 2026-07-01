@@ -11,14 +11,14 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * 责任链管理器 — ADR-0009 (Chain Engine extraction) D4 后的 thin facade 形态。
+ * 责任链管理器 — ADR-0009 抽 Engine 后的 thin facade；ADR-0022 起为链结构单一真理源。
  *
  * <p>原先在 {@code execute} 中的链推进 + 节点级决策分发 + Timer 装配 / 记录 +
  * MDC stamp（约 110 SLOC）已全部迁出到 {@link ChainEngine}。本 facade 只保留：
  *
  * <ul>
- *   <li>{@code List<CacheHandler> handlers} 维护（addHandler / size / clear / getHandlerNames）</li>
- *   <li>{@code head} 头节点引用（工厂建链时同步设置）</li>
+ *   <li>{@code List<CacheHandler> handlers} 维护（addHandler / size / clear / getHandlerNames）—
+ *       <b>ADR-0022</b> 起为链结构唯一表示，不再并行维护 next 指针链 / head 引用</li>
  *   <li>{@link ReadWriteLock} 守护链结构并发修改</li>
  *   <li>{@link #execute(CacheContext)} 委派给 {@link ChainEngine#execute(CacheContext)}</li>
  *   <li>{@link #MDC_REQUEST_ID_KEY} 常量（供 {@code MDCStampChainObserver} 引用）</li>
@@ -29,14 +29,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * {@link #execute(CacheContext)} 仅做读锁 + 委派，无任何推进 / 观测逻辑。
  *
  * <p><b>back-compat 兜底</b>：保留无参构造（{@code @Autowired} 注入 Engine），
- * 旧式 {@code CacheHandlerChain(ObjectProvider<MeterRegistry>)} 构造被移除
- * （Timer 已迁至 {@code ChainTimerChainObserver}，registry 不再由 facade 持有）。
  * 用户若需自定义 ChainEngine（如额外加 observer），声明
  * {@code @Bean @ConditionalOnMissingBean ChainEngine} 顶替默认即可。
  *
- * <p><b>facade 退化与删除测试</b>：删掉本类 → 用户需在
+ * <p><b>facade 存在代价（删除测试）</b>：删掉本类 → 用户需在
  * {@code RedisProCacheWriter} 与测试中直接持 {@link ChainEngine} 引用，复杂度
- * 重现且失去"facade → engine"职责分层。本 facade 挣得起存在代价（~50 SLOC）。
+ * 重现且失去"facade 维护链结构 / engine 推进链"职责分层。本 facade 挣得起存在代价。
  */
 @Slf4j
 @Component
@@ -51,10 +49,8 @@ public class CacheHandlerChain {
      */
     public static final String MDC_REQUEST_ID_KEY = "requestId";
 
-    /** 所有处理器列表（用于调试和后置处理） */
+    /** 所有处理器列表（用于调试和后置处理；ADR-0022 起为链结构单一真理源） */
     private final List<CacheHandler> handlers = new ArrayList<>();
-    /** 责任链头节点（冗余引用 — handlers[0] 也可拿，但 getNext() 链表遍历更便宜） */
-    private volatile CacheHandler head;
     /** 读写锁，保证线程安全（addHandler/clear 写，execute/size/getHandlerNames 读） */
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -87,16 +83,6 @@ public class CacheHandlerChain {
     public CacheHandlerChain addHandler(CacheHandler handler) {
         lock.writeLock().lock();
         try {
-            if (head == null) {
-                head = handler;
-            } else {
-                // 找到链尾
-                CacheHandler current = head;
-                while (current.getNext() != null) {
-                    current = current.getNext();
-                }
-                current.setNext(handler);
-            }
             handlers.add(handler);
             // 同步刷新 Engine 持有的快照引用 — Engine.execute 直接读 snapshot 避免并发改链
             engine.setChainSnapshot(List.copyOf(handlers));
@@ -121,15 +107,12 @@ public class CacheHandlerChain {
     public CacheResult execute(CacheContext context) {
         lock.readLock().lock();
         try {
-            // 空链保护：engine 内部也会判，但 facade 提前返回避免不必要的方法调用
-            if (head == null) {
-                log.warn("Handler chain is empty!");
-                return engine.execute(context);
-            }
+            // 委派 Engine — 空链保护（snapshot empty → WARN + success）、aroundChain/perNode
+            // 观测、post-process 全在 Engine；facade 仅持读锁避免与 addHandler/clear 并发
+            return engine.execute(context);
         } finally {
             lock.readLock().unlock();
         }
-        return engine.execute(context);
     }
 
     /**
@@ -152,7 +135,6 @@ public class CacheHandlerChain {
     public void clear() {
         lock.writeLock().lock();
         try {
-            head = null;
             handlers.clear();
             // 同步 Engine 持有的快照引用 — Engine 见到 null/empty 时直接返回 success
             engine.setChainSnapshot(null);

@@ -156,83 +156,77 @@ public class ChainEngine {
     }
 
     /**
-     * 在锁内 / 嵌套场景推进剩余链 — 跳过 aroundChain 观测与 post-process。
+     * 在锁内 / 嵌套场景推进 {@code from} <b>之后</b>的剩余链 — 跳过 aroundChain 观测与 post-process。
      *
-     * <p>典型调用方：{@code SyncLockHandler.executeChainInLock} 在分布式锁
-     * 持有期间推进 getNext() 到链尾。锁外层 {@link #execute} 已 stamp MDC /
-     * 启动 Timer，锁内不能再 stamp（避免覆盖）或重复 record（重复打点）。Post-process
-     * 由外层 execute 在锁返回后统一调用，锁内片段无需重复。
+     * <p>典型调用方：{@code SyncLockHandler} 在分布式锁持有期间推进"自己之后"的剩余
+     * handler。锁外层 {@link #execute} 已 stamp MDC / 启动 Timer，锁内不能再 stamp
+     * （避免覆盖）或重复 record（重复打点）。Post-process 由外层 execute 在锁返回后
+     * 统一调用，锁内片段无需重复。
+     *
+     * <p><b>ADR-0022</b>：定位起点改为基于 snapshot {@code indexOf(from) + 1}（不再沿
+     * {@code getNext()} 指针链构造子列表）。{@code from} 通常是发起片段推进的 handler
+     * 自身（如 {@code SyncLockHandler} 传 {@code this}），Engine 推进其后的所有 handler。
      *
      * <p>行为：仅 perNode 观测（beforeNode / afterNode），aroundChain 观测忽略。
-     * 当前实现等于去掉 aroundChain 调用的 driveChain 子集。
      *
-     * @param context    缓存上下文（与外层 execute 共享）
-     * @param from       推进起点 handler（不含）；为 null 时直接返回 success
-     * @return 从 {@code from} 推进到链尾的最终结果（无 post-process）
+     * @param context 缓存上下文（与外层 execute 共享）
+     * @param from    推进起点的边界 handler（推进其<b>后继</b>；为 null 或不在快照中时返回 success）
+     * @return 从 {@code from} 之后推进到链尾的最终结果（无 post-process）
      */
     public CacheResult executeChainFragment(CacheContext context, CacheHandler from) {
         if (from == null) {
             return CacheResult.success();
         }
-        // 构造 from 起点的子列表 — driveChain 用 List<CacheHandler> 遍历，
-        // 子列表保持顺序且仅含 from 及其后继
-        List<CacheHandler> fragment = buildFragment(from);
-        if (fragment.isEmpty()) {
+        List<CacheHandler> snapshot = chainSnapshotRef.get();
+        if (snapshot == null || snapshot.isEmpty()) {
             return CacheResult.success();
         }
-        // 复用 driveChain：aroundChain 观测由调用方外层 execute 负责，
-        // 本方法只跑 perNode（beforeNode / afterNode）
-        return driveChain(fragment, context);
-    }
-
-    /**
-     * 从 {@code from} 沿 {@link CacheHandler#getNext()} 链构造有序子列表。
-     */
-    private static List<CacheHandler> buildFragment(CacheHandler from) {
-        java.util.ArrayList<CacheHandler> out = new java.util.ArrayList<>();
-        CacheHandler cur = from;
-        // 防御性环检测 — 走 N 次未到 null 视为坏链，截断
-        int guard = 0;
-        while (cur != null && guard++ < 1024) {
-            out.add(cur);
-            cur = cur.getNext();
+        int start = snapshot.indexOf(from);
+        // from 不在快照中（理论不应发生）或已是链尾 → 无后继可推进
+        if (start < 0 || start + 1 >= snapshot.size()) {
+            return CacheResult.success();
         }
-        return out;
+        // 不可变快照的 subList view — driveChain 只读（get / size），view 安全；
+        // 复用 driveChain：aroundChain 观测由调用方外层 execute 负责，本方法只跑 perNode
+        return driveChain(snapshot.subList(start + 1, snapshot.size()), context);
     }
 
     /**
      * 节点推进主循环 — 抽取出来供 {@link #execute} 与 {@link #executeChainFragment}
-     * 共享。每次循环：
+     * 共享。按 snapshot index 顺序推进（<b>ADR-0022</b>：不再沿 {@code getNext()} 指针）：
      * <ol>
-     *   <li>检测 context.isSkipRemaining() — 短路返回当前 result（等价为继续但带 success）</li>
+     *   <li>检测 context.isSkipRemaining() — 短路返回 success</li>
      *   <li>observer.beforeNode</li>
      *   <li>handler.handle(ctx)</li>
      *   <li>observer.afterNode</li>
-     *   <li>decision switch（CONTINUE 推进 / SKIP_ALL 物化 / TERMINATE 终止）</li>
+     *   <li>decision switch（CONTINUE 推进下一 index / SKIP_ALL 物化 / TERMINATE 终止）</li>
      * </ol>
+     *
+     * <p><b>并发隔离（ADR-0022 修复）</b>：snapshot 由 {@link #setChainSnapshot} 注入的
+     * 不可变 {@code List.copyOf} 产出，index 推进完全在快照内读取。此前沿 {@code getNext()}
+     * 读 handler 实例字段，不受快照隔离保护 —— 改 index 推进后，{@code addHandler} 改链
+     * 仅影响下次 {@code setChainSnapshot}，当前 {@code execute} 持有的快照引用完全隔离。
+     *
+     * @param snapshot 不可变 handler 链快照（Engine 只读，不修改）
      */
     private CacheResult driveChain(List<CacheHandler> snapshot, CacheContext context) {
-        CacheHandler current = snapshot.get(0);
-        int idx = 0;
-        while (current != null) {
+        for (int idx = 0; idx < snapshot.size(); idx++) {
             // 上游 SKIP_ALL 已物化：短路返回 success（与原 AbstractCacheHandler.handle 一致）
             if (context.isSkipRemaining()) {
                 return CacheResult.success();
             }
-
+            CacheHandler current = snapshot.get(idx);
             HandlerResult result = invokeWithObservers(current, context);
 
             switch (result.decision()) {
                 case CONTINUE:
-                    if (current.getNext() != null) {
-                        current = current.getNext();
-                        idx++;
-                    } else {
-                        // 链尾 CONTINUE：返回 handler 的 result（result 为 null 时退化为 success —
-                        // 与原 executeChainInternal 行为一致："返回的 HandlerResult.result() 为 null
-                        // 时退化为 CacheResult.success()"）
+                    // 链尾 CONTINUE：返回 handler 的 result（result 为 null 时退化为 success —
+                    // 与原 executeChainInternal 行为一致："返回的 HandlerResult.result() 为 null
+                    // 时退化为 CacheResult.success()"）
+                    if (idx == snapshot.size() - 1) {
                         return result.result() != null ? result.result() : CacheResult.success();
                     }
+                    // 非链尾：idx++ 推进到下一 handler
                     break;
                 case SKIP_ALL:
                     context.markSkipRemaining();
@@ -243,7 +237,7 @@ public class ChainEngine {
                     throw new IllegalStateException("Unknown ChainDecision: " + result.decision());
             }
         }
-        // 防御：理论不会到这里（CONTINUE 分支已处理链尾）
+        // 空快照（理论由 execute 前置拦截，防御）
         return CacheResult.success();
     }
 

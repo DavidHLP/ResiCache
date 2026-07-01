@@ -203,10 +203,9 @@ class NullValueHandlerTest {
         @Test
         @DisplayName("GET operation 不在 shouldHandle 范围,handler.handle 返回 continueChain,不调 next")
         void handle_getOperation_returnsContinueChainWithoutAdvancing() {
-            // ADR-0009:AbstractCacheHandler.handle 现在只做"shouldHandle ? doHandle : continueChain"
-            // 链推进由 ChainEngine 负责 —— handler 自身不再调 getNext().handle(ctx)。
+            // ADR-0009/0022:AbstractCacheHandler.handle 只做"shouldHandle ? doHandle : continueChain"
+            // 链推进由 ChainEngine 负责 —— handler 自身不持有也不调 next。
             CacheHandler nextHandler = mock(CacheHandler.class);
-            handler.setNext(nextHandler);
             CacheContext context = createContext(CacheOperation.GET, "value");
 
             HandlerResult result = handler.handle(context);

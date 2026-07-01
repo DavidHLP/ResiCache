@@ -341,45 +341,20 @@ class CacheHandlerChainTest {
 
     // Test handler implementations — 简化为"返回结果不主动推进" — Engine 负责推进
     static class TestCacheHandler implements CacheHandler {
-        private CacheHandler next;
-
         @Override
         public HandlerResult handle(CacheContext context) {
             return HandlerResult.continueWith(CacheResult.success());
-        }
-
-        @Override
-        public CacheHandler getNext() {
-            return next;
-        }
-
-        @Override
-        public void setNext(CacheHandler next) {
-            this.next = next;
         }
     }
 
     static class AnotherTestHandler implements CacheHandler {
-        private CacheHandler next;
-
         @Override
         public HandlerResult handle(CacheContext context) {
             return HandlerResult.continueWith(CacheResult.success());
         }
-
-        @Override
-        public CacheHandler getNext() {
-            return next;
-        }
-
-        @Override
-        public void setNext(CacheHandler next) {
-            this.next = next;
-        }
     }
 
     static class TestPostProcessor implements CacheHandler, PostProcessHandler {
-        private CacheHandler next;
         private final AtomicBoolean called;
         private final boolean requiresPostProcess;
 
@@ -395,16 +370,6 @@ class CacheHandlerChainTest {
         @Override
         public HandlerResult handle(CacheContext context) {
             return HandlerResult.continueWith(CacheResult.success());
-        }
-
-        @Override
-        public CacheHandler getNext() {
-            return next;
-        }
-
-        @Override
-        public void setNext(CacheHandler next) {
-            this.next = next;
         }
 
         @Override

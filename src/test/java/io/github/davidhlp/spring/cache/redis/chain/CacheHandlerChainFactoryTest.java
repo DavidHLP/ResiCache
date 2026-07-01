@@ -315,13 +315,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) { }
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     @HandlerPriority(HandlerOrder.BLOOM_FILTER)
@@ -350,13 +343,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     static class AnotherTestHandler implements CacheHandler {
@@ -365,13 +351,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     static class YetAnotherTestHandler implements CacheHandler {
@@ -380,13 +359,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     @HandlerPriority(HandlerOrder.BLOOM_FILTER)
@@ -396,13 +368,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     @HandlerPriority(HandlerOrder.SYNC_LOCK)
@@ -412,13 +377,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     @HandlerPriority(HandlerOrder.ACTUAL_CACHE)
@@ -428,13 +386,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     @HandlerPriority(HandlerOrder.EARLY_EXPIRATION)
@@ -444,13 +395,6 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 
     @HandlerPriority(HandlerOrder.TTL)
@@ -460,12 +404,5 @@ class CacheHandlerChainFactoryTest {
             return HandlerResult.continueWith(CacheResult.success());
         }
 
-        @Override
-        public void setNext(CacheHandler next) {}
-
-        @Override
-        public CacheHandler getNext() {
-            return null;
-        }
     }
 }

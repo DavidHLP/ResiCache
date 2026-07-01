@@ -5,15 +5,15 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 /**
- * 缓存处理器接口（责任链模式）
+ * 缓存处理器接口（责任链模式）。
  *
- * 职责：
- * 1. 处理缓存操作，返回 {@link HandlerResult}（含链控制决策）
- * 2. 管理下一个处理器的链接
+ * <p>职责：处理缓存操作，返回 {@link HandlerResult}（含链控制决策）。
  *
- * <p>链推进逻辑由 {@link AbstractCacheHandler#handle(CacheContext)} 单一引擎统一实现；
- * 接口本身只定义契约，不再自带并行的推进 default 方法
- * （历史的 {@code invokeNext} / {@code executeRestOfChain} 已作为 dead code 移除）。
+ * <p><b>链结构与推进归属（ADR-0022）</b>：节点顺序由 {@link CacheHandlerChain}
+ * 维护为 {@code List<CacheHandler>}，推进完全由 {@link ChainEngine} 基于该列表快照
+ * 按 index 驱动。handler 不再持有"下一个处理器"链接 —— 历史的
+ * {@code setNext(CacheHandler)} / {@code getNext()} 已删除（消除 ADR-0009 抽 Engine
+ * 后残留的 next 指针 × List 快照双轨表示）。接口本身只定义处理契约。
  */
 public interface CacheHandler {
 
@@ -24,18 +24,4 @@ public interface CacheHandler {
      * @return HandlerResult 包含决策和结果
      */
     HandlerResult handle(CacheContext context);
-
-    /**
-     * 设置下一个处理器
-     *
-     * @param next 下一个处理器
-     */
-    void setNext(CacheHandler next);
-
-    /**
-     * 获取下一个处理器
-     *
-     * @return 下一个处理器
-     */
-    CacheHandler getNext();
 }

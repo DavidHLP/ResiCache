@@ -50,10 +50,7 @@ class ChainEngineTest {
     }
 
     private void installChain(CacheHandler... handlers) {
-        // 手动构建 handler 链（用 setNext 链接）— Engine.setChainSnapshot 接受 List<CacheHandler>
-        for (int i = 0; i < handlers.length - 1; i++) {
-            handlers[i].setNext(handlers[i + 1]);
-        }
+        // ADR-0022:链结构为单一 List 快照 — 无需 setNext 链接,Engine 按 index 推进
         engine.setChainSnapshot(List.of(handlers));
     }
 
@@ -273,12 +270,9 @@ class ChainEngineTest {
         @DisplayName("handler 抛 RuntimeException → 直接冒泡,Engine 不吞")
         void handlerThrowsException_propagates() {
             CacheHandler throwing = new CacheHandler() {
-                private CacheHandler next;
                 @Override public HandlerResult handle(CacheContext ctx) {
                     throw new RuntimeException("boom");
                 }
-                @Override public CacheHandler getNext() { return next; }
-                @Override public void setNext(CacheHandler next) { this.next = next; }
             };
             installChain(throwing);
 
@@ -313,7 +307,6 @@ class ChainEngineTest {
         private final String name;
         private final List<String> visitLog;
         private final HandlerResult result;
-        private CacheHandler next;
 
         RecordingHandler(String name, HandlerResult result) {
             this(name, null, result);
@@ -331,11 +324,6 @@ class ChainEngineTest {
             return result;
         }
 
-        @Override
-        public CacheHandler getNext() { return next; }
-
-        @Override
-        public void setNext(CacheHandler next) { this.next = next; }
 
         @Override
         public String toString() { return name; }
@@ -345,7 +333,6 @@ class ChainEngineTest {
         private final String name;
         private final AtomicBoolean called;
         private final boolean requires;
-        private CacheHandler next;
 
         PostProcessRecordingHandler(String name, AtomicBoolean called) {
             this(name, called, true);
@@ -362,11 +349,6 @@ class ChainEngineTest {
             return HandlerResult.continueChain();
         }
 
-        @Override
-        public CacheHandler getNext() { return next; }
-
-        @Override
-        public void setNext(CacheHandler next) { this.next = next; }
 
         @Override
         public void afterChainExecution(CacheContext context, CacheResult result) {
@@ -380,18 +362,12 @@ class ChainEngineTest {
     }
 
     static class ThrowingPostProcessor implements CacheHandler, PostProcessHandler {
-        private CacheHandler next;
 
         @Override
         public HandlerResult handle(CacheContext context) {
             return HandlerResult.continueChain();
         }
 
-        @Override
-        public CacheHandler getNext() { return next; }
-
-        @Override
-        public void setNext(CacheHandler next) { this.next = next; }
 
         @Override
         public void afterChainExecution(CacheContext context, CacheResult result) {

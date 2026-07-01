@@ -28,7 +28,7 @@
  *
  * <h2>核心类说明</h2>
  * <ul>
- *   <li><b>CacheHandler</b>：处理器接口（仅 handle/getNext/setNext 三方法）</li>
+ *   <li><b>CacheHandler</b>：处理器接口（仅 handle 一方法;ADR-0022 删除 getNext/setNext,handler 不再承担链接职责）</li>
  *   <li><b>AbstractCacheHandler</b>：抽象处理器，handle 退化为
  *       {@code shouldHandle ? doHandle : continueChain}（ADR-0009 链推进迁出到 Engine）</li>
  *   <li><b>CacheHandlerChain</b>：责任链 facade —— 维护 handler 列表 + 委派

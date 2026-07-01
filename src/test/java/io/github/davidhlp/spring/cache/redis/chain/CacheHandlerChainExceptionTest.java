@@ -32,21 +32,9 @@ class CacheHandlerChainExceptionTest {
     void handlerThrowsException_chainThrows() {
         // Given: A handler that throws RuntimeException
         CacheHandler throwingHandler = new CacheHandler() {
-            private CacheHandler next;
-
             @Override
             public HandlerResult handle(CacheContext context) {
                 throw new RuntimeException("Test exception in handler");
-            }
-
-            @Override
-            public CacheHandler getNext() {
-                return next;
-            }
-
-            @Override
-            public void setNext(CacheHandler next) {
-                this.next = next;
             }
         };
         chain.addHandler(throwingHandler);
@@ -64,21 +52,9 @@ class CacheHandlerChainExceptionTest {
     void handlerThrowsException_exceptionIsLogged() {
         // Given: A handler that throws RuntimeException
         CacheHandler throwingHandler = new CacheHandler() {
-            private CacheHandler next;
-
             @Override
             public HandlerResult handle(CacheContext context) {
                 throw new RuntimeException("Log test exception");
-            }
-
-            @Override
-            public CacheHandler getNext() {
-                return next;
-            }
-
-            @Override
-            public void setNext(CacheHandler next) {
-                this.next = next;
             }
         };
         chain.addHandler(throwingHandler);
@@ -98,24 +74,9 @@ class CacheHandlerChainExceptionTest {
     void postProcessorThrowsException_doesNotAffectResult() {
         // Given: A normal handler and a post-processor that throws
         CacheHandler normalHandler = new CacheHandler() {
-            private CacheHandler next;
-
             @Override
             public HandlerResult handle(CacheContext context) {
-                if (getNext() != null) {
-                    return getNext().handle(context);
-                }
                 return HandlerResult.continueWith(CacheResult.success());
-            }
-
-            @Override
-            public CacheHandler getNext() {
-                return next;
-            }
-
-            @Override
-            public void setNext(CacheHandler next) {
-                this.next = next;
             }
         };
 
@@ -144,68 +105,26 @@ class CacheHandlerChainExceptionTest {
         AtomicBoolean handler3Called = new AtomicBoolean(false);
 
         CacheHandler handler1 = new CacheHandler() {
-            private CacheHandler next;
-
             @Override
             public HandlerResult handle(CacheContext context) {
                 handler1Called.set(true);
-                if (getNext() != null) {
-                    return getNext().handle(context);
-                }
                 return HandlerResult.continueWith(CacheResult.success());
-            }
-
-            @Override
-            public CacheHandler getNext() {
-                return next;
-            }
-
-            @Override
-            public void setNext(CacheHandler next) {
-                this.next = next;
             }
         };
 
         CacheHandler handler2 = new CacheHandler() {
-            private CacheHandler next;
-
             @Override
             public HandlerResult handle(CacheContext context) {
                 handler2Called.set(true);
                 throw new RuntimeException("Middle handler exception");
             }
-
-            @Override
-            public CacheHandler getNext() {
-                return next;
-            }
-
-            @Override
-            public void setNext(CacheHandler next) {
-                this.next = next;
-            }
         };
 
         CacheHandler handler3 = new CacheHandler() {
-            private CacheHandler next;
-
             @Override
             public HandlerResult handle(CacheContext context) {
                 handler3Called.set(true);
-                if (getNext() != null) {
-                    return getNext().handle(context);
-                }
                 return HandlerResult.continueWith(CacheResult.success());
-            }
-
-            @Override
-            public CacheHandler getNext() {
-                return next;
-            }
-
-            @Override
-            public void setNext(CacheHandler next) {
-                this.next = next;
             }
         };
 
@@ -240,25 +159,11 @@ class CacheHandlerChainExceptionTest {
      * Test post-processor implementation
      */
     static class TestPostProcessor implements CacheHandler, PostProcessHandler {
-        private CacheHandler next;
         boolean afterChainExecutionCalled = false;
         boolean shouldThrowException = false;
 
         @Override
-        public CacheHandler getNext() {
-            return next;
-        }
-
-        @Override
-        public void setNext(CacheHandler next) {
-            this.next = next;
-        }
-
-        @Override
         public HandlerResult handle(CacheContext context) {
-            if (getNext() != null) {
-                return getNext().handle(context);
-            }
             return HandlerResult.continueWith(CacheResult.success());
         }
 

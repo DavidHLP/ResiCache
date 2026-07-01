@@ -1,3 +1,34 @@
+## [2026-07-01] ADR-0022 | Chain single-representation seam (消除 next 指针双轨,统一 List 快照 index 推进) (round 14)
+
+`/improve-codebase-architecture` round 14 autocratic one-shot 报告基于 round 1–13 已落地 ADR-0009~0021 状态,扫描 `chain/` 域,裁决 1 候选落地(Explore agent Top 3 全部扼杀:D1 撞 ADR-0012/0017 双重封口、B2 诊断夸大仅 2/5 handler 真重复、E1 模板方法损伤 Redis Pipeline+Caffeine 性能路径),自主定位 ADR-0009 抽 Engine 后残留的 next 指针 × List 快照**双轨 friction**(deletion test 通过,同款 ADR-0012 删 EarlyExpirationSupport 浅转发层模式):
+
+**ADR 主体**(`wiki/adr/0022-...md`, Accepted):
+- **D1** `CacheHandler` 接口删 `setNext`/`getNext`(3 方法 → 1 方法 handle)
+- **D2** `AbstractCacheHandler` 删 `next` 字段 + `getNext()`/`setNext()` 实现
+- **D3** `CacheHandlerChain` 删 `head` + addHandler O(N) setNext 遍历 → 纯 `handlers.add` + `setChainSnapshot`;execute/clear 删 head 引用
+- **D4** `ChainEngine.driveChain` 改纯 index for-loop(删 dead `idx` + `getNext()`);`executeChainFragment` 改 `snapshot.indexOf(from)+1` subList;删 `buildFragment`
+- **D5** `SyncLockHandler` `executeChainFragment(ctx, getNext())` → `(ctx, this)`
+- **D6** 6 test 文件 mock 删 `getNext`/`setNext`/`next` 样板;`CacheHandlerChainExceptionTest` 4 处 `handle()` 内 `getNext().handle()` 旧自推进改 `continueChain`(修正 ADR-0009 后双重推进);`ChainEngineTest.installChain` 删 setNext 循环
+
+**并发隔离修复**(CR 红蓝博弈发现):原 `driveChain` 用 `getNext()` 读 handler 实例字段不受 List 快照隔离保护(addHandler 改 next 时正在推进的 driveChain 会读到新值);改 index 推进后 `addHandler`/`clear` 改链不穿透到正在执行的 `execute`。
+
+**leverage 兑现**:链结构单一真理源(`List<CacheHandler>`)、接口收窄(3→1 方法)、新增 handler 零链接成本(List.add,无需维护 next 指针)。
+
+**文件变更**:5 main + 6 test,净 SLOC 负(删 next 字段/head/buildFragment/dead idx + mock 样板)。
+
+**Review CR findings**:零外部 —— autocratic 阶段已 self-review(driveChain index 与 getNext 推进行为等价严格证明 + executeChainFragment "含 from"→"from 之后"语义等价 + 唯一调用方 SyncLockHandler 同步改 this + 4 处 mock 自推进改 continueChain 修正双轨遗留)。**3 个 `RedisCacheSemanticsIT` 失败经 `git stash` 本 ADR diff + bare master 跑同一 IT 复现,确认为 pre-existing**(ADR-0019/0020/0021 四次独立验证),非本 ADR 引入。
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw test-compile` —— **BUILD SUCCESS**
+- `mvnw test -Dtest='!*IT'` —— unit tests 全过;3 IT 失败 pre-existing
+
+**下一步**:无 — ADR-0022 完整落地。
+
+详见 [[0022-chain-single-representation-seam]]。
+
+---
+
 ## [2026-07-01] ADR-0021 | RedisCacheAttributes.applyTo(B) seam + ProtectionToggle Function 化 (Round 13 autocratic one-shot)
 
 `/improve-codebase-architecture` round 13 autocratic one-shot 报告基于 round 1–12 已落地

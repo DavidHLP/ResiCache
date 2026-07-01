@@ -44,10 +44,7 @@ class ChainObserverTest {
                 .actualKey("test:key")
                 .build();
         handler = new CacheHandler() {
-            private CacheHandler next;
             @Override public HandlerResult handle(CacheContext c) { return HandlerResult.continueChain(); }
-            @Override public CacheHandler getNext() { return next; }
-            @Override public void setNext(CacheHandler n) { this.next = n; }
         };
     }
 

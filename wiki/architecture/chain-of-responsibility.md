@@ -58,7 +58,7 @@ public class SyncLockHandler extends AbstractCacheHandler { ... }
 ## 类层次(ADR-0009 后双层 seam:Engine 推进 + Observer 观测)
 
 ```
-CacheHandler (接口: handle / getNext / setNext)
+CacheHandler (接口: 仅 handle;ADR-0022 删除 getNext/setNext)
    └── AbstractCacheHandler (抽象, handle 退化为 shouldHandle ? doHandle : continueChain)
           ├── BloomFilterHandler      (100)
           ├── SyncLockHandler         (200)
@@ -82,10 +82,10 @@ CacheHandlerChain (thin facade)
                   └── onChainEnd → post-process
 ```
 
-- **`CacheHandler`** —— 接口:`handle(CacheContext)` / `getNext()` / `setNext()`。
+- **`CacheHandler`** —— 接口:仅 `handle(CacheContext)`(ADR-0022 删除 getNext/setNext,handler 不再持有 next 链接)。
 - **`AbstractCacheHandler`** —— 抽象基类。**ADR-0009 后** `handle()` 退化为 `shouldHandle ? doHandle : continueChain`,
   链推进(skipRemaining 短路 / decision switch / 推进 / DEBUG log / fired counter)**全部迁出到 `ChainEngine`**。
-  子类只实现 `shouldHandle` / `doHandle` 两个钩子,自身不再调 `getNext().handle(ctx)`。
+  子类只实现 `shouldHandle` / `doHandle` 两个钩子,自身不自行推进链(ADR-0022:链推进由 `ChainEngine` 基于 List 快照 index 统一驱动)。
 - **`CacheHandlerChain`** —— **thin facade**(`@Component`):维护 handler 列表(`addHandler` / `size` / `clear` /
   `getHandlerNames`)+ 委派 `execute` 到 `ChainEngine`。保留 `MDC_REQUEST_ID_KEY` 常量(供 observer 引用)。
 - **`ChainEngine`** —— **推进引擎**(`@Component`):节点循环 + decision switch + 观测编排 +

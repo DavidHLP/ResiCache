@@ -25,14 +25,17 @@ import org.springframework.util.Assert;
  *   <li>锁逻辑完全集中在此 Handler，ActualCacheHandler 不再处理锁</li>
  * </ul>
  *
- * <p>ADR-0009 D6 改进（vs. 原 executeChainInLock 直接 getNext().handle()）：
+ * <p>ADR-0009 D6 改进（vs. 原 executeChainInLock 直接 getNext().handle()）+ ADR-0022 锚点更新：
  * <ul>
  *   <li>原：{@code executeChainInLock} 直接调 {@code getNext().handle(ctx)}，
  *       绕过基类 / Engine 的 skipRemaining 短路、shouldHandle 分发、perNode
  *       观测（DEBUG log / fired counter）— 锁内片段与主链行为有微妙分叉</li>
- *   <li>新：{@code engine.executeChainFragment(ctx, getNext())} 走 Engine 统一
+ *   <li>ADR-0009：{@code engine.executeChainFragment(ctx, getNext())} 走 Engine 统一
  *       推进协议，perNode 观测照常触发（DEBUG log / fired counter），aroundChain
  *       观测（MDC stamp / Timer record）由外层 execute 唯一负责，锁内不重复打点</li>
+ *   <li>ADR-0022：next 指针链删除，调用改为 {@code engine.executeChainFragment(ctx, this)}
+ *       —— Engine 按 snapshot {@code indexOf(this) + 1} 定位后继，语义等价（推进"自己
+ *       之后"的剩余链）；handler 不再依赖自身在链中的 next 引用</li>
  *   <li>收益：锁内行为与主链一致；Engine 0 修改即可生效；WS-1.4 Span 在锁内
  *       也会按 perNode 出现 — 与原"只在外层打点"的不对称语义相比更可解释</li>
  * </ul>
@@ -127,7 +130,7 @@ public class SyncLockHandler extends AbstractCacheHandler {
         // aroundChain 观测由外层 execute 唯一负责，锁内不重复打点）
         CacheResult result = syncSupport.executeSync(
             lockContext.lockKey(),
-            () -> engine.executeChainFragment(context, getNext()),
+            () -> engine.executeChainFragment(context, this),
             lockContext.timeoutSeconds()
         );
 

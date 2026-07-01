@@ -63,6 +63,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0019-projector-fieldsource-seam-and-type-drift-deferral]] —— `RedisCacheAttributesProjector.FieldSource` 私有 record + 单一 `project()` seam(3 个 `from(annotation)` 26-line 重复墙收敛为 1-liner 委派)+ `@RedisCacheable.expectedInsertions` int/long type-drift 显式 defer(1.0 毕业统一)
 - [[0020-annotation-targets-annotatedelement-seam]] —— `AnnotationTargets` 反射多态 utility seam(annotation 包 23 处 `instanceof Method/Class` 收敛为 `AnnotatedElement` 多态路径,6 对 Method/Class 重载合并为 6 个多态方法)
 - [[0021-redis-cache-attributes-applyto-seam-and-protection-toggle]] —— `RedisCacheAttributes.applyTo(B)` seam(3 fromAttributes 22-line 重复墙收敛为 1 行委派)+ `ProtectionToggle` Function 化(CacheHandlerChainFactory 4 disabled-handler if-block 收敛为 list iteration)
+- [[0022-chain-single-representation-seam]] —— Chain single-representation seam(消除 ADR-0009 残留的 next 指针 × List 快照双轨,`CacheHandler` 接口删 setNext/getNext + `driveChain` 改 index 推进 + 修复并发隔离漏洞)
 
 ## 架构(architecture/)
 

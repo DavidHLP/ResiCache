@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
  * {@link ChainEngine}。本类只保留：
  *
  * <ul>
- *   <li>链链接字段：{@code next} / {@link #getNext()} / {@link #setNext(CacheHandler)}</li>
  *   <li>语义 counter 装配钩子：{@link #attachMeterRegistry(MeterRegistry)} →
  *       {@link #semanticCounter()}（子类 declare 自身 counter 元数据）</li>
  *   <li>语义 counter helper：{@link #registerCounter} / {@link #safeIncrementSemantic}</li>
@@ -76,9 +75,6 @@ public abstract class AbstractCacheHandler implements CacheHandler {
      */
     public record CounterMetadata(String name, String description) {
     }
-
-    /** 下一个处理器（链推进由 ChainEngine 统一驱动，本类仅持链接关系）。 */
-    private CacheHandler next;
 
     /**
      * 语义 counter 字段 — 由 {@link #attachMeterRegistry} 在子类声明
@@ -173,21 +169,11 @@ public abstract class AbstractCacheHandler implements CacheHandler {
      * </ul>
      *
      * <p>本方法只做"读 shouldHandle → 调 doHandle 或退化为 continueChain"的最薄
-     * 包装。子类不应再调 {@code getNext().handle(ctx)} 推进链。
+     * 包装。子类不应自行推进链（链推进已由 {@link ChainEngine} 统一驱动）。
      */
     @Override
     public HandlerResult handle(CacheContext context) {
         return shouldHandle(context) ? doHandle(context) : HandlerResult.continueChain();
-    }
-
-    @Override
-    public CacheHandler getNext() {
-        return next;
-    }
-
-    @Override
-    public void setNext(CacheHandler next) {
-        this.next = next;
     }
 
     /**
@@ -207,10 +193,10 @@ public abstract class AbstractCacheHandler implements CacheHandler {
      *   <li>{@code result}：处理结果（可选，为 null 时 Engine 退化为 success）</li>
      * </ul>
      *
-     * <p>子类 doHandle <strong>不应</strong>再调 {@code getNext().handle(ctx)}
-     * 推进链；链推进已由 {@link ChainEngine} 统一驱动。例外场景（如
-     * {@code SyncLockHandler} 锁内推进）请改用
-     * {@link ChainEngine#executeChainFragment(CacheContext, CacheHandler)}。
+     * <p>子类 doHandle <strong>不应</strong>自行推进链；链推进已由 {@link ChainEngine}
+     * 统一驱动。例外场景（如 {@code SyncLockHandler} 锁内推进剩余链）请改用
+     * {@link ChainEngine#executeChainFragment(CacheContext, CacheHandler)}（传 {@code this}，
+     * Engine 按 snapshot {@code indexOf} 定位其后继）。
      *
      * @param context 缓存上下文
      * @return HandlerResult 包含决策和结果
