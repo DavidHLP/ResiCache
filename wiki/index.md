@@ -8,7 +8,7 @@ tags:
 related: [overview, log, README]
 status: stable
 created: 2026-06-21
-updated: 2026-07-01
+updated: 2026-07-02
 ---
 
 # 内容索引
@@ -66,6 +66,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0022-chain-single-representation-seam]] —— Chain single-representation seam(消除 ADR-0009 残留的 next 指针 × List 快照双轨,`CacheHandler` 接口删 setNext/getNext + `driveChain` 改 index 推进 + 修复并发隔离漏洞)
 - [[0023-executor-graceful-shutdown-seam]] —— Executor graceful-shutdown seam(`ThreadPoolEarlyExpirationExecutor.shutdown()` 两段逐字重复的优雅关闭样板收敛为单一 `shutdownGracefully` 私有 seam,byte-for-byte 行为等价;round 15 扫尽未触及域后唯一经 deletion test 通过的 friction)
 - [[0024-early-expiration-pool-config-seam]] —— early-expiration 线程池配置接入 seam(兑现 dead config:`@Component` 无参硬编码 → `@Bean` 从 `EarlyExpirationProperties` 读池参数;+ 6 处 `EarlyExpirationSupport` stale wiki 引用清理;round 16 跨域接缝盲区排查唯一命中)
+- [[0025-early-expiration-policy-seam-extraction]] —— early-expiration 决策 policy seam 迁出 TtlPolicy(refresh↔avalanche 跨域寄生方法 + `Clock` 依赖归位;`shouldEarlyExpiration` → refresh 自有 `EarlyExpirationPolicy.shouldRefresh`;`DefaultTtlPolicy` 无状态化;5 机制 policy seam 齐整;round 17 跨域寄生 seam)
 
 ## 架构(architecture/)
 
@@ -108,4 +109,4 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-07-01 · 共 40 页 · 维护见 [[log]]
+最后更新:2026-07-02 · 共 41 页 · 维护见 [[log]]

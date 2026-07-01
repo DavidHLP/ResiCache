@@ -1,3 +1,30 @@
+## [2026-07-02] ADR-0025 | early-expiration 决策 policy seam 迁出 TtlPolicy (refresh↔avalanche 跨域寄生方法 + Clock 依赖归位) (round 17)
+
+`/improve-codebase-architecture` round 17 autocratic one-shot。延续 round 16 的**跨域接缝视角**(反向用:找「一个域的接口方法 ↔ 唯一异域消费者」寄生方法),通读 round 1–16 零 ADR 触及的 `protection/avalanche/` + `protection/nullvalue/` 两域全部 6 源文件,定位到 `TtlPolicy.shouldEarlyExpiration`(唯一消费者 refresh 域 `EarlyExpirationHandler`)+ 其 `Clock` 依赖(仅为该方法存在)寄生 avalanche 域。兑现 round 16「下一步」预言的「跨域接缝同源排查可推广」。
+
+**ADR 主体**(`wiki/adr/0025-...md`, Accepted):
+- **D1** 新建 `protection/refresh/EarlyExpirationPolicy` 单方法决策 seam(`shouldRefresh`,改名对齐 ubiquitous language:needsRefresh/scheduleAsyncRefresh/RefreshRetryPolicy)
+- **D2** 新建 `DefaultEarlyExpirationPolicy`(`@Component` + Clock 注入,逻辑 byte-for-byte 迁入)
+- **D3** `TtlPolicy` 删 `shouldEarlyExpiration`(3→2 方法,回归纯雪崩)
+- **D4** `DefaultTtlPolicy` 无状态化(删 Clock/currentTimeMillis/shouldEarlyExpiration/@RequiredArgsConstructor)
+- **D5** `EarlyExpirationHandler` 切换依赖,refresh↔avalanche 跨包依赖归零
+- **D6–D8** 歧路否决:inline 进 handler(违 5 机制 policy 约定)/ 顺手修 ChainEngineTest(超范围,已证 pre-existing)/ 保留两域统一抽象(ISP 违反)
+
+**deletion test 确证**:`DefaultTtlPolicy.Clock` 字段仅服务寄生方法 → 删该方法 → Clock/currentTimeMillis/@RequiredArgsConstructor 全部自然消失,类从有状态退化为无状态纯 TTL 数学。5 机制 policy seam(bloom/breakdown/nullvalue/avalanche/refresh)自此齐整,refresh 不再是唯一无自有 seam 的机制。
+
+**文件变更**:新建 2 main(`EarlyExpirationPolicy`/`DefaultEarlyExpirationPolicy`)+ 1 test(`DefaultEarlyExpirationPolicyTest`,9 边界用例迁自 `ShouldEarlyExpirationTests`,方法名 `shouldEarlyExpiration_*`→`shouldRefresh_*`);修改 3 main(`TtlPolicy`/`DefaultTtlPolicy`/`EarlyExpirationHandler`)+ 3 test;wiki 2(`early-expiration.md`/`ttl-jitter.md` stale 清理 —— 删「TtlPolicy 服务提前过期 / 共享 Clock」ISP-违反表述)。`TtlHandlerTest`/`PathCAopContractIT` 零改动。
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw test -Dtest='DefaultTtlPolicyTest,DefaultEarlyExpirationPolicyTest,EarlyExpirationHandlerTest,EarlyExpirationHandlerRaceConditionTest,TtlHandlerTest'` —— **60 tests, 0 failures**(9 迁移用例 byte-for-byte 等价,TtlHandler mock 完整保留)
+- `mvnw test`(全量)—— 782 tests,**1 pre-existing failure**:`chain/ChainEngineTest.executeFragment_skipsAroundChain`
+  - **已证非本 ADR 引入**:`git stash -u` 后在干净 master 跑 `ChainEngineTest` **同样失败**(16 tests / 1 failure / 同一用例 / 同一 `TooFewActualInvocations: beforeNode wanted 2, was 1`)。本 ADR diff 完全未触及 `chain/`。
+  - 性质:chain 域 `executeChainFragment` observer 触发语义 pre-existing 缺陷,需独立根因分析,留作 round 18 候选(见 ADR-0025 D7)。
+
+**下一步**:无 — ADR-0025 完整落地。round 18+ 候选:ChainEngine `executeChainFragment` observer 触发语义(pre-existing 失败根因)/ 0024 预言的剩余项(5 ChainObserver DRY YAGNI / CacheKeys 第 3 use case / int→long 1.0 毕业 / bloomsift 命名 polish)。
+
+详见 [[0025-early-expiration-policy-seam-extraction]]。
+
 ## [2026-07-01] ADR-0024 | early-expiration 线程池配置接入 seam (兑现 dead config + EarlyExpirationSupport stale wiki 清理) (round 16)
 
 `/improve-codebase-architecture` round 16 autocratic one-shot。round 15(ADR-0023)已宣告「架构经 14 轮 deepening 已趋饱和,未触及域扫尽」,本轮**不再单域重复扫描**,转而审视 round 1–15 各轮单域内聚扫描的**结构性盲区:跨域接缝**。

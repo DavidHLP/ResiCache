@@ -14,7 +14,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/TtlPolicy.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-07-02
 ---
 
 # TTL 抖动(HandlerOrder 300)
@@ -72,19 +72,18 @@ public long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance) {
 - **高斯随机**(`nextGaussian`)而非均匀随机——偏移集中在 0 附近、极端值少,既打散又不至于让 TTL 偏离太多。
 - `variance` 先 clamp 到 `[0, 1]`,代表最大抖动比例(默认注解 `0.2` = ±20%)。
 - `randomTtl=false` 或 `variance<=0` 时直接返回原值(关闭抖动)。
-- 注入 `Clock`(`@RequiredArgsConstructor`),`shouldEarlyExpiration` 等时间判定可测试。
+- ADR-0025 后 `DefaultTtlPolicy` 为无状态纯 TTL 数学,不持有 `Clock`(`Clock` 随 `shouldEarlyExpiration` 迁至 refresh 域 `DefaultEarlyExpirationPolicy`)。
 
-> 精确抖动公式见 `DefaultTtlPolicy.java:39-60`。`TtlPolicy` 是策略接口,可替换为自定义抖动逻辑(如均匀分布、固定阶梯)。
+> 精确抖动公式见 `DefaultTtlPolicy.java`。`TtlPolicy` 是策略接口,可替换为自定义抖动逻辑(如均匀分布、固定阶梯)。
 
 ## TtlPolicy 接口
 
-`TtlPolicy` 不只服务抖动,还服务提前过期判定:
+`TtlPolicy` 是纯雪崩(抖动)关注的策略 seam:
 
 - `shouldApply(Duration ttl)` —— TTL 是否有效(非 null/零/负);
-- `calculateFinalTtl(baseTtl, randomTtl, variance)` —— 抖动计算(本页);
-- `shouldEarlyExpiration(createdTime, ttl, threshold)` —— 提前过期判定(见 [[early-expiration]])。
+- `calculateFinalTtl(baseTtl, randomTtl, variance)` —— 抖动计算(本页)。
 
-单一策略类同时承载雪崩(抖动)与热 key(提前过期)两个相关但不同的判定,共享 `Clock`。
+> ADR-0025 前,本接口还含 `shouldEarlyExpiration`(提前过期判定),其唯一消费者是 refresh 域 `EarlyExpirationHandler`,已迁至 [[early-expiration]] 自有 `EarlyExpirationPolicy` seam;`DefaultTtlPolicy` 的 `Clock` 字段(仅为该方法存在)随之移除。
 
 ## 配置
 
@@ -113,6 +112,6 @@ resi-cache:
 ## 相关
 
 - [[cache-avalanche]] —— 雪崩定义与本机制、[[early-expiration]] 的关系
-- [[early-expiration]] —— 共享 `TtlPolicy`,主动防热 key 过期
+- [[early-expiration]] —— 主动防热 key 过期(自有 `EarlyExpirationPolicy` seam;ADR-0025 前曾寄生于 `TtlPolicy`)
 - [[context-data-flow]] —— 抖动结果如何经 `CacheOutput` 传给落盘 handler
 - [[configuration]] —— `default-ttl` 等全局项

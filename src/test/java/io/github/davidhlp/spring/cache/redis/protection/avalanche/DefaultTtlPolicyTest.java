@@ -4,34 +4,28 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * DefaultTtlPolicy 单元测试
+ *
+ * <p>ADR-0025:仅覆盖 TTL 应用判定 + 抖动计算。提前过期判定({@code shouldEarlyExpiration})已迁至
+ * {@code protection.refresh.DefaultEarlyExpirationPolicy}(见 {@code DefaultEarlyExpirationPolicyTest})。
+ * {@code DefaultTtlPolicy} 退化为无状态,不再需要 {@code Clock} mock。
  */
-@ExtendWith(MockitoExtension.class)
 @DisplayName("DefaultTtlPolicy Tests")
 class DefaultTtlPolicyTest {
-
-    @Mock
-    private Clock clock;
 
     private DefaultTtlPolicy policy;
 
     @BeforeEach
     void setUp() {
-        policy = new DefaultTtlPolicy(clock);
+        policy = new DefaultTtlPolicy();
     }
 
     @Nested
@@ -182,111 +176,6 @@ class DefaultTtlPolicyTest {
                 // Upper bound should also be respected
                 assertThat(result).isLessThanOrEqualTo(baseTtl * 2);
             }
-        }
-    }
-
-    @Nested
-    @DisplayName("shouldEarlyExpiration() Tests")
-    class ShouldEarlyExpirationTests {
-
-        private static final ZoneId UTC = ZoneId.of("UTC");
-        private static final Instant FIXED_INSTANT = Instant.parse("2024-01-01T12:00:00Z");
-        private static final long FIXED_TIME_MS = FIXED_INSTANT.toEpochMilli();
-
-        @BeforeEach
-        void setUp() {
-            Clock fixedClock = Clock.fixed(FIXED_INSTANT, UTC);
-            policy = new DefaultTtlPolicy(fixedClock);
-        }
-
-        @Test
-        @DisplayName("returns false when ttlSeconds is zero")
-        void shouldEarlyExpiration_zeroTtl_returnsFalse() {
-            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 0, 0.2);
-
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns false when ttlSeconds is negative")
-        void shouldEarlyExpiration_negativeTtl_returnsFalse() {
-            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, -100, 0.2);
-
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns false when threshold is zero")
-        void shouldEarlyExpiration_zeroThreshold_returnsFalse() {
-            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, 0.0);
-
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns false when threshold is negative")
-        void shouldEarlyExpiration_negativeThreshold_returnsFalse() {
-            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, -0.1);
-
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns false when threshold is 1")
-        void shouldEarlyExpiration_thresholdOne_returnsFalse() {
-            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, 1.0);
-
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns false when threshold is greater than 1")
-        void shouldEarlyExpiration_thresholdGreaterThanOne_returnsFalse() {
-            boolean result = policy.shouldEarlyExpiration(FIXED_TIME_MS, 100, 1.5);
-
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns true when at threshold boundary")
-        void shouldEarlyExpiration_atThreshold_returnsTrue() {
-            // TTL 100 seconds, threshold 0.2 (80% used)
-            // Current time: 1704100800000 (12:00:00)
-            // At 80 seconds elapsed, ratio = 80/100 = 0.8 = 1 - threshold
-            // createdTime = currentTime - elapsed = 1704100800000 - 80000
-            long ttlSeconds = 100;
-            double threshold = 0.2;
-            long createdTime = FIXED_TIME_MS - 80000; // 80 seconds ago
-
-            boolean result = policy.shouldEarlyExpiration(createdTime, ttlSeconds, threshold);
-
-            assertThat(result).isTrue();
-        }
-
-        @Test
-        @DisplayName("returns true when past threshold")
-        void shouldEarlyExpiration_pastThreshold_returnsTrue() {
-            // Elapsed 90 seconds, ratio = 0.9 >= 0.8
-            long ttlSeconds = 100;
-            double threshold = 0.2;
-            long createdTime = FIXED_TIME_MS - 90000; // 90 seconds ago
-
-            boolean result = policy.shouldEarlyExpiration(createdTime, ttlSeconds, threshold);
-
-            assertThat(result).isTrue();
-        }
-
-        @Test
-        @DisplayName("returns false when before threshold")
-        void shouldEarlyExpiration_beforeThreshold_returnsFalse() {
-            // Elapsed 70 seconds, ratio = 0.7 < 0.8
-            long ttlSeconds = 100;
-            double threshold = 0.2;
-            long createdTime = FIXED_TIME_MS - 70000; // 70 seconds ago
-
-            boolean result = policy.shouldEarlyExpiration(createdTime, ttlSeconds, threshold);
-
-            assertThat(result).isFalse();
         }
     }
 }

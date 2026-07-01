@@ -11,12 +11,13 @@ tags:
 related: [hot-key, cache-avalanche, ttl-jitter, handler-result-control]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationPolicy.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/DefaultEarlyExpirationPolicy.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/ThreadPoolEarlyExpirationExecutor.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheConfiguration.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/protection/avalanche/DefaultTtlPolicy.java
 status: stable
 created: 2026-06-21
-updated: 2026-07-01
+updated: 2026-07-02
 ---
 
 # 提前过期(HandlerOrder 250)
@@ -25,13 +26,13 @@ updated: 2026-07-01
 
 ## 判定:何时该提前刷新
 
-`EarlyExpirationHandler` 只对 `GET` 且注解 `enableEarlyExpiration=true` 生效。它先 `valueOperations.get` 预取缓存值,交给 `DefaultTtlPolicy.shouldEarlyExpiration` 判断:
+`EarlyExpirationHandler` 只对 `GET` 且注解 `enableEarlyExpiration=true` 生效。它先 `valueOperations.get` 预取缓存值,交给 `EarlyExpirationPolicy.shouldRefresh` 判断(ADR-0025 前,该判定寄生于 avalanche 域 `DefaultTtlPolicy.shouldEarlyExpiration`,已迁回 refresh 自有 seam):
 
 `src/main/java/io/github/davidhlp/spring/cache/redis/protection/refresh/EarlyExpirationHandler.java:111`
 
 ```java
 private EarlyExpirationDecision checkEarlyExpiration(CacheContext context, CachedValue cachedValue) {
-    boolean shouldRefresh = ttlPolicy.shouldEarlyExpiration(
+    boolean shouldRefresh = earlyExpirationPolicy.shouldRefresh(
         cachedValue.getCreatedTime(),
         cachedValue.getTtl(),
         context.getCacheOperation().getEarlyExpirationThreshold());  // 默认 0.3

@@ -6,7 +6,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.protection.avalanche.DefaultTtlPolicy;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,7 +38,7 @@ import static org.mockito.Mockito.lenient;
 class EarlyExpirationHandlerRaceConditionTest {
 
     @Mock
-    private DefaultTtlPolicy ttlPolicy;
+    private EarlyExpirationPolicy earlyExpirationPolicy;
 
     @Mock
     private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
@@ -58,7 +57,7 @@ class EarlyExpirationHandlerRaceConditionTest {
 
     @BeforeEach
     void setUp() {
-        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationExecutor, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(earlyExpirationPolicy, earlyExpirationExecutor, redisTemplate, statistics, valueOperations);
         executor = Executors.newCachedThreadPool();
     }
 
@@ -105,9 +104,9 @@ class EarlyExpirationHandlerRaceConditionTest {
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
         AtomicBoolean exceptionThrown = new AtomicBoolean(false);
 
-        // Stub both valueOperations.get and shouldEarlyExpiration
+        // Stub both valueOperations.get and shouldRefresh
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             executor.submit(() -> {
@@ -155,7 +154,7 @@ class EarlyExpirationHandlerRaceConditionTest {
             capturedValue.set(invocation.getMock());
             return originalValue;
         });
-        lenient().when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        lenient().when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
@@ -205,7 +204,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         AtomicReference<String> capturedKey = new AtomicReference<>();
 
         lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue1);
-        lenient().when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        lenient().when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             capturedKey.set(invocation.getArgument(0));
@@ -234,7 +233,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
 
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
@@ -255,7 +254,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
 
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
-        when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
             .thenReturn(false);

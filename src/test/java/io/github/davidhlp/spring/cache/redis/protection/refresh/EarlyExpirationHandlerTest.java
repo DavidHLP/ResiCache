@@ -6,7 +6,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.protection.avalanche.DefaultTtlPolicy;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,7 +33,7 @@ import static org.mockito.Mockito.*;
 class EarlyExpirationHandlerTest {
 
     @Mock
-    private DefaultTtlPolicy ttlPolicy;
+    private EarlyExpirationPolicy earlyExpirationPolicy;
 
     @Mock
     private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
@@ -52,7 +51,7 @@ class EarlyExpirationHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new EarlyExpirationHandler(ttlPolicy, earlyExpirationExecutor, redisTemplate, statistics, valueOperations);
+        handler = new EarlyExpirationHandler(earlyExpirationPolicy, earlyExpirationExecutor, redisTemplate, statistics, valueOperations);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
@@ -188,7 +187,7 @@ class EarlyExpirationHandlerTest {
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(false);
+            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(false);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -209,7 +208,7 @@ class EarlyExpirationHandlerTest {
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -231,7 +230,7 @@ class EarlyExpirationHandlerTest {
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -251,7 +250,7 @@ class EarlyExpirationHandlerTest {
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -266,7 +265,7 @@ class EarlyExpirationHandlerTest {
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             handler.doHandle(context);
 
@@ -333,7 +332,7 @@ class EarlyExpirationHandlerTest {
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
-            when(ttlPolicy.shouldEarlyExpiration(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             handler.doHandle(context);
 

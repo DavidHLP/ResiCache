@@ -6,7 +6,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
-import io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlPolicy;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
@@ -56,18 +55,18 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
         "    return 0 " +
         "end";
 
-    private final TtlPolicy ttlPolicy;
+    private final EarlyExpirationPolicy earlyExpirationPolicy;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
 
-    public EarlyExpirationHandler(TtlPolicy ttlPolicy,
+    public EarlyExpirationHandler(EarlyExpirationPolicy earlyExpirationPolicy,
                                   ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
                                   RedisTemplate<String, Object> redisTemplate,
                                   CacheStatisticsCollector statistics,
                                   ValueOperations<String, Object> valueOperations) {
-        this.ttlPolicy = ttlPolicy;
+        this.earlyExpirationPolicy = earlyExpirationPolicy;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.redisTemplate = redisTemplate;
         this.statistics = statistics;
@@ -132,7 +131,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
      * @return 提前过期决策
      */
     private EarlyExpirationDecision checkEarlyExpiration(CacheContext context, CachedValue cachedValue) {
-        boolean shouldRefresh = ttlPolicy.shouldEarlyExpiration(
+        boolean shouldRefresh = earlyExpirationPolicy.shouldRefresh(
             cachedValue.getCreatedTime(),
             cachedValue.getTtl(),
             context.getCacheOperation().getEarlyExpirationThreshold()

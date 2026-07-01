@@ -1,23 +1,21 @@
 package io.github.davidhlp.spring.cache.redis.protection.avalanche;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 默认的TTL策略，利用可注入的时钟以提高可测试性。
+ * 默认的 TTL 策略:无状态纯 TTL 数学(TTL 应用判定 + 高斯抖动防雪崩)。
  *
  * <p>实现 {@link TtlPolicy} seam;自定义实现声明 {@code @Bean} 可顶替(对齐 LockManager /
  * BloomIFilter 纪律,落实 ADR-0005)。
+ *
+ * <p>ADR-0025:原 {@code shouldEarlyExpiration} + {@code Clock} 字段(仅为该方法而存在)已迁至
+ * {@code protection.refresh.DefaultEarlyExpirationPolicy};本类随之退化为无状态,不再持有 {@code Clock}。
  */
 @Component
-@RequiredArgsConstructor
 public class DefaultTtlPolicy implements TtlPolicy {
-
-    private final Clock clock;
 
     /**
      * 判断给定的Duration是否应该应用
@@ -53,33 +51,5 @@ public class DefaultTtlPolicy implements TtlPolicy {
         long offset = (long) (baseTtl * variance * randomFactor / 3.0);
         long result = baseTtl + offset;
         return Math.max(1, Math.min(result, baseTtl * 2));
-    }
-
-    /**
-     * 判断是否应该提前过期缓存项
-     *
-     * @param createdTime 创建时间戳（毫秒）
-     * @param ttlSeconds TTL时间（秒）
-     * @param threshold 提前过期阈值
-     * @return 如果应该提前过期返回true，否则返回false
-     */
-    public boolean shouldEarlyExpiration(long createdTime, long ttlSeconds, double threshold) {
-        if (ttlSeconds <= 0 || threshold <= 0 || threshold >= 1) {
-            return false;
-        }
-
-        long elapsedTime = currentTimeMillis() - createdTime;
-        long totalTime = ttlSeconds * 1000;
-        double usedRatio = (double) elapsedTime / totalTime;
-        return usedRatio >= (1 - threshold);
-    }
-
-    /**
-     * 获取当前时间毫秒数
-     *
-     * @return 当前时间的毫秒数
-     */
-    private long currentTimeMillis() {
-        return clock.millis();
     }
 }
