@@ -11,17 +11,28 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 /**
- * Unit tests for AnnotationHandler abstract class.
- * Since AnnotationHandler is abstract, we test it via a concrete implementation.
+ * Unit tests for {@link AnnotationHandler} 抽象节点 — ADR-0013 后的精简形态.
+ *
+ * <p>原 {@code AnnotationHandlerTest} 覆盖了已删除的 {@code setNext} / {@code handle}
+ * 递归逻辑(链推进已迁出至 {@link AnnotationChainEngine});本测试聚焦抽象节点的
+ * 两个钩子契约:
+ *
+ * <ul>
+ *   <li>{@link AnnotationHandler#canHandle(Method)} — 判定接口</li>
+ *   <li>{@link AnnotationHandler#doHandle(Method, Object, Object[])} — 处理接口</li>
+ * </ul>
+ *
+ * <p>链推进 / 失败隔离 / 观测编排契约在 {@code AnnotationChainEngineTest} 中独立验证。
  */
 @DisplayName("AnnotationHandler Tests")
 class AnnotationHandlerTest {
 
     /**
-     * Concrete implementation of AnnotationHandler for testing purposes.
+     * Concrete implementation of AnnotationHandler for testing the two-hook contract.
      */
     private static class TestAnnotationHandler extends AnnotationHandler {
         private boolean canHandleCalled = false;
@@ -78,131 +89,122 @@ class AnnotationHandlerTest {
     }
 
     @Nested
-    @DisplayName("setNext() Tests")
-    class SetNextTests {
+    @DisplayName("Hook Contract Tests")
+    class HookContractTests {
 
         @Test
-        @DisplayName("setNext returns the next handler for chaining")
-        void setNext_returnsNextHandler_forChaining() throws NoSuchMethodException {
-            AnnotationHandler first = new TestAnnotationHandler(getMethod("noAnnotation"));
-            AnnotationHandler second = new TestAnnotationHandler(getMethod("noAnnotation"));
-
-            AnnotationHandler result = first.setNext(second);
-
-            assertThat(result).isSameAs(second);
-        }
-    }
-
-    @Nested
-    @DisplayName("handle() Tests")
-    class HandleTests {
-
-        @Test
-        @DisplayName("handle calls canHandle and doHandle when canHandle returns true")
-        void handle_whenCanHandleReturnsTrue_callsBothMethods() throws NoSuchMethodException {
+        @DisplayName("canHandle returns the configured boolean")
+        void canHandle_returnsConfiguredBoolean() throws NoSuchMethodException {
             TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation"));
             handler.shouldHandle = true;
-            Object target = new Object();
-            Object[] args = new Object[0];
 
-            List<CacheOperation> result = handler.handle(getMethod("noAnnotation"), target, args);
+            assertThat(handler.canHandle(getMethod("noAnnotation"))).isTrue();
+
+            handler.shouldHandle = false;
+
+            assertThat(handler.canHandle(getMethod("noAnnotation"))).isFalse();
+        }
+
+        @Test
+        @DisplayName("canHandle marks the call flag")
+        void canHandle_marksCallFlag() throws NoSuchMethodException {
+            TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation"));
+
+            handler.canHandle(getMethod("noAnnotation"));
 
             assertThat(handler.wasCanHandleCalled()).isTrue();
+        }
+
+        @Test
+        @DisplayName("doHandle returns the configured result list")
+        void doHandle_returnsConfiguredResult() throws NoSuchMethodException {
+            TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation"));
+            handler.setDoHandleResult(List.of(mock(CacheOperation.class)));
+
+            List<CacheOperation> result =
+                    handler.doHandle(getMethod("noAnnotation"), new Object(), new Object[0]);
+
+            assertThat(result).hasSize(1);
             assertThat(handler.wasDoHandleCalled()).isTrue();
-            // canHandle=true 且 doHandle 默认返回空列表 → 结果应为空(而非仅 isNotNull)
+        }
+
+        @Test
+        @DisplayName("doHandle returns empty list by default")
+        void doHandle_returnsEmptyByDefault() throws NoSuchMethodException {
+            TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation"));
+
+            List<CacheOperation> result =
+                    handler.doHandle(getMethod("noAnnotation"), new Object(), new Object[0]);
+
             assertThat(result).isEmpty();
         }
+    }
+
+    @Nested
+    @DisplayName("Inheritance / API surface Tests")
+    class InheritanceTests {
 
         @Test
-        @DisplayName("handle only calls canHandle when canHandle returns false")
-        void handle_whenCanHandleReturnsFalse_callsOnlyCanHandle() throws NoSuchMethodException {
-            TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation"));
-            handler.shouldHandle = false;
-            Object target = new Object();
-            Object[] args = new Object[0];
-
-            handler.handle(getMethod("noAnnotation"), target, args);
-
-            assertThat(handler.wasCanHandleCalled()).isTrue();
-            assertThat(handler.wasDoHandleCalled()).isFalse();
+        @DisplayName("AnnotationHandler is abstract — cannot be instantiated directly")
+        void annotationHandler_isAbstract() {
+            // 通过反射验证 abstract modifier
+            assertThat(java.lang.reflect.Modifier.isAbstract(
+                    AnnotationHandler.class.getModifiers())).isTrue();
         }
 
         @Test
-        @DisplayName("handle delegates to next handler when next is set")
-        void handle_withNextSet_delegatesToNext() throws NoSuchMethodException {
-            TestAnnotationHandler first = new TestAnnotationHandler(getMethod("noAnnotation"));
-            TestAnnotationHandler second = new TestAnnotationHandler(getMethod("noAnnotation"));
-            first.setNext(second);
-            first.shouldHandle = false;
-            second.shouldHandle = true;
-
-            first.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
-
-            assertThat(second.wasCanHandleCalled()).isTrue();
+        @DisplayName("canHandle and doHandle are abstract (must be implemented by subclass)")
+        void hooksAreAbstract() throws NoSuchMethodException {
+            assertThat(java.lang.reflect.Modifier.isAbstract(
+                    AnnotationHandler.class.getDeclaredMethod("canHandle", Method.class)
+                            .getModifiers())).isTrue();
+            assertThat(java.lang.reflect.Modifier.isAbstract(
+                    AnnotationHandler.class.getDeclaredMethod("doHandle", Method.class, Object.class, Object[].class)
+                            .getModifiers())).isTrue();
         }
 
         @Test
-        @DisplayName("handle does not throw when next is null")
-        void handle_withNullNext_doesNotThrow() throws NoSuchMethodException {
-            TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation"));
-            handler.shouldHandle = true;
-
-            handler.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
-
-            assertThat(handler.wasDoHandleCalled()).isTrue();
-        }
-
-        @Test
-        @DisplayName("handle returns combined operations from all handlers")
-        void handle_returnsCombinedOperations() throws NoSuchMethodException {
-            TestAnnotationHandler first = new TestAnnotationHandler(getMethod("noAnnotation"));
-            TestAnnotationHandler second = new TestAnnotationHandler(getMethod("noAnnotation"));
-            first.setNext(second);
-            first.shouldHandle = true;
-            second.shouldHandle = true;
-
-            first.setDoHandleResult(List.of(mock(CacheOperation.class)));
-            second.setDoHandleResult(List.of(mock(CacheOperation.class)));
-
-            List<CacheOperation> result = first.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
-
-            // 两个 handler 各返回 1 个 operation,合并后应为 2 个(而非仅 isNotNull)
-            assertThat(result).hasSize(2);
+        @DisplayName("next field and setNext method are removed (chain migrated to engine)")
+        void nextFieldAndSetNextRemoved() {
+            // 验证 next 字段不存在(原 chain 拓扑已迁移到 AnnotationChainEngine)
+            assertThatThrownBy(() -> AnnotationHandler.class.getDeclaredField("next"))
+                    .isInstanceOf(NoSuchFieldException.class);
         }
     }
 
     @Nested
-    @DisplayName("Chain Behavior Tests")
-    class ChainBehaviorTests {
+    @DisplayName("Edge Case Tests")
+    class EdgeCaseTests {
 
         @Test
-        @DisplayName("handlers are invoked in chain order")
-        void handle_chainsInOrder() throws NoSuchMethodException {
-            TestAnnotationHandler first = new TestAnnotationHandler(getMethod("noAnnotation"));
-            TestAnnotationHandler second = new TestAnnotationHandler(getMethod("noAnnotation"));
-            TestAnnotationHandler third = new TestAnnotationHandler(getMethod("noAnnotation"));
-            first.setNext(second).setNext(third);
+        @DisplayName("doHandle can return null (Engine treats null as empty list)")
+        void doHandle_canReturnNull() throws NoSuchMethodException {
+            TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation")) {
+                @Override
+                public List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
+                    return null;
+                }
+            };
 
-            first.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
+            List<CacheOperation> result =
+                    handler.doHandle(getMethod("noAnnotation"), new Object(), new Object[0]);
 
-            assertThat(first.wasCanHandleCalled()).isTrue();
-            assertThat(second.wasCanHandleCalled()).isTrue();
-            assertThat(third.wasCanHandleCalled()).isTrue();
+            assertThat(result).isNull();
         }
 
         @Test
-        @DisplayName("all handlers in chain get called even if one handles")
-        void handle_allHandlersCalled_evenWhenOneHandles() throws NoSuchMethodException {
-            TestAnnotationHandler first = new TestAnnotationHandler(getMethod("noAnnotation"));
-            TestAnnotationHandler second = new TestAnnotationHandler(getMethod("noAnnotation"));
-            first.setNext(second);
-            first.shouldHandle = true;
-            second.shouldHandle = true;
+        @DisplayName("doHandle can return mutable list (Engine wraps in unmodifiable)")
+        void doHandle_canReturnMutableList() throws NoSuchMethodException {
+            TestAnnotationHandler handler = new TestAnnotationHandler(getMethod("noAnnotation"));
+            List<CacheOperation> mutable = new ArrayList<>();
+            mutable.add(mock(CacheOperation.class));
+            handler.setDoHandleResult(mutable);
 
-            first.handle(getMethod("noAnnotation"), new Object(), new Object[0]);
+            List<CacheOperation> result =
+                    handler.doHandle(getMethod("noAnnotation"), new Object(), new Object[0]);
 
-            assertThat(first.wasDoHandleCalled()).isTrue();
-            assertThat(second.wasCanHandleCalled()).isTrue();
+            // 返回的引用就是子类的 mutable list(Engine 在收集时做 unmodifiable 包装,不在子类做)
+            assertThat(result).isSameAs(mutable);
         }
     }
 }

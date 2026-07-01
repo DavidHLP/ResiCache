@@ -18,6 +18,20 @@ wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subj
 
 > 解析最近条目:`grep "^## \[" log.md | tail -5`
 
+## [2026-07-01] improve | ADR-0013 AnnotationChainEngine + AnnotationChainObserver 抽出(autocratic one-shot 平行 seam)
+
+`/improve-codebase-architecture` round 4 autocratic one-shot 报告裁决 1 候选落地:
+
+- **A(执行)**:抽 `AnnotationChainEngine`(`@Component`,171 SLOC) + `AnnotationChainObserver`(2 钩子 default no-op 接口,68 SLOC)+ `NoOpAnnotationChainObserver`(enum 单例,17 SLOC)三个新类,收口注解解析责任链推进 + 观测编排到单一 seam;退化 `AnnotationHandler` 抽象类为纯节点(删 `next`/`setNext`/`handle` 25 SLOC 手动递归);`RedisCacheInterceptor` 构造函数 7 参 → 4 参(`setNext` 链装配从 4 行手写 → 0 行,Engine 内部维护 List);`RedisProxyCachingConfiguration` 拦截器 bean 参数同步收口。
+
+**平行 seam 设计**:不强制复用 ADR-0009 `ChainEngine`——cache 写入链是 decision 语义(CONTINUE/SKIP_ALL/TERMINATE),注解解析链是 filter 语义(canHandle 命中即求值),合并会过载抽象;两条 seam 独立,各有 spec。`AnnotationChainObserver` 仅暴露 2 aroundChain 钩子(YAGNI,对比 `ChainObserver` 4 钩子),per-handler 钩子待真需求出现时再加。
+
+**行为收窄(per-handler 失败隔离)**:旧"任一 handler 抛异常 → 全链失败" → 新"per-handler try/catch 隔离,剩余 handler 继续求值"。严格更宽松,符合"单个注解解析失败不应中断整个缓存链路"本意,与 `AbstractAnnotationHandler.registerOne` 内部已有 per-annotation try/catch 同源;旧"全链失败"行为经 review 认定为非有意,本轮顺手修正。
+
+**测试**:新增 `AnnotationChainEngineTest` 17 个契约测试(chain advance / failure isolation / observer orchestration / API surface);`AnnotationHandlerTest` 重写为 11 个新契约测试(钩子契约 + 继承断言 + 边界),删 8 个旧链递归测试;4 个具体 handler 测试零修改。**全量 727 tests,0 failures**,`mvnw checkstyle:check` 0 violations,JaCoCo `AnnotationChainEngine` 95%/93%、`AnnotationHandler` 100%/100%。
+
+详见 [[0013-annotation-chain-engine-extraction]]。
+
 ## [2026-07-01] improve | ADR-0012 interceptor 残骸收敛 + EarlyExpirationSupport 浅模块删除(round 3)
 
 `/improve-codebase-architecture` round 3 报告(`/tmp/architecture-review-1782837301.html`)3 候选裁决落地:

@@ -54,6 +54,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0010-attributes-projection-and-strategy-deletion]] —— Attributes 投影层 + TwoListEvictionStrategy 删除(注解×工厂字段映射去重)
 - [[0011-bloom-key-drift-fix-and-cachekeys-seam]] —— Bloom 键漂移修复 + CacheKeys 键派生 seam(sync+bloom 静默 null)
 - [[0012-interceptor-consolidation-and-shallow-module-removal]] —— Path C interceptor 残骸收敛(Helper 死代码 + ResiCacheMethodInterceptor pass-through)+ EarlyExpirationSupport 浅模块删除(Spring 注解映射不合并裁决)
+- [[0013-annotation-chain-engine-extraction]] —— AnnotationChainEngine + AnnotationChainObserver 抽出(平行 ADR-0009 seam,注解解析链单一化)
 
 ## 架构(architecture/)
 

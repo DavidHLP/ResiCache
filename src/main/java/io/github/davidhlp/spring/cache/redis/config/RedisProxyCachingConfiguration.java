@@ -2,12 +2,8 @@ package io.github.davidhlp.spring.cache.redis.config;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheOperationSource;
 import io.github.davidhlp.spring.cache.redis.cache.RedisCacheInterceptor;
-import io.github.davidhlp.spring.cache.redis.handler.CachePutAnnotationHandler;
-import io.github.davidhlp.spring.cache.redis.handler.CacheableAnnotationHandler;
-import io.github.davidhlp.spring.cache.redis.handler.CachingAnnotationHandler;
-import io.github.davidhlp.spring.cache.redis.handler.EvictAnnotationHandler;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
+import io.github.davidhlp.spring.cache.redis.handler.AnnotationChainEngine;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -51,6 +47,11 @@ public class RedisProxyCachingConfiguration {
      * Path C 单一 advice —— advisor 直接持有的拦截器,装配职责与拦截职责收口到同一处
      * (原 Step 4/5/7 残骸 {@code CacheAspectSupportHelper}/{@code ResiCacheMethodInterceptor}
      * 已于本轮收敛删除,继承面 3 层 → 2 层,dead-injection 参数同步清理)。
+     *
+     * <p><strong>ADR-0013 链装配单一化</strong>:构造函数不再注入 4 个独立的
+     * {@code *AnnotationHandler},改注入 {@link AnnotationChainEngine}。Engine
+     * 由 Spring 自动装配 {@code List<AnnotationHandler>}(4 个 @Component handler),
+     * 链结构在 Engine 内部维护,本配置类零感知。
      */
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
@@ -59,18 +60,12 @@ public class RedisProxyCachingConfiguration {
                     CacheOperationSource redisCacheOperationSource,
             RedisProCacheManager cacheManager,
             KeyGenerator keyGenerator,
-            CacheableAnnotationHandler cacheableAnnotationHandler,
-            EvictAnnotationHandler evictAnnotationHandler,
-            CachingAnnotationHandler cachingAnnotationHandler,
-            CachePutAnnotationHandler cachePutAnnotationHandler) {
+            AnnotationChainEngine annotationChainEngine) {
 
         return new RedisCacheInterceptor(
                 redisCacheOperationSource,
                 cacheManager,
                 keyGenerator,
-                cacheableAnnotationHandler,
-                evictAnnotationHandler,
-                cachingAnnotationHandler,
-                cachePutAnnotationHandler);
+                annotationChainEngine);
     }
 }
