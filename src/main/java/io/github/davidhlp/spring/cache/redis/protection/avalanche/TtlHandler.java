@@ -5,8 +5,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -34,14 +32,16 @@ public class TtlHandler extends AbstractCacheHandler {
 
     private final TtlPolicy ttlPolicy;
 
-    /** guide §223b1:TTL jitter 应用事件计数(防雪崩:randomTtl=true 的 variance 展开)。 */
-    private Counter ttlJitteredCounter;
-
     private static final long DEFAULT_TTL = 60;
 
+    /**
+     * ADR-0018 — 语义 counter 元数据声明。guide §223b1：TTL jitter 应用事件
+     * 计数（防雪崩：randomTtl=true 的 variance 展开）。基类负责注册 + null-safe
+     * 自增 helper，子类不持有字段也不写注册样板。
+     */
     @Override
-    protected void onAttachMetrics(MeterRegistry registry) {
-        this.ttlJitteredCounter = registerCounter(registry,
+    protected CounterMetadata semanticCounter() {
+        return new CounterMetadata(
                 "resicache.handler.ttl.jittered",
                 "TTL jitter applied (avalanche protection: randomTtl=true variance spread the TTL)");
     }
@@ -83,7 +83,7 @@ public class TtlHandler extends AbstractCacheHandler {
 
             // guide §223b1:TTL jitter 应用计数(randomTtl=true 时 variance 展开)
             if (context.getCacheOperation().isRandomTtl()) {
-                safeIncrement(ttlJitteredCounter);
+                safeIncrementSemantic();
             }
 
             log.debug(

@@ -1,3 +1,44 @@
+## [2026-07-01] improve | ADR-0018 AbstractCacheHandler 语义 counter 模板方法 seam (5 个 onAttachMetrics handler 子类样板收敛) (round 8)
+
+`/improve-codebase-architecture` round 8 autocratic one-shot 报告(`/tmp/architecture-review-1782889446.html`)基于 round 1–7 已落地 ADR-0009/0010/0011/0012/0013/0014/0015/0016/0017 后,扫描 5 个 protection handler + AbstractCacheHandler,筛出 1 强候选(候选 A)落地,2 候选(B/C)继续延后(YAGNI/不动):
+
+**ADR 主体** (`wiki/adr/0018-...md`, 215 行, Accepted):
+- **D1** `AbstractCacheHandler.semanticCounter()` 模板方法 — 5 个 protection handler 各自 `onAttachMetrics` 5 行样板收敛为 1 个 `CounterMetadata` record 声明;基类接管 counter 字段 + 注册 + null-safe 自增 helper
+- **D2** 旧 `safeIncrement(Counter)` 多参版本删除 (唯一调用方被 D1 替代, 留则成死代码)
+- **D3** `registerCounter` helper 保留 (当前 1 caller, 留作未来扩展点 — 不属"假 seam" 而属"工具方法", 不可类比 ADR-0016 的 seam 原则)
+- **D4** counter 名字仍 unique per handler (反驳 round 7 defer "合并易失语" — 本 ADR 不是"合并" 而是"下沉样板 + 字段托管", 语义零变化, exposition 行 0 改)
+
+**文件变更**:
+- 修改 6: `chain/AbstractCacheHandler.java` (新增 record + 模板 + helper + 改写 attachMeterRegistry body; 删旧 safeIncrement), 5 个 protection handler (各删 1 字段 + 1 override + 2 imports, 各加 1 semanticCounter() 3 行)
+- 新增 1: `test/chain/AbstractCacheHandlerSemanticCounterTest.java` (8 contract tests)
+- 总代码净变化: **-7 SLOC body / +53 SLOC Javadoc** (5 个 onAttachMetrics 25 行 → 5 个 semanticCounter 15 行, 净 -10; 5 个 null-prone 字段消失 -5; 10 个 import 删除 -10; 旧 safeIncrement -5; record 模板 + Javadoc + safeIncrementSemantic +73; 综合 -7 SLOC body)
+
+**leverage 兑现**:
+1. 新增第 6 个带语义 counter 的 handler → 只需 declare 元数据 3 行 + 1 行 `safeIncrementSemantic()`,无注册样板、无 null-prone 字段
+2. counter 名字 / description 仍归各 handler 声明 (Tell-Don't-Ask), Micrometer exposition 行 0 改
+3. 基类唯一 `semanticCounter` 字段 + 唯一 `safeIncrementSemantic` 入口 — null-safe 逻辑中心化
+4. 自定义 subclass breaking: override 旧 `onAttachMetrics(MeterRegistry)` 会被静默忽略 — 基类 Javadoc 显式说明替代路径
+
+**Review CR findings**: 零 — autocratic 阶段已 self-review(protected hook 不可见性 + Micrometer exposition 零回归 + import 清洁度 + counter 名字唯一性 + 并发模型 preservation + 5 个 handler test 0 改通过),无 CR 问题待修
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw test -Dtest='!*IT'` —— **BUILD SUCCESS, 775 tests, 0 failures, 0 errors**
+  (原 757 + 8 新增 semanticCounter contract = 765; 另有 10 个其他累积测试增量为 round 7-8 期间积累的 unit tests, 与本 ADR 改动无关)
+- `mvnw verify -DskipITs` —— **BUILD SUCCESS, All coverage checks have been met**
+  (JaCoCo gate 通过, `AbstractCacheHandler.semanticCounter` 100% 行覆盖)
+- 5 个 protection handler 全部 0 改测试通过 (TtlHandlerTest 验证 `registry.get("resicache.handler.ttl.jittered").counter().count()` 自增契约保持)
+- 3 IT 失败为 pre-existing Testcontainers 环境问题, 在 round 8 之前的 master 即存在 — git stash round 8 diff 后跑 `mvnw test -Dtest='RedisCacheSemanticsIT'` 同样 3 失败
+
+**下一步**: 无 — ADR-0018 完整落地。下轮(Round 9)候选空间:
+- B (defer): CacheKeys.fromRedisKey 双实现 seam — 等 3rd key-derivation use case 出现
+- C (defer): LockManager.getOrder 排序 at construction — YAGNI (单 LockManager 默认时为死工作)
+- 新可能: chain/observer/ 5 个 ChainObserver 实现是否有 DRY 空间 (ChainDebugLog / ChainTimer / MDCStamp / FiredCounter / NoOp)
+
+详见 [[0018-semantic-counter-template-method]]。
+
+---
+
 ## [2026-07-01] improve | ADR-0017 Operation.fromAttributes 静态 seam (Factory materialize builder 链 1-liner 委派) (round 7)
 
 `/improve-codebase-architecture` round 7 autocratic one-shot 报告裁决 1 候选落地:

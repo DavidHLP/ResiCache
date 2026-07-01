@@ -5,8 +5,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -29,16 +27,18 @@ public class NullValueHandler extends AbstractCacheHandler {
 
     private final NullValuePolicy nullValuePolicy;
 
-    /** Path C 后续(WS-1.4) — 空值命中事件计数。 */
-    private Counter nullHitCounter;
-
     public NullValueHandler(NullValuePolicy nullValuePolicy) {
         this.nullValuePolicy = nullValuePolicy;
     }
 
+    /**
+     * ADR-0018 — 语义 counter 元数据声明。基类 {@link AbstractCacheHandler#attachMeterRegistry}
+     * 在 registry 非空时从本元数据构建 counter 字段；子类不再写"取 registry 调
+     * registerCounter 存到本类字段"5 行样板，也不再持有 null-prone 字段。
+     */
     @Override
-    protected void onAttachMetrics(MeterRegistry registry) {
-        this.nullHitCounter = registerCounter(registry,
+    protected CounterMetadata semanticCounter() {
+        return new CounterMetadata(
                 "resicache.handler.null.hit",
                 "Null value encountered on PUT (cacheNullValues guard activated, payload is null placeholder)");
     }
@@ -55,7 +55,7 @@ public class NullValueHandler extends AbstractCacheHandler {
 
         if (deserializedValue == null) {
             // WS-1.4 per-handler tag:空值命中事件计数(覆盖 cacheNullValues=true/false 两种路径)
-            safeIncrement(nullHitCounter);
+            safeIncrementSemantic();
             if (!nullValuePolicy.shouldCacheNull(context.getCacheOperation())) {
                 log.debug(
                         "Skipping null value caching (cacheNullValues=false): cacheName={}, key={}",

@@ -8,8 +8,6 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlPolicy;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -64,9 +62,6 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
 
-    /** Path C 后续(WS-1.4) — 同步提前过期触发事件计数。 */
-    private Counter earlyRefreshTriggeredCounter;
-
     public EarlyExpirationHandler(TtlPolicy ttlPolicy,
                                   ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
                                   RedisTemplate<String, Object> redisTemplate,
@@ -79,9 +74,13 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
         this.valueOperations = valueOperations;
     }
 
+    /**
+     * ADR-0018 — 语义 counter 元数据声明。Path C 后续(WS-1.4)：
+     * 同步提前过期触发事件计数。
+     */
     @Override
-    protected void onAttachMetrics(MeterRegistry registry) {
-        this.earlyRefreshTriggeredCounter = registerCounter(registry,
+    protected CounterMetadata semanticCounter() {
+        return new CounterMetadata(
                 "resicache.handler.early-refresh.triggered",
                 "Early refresh triggered (sync=true early expiration path, ActualCacheHandler skipped)");
     }
@@ -117,7 +116,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
             log.debug("Sync early-expiration triggered, skipping actual cache: cacheName={}, key={}",
                       context.getCacheName(), context.getRedisKey());
             // WS-1.4 per-handler tag:同步提前过期触发事件计数
-            safeIncrement(earlyRefreshTriggeredCounter);
+            safeIncrementSemantic();
             return HandlerResult.skipAll();
         }
 

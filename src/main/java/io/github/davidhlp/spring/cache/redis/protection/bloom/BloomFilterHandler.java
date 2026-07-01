@@ -5,8 +5,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.stereotype.Component;
@@ -16,17 +14,11 @@ import org.springframework.stereotype.Component;
  *
  * <p>职责：
  * <ul>
- *   <li>GET: Writer 层透传，Bloom 短路检查已移至 {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCache#get(Object, Callable)} 层</li>
- *   <li>PUT/PUT_IF_ABSENT: 先让后续 Handler 执行，成功后将 key 添加到布隆过滤器</li>
- *   <li>CLEAN: 清理缓存时，同时清理布隆过滤器</li>
- * </ul>
- *
- * <p>设计说明：
- * <ul>
- *   <li>对于 PUT 操作，采用前置检查+后置处理模式</li>
- *   <li>通过 markPostProcess 标记请求后置处理</li>
- *   <li>在责任链执行完成后执行后置逻辑</li>
- *   <li>Bloom 仅在确认数据存在时（PUT 成功）才添加 key，GET miss 不会污染 Bloom</li>
+ *   <li>GET: Writer 层透传，Bloom 短路检查已移至 {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter#get}
+ *       前置（{@link BloomSupport#mightContain}）。本 handler 仅承担 observability
+ *       与 attributes 标记职责</li>
+ *   <li>PUT / PUT_IF_ABSENT / CLEAN: 标记需要后置处理，由
+ *       {@link #afterChainExecution} 在责任链执行完成后回填 / 清空布隆</li>
  * </ul>
  */
 @Slf4j
@@ -35,24 +27,24 @@ import org.springframework.stereotype.Component;
 public class BloomFilterHandler extends AbstractCacheHandler
         implements PostProcessHandler {
 
-    /** 上下文属性键：标记需要后置处理 */
+    /** 后置处理标记 — Bloom 短路 / 后置回填的轻量状态。 */
     private static final String POST_PROCESS_KEY = "bloom.postProcess";
 
     private final BloomSupport bloomSupport;
     private final CacheStatisticsCollector statistics;
 
-    /** Path C 后续(WS-1.4) — Bloom 拒绝计数。 */
-    private Counter bloomBlockedCounter;
-
-    public BloomFilterHandler(BloomSupport bloomSupport,
-                              CacheStatisticsCollector statistics) {
+    public BloomFilterHandler(BloomSupport bloomSupport, CacheStatisticsCollector statistics) {
         this.bloomSupport = bloomSupport;
         this.statistics = statistics;
     }
 
+    /**
+     * ADR-0018 — 语义 counter 元数据声明。WS-1.4 per-handler tag 试点：
+     * Bloom 拒绝事件计数（key 判定不在集合 → 直接短路）。
+     */
     @Override
-    protected void onAttachMetrics(MeterRegistry registry) {
-        this.bloomBlockedCounter = registerCounter(registry,
+    protected CounterMetadata semanticCounter() {
+        return new CounterMetadata(
                 "resicache.handler.bloom.blocked",
                 "Bloom filter rejections — key definitely not in cache, request short-circuited");
     }
@@ -92,7 +84,7 @@ public class BloomFilterHandler extends AbstractCacheHandler
                     context.getRedisKey());
             statistics.incMisses(context.getCacheName());
             // WS-1.4 per-handler tag 试点:Bloom 拒绝事件计数
-            safeIncrement(bloomBlockedCounter);
+            safeIncrementSemantic();
             return HandlerResult.terminate(CacheResult.miss());
         }
 

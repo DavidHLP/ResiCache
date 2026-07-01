@@ -59,6 +59,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0015-annotation-handler-registerall-deepening]] —— `AbstractAnnotationHandler.registerAll` 批量注册模板下沉(5 处 for-loop 收敛为单行委派)
 - [[0016-observer-registry-seam-and-manager-instantiate-seam]] —— `ObserverRegistry<O>` 跨 engine observer 列表去重 seam + `RedisProCacheManager` instantiate seam 收敛
 - [[0017-operation-fromattributes-seam]] —— `XxxOperation.fromAttributes(method, key, attributes)` 静态 seam + `RedisCacheAttributes` 移到 `operation/` 包(factory materialize 1-liner 委派)
+- [[0018-semantic-counter-template-method]] —— `AbstractCacheHandler.semanticCounter()` 模板方法(5 个 protection handler 的 `onAttachMetrics` 样板收敛为基类 record 字段 + null-safe `safeIncrementSemantic()`,counter 名字仍 unique)
 
 ## 架构(architecture/)
 

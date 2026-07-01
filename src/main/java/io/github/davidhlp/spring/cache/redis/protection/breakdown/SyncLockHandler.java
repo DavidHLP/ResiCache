@@ -10,8 +10,6 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.ChainEngine;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -72,18 +70,19 @@ public class SyncLockHandler extends AbstractCacheHandler {
         this.engine = engine;
     }
 
-    /** 分布式锁成功获取事件计数（语义 counter）。 */
-    private Counter lockAcquiredCounter;
-
     public SyncLockHandler(SyncSupport syncSupport,
                            RedisProCacheProperties properties) {
         this.syncSupport = syncSupport;
         this.properties = properties;
     }
 
+    /**
+     * ADR-0018 — 语义 counter 元数据声明。WS-1.4 per-handler tag：
+     * 分布式锁成功获取事件计数（sync=true 缓存操作进入临界区）。
+     */
     @Override
-    protected void onAttachMetrics(MeterRegistry registry) {
-        this.lockAcquiredCounter = registerCounter(registry,
+    protected CounterMetadata semanticCounter() {
+        return new CounterMetadata(
                 "resicache.handler.sync.lock.acquired",
                 "Distributed lock acquired (sync=true cache operation entered critical section)");
     }
@@ -122,7 +121,7 @@ public class SyncLockHandler extends AbstractCacheHandler {
         context.setAttribute(LOCK_ACQUIRED_KEY, true);
 
         // WS-1.4 per-handler tag:分布式锁成功获取事件计数
-        safeIncrement(lockAcquiredCounter);
+        safeIncrementSemantic();
 
         // 在锁内执行后续 Handler — 委派给 Engine 统一推进（perNode 观测照常，
         // aroundChain 观测由外层 execute 唯一负责，锁内不重复打点）
