@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.factory;
 
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
@@ -37,31 +38,17 @@ public class CacheableOperationFactory
         return materialize(method, key, a);
     }
 
-    /** 从 {@link RedisCacheAttributes} 构造 {@link RedisCacheableOperation}。 */
+    /**
+     * 从 {@link RedisCacheAttributes} 构造 {@link RedisCacheableOperation} — 单一委派 seam
+     * (ADR-0017)。
+     *
+     * <p>本方法在 ADR-0017 之前是 18 行 builder 链;现在退化为 1 行委派给
+     * {@link RedisCacheableOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)}。
+     * Builder 字段映射的归属(Tell, Don't Ask)由 Operation 类的 static method 承担 — Operation
+     * 最清楚自己的 Builder 该怎么填。
+     */
     RedisCacheableOperation materialize(Method method, String key, RedisCacheAttributes a) {
-        return RedisCacheableOperation.builder()
-                .name(method.getName())
-                .key(key)
-                .cacheNames(a.getCacheNames())
-                .keyGenerator(a.getKeyGenerator())
-                .cacheManager(a.getCacheManager())
-                .cacheResolver(a.getCacheResolver())
-                .condition(a.getCondition())
-                .unless(a.getUnless())
-                .ttl(a.getTtl())
-                .type(a.getType())
-                .cacheNullValues(a.isCacheNullValues())
-                .useBloomFilter(a.isUseBloomFilter())
-                .expectedInsertions((int) Math.min(Integer.MAX_VALUE, Math.max(0L, a.getExpectedInsertions())))
-                .falseProbability(a.getFalseProbability())
-                .randomTtl(a.isRandomTtl())
-                .variance(a.getVariance())
-                .enableEarlyExpiration(a.isEnableEarlyExpiration())
-                .earlyExpirationThreshold(a.getEarlyExpirationThreshold())
-                .earlyExpirationMode(a.getEarlyExpirationMode())
-                .sync(a.isSync())
-                .syncTimeout(a.getSyncTimeout())
-                .build();
+        return RedisCacheableOperation.fromAttributes(method, key, a);
     }
 
     @Override

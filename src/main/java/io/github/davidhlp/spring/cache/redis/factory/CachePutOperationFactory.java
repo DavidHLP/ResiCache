@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.factory;
 
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
 
@@ -37,31 +38,15 @@ public class CachePutOperationFactory
         return materialize(method, key, a);
     }
 
-    /** 从 {@link RedisCacheAttributes} 构造 {@link RedisCachePutOperation}。 */
+    /**
+     * 从 {@link RedisCacheAttributes} 构造 {@link RedisCachePutOperation} — 单一委派 seam
+     * (ADR-0017)。
+     *
+     * <p>原 18 行 builder 链退化 1 行委派给
+     * {@link RedisCachePutOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)}。
+     */
     RedisCachePutOperation materialize(Method method, String key, RedisCacheAttributes a) {
-        return RedisCachePutOperation.builder()
-                .name(method.getName())
-                .key(key)
-                .cacheNames(a.getCacheNames())
-                .keyGenerator(a.getKeyGenerator())
-                .cacheManager(a.getCacheManager())
-                .cacheResolver(a.getCacheResolver())
-                .condition(a.getCondition())
-                .unless(a.getUnless())
-                .ttl(a.getTtl())
-                .type(a.getType())
-                .cacheNullValues(a.isCacheNullValues())
-                .useBloomFilter(a.isUseBloomFilter())
-                .expectedInsertions(a.getExpectedInsertions())
-                .falseProbability(a.getFalseProbability())
-                .randomTtl(a.isRandomTtl())
-                .variance(a.getVariance())
-                .enableEarlyExpiration(a.isEnableEarlyExpiration())
-                .earlyExpirationThreshold(a.getEarlyExpirationThreshold())
-                .earlyExpirationMode(a.getEarlyExpirationMode())
-                .sync(a.isSync())
-                .syncTimeout(a.getSyncTimeout())
-                .build();
+        return RedisCachePutOperation.fromAttributes(method, key, a);
     }
 
     @Override

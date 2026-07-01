@@ -1,5 +1,6 @@
-package io.github.davidhlp.spring.cache.redis.factory;
+package io.github.davidhlp.spring.cache.redis.operation;
 
+import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import lombok.Builder;
 import lombok.Value;
@@ -15,18 +16,27 @@ import lombok.Value;
  *       {@link #falseProbability}）由 {@link RedisCacheAttributesProjector} 集中收敛，
  *       任何注解都不再持有自己的"分散默认";</li>
  *   <li>三个具体 factory 与 Spring 适配 factory 都消费本类，消除了原"18/18 builder 字段
- *       逐字重复"（{@code Cacheable ≡ Put}）以及"3 处默认值漂移"的死代码与认知负担；</li>
- *   <li>新增字段只动本类 + 投影器 + 1 个 Builder 三处，而非 9 处。</li>
+ *       逐字重复"（{@code Cacheable ≡ Put}）以及"3 处默认值漂移"的死代码与认知负担;</li>
+ *   <li>新增字段只动本类 + 投影器 + 1 个 Builder.fromAttributes 三处，而非 9 处。</li>
  * </ul>
  *
  * <p>Evict 独有字段（{@link #allEntries} / {@link #beforeInvocation}）也包含在本类中，
- * 由具体 factory 的 {@code materialize} 方法选择性使用；语义在 Evict 不适用的字段对
+ * 由具体 Operation 的 {@code fromAttributes} 方法选择性使用；语义在 Evict 不适用的字段对
  * 其他注解不设任何限制。
+ *
+ * <p><strong>包归属</strong>：放在 {@code operation} 包而非 {@code factory} 包 —
+ * 本类是对"ResiCache operation 数据形状"的统一描述，{@code fromAttributes(method, key, attributes)}
+ * 三个 operation 类的静态工厂方法直接消费本类。包方向保持 {@code factory → operation} 单向
+ * （factory 通过本类 import 注入数据，operation 通过 {@code fromAttributes} 静态方法完成
+ * Builder 填充，二者均不需对方反向依赖）。
  *
  * <p><strong>public by package</strong>：仅 factory 与 projector 内部使用，未声明 public
  * 构造器；外部应通过 {@link RedisCacheAttributesProjector} 构造。
  *
  * @see RedisCacheAttributesProjector
+ * @see RedisCacheableOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
+ * @see RedisCachePutOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
+ * @see RedisCacheEvictOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
  */
 @Value
 @Builder(toBuilder = true)

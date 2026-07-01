@@ -42,6 +42,52 @@ public class RedisCacheEvictOperation extends CacheEvictOperation {
         return new Builder();
     }
 
+    /**
+     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCacheEvictOperation} — 单一字段映射 seam
+     * (ADR-0017)。
+     *
+     * <p>本方法替代原 {@code EvictOperationFactory.materialize} 的 18 行 builder 链。
+     *
+     * <p>Evict 的字段集是 Cacheable/Put 的<strong>子集 + Evict-only 字段</strong>:
+     * <ul>
+     *   <li><strong>缺失</strong>(无对应 Builder 槽位):{@code unless} / {@code type} /
+     *       {@code cacheNullValues} / {@code randomTtl} / {@code variance} —
+     *       Evict 不持有这些语义,故 fromAttributes 显式忽略(对应语义:"Evict 不缓存值,故无
+     *       TTL 随机化/无空值/无类型槽位")</li>
+     *   <li><strong>独有</strong>:{@code allEntries} / {@code beforeInvocation} —
+     *       Evict-only 字段,直接映射</li>
+     * </ul>
+     *
+     * <p>Factory 退化为单行委派:
+     * <pre>
+     *   return RedisCacheEvictOperation.fromAttributes(method, key, attributes);
+     * </pre>
+     */
+    public static RedisCacheEvictOperation fromAttributes(
+            java.lang.reflect.Method method, String key, RedisCacheAttributes a) {
+        Builder b = builder();
+        b.name(method.getName())
+                .key(key)
+                .cacheNames(a.getCacheNames())
+                .keyGenerator(a.getKeyGenerator())
+                .cacheManager(a.getCacheManager())
+                .cacheResolver(a.getCacheResolver())
+                .condition(a.getCondition())
+                .allEntries(a.isAllEntries())
+                .beforeInvocation(a.isBeforeInvocation())
+                .sync(a.isSync())
+                .syncTimeout(a.getSyncTimeout())
+                .ttl(a.getTtl())
+                .useBloomFilter(a.isUseBloomFilter())
+                .expectedInsertions(a.getExpectedInsertions())
+                .falseProbability(a.getFalseProbability())
+                .enableEarlyExpiration(a.isEnableEarlyExpiration())
+                .earlyExpirationThreshold(a.getEarlyExpirationThreshold())
+                .earlyExpirationMode(a.getEarlyExpirationMode());
+        return b.build();
+    }
+
+
     @EqualsAndHashCode(callSuper = true)
     public static class Builder extends CacheEvictOperation.Builder {
         private boolean sync;

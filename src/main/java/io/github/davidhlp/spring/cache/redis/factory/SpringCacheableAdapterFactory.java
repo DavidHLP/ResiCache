@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.factory;
 
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
 import org.springframework.cache.annotation.Cacheable;

@@ -50,6 +50,47 @@ public class RedisCachePutOperation extends CachePutOperation {
         return new Builder();
     }
 
+    /**
+     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCachePutOperation} — 单一字段映射 seam
+     * (ADR-0017)。
+     *
+     * <p>本方法替代原 {@code CachePutOperationFactory.materialize} 的 18 行 builder 链;
+     * Put 的字段集与 Cacheable <strong>完全相同</strong>(21 字段),唯一区别是
+     * {@code expectedInsertions} 在 Put 中是 {@code long} 类型(无窄化,直传)。
+     *
+     * <p>Factory 退化为单行委派:
+     * <pre>
+     *   return RedisCachePutOperation.fromAttributes(method, key, attributes);
+     * </pre>
+     */
+    public static RedisCachePutOperation fromAttributes(
+            java.lang.reflect.Method method, String key, RedisCacheAttributes a) {
+        Builder b = builder();
+        b.name(method.getName())
+                .key(key)
+                .cacheNames(a.getCacheNames())
+                .keyGenerator(a.getKeyGenerator())
+                .cacheManager(a.getCacheManager())
+                .cacheResolver(a.getCacheResolver())
+                .condition(a.getCondition())
+                .unless(a.getUnless())
+                .ttl(a.getTtl())
+                .type(a.getType())
+                .cacheNullValues(a.isCacheNullValues())
+                .useBloomFilter(a.isUseBloomFilter())
+                .expectedInsertions(a.getExpectedInsertions())
+                .falseProbability(a.getFalseProbability())
+                .sync(a.isSync())
+                .syncTimeout(a.getSyncTimeout())
+                .randomTtl(a.isRandomTtl())
+                .variance(a.getVariance())
+                .enableEarlyExpiration(a.isEnableEarlyExpiration())
+                .earlyExpirationThreshold(a.getEarlyExpirationThreshold())
+                .earlyExpirationMode(a.getEarlyExpirationMode());
+        return b.build();
+    }
+
+
     @EqualsAndHashCode(callSuper = true)
     public static class Builder extends CachePutOperation.Builder {
         private long ttl = 60;

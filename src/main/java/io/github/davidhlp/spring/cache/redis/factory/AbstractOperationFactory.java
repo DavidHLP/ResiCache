@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.factory;
 
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import org.springframework.cache.interceptor.CacheOperation;
 
 import java.lang.annotation.Annotation;
@@ -11,11 +12,15 @@ import java.lang.annotation.Annotation;
  *   <li>{@code cacheNames/value} 优先逻辑 —— 收拢到
  *       {@link RedisCacheAttributesProjector#resolveCacheNames(String[], String[])}，
  *       三个具体 factory 现在只消费 {@link RedisCacheAttributes}，不再重复同样的 if-else</li>
+ *   <li>{@code materialize(method, key, attributes)} 退化为单行委派给 Operation 类的
+ *       {@code fromAttributes(method, key, attributes)} 静态方法(ADR-0017)— Builder 字段
+ *       映射的归属在 Operation 自身,Factory 不再持有 18 行 builder 链</li>
  * </ul>
  *
- * <p>Builder 字段填充<strong>不下沉</strong>：RedisCacheable/Put/EvictOperation 的 Builder 继承自不同的
- * Spring 基类（CacheableOperation.Builder / CachePutOperation.Builder / CacheEvictOperation.Builder），
- * 类型不兼容，无法用单一通用 Builder 填公共字段；子类各自实现 {@code materialize(...)} 填字段。
+ * <p>Builder 字段填充<strong>已下沉</strong>(ADR-0017):三个 Operation 类各自提供
+ * {@code fromAttributes(method, key, attributes)} 静态方法,Builder 字段归属
+ * (Tell, Don't Ask)落在最了解字段的 Operation 类。Factory 仅作为投影层
+ * (RedisCacheAttributesProjector)→Operation 的路由层,本身不再持有 builder 链样板。
  *
  * @param <A> 注解类型
  * @param <O> 操作类型

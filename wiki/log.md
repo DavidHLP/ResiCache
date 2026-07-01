@@ -1,3 +1,38 @@
+## [2026-07-01] improve | ADR-0017 Operation.fromAttributes 静态 seam (Factory materialize builder 链 1-liner 委派) (round 7)
+
+`/improve-codebase-architecture` round 7 autocratic one-shot 报告裁决 1 候选落地:
+
+- **A (执行)**:三个 `XxxOperation` 类(`RedisCacheableOperation` / `RedisCachePutOperation` /
+  `RedisCacheEvictOperation`)各自新增 static `fromAttributes(Method, String, RedisCacheAttributes)` 方法
+  (28 / 27 / 27 SLOC body + ~12 SLOC Javadoc each);三个 ResiCache factory 的 `materialize` 从 18 行 builder 链
+  退化为 1 行委派(-51 SLOC factory body,+85 SLOC Operation static method body + Javadoc)。
+  归属反转 (Tell, Don't Ask):Builder 字段映射从 factory 迁到 Operation 类自身——谁拥有字段谁填。
+
+- **B (执行)**:把 `RedisCacheAttributes` 从 `factory/` 包移到 `operation/` 包——
+  解决 D1 引入的反向依赖(`operation → factory`)。新方向:`factory → operation` 单向保持。
+  6 个 main + 4 个 test 文件 import 同步;语义零变化,纯包路径调整。
+
+- **C (有意保留,行为收窄)**:`SpringCacheableAdapterFactory` 不参与本轮。Spring
+  `CacheableOperation.Builder.setX(...)` 对 null/空串敏感(会抛 IAE)→ 必须走 hasText
+  守卫路径,与三个 ResiCache 工厂的"全量 set"策略性质不同。强行并入需为 Spring 单独
+  写 if-guard 分支,反增复杂度。本 ADR 显式封口,避免未来 re-suggest。
+
+- **D (有意撤销,泛型化不动)**:`AbstractOperationFactory<B extends Builder>` 泛型化
+  不执行——三个 Spring Builder 继承自三个不同基类,泛型 `<B extends CacheOperation.Builder>`
+  只能约束公共父类无法调子类 setter;反射/回调强行通用,失去类型安全。D1 已通过
+  Operation 类各自持 fromAttributes 达成更深层 seam,无需再加 factory 层泛型。
+
+**测试**:新增 `OperationFromAttributesTest` 11 契约测试(Cacheable 全字段 + Put 全字段 +
+Evict 子集字段 + 边界裁剪 + 3 factory 委派契约);4 个原 test 文件 import 同步,**零行为变化**。
+**全量 757 tests,0 failures,0 errors**(原 746 + 11 新增),`mvnw checkstyle:check` 0 violations。
+**SLOC 净变化**:`-51 (3 materialize body) + 85 (3 fromAttributes body) = +34 SLOC body / +45 SLOC Javadoc`。
+
+**包方向保持**:`factory → operation` 单向,反向依赖被 D2 消除。
+
+详见 [[0017-operation-fromattributes-seam]]。
+
+---
+
 ## [2026-07-01] improve | ADR-0015 AnnotationHandler registerAll 批量注册模板下沉(round 6)
 
 `/improve-codebase-architecture` round 6 autocratic one-shot 报告裁决 1 候选落地:
@@ -35,6 +70,8 @@ updated: 2026-07-01
 wiki 演化的时间线,append-only。条目格式 `## [YYYY-MM-DD] <op> | <subject>`(op ∈ init / ingest / improve / colorize / query / lint)。
 
 > 解析最近条目:`grep "^## \[" log.md | tail -5`
+
+---
 
 ## [2026-07-01] improve | ADR-0013 AnnotationChainEngine + AnnotationChainObserver 抽出(autocratic one-shot 平行 seam)
 

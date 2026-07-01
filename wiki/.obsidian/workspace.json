@@ -187,8 +187,11 @@
       "realclaudian:Open Claudian": false
     }
   },
-  "active": "65c62cfe32d0a256",
+  "active": "b48fd6cee0a8b89c",
   "lastOpenFiles": [
+    "sedTotyIY",
+    "adr/0017-operation-fromattributes-seam.md",
+    "adr/0016-observer-registry-seam-and-manager-instantiate-seam.md",
     "index.md",
     "meta/modules-canvas.canvas",
     "meta/mechanisms-canvas.canvas",
