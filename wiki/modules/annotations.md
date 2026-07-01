@@ -113,3 +113,30 @@ public abstract class AnnotationHandler {
 - [[auto-configuration]] —— `RedisCacheOperationSource` bean 的装配
 - [[chain-of-responsibility]] —— 区别于本页的「防护责任链」
 - [[configure-behavior]] —— 如何组合这些注解属性
+
+## 批量注册样板:registerAll 模板(ADR-0015)
+
+`AbstractAnnotationHandler` 暴露 3 个可复用样板,逐层下沉 for-loop 重复:
+
+| 模板 | 作用 | 复杂度 |
+|---|---|---|
+| `generateKey(target, method, args, keyExpr)` | 解析 key 表达式;空则走 `KeyGenerator` | 单元素 |
+| `registerOne(method, target, args, anno, key, factory, action, tag)` | 单注解注册:key 生成 → 工厂创建 → 注册 → 日志;异常返回 null | 单元素 + try/catch |
+| `registerAll(method, target, args, annos, keyExtractor, factory, action, tag)` | 批量注册:迭代 `annos` 调 `registerOne`,收集成功 operation | 数组 + 异常隔离 |
+
+**典型用法**(3 个具体 handler 全部收敛为单行委派):
+
+```java
+// CachePutAnnotationHandler.doHandle (ADR-0015 前 14 SLOC → 后 3 SLOC)
+RedisCachePut[] puts = method.getAnnotationsByType(RedisCachePut.class);
+return registerAll(method, target, args, puts, RedisCachePut::key,
+        cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put");
+```
+
+**契约**:
+- 空数组 / null 数组 → `Collections.emptyList()`(不可变,零分配)
+- per-element 异常隔离由 `registerOne` 内部 try/catch 保证
+- 返回 `List<CacheOperation>`(非 `List<O>`),由 Spring 抽象层统一
+
+**`CacheableAnnotationHandler` 不参与本轮**(形态不同):其 `doHandle` 是 2 条 `if-return` 路径
+(`@RedisCacheable` 与 Spring `@Cacheable` 二选一),无 for-loop 样板,`registerOne` 已是最优。

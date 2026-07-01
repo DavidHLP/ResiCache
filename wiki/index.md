@@ -8,7 +8,7 @@ tags:
 related: [overview, log, README]
 status: stable
 created: 2026-06-21
-updated: 2026-06-29
+updated: 2026-07-01
 ---
 
 # 内容索引
@@ -55,6 +55,8 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0011-bloom-key-drift-fix-and-cachekeys-seam]] —— Bloom 键漂移修复 + CacheKeys 键派生 seam(sync+bloom 静默 null)
 - [[0012-interceptor-consolidation-and-shallow-module-removal]] —— Path C interceptor 残骸收敛(Helper 死代码 + ResiCacheMethodInterceptor pass-through)+ EarlyExpirationSupport 浅模块删除(Spring 注解映射不合并裁决)
 - [[0013-annotation-chain-engine-extraction]] —— AnnotationChainEngine + AnnotationChainObserver 抽出(平行 ADR-0009 seam,注解解析链单一化)
+- [[0014-constructor-telescoping-collapse]] —— `RedisProCache` + `RedisProCacheManager` 构造重载墙收敛(单一 seam)
+- [[0015-annotation-handler-registerall-deepening]] —— `AbstractAnnotationHandler.registerAll` 批量注册模板下沉(5 处 for-loop 收敛为单行委派)
 
 ## 架构(architecture/)
 

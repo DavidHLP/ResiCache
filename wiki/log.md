@@ -1,3 +1,21 @@
+## [2026-07-01] improve | ADR-0015 AnnotationHandler registerAll 批量注册模板下沉(round 6)
+
+`/improve-codebase-architecture` round 6 autocratic one-shot 报告裁决 1 候选落地:
+
+- **A(执行)**:基类 `AbstractAnnotationHandler` 新增 `registerAll(Method, Object, Object[], A[], Function<A, String>, OperationFactory<A, O>, RegisterAction<O>, String) → List<CacheOperation>` 模板(18 SLOC body + 35 SLOC Javadoc),下沉 5 处 for-loop(3 个具体 handler 的 1+1+3);`CachePut` / `Evict` / `Caching` 3 个 handler 的 `doHandle` 退化为"取注解数组 + 单行 registerAll 委派",从 14/13/38 SLOC 收敛到 3/3/17 SLOC(-78% / -77% / -55%)。
+
+- **B(有意)**:返回类型 `List<CacheOperation>` 而非 `List<O>` — 避免 Java target-type 推断把 `O` 拉到 `CacheOperation` 与 factory 的具体 `O` 冲突;`O extends CacheOperation` 保证安全上转;调用方拿到统一抽象层。
+
+- **C(有意)**:`CacheableAnnotationHandler` 不参与本轮 — 形态为 2 个 `if-return` 路径(RedisCacheable vs Spring Cacheable 二选一),无 for-loop 样板,`registerOne` 已是最优。
+
+- **D(有意,行为收窄)**:空数组 / null 数组从 `new ArrayList<>()` 改为 `Collections.emptyList()` — 唯一调用方 `AnnotationChainEngine.execute` 走 `collected.addAll(ops)`,对空 source 是 no-op,无影响;不可变空 list 是 Java 标准惯用法,Javadoc 显式说明"never null, may be empty"。
+
+**测试**:新增 `AbstractAnnotationHandlerTest` 8 个 contract 测试(empty / null / single / multiple / partial-failure / all-failure / keyExtractor / KeyGenerator fallback),钉住 registerAll 的运行时契约(顺序、异常隔离、空处理);原 4 个具体 handler 测试零修改。**全量 735 tests,0 failures**(原 727 + 8 新增),`mvnw checkstyle:check` 0 violations,JaCoCo `AbstractAnnotationHandler.registerAll` 100% 行覆盖。
+
+**全仓 SLOC 净变化**:`-38 (5 for-loop body) + 18 (registerAll body) = -20 SLOC body / +35 SLOC Javadoc`。
+
+详见 [[0015-annotation-handler-registerall-deepening]]。
+
 ---
 title: 操作日志
 type: meta

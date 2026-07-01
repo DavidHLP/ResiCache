@@ -12,16 +12,20 @@ import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 处理 {@link RedisCachePut @RedisCachePut} 注解：为方法上每个 @RedisCachePut
  * 构建并注册一个 {@link RedisCachePutOperation}。
  *
- * <p>注册样板（key 生成 → 工厂创建 → 注册 → 日志，异常返回 null）收敛到
- * {@link AbstractAnnotationHandler#registerOne}，本类只提供工厂与
- * {@code redisCacheRegister::registerCachePutOperation} 方法引用。
+ * <p>注册样板（for-loop + null-check + ArrayList 装配）已收敛到
+ * {@link AbstractAnnotationHandler#registerAll}。本类只负责获取注解数组 + 提供
+ * key 提取器（{@code RedisCachePut::key}） + 委派：
+ *
+ * <pre>
+ *   return registerAll(method, target, args, puts, RedisCachePut::key,
+ *           cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put");
+ * </pre>
  */
 @Slf4j
 @Component
@@ -45,17 +49,7 @@ public class CachePutAnnotationHandler extends AbstractAnnotationHandler {
     @Override
     protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCachePut[] puts = method.getAnnotationsByType(RedisCachePut.class);
-        List<CacheOperation> operations = new ArrayList<>();
-
-        for (RedisCachePut put : puts) {
-            RedisCachePutOperation operation = registerOne(
-                    method, target, args, put, put.key(),
-                    cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put");
-            if (operation != null) {
-                operations.add(operation);
-            }
-        }
-
-        return operations;
+        return registerAll(method, target, args, puts, RedisCachePut::key,
+                cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put");
     }
 }

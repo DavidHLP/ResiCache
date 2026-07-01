@@ -7,10 +7,7 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
 import io.github.davidhlp.spring.cache.redis.factory.CachePutOperationFactory;
 import io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory;
 import io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,8 +24,13 @@ import java.util.List;
  * 处理 {@link RedisCaching @RedisCaching} 组合注解：将其内嵌的 @RedisCacheable /
  * @RedisCacheEvict / @RedisCachePut 各自展开并注册。
  *
- * <p>三种子注解的注册均复用 {@link AbstractAnnotationHandler#registerOne} 模板，
- * 仅工厂与注册方法引用不同；样板收敛消除了原三段几乎逐字重复的 register 私有方法。
+ * <p>三种子注解的注册均复用 {@link AbstractAnnotationHandler#registerAll} 模板：
+ * <pre>
+ *   operations.addAll(registerAll(method, target, args, caching.redisCacheable(),
+ *           RedisCacheable::key, cacheableOperationFactory,
+ *           redisCacheRegister::registerCacheableOperation, "cacheable from @RedisCaching"));
+ * </pre>
+ * 三个 for-loop 全部下沉到基类，本类只剩 3 行 {@code addAll} 委派。
  */
 @Slf4j
 @Component
@@ -61,34 +63,19 @@ public class CachingAnnotationHandler extends AbstractAnnotationHandler {
         List<CacheOperation> operations = new ArrayList<>();
 
         // 处理组合注解中的 @RedisCacheable
-        for (RedisCacheable cacheable : caching.redisCacheable()) {
-            RedisCacheableOperation operation = registerOne(
-                    method, target, args, cacheable, cacheable.key(),
-                    cacheableOperationFactory, redisCacheRegister::registerCacheableOperation, "cacheable from @RedisCaching");
-            if (operation != null) {
-                operations.add(operation);
-            }
-        }
+        operations.addAll(registerAll(method, target, args, caching.redisCacheable(),
+                RedisCacheable::key, cacheableOperationFactory,
+                redisCacheRegister::registerCacheableOperation, "cacheable from @RedisCaching"));
 
         // 处理组合注解中的 @RedisCacheEvict
-        for (RedisCacheEvict evict : caching.redisCacheEvict()) {
-            RedisCacheEvictOperation operation = registerOne(
-                    method, target, args, evict, evict.key(),
-                    evictOperationFactory, redisCacheRegister::registerCacheEvictOperation, "cache evict from @RedisCaching");
-            if (operation != null) {
-                operations.add(operation);
-            }
-        }
+        operations.addAll(registerAll(method, target, args, caching.redisCacheEvict(),
+                RedisCacheEvict::key, evictOperationFactory,
+                redisCacheRegister::registerCacheEvictOperation, "cache evict from @RedisCaching"));
 
         // 处理组合注解中的 @RedisCachePut
-        for (RedisCachePut put : caching.redisCachePut()) {
-            RedisCachePutOperation operation = registerOne(
-                    method, target, args, put, put.key(),
-                    cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put from @RedisCaching");
-            if (operation != null) {
-                operations.add(operation);
-            }
-        }
+        operations.addAll(registerAll(method, target, args, caching.redisCachePut(),
+                RedisCachePut::key, cachePutOperationFactory,
+                redisCacheRegister::registerCachePutOperation, "cache put from @RedisCaching"));
 
         return operations;
     }
