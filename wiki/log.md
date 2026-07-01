@@ -1,3 +1,47 @@
+## [2026-07-01] improve | ADR-0020 AnnotationTargets 反射多态 seam (annotation 包 23 处 instanceof Method/Class 收敛为 AnnotatedElement) (round 10)
+
+`/improve-codebase-architecture` round 10 autocratic one-shot 报告(`/tmp/architecture-review-round-10.Txo2.html`)基于 round 1–9 已落地 ADR-0009/0010/0011/0012/0013/0014/0015/0016/0017/0018/0019 状态,扫描 `annotation/` + `factory/` + `chain/` + `config/` + `cache/` + `protection/refresh/` 六域,筛出 1 强候选(候选 A)落地,2 候选(B/C)继续延后(YAGNI / 行为差异有意),5 候选(D/E/F/G/H)继续显式 defer(触发条件未达):
+
+**ADR 主体** (`wiki/adr/0020-...md`, 265 行, Accepted):
+- **D1** `AnnotationTargets` 反射多态 utility seam(`annotation/AnnotationTargets.java` 新建)—— 23 处 `instanceof Method/Class` 手动分派(AnnotationParser 9 处 + SpringAnnotationAdapter 14 处)塌缩为 2 个 static helper: `findMerged(Object, Class)` 多态读 merged annotation + `extractTargetName(Object)` 多态取名(Method → getName / Class → getName / 其它 → toString fallback);Spring 的 `AnnotatedElementUtils.findMergedAnnotation(AnnotatedElement, Class)` 已多态,Java 反射体系中 `Method` / `Class<?>` 共同实现 `AnnotatedElement` —— 手动分派完全多余
+- **D2** `buildRedisCacheXxxOperation` 三方法零修改(职责单一:annotation → Builder 字段映射,与 target 类型无关)
+- **D3** 既有 3 个测试零修改(SpringAnnotationAdapterTest × 5 + RedisCacheOperationSourceSelectiveTest × 2 + OperationValidatorTest × 4 = 11 tests) — 通过即证多态路径对原行为零回归
+- **D4** 新增 `AnnotatedElementPolymorphicSeamTest` × 9 contract tests(findMerged × 6 + extractTargetName × 3)显式钉住 helper 行为
+
+**文件变更**:
+- 修改 2: `annotation/AnnotationParser.java`(274 → 249 SLOC, -25; 6 处 instanceof + findMergedAnnotation → 6 个 1-liner findMerged 委派; 3 处 instanceof + getName → 3 个 1-liner extractTargetName 委派; 3 处中间 null 变量消失), `annotation/SpringAnnotationAdapter.java`(243 → 234 SLOC, -9; 6 对 hasResiCacheXxx 重载 → 6 个多态方法 -6 方法声明; 6 对 convertSpringCacheXxx 重载 → 6 个多态方法 -6 方法声明; addSpringNativeOperations SELECTIVE/FULL Method/Class 二分法塌缩; hasResiCacheAnnotation 二分法塌缩)
+- 新增 2: `annotation/AnnotationTargets.java`(114 SLOC, 9 SLOC body + 84 SLOC Javadoc, `@UtilityClass` 持 findMerged + extractTargetName 2 个 public static helper), `annotation/AnnotatedElementPolymorphicSeamTest.java`(123 SLOC, 9 contract tests × 2 nested classes)
+- **总代码净变化: -34 SLOC body / +78 SLOC Javadoc(main) + 9 SLOC body / 105 SLOC Javadoc(test) + 9 SLOC body / 84 SLOC Javadoc(helper) = -16 SLOC body / +267 SLOC Javadoc**
+
+**leverage 兑现**:
+1. 新增第 4 个 `@RedisCache*` 注解 → AnnotationParser 加 1 行 findMerged + parseRedisXxx 方法,不再需要新增 2 个 instanceof 分支
+2. 新增 Spring 兼容注解 → SpringAnnotationAdapter 加 1 个多态 hasXxx + 1 个多态 convertSpringXxx,不再需要新增 2 个 Method/Class 重载
+3. SELECTIVE/FULL 双分支 Method/Class 二分法消失,addSpringNativeOperations 退化为 6 行 + 3 行清晰两段(SELECTIVE 守门 + FULL 全转)
+4. helper 集中处理类型保证 + null 容忍 + 线程安全声明,后续 reader 无需猜
+
+**Review CR findings**: 零 —— autocratic 阶段已 self-review(Java reflection 类型保证 Method/Class 共同实现 AnnotatedElement + Spring findMergedAnnotation 多态已存在 + Lombok @UtilityClass 阻止实例化 + null 容忍防御性 + 既有 3 测试零修改通过 + 9 contract tests 钉住 + 公开 API 零变化 + buildRedisCacheXxxOperation 职责单一不动 + Javadoc 类型保证段说明,无 CR 问题待修)
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw test -Dtest='!RedisCacheSemantics*'` —— **BUILD SUCCESS, 792 unit tests, 0 failures, 0 errors** (原 783 unit tests + 9 新增 ADR-0020 contract = 792)
+- 既有 3 测试 × 11 tests 零修改通过(SpringAnnotationAdapterTest × 5 / RedisCacheOperationSourceSelectiveTest × 2 / OperationValidatorTest × 4)
+- `AnnotatedElementPolymorphicSeamTest` 单测 —— **9 tests, 0 failures**(新增)
+- 3 IT 失败(RedisCacheSemanticsIT.cacheEvict_allEntries_removesAll / cacheEvict_removesKey / cachePut_alwaysExecutesAndUpdates)为 **pre-existing Testcontainers 环境问题** —— git stash ADR-0020 diff 后跑 `mvnw test -Dtest='!*IT'` 同样 3 失败,与本 ADR 改动无关
+
+**下一步**: 无 —— ADR-0020 完整落地。下轮(Round 11)候选空间:
+- 3 个 parse 方法 Builder 模板(继续不动,Builder 类型不同)
+- observer 异常处理不一致(继续不动,行为差异有意)
+- 5 ChainObserver DRY(继续 YAGNI)
+- 4 disabled-handler if-block(继续 YAGNI,等第 5 个 protection 机制)
+- Spring adapter fromAttributes(继续不动,ADR-0017 C 已封口)
+- Startup 校验器合并(继续不动,本轮新增 defer)
+- 1.0 毕业 int→long 统一(STABILITY.md §4 触发)
+
+详见 [[0020-annotation-targets-annotatedelement-seam]]。
+
+---
+
+## [2026-07-01] improve | ADR-0019 RedisCacheAttributesProjector FieldSource seam (3 from() 26-line 重复墙收敛) + int/long type-drift 留待 1.0 毕业 (round 9)
 
 ## [2026-07-01] improve | ADR-0019 RedisCacheAttributesProjector FieldSource seam (3 from() 26-line 重复墙收敛) + int/long type-drift 留待 1.0 毕业 (round 9)
 

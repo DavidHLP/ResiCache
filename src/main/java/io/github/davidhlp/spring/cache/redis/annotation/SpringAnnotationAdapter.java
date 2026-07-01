@@ -10,10 +10,9 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheOperation;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.StringUtils;
 
-import java.lang.reflect.Method;
+import java.lang.reflect.AnnotatedElement;
 import java.util.List;
 
 /**
@@ -23,6 +22,14 @@ import java.util.List;
  * 由 {@link RedisProCacheProperties.NativeAnnotationMode}(FULL/NONE/SELECTIVE)驱动。
  * SELECTIVE 模式下,若 ResiCache 同名注解已存在则跳过对应 Spring 注解,避免重复操作。
  * 纯函数,持有不可变的 {@code NativeAnnotationMode} 枚举(构造期注入)。
+ *
+ * <p><b>Round 10 / ADR-0020 seam 收敛</b>:本类原先 14 处
+ * {@code instanceof Method} / {@code instanceof Class} 分派样板已统一委派给
+ * {@link AnnotationTargets#findMerged} 与 {@link AnnotationTargets#extractTargetName}。
+ * 原 6 对 {@code hasResiCacheXxx(Method)} + {@code hasResiCacheXxx(Class)} 重载 +
+ * 6 对 {@code convertSpringXxx(Method, List)} + {@code convertSpringXxx(Class, List)}
+ * 重载 + {@code addSpringNativeOperations} 内 SELECTIVE / FULL 双分支的 Method/Class
+ * 二分法,共 14 个分派点全部塌缩为多态 {@link AnnotatedElement} 路径。
  */
 @Slf4j
 final class SpringAnnotationAdapter {
@@ -39,6 +46,11 @@ final class SpringAnnotationAdapter {
      *
      * <p>使 @Cacheable, @CachePut, @CacheEvict 也能被 ResiCache 处理.
      *
+     * <p>Round 10 / ADR-0020:SELECTIVE / FULL 两个分支的 Method/Class 二分法
+     * 已统一为 {@link AnnotatedElement} 多态路径(target 走
+     * {@code instanceof Method} / {@code instanceof Class} 判断已下沉至
+     * {@link AnnotationTargets#extractTargetName})。
+     *
      * @param target 方法或类对象
      * @param ops 操作集合
      */
@@ -48,117 +60,96 @@ final class SpringAnnotationAdapter {
             return;
         }
 
+        final String name = AnnotationTargets.extractTargetName(target);
+
         if (nativeAnnotationMode == RedisProCacheProperties.NativeAnnotationMode.SELECTIVE) {
             // SELECTIVE:无任何 ResiCache 注解则跳过;否则按需转换 Spring 注解(已有 ResiCache 对应项则跳过,避免重复)
             if (!hasResiCacheAnnotation(target)) {
                 return;
             }
-            if (target instanceof Method method) {
-                if (!hasResiCacheable(method)) { convertSpringCacheable(method, ops); }
-                if (!hasResiCacheEvict(method)) { convertSpringCacheEvict(method, ops); }
-                if (!hasResiCachePut(method)) { convertSpringCachePut(method, ops); }
-            } else if (target instanceof Class<?> clazz) {
-                if (!hasResiCacheable(clazz)) { convertSpringCacheable(clazz, ops); }
-                if (!hasResiCacheEvict(clazz)) { convertSpringCacheEvict(clazz, ops); }
-                if (!hasResiCachePut(clazz)) { convertSpringCachePut(clazz, ops); }
-            }
+            if (!hasResiCacheable(target)) { convertSpringCacheable(target, name, ops); }
+            if (!hasResiCacheEvict(target)) { convertSpringCacheEvict(target, name, ops); }
+            if (!hasResiCachePut(target)) { convertSpringCachePut(target, name, ops); }
             return;
         }
 
         // FULL mode: convert all Spring native annotations
-        if (target instanceof Method method) {
-            convertSpringCacheable(method, ops);
-            convertSpringCachePut(method, ops);
-            convertSpringCacheEvict(method, ops);
-        } else if (target instanceof Class<?> clazz) {
-            convertSpringCacheable(clazz, ops);
-            convertSpringCachePut(clazz, ops);
-            convertSpringCacheEvict(clazz, ops);
-        }
+        convertSpringCacheable(target, name, ops);
+        convertSpringCachePut(target, name, ops);
+        convertSpringCacheEvict(target, name, ops);
     }
 
+    /**
+     * 目标上是否含任意 ResiCache 注解(3 个原生 + @RedisCaching 复合).
+     *
+     * <p>Round 10 / ADR-0020:多态 {@link AnnotatedElement} 路径,
+     * 原 Method/Class 二分法已消失。
+     */
     private boolean hasResiCacheAnnotation(Object target) {
-        if (target instanceof Method method) {
-            return hasResiCacheable(method) || hasResiCacheEvict(method)
-                    || hasResiCachePut(method)
-                    || AnnotatedElementUtils.findMergedAnnotation(method, RedisCaching.class) != null;
-        } else if (target instanceof Class<?> clazz) {
-            return hasResiCacheable(clazz) || hasResiCacheEvict(clazz)
-                    || hasResiCachePut(clazz)
-                    || AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCaching.class) != null;
+        if (target instanceof AnnotatedElement) {
+            return hasResiCacheable(target) || hasResiCacheEvict(target)
+                    || hasResiCachePut(target)
+                    || AnnotationTargets.findMerged(target, RedisCaching.class) != null;
         }
         return false;
     }
 
-    private boolean hasResiCacheable(Method method) {
-        return AnnotatedElementUtils.findMergedAnnotation(method, RedisCacheable.class) != null;
+    /** 多态 {@link AnnotatedElement} 路径,原 Method/Class 重载对已合并. */
+    private boolean hasResiCacheable(Object target) {
+        return AnnotationTargets.findMerged(target, RedisCacheable.class) != null;
     }
 
-    private boolean hasResiCacheable(Class<?> clazz) {
-        return AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCacheable.class) != null;
+    /** 多态 {@link AnnotatedElement} 路径,原 Method/Class 重载对已合并. */
+    private boolean hasResiCacheEvict(Object target) {
+        return AnnotationTargets.findMerged(target, RedisCacheEvict.class) != null;
     }
 
-    private boolean hasResiCacheEvict(Method method) {
-        return AnnotatedElementUtils.findMergedAnnotation(method, RedisCacheEvict.class) != null;
+    /** 多态 {@link AnnotatedElement} 路径,原 Method/Class 重载对已合并. */
+    private boolean hasResiCachePut(Object target) {
+        return AnnotationTargets.findMerged(target, RedisCachePut.class) != null;
     }
 
-    private boolean hasResiCacheEvict(Class<?> clazz) {
-        return AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCacheEvict.class) != null;
-    }
-
-    private boolean hasResiCachePut(Method method) {
-        return AnnotatedElementUtils.findMergedAnnotation(method, RedisCachePut.class) != null;
-    }
-
-    private boolean hasResiCachePut(Class<?> clazz) {
-        return AnnotatedElementUtils.findMergedAnnotation(clazz, RedisCachePut.class) != null;
-    }
-
-    private void convertSpringCacheable(Method method, List<CacheOperation> ops) {
-        Cacheable ann = AnnotatedElementUtils.findMergedAnnotation(method, Cacheable.class);
+    /**
+     * 转换 Spring 原生 {@code @Cacheable} 为 ResiCache 的
+     * {@link org.springframework.cache.interceptor.CacheableOperation}.
+     *
+     * <p>Round 10 / ADR-0020:多态 {@code (AnnotatedElement) target} 路径,原
+     * Method/Class 重载对已合并;name 由调用方通过 {@link AnnotationTargets#extractTargetName}
+     * 预提取,本方法只负责"读注解 + build operation"两步。
+     */
+    private void convertSpringCacheable(Object target, String name, List<CacheOperation> ops) {
+        Cacheable ann = AnnotationTargets.findMerged(target, Cacheable.class);
         if (ann != null) {
-            ops.add(buildRedisCacheableOperation(ann, method.getName()));
-            log.debug("Converted Spring @Cacheable on method: {}", method.getName());
+            ops.add(buildRedisCacheableOperation(ann, name));
+            log.debug("Converted Spring @Cacheable on target: {}", name);
         }
     }
 
-    private void convertSpringCacheable(Class<?> clazz, List<CacheOperation> ops) {
-        Cacheable ann = AnnotatedElementUtils.findMergedAnnotation(clazz, Cacheable.class);
+    /**
+     * 转换 Spring 原生 {@code @CachePut} 为 ResiCache 的
+     * {@link RedisCachePutOperation}.
+     *
+     * <p>Round 10 / ADR-0020:多态路径,原 Method/Class 重载对已合并。
+     */
+    private void convertSpringCachePut(Object target, String name, List<CacheOperation> ops) {
+        CachePut ann = AnnotationTargets.findMerged(target, CachePut.class);
         if (ann != null) {
-            ops.add(buildRedisCacheableOperation(ann, clazz.getName()));
-            log.debug("Converted Spring @Cacheable on class: {}", clazz.getName());
+            ops.add(buildRedisCachePutOperation(ann, name));
+            log.debug("Converted Spring @CachePut on target: {}", name);
         }
     }
 
-    private void convertSpringCachePut(Method method, List<CacheOperation> ops) {
-        CachePut ann = AnnotatedElementUtils.findMergedAnnotation(method, CachePut.class);
+    /**
+     * 转换 Spring 原生 {@code @CacheEvict} 为 ResiCache 的
+     * {@link RedisCacheEvictOperation}.
+     *
+     * <p>Round 10 / ADR-0020:多态路径,原 Method/Class 重载对已合并。
+     */
+    private void convertSpringCacheEvict(Object target, String name, List<CacheOperation> ops) {
+        CacheEvict ann = AnnotationTargets.findMerged(target, CacheEvict.class);
         if (ann != null) {
-            ops.add(buildRedisCachePutOperation(ann, method.getName()));
-            log.debug("Converted Spring @CachePut on method: {}", method.getName());
-        }
-    }
-
-    private void convertSpringCachePut(Class<?> clazz, List<CacheOperation> ops) {
-        CachePut ann = AnnotatedElementUtils.findMergedAnnotation(clazz, CachePut.class);
-        if (ann != null) {
-            ops.add(buildRedisCachePutOperation(ann, clazz.getName()));
-            log.debug("Converted Spring @CachePut on class: {}", clazz.getName());
-        }
-    }
-
-    private void convertSpringCacheEvict(Method method, List<CacheOperation> ops) {
-        CacheEvict ann = AnnotatedElementUtils.findMergedAnnotation(method, CacheEvict.class);
-        if (ann != null) {
-            ops.add(buildRedisCacheEvictOperation(ann, method.getName()));
-            log.debug("Converted Spring @CacheEvict on method: {}", method.getName());
-        }
-    }
-
-    private void convertSpringCacheEvict(Class<?> clazz, List<CacheOperation> ops) {
-        CacheEvict ann = AnnotatedElementUtils.findMergedAnnotation(clazz, CacheEvict.class);
-        if (ann != null) {
-            ops.add(buildRedisCacheEvictOperation(ann, clazz.getName()));
-            log.debug("Converted Spring @CacheEvict on class: {}", clazz.getName());
+            ops.add(buildRedisCacheEvictOperation(ann, name));
+            log.debug("Converted Spring @CacheEvict on target: {}", name);
         }
     }
 

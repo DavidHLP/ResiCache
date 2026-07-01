@@ -60,6 +60,8 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0016-observer-registry-seam-and-manager-instantiate-seam]] —— `ObserverRegistry<O>` 跨 engine observer 列表去重 seam + `RedisProCacheManager` instantiate seam 收敛
 - [[0017-operation-fromattributes-seam]] —— `XxxOperation.fromAttributes(method, key, attributes)` 静态 seam + `RedisCacheAttributes` 移到 `operation/` 包(factory materialize 1-liner 委派)
 - [[0018-semantic-counter-template-method]] —— `AbstractCacheHandler.semanticCounter()` 模板方法(5 个 protection handler 的 `onAttachMetrics` 样板收敛为基类 record 字段 + null-safe `safeIncrementSemantic()`,counter 名字仍 unique)
+- [[0019-projector-fieldsource-seam-and-type-drift-deferral]] —— `RedisCacheAttributesProjector.FieldSource` 私有 record + 单一 `project()` seam(3 个 `from(annotation)` 26-line 重复墙收敛为 1-liner 委派)+ `@RedisCacheable.expectedInsertions` int/long type-drift 显式 defer(1.0 毕业统一)
+- [[0020-annotation-targets-annotatedelement-seam]] —— `AnnotationTargets` 反射多态 utility seam(annotation 包 23 处 `instanceof Method/Class` 收敛为 `AnnotatedElement` 多态路径,6 对 Method/Class 重载合并为 6 个多态方法)
 
 ## 架构(architecture/)
 
@@ -102,4 +104,4 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-06-29 · 共 39 页 · 维护见 [[log]]
+最后更新:2026-07-01 · 共 40 页 · 维护见 [[log]]

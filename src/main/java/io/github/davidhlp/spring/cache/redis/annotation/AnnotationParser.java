@@ -6,10 +6,8 @@ import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.interceptor.CacheOperation;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.StringUtils;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +22,14 @@ import java.util.List;
  * {@link org.springframework.cache.interceptor.CacheableOperation}(而非 ResiCache 的
  * RedisCacheableOperation),确保 getClass() 返回 CacheableOperation.class —— 这样
  * CacheAspectSupport 的 CacheOperationContexts 能正确按类型索引(可缓存/可放入/可清除三桶)。
+ *
+ * <p><b>Round 10 / ADR-0020 seam 收敛</b>:本类原先 9 处
+ * {@code if (target instanceof Method) ... else if (target instanceof Class) ...}
+ * 重复分派(Method/Class 各自强转后调 {@code AnnotatedElementUtils.findMergedAnnotation}
+ * 或取 {@code getName()})已统一委派给 {@link AnnotationTargets#findMerged} 与
+ * {@link AnnotationTargets#extractTargetName}。本类签名零变化,行为零回归
+ * (现有 {@code SpringAnnotationAdapterTest} + {@code RedisCacheOperationSourceSelectiveTest}
+ * + 本类新增 {@code AnnotatedElementPolymorphicSeamTest} 联合钉住)。
  */
 @Slf4j
 final class AnnotationParser {
@@ -39,62 +45,34 @@ final class AnnotationParser {
         log.trace("Parsing cache annotations for target: {}", target);
 
         // 处理单个 @RedisCacheable 注解
-        RedisCacheable cacheable = null;
-        if (target instanceof Method) {
-            cacheable = AnnotatedElementUtils.findMergedAnnotation(
-                    (Method) target, RedisCacheable.class);
-        } else if (target instanceof Class) {
-            cacheable = AnnotatedElementUtils.findMergedAnnotation(
-                    (Class<?>) target, RedisCacheable.class);
-        }
-
+        final RedisCacheable cacheable =
+                AnnotationTargets.findMerged(target, RedisCacheable.class);
         if (cacheable != null) {
             log.debug("Found @RedisCacheable annotation on target: {}", target);
-            final CacheOperation operation = parseRedisCacheable(cacheable, target);
-            ops.add(operation);
+            ops.add(parseRedisCacheable(cacheable, target));
         }
 
         // 处理单个 @RedisCacheEvict 注解
-        RedisCacheEvict cacheEvict = null;
-        if (target instanceof Method) {
-            cacheEvict = AnnotatedElementUtils.findMergedAnnotation(
-                    (Method) target, RedisCacheEvict.class);
-        } else if (target instanceof Class) {
-            cacheEvict = AnnotatedElementUtils.findMergedAnnotation(
-                    (Class<?>) target, RedisCacheEvict.class);
-        }
-
+        final RedisCacheEvict cacheEvict =
+                AnnotationTargets.findMerged(target, RedisCacheEvict.class);
         if (cacheEvict != null) {
             log.debug("Found @RedisCacheEvict annotation on target: {}", target);
-            final RedisCacheEvictOperation operation =
-                    parseRedisCacheEvict(cacheEvict, target);
-            ops.add(operation);
+            ops.add(parseRedisCacheEvict(cacheEvict, target));
         }
 
         // 处理 @RedisCaching 复合注解
-        RedisCaching caching = null;
-        if (target instanceof Method) {
-            caching = AnnotatedElementUtils.findMergedAnnotation(
-                    (Method) target, RedisCaching.class);
-        } else if (target instanceof Class) {
-            caching = AnnotatedElementUtils.findMergedAnnotation(
-                    (Class<?>) target, RedisCaching.class);
-        }
-
+        final RedisCaching caching =
+                AnnotationTargets.findMerged(target, RedisCaching.class);
         if (caching != null) {
             log.debug("Found @RedisCaching annotation on target: {}", target);
             for (final RedisCacheable c : caching.redisCacheable()) {
-                final CacheOperation operation = parseRedisCacheable(c, target);
-                ops.add(operation);
+                ops.add(parseRedisCacheable(c, target));
             }
             for (final RedisCacheEvict e : caching.redisCacheEvict()) {
-                final RedisCacheEvictOperation operation =
-                        parseRedisCacheEvict(e, target);
-                ops.add(operation);
+                ops.add(parseRedisCacheEvict(e, target));
             }
             for (final RedisCachePut p : caching.redisCachePut()) {
-                final CacheOperation operation = parseRedisCachePut(p, target);
-                ops.add(operation);
+                ops.add(parseRedisCachePut(p, target));
             }
         }
 
@@ -110,8 +88,7 @@ final class AnnotationParser {
      */
     private CacheOperation parseRedisCacheable(
             final RedisCacheable ann, final Object target) {
-        final String name = (target instanceof Method)
-                ? ((Method) target).getName() : target.toString();
+        final String name = AnnotationTargets.extractTargetName(target);
         log.trace("Parsing @RedisCacheable annotation for target: {}", target);
 
         // 使用 Spring 标准的 CacheableOperation.Builder，确保 getClass() 返回 CacheableOperation.class
@@ -162,8 +139,7 @@ final class AnnotationParser {
      */
     private RedisCacheEvictOperation parseRedisCacheEvict(
             final RedisCacheEvict ann, final Object target) {
-        final String name = (target instanceof Method)
-                ? ((Method) target).getName() : target.toString();
+        final String name = AnnotationTargets.extractTargetName(target);
         log.trace("Parsing @RedisCacheEvict annotation for target: {}", target);
 
         final RedisCacheEvictOperation.Builder builder =
@@ -219,8 +195,7 @@ final class AnnotationParser {
      */
     private CacheOperation parseRedisCachePut(
             final RedisCachePut ann, final Object target) {
-        final String name = (target instanceof Method)
-                ? ((Method) target).getName() : target.toString();
+        final String name = AnnotationTargets.extractTargetName(target);
         log.trace("Parsing @RedisCachePut annotation for target: {}", target);
 
         final RedisCachePutOperation.Builder builder =
