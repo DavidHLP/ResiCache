@@ -57,6 +57,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0013-annotation-chain-engine-extraction]] —— AnnotationChainEngine + AnnotationChainObserver 抽出(平行 ADR-0009 seam,注解解析链单一化)
 - [[0014-constructor-telescoping-collapse]] —— `RedisProCache` + `RedisProCacheManager` 构造重载墙收敛(单一 seam)
 - [[0015-annotation-handler-registerall-deepening]] —— `AbstractAnnotationHandler.registerAll` 批量注册模板下沉(5 处 for-loop 收敛为单行委派)
+- [[0016-observer-registry-seam-and-manager-instantiate-seam]] —— `ObserverRegistry<O>` 跨 engine observer 列表去重 seam + `RedisProCacheManager` instantiate seam 收敛
 
 ## 架构(architecture/)
 

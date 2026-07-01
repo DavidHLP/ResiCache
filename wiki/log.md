@@ -540,3 +540,34 @@ Q2 autonomous-loop v1/v2(round 1–42)已 CLOSED,新一轮项目优化里程碑�
 **验证**: `mvnw checkstyle:check` PASS;`mvnw verify` 689 tests, 0 failures,coverage checks met。
 
 **下一步**: 无 — ADR-0010 已完整落地,Round 45 待 polish F1 (Javadoc sync)。
+
+---
+
+## [2026-07-01] ADR-0016 | ObserverRegistry 抽出 + RedisProCacheManager instantiate seam 收敛 (Round 6 autocratic one-shot)
+
+`/improve-codebase-architecture` round 6 autocratic one-shot 报告基于 round 1–5 已落地 ADR-0009/0010/0011/0012/0013/0014/0015 后,扫描 `chain/` + `handler/` + `cache/` 三域,筛出 2 强候选(候选 A + B)同 commit 合并落地,4 候选(C/D/E/F)继续延后(YAGNI/不动):
+
+**ADR 主体** (`wiki/adr/0016-...md`, 300 行, Accepted):
+- **D1** `chain/ObserverRegistry<O>` 抽出 — 跨 engine observer 列表去重 seam,泛型 utility 供 `ChainEngine` + `AnnotationChainEngine` 共用(消除 ~50 SLOC 重复 + 中心化 null-check + 中心化 CopyOnWrite 线程模型)
+- **D2** `RedisProCacheManager.instantiateRedisProCache(name, cfg)` 抽出 — 8 参 `new RedisProCache(...)` 重复样板收敛为 1 处委派(Spring 扩展点韧性)
+- **D3–D6** 候选 C/D/E/F 决策记录(Factory materialize / Projector 3 from / CacheResult 语义 / Factory 4 if-block)留作未来触发器
+
+**文件变更**:
+- 新建 2: `chain/ObserverRegistry.java` (60 SLOC / 24 code-only), `test/chain/ObserverRegistryTest.java` (8 contract tests)
+- 修改 4: `ChainEngine.java` (-16 code SLOC), `AnnotationChainEngine.java` (-3 code SLOC), `RedisProCacheManager.java` (-5 code SLOC), `test/cache/RedisProCacheManagerTest.java` (+3 contract tests)
+- 总代码净变化:**0 SLOC**(seam 重新分布,leverage +∞)
+
+**leverage 兑现**:
+1. 新增第 3 个 observer-bearing engine → 直接 `new ObserverRegistry<O>()`,1 行而非 25 SLOC
+2. Spring 框架 `RedisCache` 构造参数变化 → instantiate seam 兜底,改 1 处而非 2 处
+3. observer 列表 null-check / CopyOnWrite 线程模型 → 中心化(此前两 engine 各持)
+
+**Review CR findings**: 零 — autocratic 阶段已 self-review(公开 API 兼容性 + import 清洁度 + 线程模型保留 + 27+ 调用方零回归),无 CR 问题待修
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw verify` —— **BUILD SUCCESS, 746 tests, 0 failures, 0 errors; All coverage checks have been met**
+  (原 735 + 8 ObserverRegistry contract + 3 Manager contract = 746)
+- JaCoCo —— `chain.ObserverRegistry` 100% 行覆盖 (8 contract tests)
+
+**下一步**: 无 — ADR-0016 完整落地。下轮(Round 7)可考虑候选 G:5 个 `onAttachMetrics` handler 子类 single-counter pattern 微 DRY(目前每 handler unique counter 名,合并易失语)。

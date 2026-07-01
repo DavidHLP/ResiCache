@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -50,16 +49,21 @@ import java.util.concurrent.atomic.AtomicReference;
  * post-process（外层 {@link #execute} 完成）。仅做节点推进 + perNode 观测。
  *
  * <p><b>线程安全</b>：Engine 单例 Bean，{@link #observers} 字段为
- * {@link CopyOnWriteArrayList}（启动期单写、热期多读），observer 自身必须
- * 线程安全。Handler 列表由 {@link CacheHandlerChain} 持锁读快照传入，Engine
- * 内部不修改该列表。
+ * {@link ObserverRegistry}（内部 {@code CopyOnWriteArrayList}，启动期单写、热期
+ * 多读），observer 自身必须线程安全。Handler 列表由 {@link CacheHandlerChain}
+ * 持锁读快照传入，Engine 内部不修改该列表。
+ *
+ * <p><b>Observer 列表管理委派</b>(ADR-0016):{@code addObserver} / {@code observers}
+ * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与
+ * {@code handler.AnnotationChainEngine} 共用 — 消除两 engine 间 ~30 SLOC 的
+ * observer 列表样板重复。
  */
 @Slf4j
 @Component
 public class ChainEngine {
 
-    /** 注册的 observer 列表 — 启动期单写、运行期多读（CopyOnWrite 适配）。 */
-    private final List<ChainObserver> observers = new CopyOnWriteArrayList<>();
+    /** 注册的 observer 列表 — 委派到 {@link ObserverRegistry}(ADR-0016 单一 seam). */
+    private final ObserverRegistry<ChainObserver> observers = new ObserverRegistry<>();
 
     /** 工厂建链后注入（{@link CacheHandlerChainFactory#createChain}）。 */
     private final AtomicReference<List<CacheHandler>> chainSnapshotRef = new AtomicReference<>();
@@ -74,11 +78,9 @@ public class ChainEngine {
      * 首次 execute 前。
      *
      * @param observer 待注册的 observer（不为 null）
+     * @throws IllegalArgumentException 若 observer 为 null
      */
     public void addObserver(ChainObserver observer) {
-        if (observer == null) {
-            throw new IllegalArgumentException("observer must not be null");
-        }
         observers.add(observer);
     }
 
@@ -88,7 +90,7 @@ public class ChainEngine {
      * @return 不可变 observer 列表快照
      */
     public List<ChainObserver> observers() {
-        return List.copyOf(observers);
+        return observers.snapshot();
     }
 
     /**
@@ -123,15 +125,11 @@ public class ChainEngine {
             log.warn("Handler chain is empty!");
             // 仍然走 onChainStart/onChainEnd 配对 — observer 可能在 start 注册
             // thread-local 资源（如 Timer.Sample），不配对会泄漏
-            for (ChainObserver o : observers) {
-                o.onChainStart(context);
-            }
+            observers.forEach(o -> o.onChainStart(context));
             try {
                 return CacheResult.success();
             } finally {
-                for (ChainObserver o : observers) {
-                    o.onChainEnd(context, CacheResult.success());
-                }
+                observers.forEach(o -> o.onChainEnd(context, CacheResult.success()));
             }
         }
 
@@ -139,9 +137,7 @@ public class ChainEngine {
                 context.getOperation(), context.getCacheName(), context.getRedisKey());
 
         // aroundChain 观测：start
-        for (ChainObserver o : observers) {
-            o.onChainStart(context);
-        }
+        observers.forEach(o -> o.onChainStart(context));
 
         CacheResult finalResult;
         try {
@@ -153,9 +149,7 @@ public class ChainEngine {
             executePostProcess(snapshot, context, finalResult);
         } finally {
             // aroundChain 观测：end（即使主路径异常也调用，保证 observer 资源配对）
-            for (ChainObserver o : observers) {
-                o.onChainEnd(context, CacheResult.success());
-            }
+            observers.forEach(o -> o.onChainEnd(context, CacheResult.success()));
         }
 
         return finalResult;
@@ -264,13 +258,9 @@ public class ChainEngine {
      * 能拿到 result.decision() 做后续处理。
      */
     private HandlerResult invokeWithObservers(CacheHandler handler, CacheContext context) {
-        for (ChainObserver o : observers) {
-            o.beforeNode(handler, context);
-        }
+        observers.forEach(o -> o.beforeNode(handler, context));
         HandlerResult result = handler.handle(context);
-        for (ChainObserver o : observers) {
-            o.afterNode(handler, context, result);
-        }
+        observers.forEach(o -> o.afterNode(handler, context, result));
         return result;
     }
 

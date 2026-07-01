@@ -77,15 +77,44 @@ public class RedisProCacheManager extends RedisCacheManager {
         this.methodMetadataResolver = methodMetadataResolver;
         setTransactionAware(transactionAware);
     }
+
     @Override
     @NonNull
     protected RedisCache createRedisCache(
             @NonNull String name, RedisCacheConfiguration cacheConfiguration) {
         log.debug("Creating RedisProCache for cache name: {}", name);
+        return instantiateRedisProCache(name, resolveCacheConfiguration(cacheConfiguration));
+    }
+
+    @Override
+    @Nullable
+    protected RedisCache getMissingCache(@NonNull String name) {
+        log.debug("Creating missing RedisProCache for cache name: {}", name);
+        return instantiateRedisProCache(name, resolveCacheConfiguration(null));
+    }
+
+    /**
+     * 实例化 {@link RedisProCache} 的单一 seam — 收敛 8 参构造调用的重复样板
+     * (ADR-0016,原 {@code createRedisCache} 与 {@code getMissingCache} 各自
+     * 8-arg 重复).
+     *
+     * <p><b>deletion test</b>:删本方法 → {@code createRedisCache} 与
+     * {@code getMissingCache} 恢复各自 8-arg 调用;任一参数新增/重命名时两处
+     * 必漏改一边(本 manager 是 Spring 扩展点,Spring 框架可能在 vNext 增删参数).
+     *
+     * <p>参数契约:与 {@link RedisProCache} 8 参构造完全一致;
+     * {@link RedisCacheConfiguration} 由调用方在传入前用 {@link #resolveCacheConfiguration}
+     * 归一化(可能为 null → fallback 到 {@link #getDefaultCacheConfiguration()}).
+     *
+     * @param name      缓存名称
+     * @param config    已归一化的缓存配置(可为 null,走默认)
+     * @return 新建 {@link RedisProCache} 实例
+     */
+    private RedisProCache instantiateRedisProCache(String name, RedisCacheConfiguration config) {
         return new RedisProCache(
                 name,
                 redisProCacheWriter,
-                resolveCacheConfiguration(cacheConfiguration),
+                config,
                 meterRegistry,
                 bloomSupport,
                 redisCacheRegister,
@@ -96,20 +125,5 @@ public class RedisProCacheManager extends RedisCacheManager {
     private RedisCacheConfiguration resolveCacheConfiguration(
             @Nullable RedisCacheConfiguration cacheConfiguration) {
         return cacheConfiguration != null ? cacheConfiguration : getDefaultCacheConfiguration();
-    }
-
-    @Override
-    @Nullable
-    protected RedisCache getMissingCache(@NonNull String name) {
-        log.debug("Creating missing RedisProCache for cache name: {}", name);
-        return new RedisProCache(
-                name,
-                redisProCacheWriter,
-                resolveCacheConfiguration(null),
-                meterRegistry,
-                bloomSupport,
-                redisCacheRegister,
-                syncSupport,
-                methodMetadataResolver);
     }
 }

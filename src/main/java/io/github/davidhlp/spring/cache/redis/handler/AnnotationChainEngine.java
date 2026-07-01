@@ -1,5 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
+import io.github.davidhlp.spring.cache.redis.chain.ObserverRegistry;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.stereotype.Component;
@@ -8,7 +10,6 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 注解解析责任链推进引擎 — ADR-0013 (Annotation Chain Engine extraction).
@@ -30,13 +31,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p><b>观测编排</b>:Engine 在链入口调用所有 observer 的
  * {@link AnnotationChainObserver#onChainStart(Method, Object, Object[])},
  * 链出口调用 {@link AnnotationChainObserver#onChainEnd(Method, Object, Object[], List)}
- * (try/finally 守护,异常路径也保证 onChainEnd 触发)。
+ * (try/finally 守护,异常路径也保证 onChainEnd 触发).
  * Observer 实现以 default no-op 形式提供(见 {@link AnnotationChainObserver}),
- * Engine 自身不感知 MDC / 计时 / DEBUG log 等具体关注点。
+ * Engine 自身不感知 MDC / 计时 / DEBUG log 等具体关注点.
  *
  * <p><b>失败隔离</b>:Engine 捕获每个 handler 抛出的异常,记 ERROR 日志后继续遍历
- * 剩余 handler。这与原 {@code AnnotationHandler.handle} 的"全链失败"语义<em>不同</em>
- * — 原实现是"任一 handler 抛异常 → 整个链求值中断 → 拦截器失败 → 缓存全失效"。
+ * 剩余 handler. 这与原 {@code AnnotationHandler.handle} 的"全链失败"语义<em>不同</em>
+ * — 原实现是"任一 handler 抛异常 → 整个链求值中断 → 拦截器失败 → 缓存全失效".
  * 新实现的 per-handler 隔离<strong>是严格更宽松</strong>的行为:
  * <ul>
  *   <li>原本能容忍的链路(无 handler 抛异常)行为零变化</li>
@@ -45,15 +46,21 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *       try/catch 模式一致</li>
  * </ul>
  * 行为收窄方向:更宽松,符合"单个 handler 失败不应中断整个缓存链路"的本意
- * (Spring 注解处理也有同源约定)。
+ * (Spring 注解处理也有同源约定).
  *
- * <p><b>线程安全</b>:Engine 单例 Bean,observers 字段为 CopyOnWriteArrayList
- * (启动期单写、运行期多读),observer 自身必须线程安全。Handler 列表由 Spring
- * 启动时一次性注入,运行期不变(无 addHandler 暴露,本场景下链是静态的)。
+ * <p><b>线程安全</b>:Engine 单例 Bean,observers 字段委派到 {@link ObserverRegistry}
+ * (内部 {@code CopyOnWriteArrayList}, 启动期单写、运行期多读), observer 自身必须
+ * 线程安全. Handler 列表由 Spring 启动时一次性注入,运行期不变(无 addHandler
+ * 暴露,本场景下链是静态的).
+ *
+ * <p><b>Observer 列表管理委派</b>(ADR-0016):{@code addObserver} / {@code observers}
+ * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与 {@code chain.ChainEngine}
+ * 共用 — 消除两 engine 间 ~30 SLOC 的 observer 列表样板重复. Observer 遍历
+ * 期间抛出的异常被本 Engine 的 try/catch 捕获(见 {@link #execute}),不阻塞主链.
  *
  * <p><b>与 ChainEngine 的关系</b>:本 Engine 是 cache 写入链推进引擎
  * ({@code chain.ChainEngine})的<em>平行 seam</em>,非复用 — 决策语义不同
- * (filter vs decision),合并会导致抽象过载。
+ * (filter vs decision),合并会导致抽象过载.
  */
 @Slf4j
 @Component
@@ -62,8 +69,8 @@ public class AnnotationChainEngine {
     /** 注入的所有 AnnotationHandler 实现(Spring 自动按 List 注入 4 个具体 handler) */
     private final List<AnnotationHandler> handlers;
 
-    /** observer 列表 — 启动期单写、运行期多读(CopyOnWrite 适配) */
-    private final List<AnnotationChainObserver> observers = new CopyOnWriteArrayList<>();
+    /** observer 列表 — 委派到 {@link ObserverRegistry}(ADR-0016 单一 seam). */
+    private final ObserverRegistry<AnnotationChainObserver> observers = new ObserverRegistry<>();
 
     public AnnotationChainEngine(List<AnnotationHandler> handlers) {
         this.handlers = List.copyOf(handlers);
@@ -78,11 +85,9 @@ public class AnnotationChainEngine {
      * execute 前。
      *
      * @param observer 待注册的 observer(不为 null)
+     * @throws IllegalArgumentException 若 observer 为 null
      */
     public void addObserver(AnnotationChainObserver observer) {
-        if (observer == null) {
-            throw new IllegalArgumentException("observer must not be null");
-        }
         observers.add(observer);
     }
 
@@ -92,7 +97,7 @@ public class AnnotationChainEngine {
      * @return 不可变 observer 列表快照
      */
     public List<AnnotationChainObserver> observers() {
-        return List.copyOf(observers);
+        return observers.snapshot();
     }
 
     /**
@@ -125,7 +130,7 @@ public class AnnotationChainEngine {
         Object[] safeArgs = args != null ? args : new Object[0];
 
         // 1. aroundChain:onChainStart
-        for (AnnotationChainObserver o : observers) {
+        observers.forEach(o -> {
             try {
                 o.onChainStart(method, target, safeArgs);
             } catch (Exception observerEx) {
@@ -133,7 +138,7 @@ public class AnnotationChainEngine {
                 log.error("AnnotationChainObserver.onChainStart failed: {}",
                         o.getClass().getSimpleName(), observerEx);
             }
-        }
+        });
 
         // 2. 遍历 handler 求值
         List<CacheOperation> collected = new ArrayList<>();
@@ -156,14 +161,14 @@ public class AnnotationChainEngine {
         } finally {
             // 3. aroundChain:onChainEnd(try/finally 守护,异常路径也保证触发)
             List<CacheOperation> snapshot = Collections.unmodifiableList(collected);
-            for (AnnotationChainObserver o : observers) {
+            observers.forEach(o -> {
                 try {
                     o.onChainEnd(method, target, safeArgs, snapshot);
                 } catch (Exception observerEx) {
                     log.error("AnnotationChainObserver.onChainEnd failed: {}",
                             o.getClass().getSimpleName(), observerEx);
                 }
-            }
+            });
         }
 
         return Collections.unmodifiableList(collected);

@@ -186,4 +186,48 @@ class RedisProCacheManagerTest {
             assertThat(cache1).isNotEqualTo(cache2);
         }
     }
+
+    @Nested
+    @DisplayName("instantiateRedisProCache contract tests (ADR-0016)")
+    class InstantiateRedisProCacheContract {
+
+        @Test
+        @DisplayName("createRedisCache 与 getMissingCache 走同一 instantiate seam — name 透传")
+        void createAndMissing_useSameInstantiateSeam_namePropagated() {
+            String name1 = "seam-cache-create";
+            String name2 = "seam-cache-missing";
+
+            RedisProCache fromCreate = (RedisProCache) cacheManager.createRedisCache(name1, null);
+            // getMissingCache 是 protected, 走 createRedisCache(name, null) 等价路径
+            // 这里我们通过 getCache 触发 missing 路径(会调 createRedisCache)
+            var fromMissing = cacheManager.getCache(name2);
+
+            assertThat(fromCreate.getName()).isEqualTo(name1);
+            assertThat(fromMissing).isNotNull();
+            assertThat(fromMissing.getName()).isEqualTo(name2);
+        }
+
+        @Test
+        @DisplayName("createRedisCache(name, cfg) — cfg 非 null 时透传(不走默认)")
+        void createRedisCache_nonNullConfig_propagatesConfig() {
+            RedisCacheConfiguration customConfig = RedisCacheConfiguration.defaultCacheConfig()
+                    .entryTtl(Duration.ofSeconds(777));
+
+            RedisProCache cache = (RedisProCache) cacheManager.createRedisCache("cfg-cache", customConfig);
+
+            // cfg=777s 透传到 RedisProCache(证明 instantiateRedisProCache 未误调 resolve)
+            assertThat(cache.getCacheConfiguration().getTtlFunction().getTimeToLive(null, null))
+                    .isEqualTo(Duration.ofSeconds(777));
+        }
+
+        @Test
+        @DisplayName("createRedisCache(name, null) — null cfg 走默认(证明 resolve 仍然生效)")
+        void createRedisCache_nullConfig_fallsBackToDefault() {
+            // defaultConfig TTL=60s (来自 @BeforeEach setUp)
+            RedisProCache cache = (RedisProCache) cacheManager.createRedisCache("null-cfg-cache", null);
+
+            assertThat(cache.getCacheConfiguration().getTtlFunction().getTimeToLive(null, null))
+                    .isEqualTo(Duration.ofSeconds(60));
+        }
+    }
 }
