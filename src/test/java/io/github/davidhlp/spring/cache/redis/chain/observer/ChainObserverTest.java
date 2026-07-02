@@ -7,6 +7,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -37,12 +38,12 @@ class ChainObserverTest {
 
     @BeforeEach
     void setUp() {
-        ctx = CacheContext.builder()
+        ctx = CacheContext.of(CacheInput.builder()
                 .operation(CacheOperation.GET)
                 .cacheName("test-cache")
                 .redisKey("test:key")
                 .actualKey("test:key")
-                .build();
+                .build());
         handler = new CacheHandler() {
             @Override public HandlerResult handle(CacheContext c) { return HandlerResult.continueChain(); }
         };

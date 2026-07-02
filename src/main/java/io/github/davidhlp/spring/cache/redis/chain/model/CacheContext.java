@@ -24,28 +24,27 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>使用方式:
  * <ul>
+ *   <li>构造：{@code CacheContext.of(CacheInput.builder()…build())}（ADR-0026：单一构造路径，
+ *       原 CacheContextBuilder pass-through 重复墙已删）</li>
  *   <li>读取操作参数：context.getOperation(), context.getCacheName() 等</li>
- *   <li>设置处理结果：context.output().setFinalTtl(...), context.output().setStoreValue(...)</li>
- *   <li>检查状态：context.isSkipRemaining(), context.output().isEarlyExpirationCheckEnabled()</li>
+ *   <li>设置处理结果：context.getOutput().setFinalTtl(...), context.getOutput().setStoreValue(...)</li>
+ *   <li>检查状态：context.isSkipRemaining(), context.getOutput().isEarlyExpirationCheckEnabled()</li>
  *   <li>属性传递：context.setAttribute(key, value), context.getAttribute(key)</li>
  * </ul>
  */
 public class CacheContext {
 
     /**
-     * 属性键常量 - 避免 Magic Strings
+     * 属性键常量 - 避免 Magic Strings。
+     *
+     * <p>ADR-0026：仅保留在用的 2 个 key；{@code CACHE_HIT} / {@code ASYNC_REFRESH_TASK_ID}
+     * 已删（全项目含 test 0 引用，死代码）。
      */
     public static final class AttributeKey {
         private AttributeKey() {}
 
         /** 提前过期跳过标记 */
         public static final String EARLY_EXPIRATION_SKIPPED = "earlyExpiration.skipped";
-
-        /** 缓存命中标记 */
-        public static final String CACHE_HIT = "cache.hit";
-
-        /** 异步刷新任务ID */
-        public static final String ASYNC_REFRESH_TASK_ID = "async.refresh.taskId";
 
         /** EarlyExpirationHandler 获取的缓存值（供 ActualCacheHandler 复用，避免双重 Redis GET） */
         public static final String PREFETCHED_CACHED_VALUE = "cache.prefetchedValue";
@@ -55,19 +54,10 @@ public class CacheContext {
     @Getter
     private final CacheInput input;
 
-    /** 输出状态（可变） */
+    /** 输出状态（可变）。{@code @Getter} 生成 {@code getOutput()}，供 ActualCacheHandler /
+     * TtlHandler / NullValueHandler 等调用（ADR-0026：原手写兜底 + 编译侥幸注释已删）。 */
     @Getter
     private final CacheOutput output;
-
-    /**
-     * 显式 {@code getOutput()} 访问器 — 兼容 {@code ActualCacheHandler} 多处调用
-     * (line 72, 162, 283 等)。{@code @Getter} Lombok 注解处理器在某些编译路径
-     * (增量编译 + record/resolver 混合)可能不生成,显式方法作为兜底;若 Lombok
-     * 已生成,Java 编译会报 duplicate,届时移除本方法即可。
-     */
-    public CacheOutput getOutput() {
-        return output;
-    }
 
     /**
      * 临时属性（用于 Handler 间传递数据和后置处理标记）
@@ -82,37 +72,37 @@ public class CacheContext {
     }
 
     // ==================== 便捷访问方法（委托到 input） ====================
-    
-    public CacheOperation getOperation() { 
-        return input.operation(); 
+
+    public CacheOperation getOperation() {
+        return input.operation();
     }
-    
-    public String getCacheName() { 
-        return input.cacheName(); 
+
+    public String getCacheName() {
+        return input.cacheName();
     }
-    
-    public String getRedisKey() { 
-        return input.redisKey(); 
+
+    public String getRedisKey() {
+        return input.redisKey();
     }
-    
-    public String getActualKey() { 
-        return input.actualKey(); 
+
+    public String getActualKey() {
+        return input.actualKey();
     }
-    
-    public byte[] getValueBytes() { 
-        return input.valueBytes(); 
+
+    public byte[] getValueBytes() {
+        return input.valueBytes();
     }
-    
-    public Object getDeserializedValue() { 
-        return input.deserializedValue(); 
+
+    public Object getDeserializedValue() {
+        return input.deserializedValue();
     }
-    
-    public Duration getTtl() { 
-        return input.ttl(); 
+
+    public Duration getTtl() {
+        return input.ttl();
     }
-    
-    public RedisCacheableOperation getCacheOperation() { 
-        return input.cacheOperation(); 
+
+    public RedisCacheableOperation getCacheOperation() {
+        return input.cacheOperation();
     }
 
     // ==================== 便捷访问方法（委托到 output） ====================
@@ -196,46 +186,8 @@ public class CacheContext {
     }
 
     // ==================== 静态工厂方法 ====================
-    
+
     public static CacheContext of(CacheInput input) {
         return new CacheContext(input);
-    }
-    
-    /**
-     * 创建 Builder（向后兼容）
-     */
-    public static CacheContextBuilder builder() {
-        return new CacheContextBuilder();
-    }
-    
-    /**
-     * Builder 类（向后兼容旧代码）
-     */
-    public static class CacheContextBuilder {
-        private CacheOperation operation;
-        private String cacheName;
-        private String redisKey;
-        private String actualKey;
-        private byte[] valueBytes;
-        private Object deserializedValue;
-        private Duration ttl;
-        private RedisCacheableOperation cacheOperation;
-        
-        public CacheContextBuilder operation(CacheOperation operation) { this.operation = operation; return this; }
-        public CacheContextBuilder cacheName(String cacheName) { this.cacheName = cacheName; return this; }
-        public CacheContextBuilder redisKey(String redisKey) { this.redisKey = redisKey; return this; }
-        public CacheContextBuilder actualKey(String actualKey) { this.actualKey = actualKey; return this; }
-        public CacheContextBuilder valueBytes(byte[] valueBytes) { this.valueBytes = valueBytes; return this; }
-        public CacheContextBuilder deserializedValue(Object value) { this.deserializedValue = value; return this; }
-        public CacheContextBuilder ttl(Duration ttl) { this.ttl = ttl; return this; }
-        public CacheContextBuilder cacheOperation(RedisCacheableOperation op) { this.cacheOperation = op; return this; }
-        
-        public CacheContext build() {
-            CacheInput input = new CacheInput(
-                operation, cacheName, redisKey, actualKey,
-                valueBytes, deserializedValue, ttl, cacheOperation
-            );
-            return new CacheContext(input);
-        }
     }
 }

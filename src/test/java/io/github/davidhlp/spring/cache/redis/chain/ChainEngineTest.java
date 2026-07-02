@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.github.davidhlp.spring.cache.redis.chain.observer.MDCStampChainObserver;
 import io.github.davidhlp.spring.cache.redis.chain.observer.NoOpChainObserver;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,12 +42,12 @@ class ChainEngineTest {
     }
 
     private CacheContext newCtx() {
-        return CacheContext.builder()
+        return CacheContext.of(CacheInput.builder()
                 .operation(CacheOperation.GET)
                 .cacheName("test-cache")
                 .redisKey("test:key")
                 .actualKey("test:key")
-                .build();
+                .build());
     }
 
     private void installChain(CacheHandler... handlers) {

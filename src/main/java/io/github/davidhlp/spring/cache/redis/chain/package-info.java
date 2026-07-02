@@ -58,11 +58,11 @@
  * CacheHandlerChain chain = chainFactory.createChain();
  *
  * // 构建上下文
- * CacheContext context = CacheContext.builder()
+ * CacheContext context = CacheContext.of(CacheInput.builder()
  *     .operation(CacheOperation.GET)
  *     .cacheName("user")
  *     .redisKey("user::123")
- *     .build();
+ *     .build());
  *
  * // 执行责任链
  * CacheResult result = chain.execute(context);

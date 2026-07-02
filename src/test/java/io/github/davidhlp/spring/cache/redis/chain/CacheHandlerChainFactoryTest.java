@@ -274,12 +274,12 @@ class CacheHandlerChainFactoryTest {
             factory = new CacheHandlerChainFactory(List.of(probe), properties, provider, new ChainEngine());
 
             CacheHandlerChain chain = factory.createChain();
-            CacheContext ctx = CacheContext.builder()
+            CacheContext ctx = CacheContext.of(CacheInput.builder()
                     .operation(CacheOperation.GET)
                     .cacheName("probe-cache")
                     .redisKey("probe:k")
                     .actualKey("probe:k")
-                    .build();
+                    .build());
             chain.execute(ctx);
 
             var counters = new ArrayList<>(registry.find("resicache.handler.fired").counters());

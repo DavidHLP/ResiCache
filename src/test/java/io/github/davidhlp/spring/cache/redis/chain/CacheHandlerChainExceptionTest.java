@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -147,12 +148,12 @@ class CacheHandlerChainExceptionTest {
     }
 
     private CacheContext createTestContext() {
-        return CacheContext.builder()
+        return CacheContext.of(CacheInput.builder()
                 .operation(CacheOperation.PUT)
                 .cacheName("test-cache")
                 .redisKey("test:key")
                 .actualKey("test:key")
-                .build();
+                .build());
     }
 
     /**

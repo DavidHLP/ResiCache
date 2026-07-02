@@ -8,6 +8,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import org.slf4j.MDC;
@@ -132,7 +133,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
         // 构建上下文（带操作配置）
         CacheContext context =
-                CacheContext.builder()
+                CacheContext.of(CacheInput.builder()
                         .operation(CacheOperation.PUT)
                         .cacheName(name)
                         .redisKey(redisKey)
@@ -141,7 +142,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                         .deserializedValue(deserializedValue)
                         .ttl(ttl)
                         .cacheOperation(operation)
-                        .build();
+                        .build());
 
         // 执行责任链（使用缓存的 chain 实例）
         getChain().execute(context);
@@ -318,7 +319,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             log.debug("No metadata found via AnnotatedElementKey for cacheName={}, falling back to actualKey", cacheName);
         }
 
-        return CacheContext.builder()
+        return CacheContext.of(CacheInput.builder()
                 .operation(operation)
                 .cacheName(cacheName)
                 .redisKey(redisKey)
@@ -327,7 +328,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 .deserializedValue(deserializedValue)
                 .ttl(ttl)
                 .cacheOperation(cacheOperation)
-                .build();
+                .build());
     }
 
     /**

@@ -125,11 +125,11 @@ public class ChainEngine {
             log.warn("Handler chain is empty!");
             // 仍然走 onChainStart/onChainEnd 配对 — observer 可能在 start 注册
             // thread-local 资源（如 Timer.Sample），不配对会泄漏
-            observers.forEach(o -> o.onChainStart(context));
+            observers.forEachSafe(o -> o.onChainStart(context));
             try {
                 return CacheResult.success();
             } finally {
-                observers.forEach(o -> o.onChainEnd(context, CacheResult.success()));
+                observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
             }
         }
 
@@ -137,7 +137,7 @@ public class ChainEngine {
                 context.getOperation(), context.getCacheName(), context.getRedisKey());
 
         // aroundChain 观测：start
-        observers.forEach(o -> o.onChainStart(context));
+        observers.forEachSafe(o -> o.onChainStart(context));
 
         CacheResult finalResult;
         try {
@@ -149,7 +149,7 @@ public class ChainEngine {
             executePostProcess(snapshot, context, finalResult);
         } finally {
             // aroundChain 观测：end（即使主路径异常也调用，保证 observer 资源配对）
-            observers.forEach(o -> o.onChainEnd(context, CacheResult.success()));
+            observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
         }
 
         return finalResult;
@@ -252,9 +252,9 @@ public class ChainEngine {
      * 能拿到 result.decision() 做后续处理。
      */
     private HandlerResult invokeWithObservers(CacheHandler handler, CacheContext context) {
-        observers.forEach(o -> o.beforeNode(handler, context));
+        observers.forEachSafe(o -> o.beforeNode(handler, context));
         HandlerResult result = handler.handle(context);
-        observers.forEach(o -> o.afterNode(handler, context, result));
+        observers.forEachSafe(o -> o.afterNode(handler, context, result));
         return result;
     }
 

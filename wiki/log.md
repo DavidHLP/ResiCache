@@ -954,3 +954,17 @@ Q2 autonomous-loop v1/v2(round 1–42)已 CLOSED,新一轮项目优化里程碑�
 - JaCoCo —— `chain.ObserverRegistry` 100% 行覆盖 (8 contract tests)
 
 **下一步**: 无 — ADR-0016 完整落地。下轮(Round 7)可考虑候选 G:5 个 `onAttachMetrics` handler 子类 single-counter pattern 微 DRY(目前每 handler unique counter 名,合并易失语)。
+
+## [2026-07-02] ADR-0026 | Round 14 — CacheContextBuilder 删除 + ObserverRegistry.forEachSafe + 候选 3/4 封口
+
+`/improve-codebase-architecture` round 14 autocratic one-shot 报告(`/tmp/architecture-review-round-14-1782963998.html`,不入仓)4 候选落地:
+
+- **D1 删 CacheContextBuilder**(候选 1,执行):pass-through 重复墙(整复制 `CacheInput.Builder` 8 字段+8 setter ~30 SLOC)删除;7 调用方(main 2 + test 5)迁 `CacheContext.of(CacheInput.builder()…build())`;手写 `getOutput()` 兜底删(靠字段级 `@Getter`,核实 `getInput()` 0 次直接调用 → 8 个 input 委派方法是唯一入口,在挣价值,保留)。
+- **D2 ObserverRegistry.forEachSafe**(候选 2,执行):两 engine observer 异常语义不一致(`ChainEngine` 裸调冒泡 / `AnnotationChainEngine` 吞 + 记 ERROR;`AnnotationChainEngineTest` 注释声称"一致"实为假)→ 统一为 `forEachSafe`「吞+记ERROR,主链继续」;`ChainEngine` 6 处 + `AnnotationChainEngine` 2 处改用,消除 try-catch 重复;invariant 浮出到 utility seam(ADR-0016 收敛列表管理,本 ADR 补齐遍历异常语义)。
+- **D3 删 AttributeKey 2 死常量**(候选 4 部分):`CACHE_HIT` / `ASYNC_REFRESH_TASK_ID` 全项目(含 test)0 引用。
+- **D4 SpringAnnotationAdapter hasText 守卫墙**(候选 3,封口不动):3 类 builder 异构(Spring 原生 setXxx vs ResiCache fluent xxx),统一需 18 lambda,可读性反降;与 ADR-0020 同源裁决,纳入封口。遗留:三方法产出三类型 Operation 的不对称根因属 1.0 级,留触发器。
+- **D5 typed AttributeKey**(候选 4 部分,封口不动):仅 2 在用 key,成本>收益。
+
+**验证**:`mvnw verify` BUILD SUCCESS,**782 tests** 0 failures 0 errors,**All coverage checks have been met**;0 公开 API 变化。
+
+**剔除的伪候选**(Explore agent 误判,核实后剔除):`RedisCacheAttributes.applyTo`(ADR-0021 已完整解决)、`RedisProCacheProperties`/`TwoListLRU`(deletion test 在挣价值,深度模块)。

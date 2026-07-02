@@ -53,10 +53,11 @@ import java.util.List;
  * 线程安全. Handler 列表由 Spring 启动时一次性注入,运行期不变(无 addHandler
  * 暴露,本场景下链是静态的).
  *
- * <p><b>Observer 列表管理委派</b>(ADR-0016):{@code addObserver} / {@code observers}
- * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与 {@code chain.ChainEngine}
- * 共用 — 消除两 engine 间 ~30 SLOC 的 observer 列表样板重复. Observer 遍历
- * 期间抛出的异常被本 Engine 的 try/catch 捕获(见 {@link #execute}),不阻塞主链.
+ * <p><b>Observer 列表管理委派</b>(ADR-0016 / ADR-0026):{@code addObserver} /
+ * {@code observers} / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与
+ * {@code chain.ChainEngine} 共用 — 消除两 engine 间 ~30 SLOC 的 observer 列表样板重复.
+ * Observer 遍历期间抛出的异常由 {@link ObserverRegistry#forEachSafe(Consumer)} 统一隔离
+ * (ADR-0026),不阻塞主链;两 engine 语义对齐.
  *
  * <p><b>与 ChainEngine 的关系</b>:本 Engine 是 cache 写入链推进引擎
  * ({@code chain.ChainEngine})的<em>平行 seam</em>,非复用 — 决策语义不同
@@ -129,16 +130,9 @@ public class AnnotationChainEngine {
         // 但本 seam 期望 target 非 null(对应拦截器契约),只做 args null 兜底
         Object[] safeArgs = args != null ? args : new Object[0];
 
-        // 1. aroundChain:onChainStart
-        observers.forEach(o -> {
-            try {
-                o.onChainStart(method, target, safeArgs);
-            } catch (Exception observerEx) {
-                // observer 异常不阻塞主链(与 ChainEngine.execute 行为一致)
-                log.error("AnnotationChainObserver.onChainStart failed: {}",
-                        o.getClass().getSimpleName(), observerEx);
-            }
-        });
+        // 1. aroundChain:onChainStart（forEachSafe 异常隔离 — observer 抛异常吞 + 记 ERROR，
+        //    不阻断主链；语义与 ChainEngine 一致，ADR-0026）
+        observers.forEachSafe(o -> o.onChainStart(method, target, safeArgs));
 
         // 2. 遍历 handler 求值
         List<CacheOperation> collected = new ArrayList<>();
@@ -160,15 +154,9 @@ public class AnnotationChainEngine {
             }
         } finally {
             // 3. aroundChain:onChainEnd(try/finally 守护,异常路径也保证触发)
+            //    forEachSafe 异常隔离 — 单 observer 失败不阻断其他 observer 的 onChainEnd(ADR-0026)
             List<CacheOperation> snapshot = Collections.unmodifiableList(collected);
-            observers.forEach(o -> {
-                try {
-                    o.onChainEnd(method, target, safeArgs, snapshot);
-                } catch (Exception observerEx) {
-                    log.error("AnnotationChainObserver.onChainEnd failed: {}",
-                            o.getClass().getSimpleName(), observerEx);
-                }
-            });
+            observers.forEachSafe(o -> o.onChainEnd(method, target, safeArgs, snapshot));
         }
 
         return Collections.unmodifiableList(collected);
