@@ -1,3 +1,39 @@
+## [2026-07-02] improve | ChainEngineTest.executeFragment 期望同步 ADR-0022 语义 + RedisCacheSemanticsIT 真实失败发现(纠正 log 误诊) (round 18)
+
+`/improve-codebase-architecture` round 18 autocratic one-shot。架构经 17 轮 deepening 趋饱和,round 17(ADR-0025)明确点名的 round 18 #1 候选 = `ChainEngineTest.executeFragment_skipsAroundChain` pre-existing 失败(跨 ADR-0022~0025 四轮 defer)。其余候选(5 ChainObserver DRY / CacheKeys 第 3 use case / int→long 1.0 毕业 / bloomsift 命名 polish)log 已判定 YAGNI/polish/等触发,不配 ADR → 本轮扼杀,只做 #1。
+
+**ChainEngineTest 修复(目标达成)**:
+- **根因**:`executeChainFragment(ctx, from)` 经 ADR-0022 D4 语义从「含 from」改为「from 之后」(`snapshot.indexOf(from) + 1` subList)。`SyncLockHandler` 同步改 `getNext()`→`this`(D5)。**实现正确**(javadoc line 159 明确「推进 from 之后的剩余链」),但测试 `executeFragment_skipsAroundChain` 期望未同步:链 `[h1,h2]` 传 `h1`,ADR-0022 前推进 h1+h2(perNode×2),改后只推进 h2(perNode×1)→ `TooFewActualInvocations: beforeNode wanted 2, was 1`。
+- **修法(路径 R)**:链改 `[h0,h1,h2]` 传 `h0`。h0 模拟 SyncLockHandler 锁内 fragment 发起者(传 this),h1/h2 是其后继 → perNode × 2 验证「from 之后多节点推进」语义,断言强度保留,aroundChain 不触发契约不变。
+- **歧路扼杀**:改实现回「含 from」(推翻 ADR-0022 D4/D5 有意决策)/ 简单 `times(2)→times(1)`(断言弱化,无法验证多节点推进)。
+
+**🚨 重大发现:RedisCacheSemanticsIT 3 失败是真实断言失败,非 log 所称「Testcontainers 环境问题」**:
+
+log 跨 ADR-0019/0020/0021/0022 反复称 `cacheEvict_removesKey` / `cacheEvict_allEntries_removesAll` / `cachePut_alwaysExecutesAndUpdates` 三 IT 失败为「pre-existing Testcontainers 环境问题」——**误诊**。实测(单跑 `RedisCacheSemanticsIT`):Spring Boot 启动成功 + Redis 连接正常(到断言阶段,非 Docker/连接失败),失败为**真实断言失败**:
+- `cacheEvict_removesKey:95` — `expected: null, but was: CachedValue`(evictById 后 `testCache::1` 仍在)
+- `cacheEvict_allEntries_removesAll:107` — 同上
+- `cachePut_alwaysExecutesAndUpdates` — `Expecting actual not to be null`(putById 后 `testCache::1` 未写;但 callCount=2 说明方法执行了,@CachePut 语义下方法每次执行正常,只是缓存副作用未产生)
+
+**症状特征**:`@RedisCacheable` GET 路径工作正常(`cacheable_cachesResult` 通过,getById 写入 `testCache::1` line 92 `isNotNull` 过),仅 `@RedisCachePut` / `@RedisCacheEvict` 失效。同 `cacheNames="testCache"` + `key="#id"` + 同 template,GET 写入成功但 PUT/EVICT 失效 → 根因在 PUT/EVICT 操作路径。
+
+**根因调查(已通读 10 文件,全部排除)**:ActualCacheHandler handlePut/handleRemove(用 `context.getRedisKey()`,逻辑正确)✓ / RedisProCacheWriter put/remove 走 executeChain ✓ / RedisProCache.put/evict → super → writer ✓ / operation 类层次(`RedisCachePutOperation extends CachePutOperation`、`RedisCacheEvictOperation extends CacheEvictOperation`、`RedisCacheableOperation extends CacheableOperation` — Spring interceptor 均识别)✓ / SpringAnnotationAdapter SELECTIVE 桥接 ✓ / TestCacheService 注解 ✓ / IT 测试逻辑 ✓。
+
+**根因方向(收窄至 PUT/EVICT 走链时的 operation 查找,待 round 19 精确定位)**:PUT 经 `RedisProCacheWriter.put(name,key,value,ttl)`(line 150,不带 operation 重载)→ `buildContext` 靠 `methodMetadataResolver.currentKey()` 查 `RedisCacheRegister.getCacheableOperation(cacheName, elementKey)`。**嫌疑**:put/evict 上下文 `cacheOperation` 为 null(methodMetadataResolver ThreadLocal 未在该路径设置 / register 未以 elementKey 注册 put/evict operation)→ 某前置 handler 在 `cacheOperation==null` 时对 PUT/EVICT 短路,链未到 ActualCacheHandler。**待读**:RedisCacheRegister 注册逻辑 + 前置 handler(BloomFilter/SyncLock/NullValue)shouldHandle 对 PUT+null-operation 的行为 + RedisCacheInterceptor/ResiCacheMethodInterceptor 的 methodMetadata 设置路径。**诊断方法**:dump Redis keys(看 putById 实际写了什么 key)/ 临时日志看 buildContext 的 cacheOperation 是否 null。
+
+**scope 控制**:本轮只 commit ChainEngineTest 修复(铁律 3「严禁基于片段盲目盲改」— 未通读 RedisCacheRegister / 前置 handler / interceptor metadata 路径前不碰 PUT/EVICT 路径)。IT 修复为 round 19 独立工作(系统性调查 + 实验诊断 + 回归验证)。
+
+**验证**:
+- `mvnw checkstyle:check` — **0 violations**
+- `mvnw test -Dtest='ChainEngineTest'` — **16 tests, 0 failures**(含目标 `executeFragment_skipsAroundChain`)
+- 全量 unit test(所有非 IT 类)— **0 failures**(无回归)
+- `mvnw test -Dtest='RedisCacheSemanticsIT'` — **8 tests, 3 failures**(pre-existing,与本轮 ChainEngineTest 改动无代码依赖;本轮仅诊断纠正,未修)
+
+**文件变更**:1 test(`ChainEngineTest.java`,`executeFragment_skipsAroundChain` 链 `[h1,h2]`→`[h0,h1,h2]` + from `h1`→`h0` + javadoc 注释 ADR-0022 语义);wiki 2(log.md 本条目 + 无新 ADR)。
+
+**下一步**:无 — ChainEngineTest 完整修复(round 18 目标达成)。**round 19 候选**:RedisCacheSemanticsIT 真实失败根因(PUT/EVICT operation 查找 / methodMetadataResolver ThreadLocal / register 注册)— 本轮已排除 10 文件 + 收窄根因方向,下轮从 RedisCacheRegister + 前置 handler shouldHandle + interceptor metadata 设置路径切入。
+
+---
+
 ## [2026-07-02] ADR-0025 | early-expiration 决策 policy seam 迁出 TtlPolicy (refresh↔avalanche 跨域寄生方法 + Clock 依赖归位) (round 17)
 
 `/improve-codebase-architecture` round 17 autocratic one-shot。延续 round 16 的**跨域接缝视角**(反向用:找「一个域的接口方法 ↔ 唯一异域消费者」寄生方法),通读 round 1–16 零 ADR 触及的 `protection/avalanche/` + `protection/nullvalue/` 两域全部 6 源文件,定位到 `TtlPolicy.shouldEarlyExpiration`(唯一消费者 refresh 域 `EarlyExpirationHandler`)+ 其 `Clock` 依赖(仅为该方法存在)寄生 avalanche 域。兑现 round 16「下一步」预言的「跨域接缝同源排查可推广」。

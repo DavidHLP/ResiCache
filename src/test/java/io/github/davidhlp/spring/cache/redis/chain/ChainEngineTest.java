@@ -157,21 +157,24 @@ class ChainEngineTest {
         }
 
         @Test
-        @DisplayName("executeChainFragment:不调 aroundChain 钩子,只调 perNode")
+        @DisplayName("executeChainFragment:不调 aroundChain 钩子,只调 perNode(推进 from 之后)")
         void executeFragment_skipsAroundChain() {
             ChainObserver observer = mock(ChainObserver.class);
             engine.addObserver(observer);
+            // ADR-0022: executeChainFragment 语义为「推进 from 之后的剩余链」(不再含 from 本身)
+            // h0 作 fragment 发起者(模拟 SyncLockHandler 锁内传 this),h1/h2 是其后继
+            CacheHandler h0 = new RecordingHandler("h0", HandlerResult.continueChain());
             CacheHandler h1 = new RecordingHandler("h1", HandlerResult.continueChain());
             CacheHandler h2 = new RecordingHandler("h2", HandlerResult.continueWith(CacheResult.success()));
-            installChain(h1, h2);
+            installChain(h0, h1, h2);
 
-            CacheResult result = engine.executeChainFragment(newCtx(), h1);
+            CacheResult result = engine.executeChainFragment(newCtx(), h0);
 
             assertThat(result.isSuccess()).isTrue();
             // aroundChain 未触发(fragment 不应 stamp MDC / record Timer)
             verify(observer, times(0)).onChainStart(any());
             verify(observer, times(0)).onChainEnd(any(), any());
-            // perNode 各调一次
+            // perNode 对 from(h0)之后的 h1/h2 各调一次 → 共 2 次
             verify(observer, times(2)).beforeNode(any(), any());
             verify(observer, times(2)).afterNode(any(), any(), any());
         }
