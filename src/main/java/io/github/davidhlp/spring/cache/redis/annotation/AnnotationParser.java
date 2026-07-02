@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
-
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.interceptor.CacheOperation;
@@ -58,6 +55,16 @@ final class AnnotationParser {
         if (cacheEvict != null) {
             log.debug("Found @RedisCacheEvict annotation on target: {}", target);
             ops.add(parseRedisCacheEvict(cacheEvict, target));
+        }
+
+        // 处理单个 @RedisCachePut 注解 (ADR-0027: 修补历史遗漏 —— 此前仅 @RedisCaching
+        // 复合形式下的 @RedisCachePut 被展开,单注解形式被静默忽略,导致 @RedisCachePut 方法
+        // 不触发 Spring AOP 的 cache.put 调用)
+        final RedisCachePut cachePut =
+                AnnotationTargets.findMerged(target, RedisCachePut.class);
+        if (cachePut != null) {
+            log.debug("Found @RedisCachePut annotation on target: {}", target);
+            ops.add(parseRedisCachePut(cachePut, target));
         }
 
         // 处理 @RedisCaching 复合注解
@@ -137,14 +144,24 @@ final class AnnotationParser {
      * @param target 方法或类对象
      * @return 缓存操作
      */
-    private RedisCacheEvictOperation parseRedisCacheEvict(
+    private CacheOperation parseRedisCacheEvict(
             final RedisCacheEvict ann, final Object target) {
         final String name = AnnotationTargets.extractTargetName(target);
         log.trace("Parsing @RedisCacheEvict annotation for target: {}", target);
 
-        final RedisCacheEvictOperation.Builder builder =
-                RedisCacheEvictOperation.builder();
-        builder.name(name);
+        // ADR-0027: 使用 Spring 标准的 CacheEvictOperation.Builder,确保 getClass() 返回
+        // CacheEvictOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
+        // 能正确按类型索引(可缓存/可放入/可清除三桶)。此前产出 ResiCache 子类
+        // RedisCacheEvictOperation,其 getClass() ≠ CacheEvictOperation.class,Spring
+        // 无法将其分入 evict 桶 → @RedisCacheEvict 方法执行但不触发 cache.evict。
+        // ResiCache 增强字段(ttl/bloom/early-expiration 等)不进 Spring operation:
+        // 由 AnnotationChainEngine 的 handler 注册到 RedisCacheRegister,链路
+        // buildContext 按需查询。(@RedisCacheEvict 的 sync/syncTimeout 是 ResiCache
+        // 扩展,Spring 原生 CacheEvictOperation 无此概念,此处不投影——与 Spring
+        // 原生 @CacheEvict 行为一致。)
+        final org.springframework.cache.interceptor.CacheEvictOperation.Builder builder =
+                new org.springframework.cache.interceptor.CacheEvictOperation.Builder();
+        builder.setName(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
@@ -162,8 +179,6 @@ final class AnnotationParser {
 
         builder.setCacheWide(ann.allEntries());
         builder.setBeforeInvocation(ann.beforeInvocation());
-        builder.sync(ann.sync());
-        builder.syncTimeout(ann.syncTimeout());
 
         if (StringUtils.hasText(ann.keyGenerator())) {
             builder.setKeyGenerator(ann.keyGenerator());
@@ -173,16 +188,8 @@ final class AnnotationParser {
             builder.setCacheManager(ann.cacheManager());
         }
 
-        builder.ttl(ann.ttl());
-        builder.useBloomFilter(ann.useBloomFilter());
-        builder.expectedInsertions(ann.expectedInsertions());
-        builder.falseProbability(ann.falseProbability());
-        builder.enableEarlyExpiration(ann.enableEarlyExpiration());
-        builder.earlyExpirationThreshold(ann.earlyExpirationThreshold());
-        builder.earlyExpirationMode(ann.earlyExpirationMode());
-
-        final RedisCacheEvictOperation operation = builder.build();
-        log.debug("Built RedisCacheEvictOperation: {}", operation);
+        final org.springframework.cache.interceptor.CacheEvictOperation operation = builder.build();
+        log.debug("Built CacheEvictOperation: {}", operation);
         return operation;
     }
 
@@ -198,9 +205,16 @@ final class AnnotationParser {
         final String name = AnnotationTargets.extractTargetName(target);
         log.trace("Parsing @RedisCachePut annotation for target: {}", target);
 
-        final RedisCachePutOperation.Builder builder =
-                RedisCachePutOperation.builder();
-        builder.name(name);
+        // ADR-0027: 使用 Spring 标准的 CachePutOperation.Builder,确保 getClass() 返回
+        // CachePutOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
+        // 能正确按类型索引(可缓存/可放入/可清除三桶)。与 parseRedisCacheable 对齐
+        //(后者自 ADR-0020 起已改用 Spring 标准类);parseRedisCachePut/Evict 此前漏改,
+        //产出 ResiCache 子类导致 Spring 分桶失败。ResiCache 增强字段(ttl/bloom/
+        // nullValue/early-expiration 等)不进 Spring operation:由 AnnotationChainEngine
+        // 的 handler 注册到 RedisCacheRegister,链路 buildContext 按需查询。
+        final org.springframework.cache.interceptor.CachePutOperation.Builder builder =
+                new org.springframework.cache.interceptor.CachePutOperation.Builder();
+        builder.setName(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
@@ -228,22 +242,8 @@ final class AnnotationParser {
             builder.setCacheResolver(ann.cacheResolver());
         }
 
-        builder.ttl(ann.ttl());
-        builder.type(ann.type());
-        builder.cacheNullValues(ann.cacheNullValues());
-        builder.useBloomFilter(ann.useBloomFilter());
-        builder.expectedInsertions(ann.expectedInsertions());
-        builder.falseProbability(ann.falseProbability());
-        builder.sync(ann.sync());
-        builder.syncTimeout(ann.syncTimeout());
-        builder.randomTtl(ann.randomTtl());
-        builder.variance(ann.variance());
-        builder.enableEarlyExpiration(ann.enableEarlyExpiration());
-        builder.earlyExpirationThreshold(ann.earlyExpirationThreshold());
-        builder.earlyExpirationMode(ann.earlyExpirationMode());
-
-        final RedisCachePutOperation operation = builder.build();
-        log.debug("Built RedisCachePutOperation: {}", operation);
+        final org.springframework.cache.interceptor.CachePutOperation operation = builder.build();
+        log.debug("Built CachePutOperation: {}", operation);
         return operation;
     }
 }

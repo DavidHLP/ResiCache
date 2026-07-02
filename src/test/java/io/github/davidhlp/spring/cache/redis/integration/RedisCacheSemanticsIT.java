@@ -75,9 +75,14 @@ class RedisCacheSemanticsIT extends AbstractRedisIntegrationTest {
             cacheService.putById(1L, "second");
             assertThat(cacheService.getCallCount()).isEqualTo(2);
 
-            // The cache should have the latest value
-            String cached = (String) valueOps.get("testCache::1");
-            assertThat(cached).contains("second");
+            // The cache should have the latest value. Read back through the cache
+            // abstraction (getById) rather than valueOps directly: ResiCache stores values
+            // wrapped in CachedValue (carrying ttl/createdTime for early-expiration), so a
+            // raw valueOps.get yields a CachedValue envelope; getById unwraps it. The
+            // callCount staying at 2 also confirms the get hit the put's write.
+            String cached = cacheService.getById(1L);
+            assertThat(cacheService.getCallCount()).isEqualTo(2);
+            assertThat(cached).isEqualTo("second");
         }
     }
 

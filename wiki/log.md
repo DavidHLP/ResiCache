@@ -1,3 +1,35 @@
+## [2026-07-02] improve | ADR-0027 @RedisCachePut/@RedisCacheEvict AnnotationParser 对齐 Spring 标准类 + 单注解探测修补(纠正 4 轮 ADR 的环境误诊) (round 19)
+
+`/improve-codebase-architecture` round 19 autocratic one-shot。**目标 = round 18 点名的 `RedisCacheSemanticsIT` 真实失败根因**(round 18 已纠正"环境问题"误诊,但根因方向误判为「cacheOperation==null 短路」,留 round 19 精确定位)。
+
+**双重根因(经诊断日志铁证)**,均在 `annotation/AnnotationParser.java`(注解 → Spring `CacheOperation` 解析层):
+
+- **根因 A(单 `@RedisCachePut` 探测遗漏,铁证)**:`parseResiCacheAnnotations` 探测单 `@RedisCacheable`/`@RedisCacheEvict` + `@RedisCaching` 复合,**唯独漏单 `@RedisCachePut`** → 单标 `@RedisCachePut` 的方法 ops 集合为空 → Spring AOP 不触发 `cache.put`。诊断 `putById opCount=0, opTypes=[]`。
+- **根因 B(Put/Evict 产 ResiCache 子类致 Spring 分桶失败)**:`parseRedisCacheable` 自 ADR-0020 已改用 Spring 标准 `CacheableOperation`(javadoc 自承「确保 getClass() 返回 CacheableOperation.class,CacheOperationContexts 能正确按类型索引三桶」),但 `parseRedisCachePut`/`parseRedisCacheEvict` **漏改**,仍产 ResiCache 子类 → Spring 按运行时 `getClass()` 分桶不入 put/evict 桶 → 不触发 `cache.put`/`cache.evict`。诊断 `evictById opCount=1, opTypes=[RedisCacheEvictOperation]` 但全链无 `op=REMOVE`;对照 `getById [CacheableOperation]`(Spring 标准)工作正常。
+
+**ADR 主体**(`wiki/adr/0027-...md`, Accepted):
+- **D1** `parseResiCacheAnnotations` 补回单 `@RedisCachePut` 探测块(形态与 Cacheable/Evict 对称)
+- **D2** `parseRedisCacheEvict` → Spring 标准 `CacheEvictOperation.Builder`,去 ResiCache 增强字段
+- **D3** `parseRedisCachePut` → Spring 标准 `CachePutOperation.Builder`,去 ResiCache 增强字段(对齐 parseRedisCacheable)
+- **D4** 删 `RedisCacheEvictOperation`/`RedisCachePutOperation` import(仍由 `handler/` 注册 register;两类并存:AnnotationParser→Spring 标准类触发 AOP / handler→ResiCache 子类查询增强配置)
+- **D5** 修 `RedisCacheSemanticsIT.cachePut_alwaysExecutesAndUpdates` pre-existing `ClassCastException`(D1~D3 修复后 PUT 触发暴露的测试 bug:测试 `(String)valueOps.get` 强转裸 String,但 ResiCache 存 `CachedValue` 信封;改用 `getById` 经抽象层解包,断言更强)
+- **D6** 歧路否决:D6a(buildContext 按 type 查 Put/Evict operation,需引入 ResiCacheOperation 共同接口,留后续 ADR)/ D6b(子类 implements 标记接口骗分桶,治标不治本)/ D6c(沿用 round 18 cacheOperation==null 短路假说,误诊)
+
+**诊断方法(红蓝自愈)**:纸面推演穷尽后(读透 14 文件:`AnnotationParser`/`RedisCacheOperationSource`/`RedisProCache`/`RedisProCacheWriter`/`ActualCacheHandler`/`AbstractCacheHandler`/5 protection handler/`RedisCacheRegister`/`MethodMetadataResolver`/`CacheContext`/`CacheInput`/`NullValuePolicy`/3 Operation 类),加 6 处临时 `DIAG` log 实跑 IT,dump `parseCacheOperations` per-method 的 opCount/opTypes —— 一举锁定 `putById opCount=0`(根因 A)与 `evictById opTypes=[RedisCacheEvictOperation]` 但无 op=REMOVE(根因 B)。诊断日志已全部移除。
+
+**验证**:
+- `mvnw checkstyle:check` —— **0 violations**
+- `mvnw test -Dtest=RedisCacheSemanticsIT` —— **8 tests, 0 failures**(此前 3 失败全绿)
+- `mvnw clean verify -Dmaven.javadoc.skip=true` —— **BUILD SUCCESS, 782 tests, 0 failures, 0 errors, All coverage checks have been met**(JaCoCo gate 通过;javadoc 失败为 pre-existing Lombok 问题,与本轮无关)
+
+**文件变更**:1 main(`annotation/AnnotationParser.java` D1~D4)+ 4 文件诊断日志移除(`cache/RedisProCacheWriter.java`/`cache/RedisProCache.java`/`chain/ActualCacheHandler.java`/`annotation/RedisCacheOperationSource.java`)+ 1 test(`integration/RedisCacheSemanticsIT.java` D5)+ 1 ADR + wiki 2(本 log 条目 + index.md ADR 列表)。
+
+**教训**:4 轮 ADR(0019~0022)的「`git stash` + bare master 复现失败 → 推论环境问题」在失败是 pre-existing 且非环境时同样成立(bare master 也坏),无法区分「环境问题」与「长期潜伏代码 bug」。后续遇 IT 失败应**优先加诊断日志定位真实断点**,而非急于甩锅环境。round 18 已迈出纠正第一步(定性为真实失败),round 19 通读 `AnnotationParser` + 诊断日志锁定双重根因,一次性闭环。
+
+详见 [[0027-annotation-parser-put-evict-spring-standard-alignment]]。
+
+---
+
 ## [2026-07-02] improve | ChainEngineTest.executeFragment 期望同步 ADR-0022 语义 + RedisCacheSemanticsIT 真实失败发现(纠正 log 误诊) (round 18)
 
 `/improve-codebase-architecture` round 18 autocratic one-shot。架构经 17 轮 deepening 趋饱和,round 17(ADR-0025)明确点名的 round 18 #1 候选 = `ChainEngineTest.executeFragment_skipsAroundChain` pre-existing 失败(跨 ADR-0022~0025 四轮 defer)。其余候选(5 ChainObserver DRY / CacheKeys 第 3 use case / int→long 1.0 毕业 / bloomsift 命名 polish)log 已判定 YAGNI/polish/等触发,不配 ADR → 本轮扼杀,只做 #1。
