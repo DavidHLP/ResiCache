@@ -17,7 +17,6 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 
 import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class RedisProCache extends RedisCache {
@@ -55,7 +54,8 @@ public class RedisProCache extends RedisCache {
      *   <li>{@code name / cacheWriter / cacheConfiguration} —— 必传,转发给
      *       {@link RedisCache#super(String, RedisCacheWriter, RedisCacheConfiguration)}</li>
      *   <li>{@code meterRegistry} —— 可为 null(此时所有 timer/counter 为 null,
-     *       {@link #safeIncrement} / {@link #safeRecord} 静默 no-op)</li>
+     *       {@link RedisProCacheTimers#safeIncrement} /
+     *       {@link RedisProCacheTimers#timed} 静默 no-op,见 ADR-0031)</li>
      *   <li>{@code bloomSupport} —— 可为 null(关闭缓存穿透防护,GET 路径跳过 bloom 短路)</li>
      *   <li>{@code redisCacheRegister} —— 可为 null(关闭方法级 metadata 查找,
      *       {@link #lookupOperation()} 返回 null)</li>
@@ -63,6 +63,12 @@ public class RedisProCache extends RedisCache {
      *   <li>{@code methodMetadataResolver} —— 可为 null(关闭 ThreadLocal 路径,
      *       与 {@code redisCacheRegister} 协同)</li>
      * </ul>
+     *
+     * <p><b>Round 22 收敛</b>(ADR-0031):timing & counter 注册与 null-safe 调用已迁移至
+     * {@link RedisProCacheTimers} 工具 seam。本类不再包含任何
+     * {@code try-finally + System.nanoTime() + safeRecord} 样板;6 个公开方法通过
+     * {@link RedisProCacheTimers#timed} / {@link RedisProCacheTimers#timedGet}
+     * 调用,行为字节级等价。
      */
     public RedisProCache(
             String name,
@@ -74,19 +80,19 @@ public class RedisProCache extends RedisCache {
             SyncSupport syncSupport,
             MethodMetadataResolver methodMetadataResolver) {
         super(name, cacheWriter, cacheConfiguration);
-        this.getTimer = registerTimer(meterRegistry, "resicache.cache.get",
+        this.getTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.get",
                 "Time spent getting cache entries", name);
-        this.putTimer = registerTimer(meterRegistry, "resicache.cache.put",
+        this.putTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.put",
                 "Time spent putting cache entries", name);
-        this.evictTimer = registerTimer(meterRegistry, "resicache.cache.evict",
+        this.evictTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.evict",
                 "Time spent evicting cache entries", name);
-        this.hitCounter = registerCounter(meterRegistry, "resicache.cache.hit",
+        this.hitCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.hit",
                 "Cache hit count", name);
-        this.missCounter = registerCounter(meterRegistry, "resicache.cache.miss",
+        this.missCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.miss",
                 "Cache miss count", name);
-        this.putCounter = registerCounter(meterRegistry, "resicache.cache.put.count",
+        this.putCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.put.count",
                 "Cache put count", name);
-        this.evictCounter = registerCounter(meterRegistry, "resicache.cache.evict.count",
+        this.evictCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.evict.count",
                 "Cache evict count", name);
         this.bloomSupport = bloomSupport;
         this.redisCacheRegister = redisCacheRegister;
@@ -94,108 +100,69 @@ public class RedisProCache extends RedisCache {
         this.methodMetadataResolver = methodMetadataResolver;
     }
 
-    private static Timer registerTimer(MeterRegistry registry, String name,
-                                       String description, String cacheName) {
-        if (registry == null) {
-            return null;
-        }
-        return Timer.builder(name)
-                .tag("cache", cacheName)
-                .description(description)
-                .register(registry);
-    }
-
-    private static Counter registerCounter(MeterRegistry registry, String name,
-                                           String description, String cacheName) {
-        if (registry == null) {
-            return null;
-        }
-        return Counter.builder(name)
-                .tag("cache", cacheName)
-                .description(description)
-                .register(registry);
-    }
-
-    private static void safeIncrement(Counter counter) {
-        if (counter != null) {
-            counter.increment();
-        }
-    }
-
-    private static void safeRecord(Timer timer, long duration, TimeUnit unit) {
-        if (timer != null) {
-            timer.record(duration, unit);
-        }
-    }
-
     @Override
     public ValueWrapper get(Object key) {
-        long start = System.nanoTime();
-        try {
+        return RedisProCacheTimers.timedGet(getTimer, () -> {
             ValueWrapper result = super.get(key);
             if (result != null) {
-                safeIncrement(hitCounter);
+                RedisProCacheTimers.safeIncrement(hitCounter);
             } else {
-                safeIncrement(missCounter);
+                RedisProCacheTimers.safeIncrement(missCounter);
             }
             return result;
-        } finally {
-            safeRecord(getTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
-        }
+        });
     }
 
     @Override
     public <T> T get(Object key, Class<T> type) {
-        long start = System.nanoTime();
-        try {
+        return RedisProCacheTimers.timedGet(getTimer, () -> {
             T result = super.get(key, type);
             if (result != null) {
-                safeIncrement(hitCounter);
+                RedisProCacheTimers.safeIncrement(hitCounter);
             } else {
-                safeIncrement(missCounter);
+                RedisProCacheTimers.safeIncrement(missCounter);
             }
             return result;
-        } finally {
-            safeRecord(getTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
-        }
+        });
     }
 
     @Override
     public <T> T get(Object key, Callable<T> loader) {
-        long start = System.nanoTime();
+        // body 抛异常 → 本 timedGet 的 finally 仍按原 try-finally 语义记录计时;
+        // 外层 try-catch 翻译异常 + 自增 miss,保持与原 4-层结构字节级等价。
         try {
-            RedisCacheableOperation operation = lookupOperation();
+            return RedisProCacheTimers.timedGet(getTimer, () -> {
+                RedisCacheableOperation operation = lookupOperation();
 
-            // Bloom Filter 短路检查(仅 sync 路径;Spring 仅对 sync=true 调 get(key,loader)):
-            // 在调用 loader 之前拦截,防止缓存穿透真正到达数据源。属 C4 裁定的有意双层防御
-            // (本处防 loader/数据源;链层 BloomFilterHandler 防 Redis GET),ADR-0011 不移除。
-            // 键一致性(ADR-0011):必须用 actualKey(CacheKeys.bloomKey,与链层 add 同源),
-            // 不可用 createCacheKey 的带前缀 redisKey —— 否则查的 key 永不在过滤器里(键漂移缺陷)。
-            if (operation != null && operation.isUseBloomFilter()
-                    && bloomSupport != null) {
-                String bloomKey = CacheKeys.fromRedisKey(getName(), createCacheKey(key)).bloomKey();
-                if (!bloomSupport.mightContain(getName(), bloomKey)) {
-                    log.debug("Bloom filter rejected loader invocation: cacheName={}, key={}", getName(), bloomKey);
-                    safeIncrement(missCounter);
-                    return null;
+                // Bloom Filter 短路检查(仅 sync 路径;Spring 仅对 sync=true 调 get(key,loader)):
+                // 在调用 loader 之前拦截,防止缓存穿透真正到达数据源。属 C4 裁定的有意双层防御
+                // (本处防 loader/数据源;链层 BloomFilterHandler 防 Redis GET),ADR-0011 不移除。
+                // 键一致性(ADR-0011):必须用 actualKey(CacheKeys.bloomKey,与链层 add 同源),
+                // 不可用 createCacheKey 的带前缀 redisKey —— 否则查的 key 永不在过滤器里(键漂移缺陷)。
+                if (operation != null && operation.isUseBloomFilter()
+                        && bloomSupport != null) {
+                    String bloomKey = CacheKeys.fromRedisKey(getName(), createCacheKey(key)).bloomKey();
+                    if (!bloomSupport.mightContain(getName(), bloomKey)) {
+                        log.debug("Bloom filter rejected loader invocation: cacheName={}, key={}", getName(), bloomKey);
+                        RedisProCacheTimers.safeIncrement(missCounter);
+                        return null;
+                    }
                 }
-            }
 
-            if (operation != null && operation.isSync() && syncSupport != null) {
-                // 分布式同步模式：使用 SyncSupport 确保跨 JVM 单飞加载
-                return executeSyncLoad(key, loader, operation);
-            } else {
-                // 默认模式：Spring 本地锁（JVM 内单飞）
-                return super.get(key, loader);
-            }
+                if (operation != null && operation.isSync() && syncSupport != null) {
+                    // 分布式同步模式:使用 SyncSupport 确保跨 JVM 单飞加载
+                    return executeSyncLoad(key, loader, operation);
+                } else {
+                    // 默认模式:Spring 本地锁(JVM 内单飞)
+                    return super.get(key, loader);
+                }
+            });
         } catch (Exception e) {
-            safeIncrement(missCounter);
+            RedisProCacheTimers.safeIncrement(missCounter);
             if (e instanceof RuntimeException re) {
                 throw re;
             }
             throw new RuntimeException("Failed to load cache value for key: " + key, e);
-        } finally {
-            safeRecord(getTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
     }
 
@@ -254,34 +221,23 @@ public class RedisProCache extends RedisCache {
 
     @Override
     public void put(Object key, Object value) {
-        long start = System.nanoTime();
-        try {
+        RedisProCacheTimers.timed(putTimer, () -> {
             super.put(key, value);
-            safeIncrement(putCounter);
-        } finally {
-            safeRecord(putTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
-        }
+            RedisProCacheTimers.safeIncrement(putCounter);
+        });
     }
 
     @Override
     public void evict(Object key) {
-        long start = System.nanoTime();
-        try {
+        RedisProCacheTimers.timed(evictTimer, () -> {
             super.evict(key);
-            safeIncrement(evictCounter);
-        } finally {
-            safeRecord(evictTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
-        }
+            RedisProCacheTimers.safeIncrement(evictCounter);
+        });
     }
 
     @Override
     public void clear() {
-        long start = System.nanoTime();
-        try {
-            super.clear();
-        } finally {
-            safeRecord(evictTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
-        }
+        RedisProCacheTimers.timed(evictTimer, super::clear);
     }
 
     public long getHitCount() {

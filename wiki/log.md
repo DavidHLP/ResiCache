@@ -1,3 +1,47 @@
+## [2026-07-03] improve | ADR-0031 | RedisProCache 6 处 try-finally timing 样板 → RedisProCacheTimers 工具 seam(round 22)
+
+`/improve-codebase-architecture` round 22 autocratic one-shot。Round 21 ADR-0030 死 protected 删除 + Round 20 ADR-0029 hypothetical-seam 接受合宣示"saturation 已抵",本轮转向饱和预言**反向探测**:全仓 grep + codebase-memory 图深扫 `cache/` 域(此前 round 1–21 完全未抽 timing seam)。
+
+**唯一命中 F1**:`cache/RedisProCache.java`(308 SLOC)6 处字节级同构 timing 样板(`long start = System.nanoTime(); try { ... } finally { safeRecord(<timer>, ..., NANOSECONDS); }`)× `safeRecord` 等 4 个 `private static` helper 已部分抽但只 absorb 最后一行,`System.nanoTime` 边界 × `try/finally` 样板仍 5× 重复。**shallow duplication**,非 dead duplication。
+
+**ADR 主体**(`wiki/adr/0031-...md`, Accepted):
+
+- **D1** 新建 `cache/RedisProCacheTimers` package-private 工具类(5 静态入口):`registerTimer` / `registerCounter` / `safeIncrement` / `timed` / `timedGet`
+- **D2** `RedisProCache` 6 处样板 → seam 调用 —— `get(Object)` × 2 + `get(Object, Callable<T>)` × 1 改 `timedGet`,`put` / `evict` / `clear` 改 `timed`
+- **D3** 删 4 个 private static helper(`registerTimer` / `registerCounter` / `safeIncrement` / `safeRecord`)
+- **D4** 删 `import java.util.concurrent.TimeUnit`(Checkstyle `UnusedImports` = error)
+- **D5** 新增 `RedisProCacheTimersTest`(5 `@Nested` × 2–3 用例 = **10 用例**):null/non-null 分支 + 异常传播 + finally 时序 —— 兑现"接口是测试面"
+- **D6–D8** 歧路否决:D6a Micrometer `@Timed` interceptor(需 AspectJ 织入 + 改生产依赖图,负 leverage)/ D6b 沿用 safeRecord(非真正归并,5 个样板点保留)/ D6c 内联 try-with-resources(`Timer` 非 AutoCloseable,不适用)
+
+**deletion test 干净通过**:`safeRecord` + 6 处样板同时删,复杂度从 6 处集中消失,不在调用点重现 —— 真实归并而非搬家。
+
+**行为保真**(字节级语义对齐):
+
+- `timer == null`(`meterRegistry` 未启用)helper 短路不计算 `nanoTime`(原 `safeRecord(null, ..., NANOSECONDS)` 是 no-op,等价优化)
+- 异常不被吞 —— 仍沿 finally 释放
+- meter 名 + tag + description 完全不变
+- `get(key, Callable<T>)` 的 4-层 catch 异常翻译语义完全保留(外层 try-catch + 内层 timedGet)
+
+**文件变更**:
+
+- 1 main(新建 `RedisProCacheTimers.java` ~95 SLOC 含 javadoc + 5 静态入口)
+- 1 main(改 `RedisProCache.java`,删 4 helper + 6 样板收敛,308 → 225 行,TimeUnit import 去除)
+- 1 test(新建 `RedisProCacheTimersTest.java` ~150 SLOC,10 用例)
+- 1 ADR(`wiki/adr/0031-...md`)
+- 1 wiki(本页 + `index.md` ADR 列表追加 0031)
+
+**验证**:
+
+- `mvnw checkstyle:check test-compile -B` —— **0 violations**
+- `mvnw test -Dtest='RedisProCacheTest,RedisProCacheTimersTest'` —— **23 tests, 0 failures**(13 既有 + 10 新增)
+- `mvnw test` —— 797 unit tests,**0 failures, 8 errors**(8 errors = `RedisCacheInterceptorTest` `setNext(...)` NoSuchMethodError,pre-existing —— git stash + bare master `280f0b4` 复现完全相同 8 errors,与本 ADR 错位,留 round 23+ 独立工单)
+
+**饱和反向证明**:Round 21 已宣"未触及域扫尽",本轮在饱和预言之后仍找到一处真重复(`cache/` 域 round 1–21 全程未抽 seam)—— 浅层模块仍可下沉,**架构深化空间尚未枯竭**。与 ADR-0029"接受两个 hypothetical seam"呼应:本处是 ADR-0029 精神的镜像 —— 接受并下沉既存样板,而非删除既有抽象。
+
+详见 [[0031-redisprocache-timing-helper-seam]]。
+
+---
+
 ## [2026-07-02] improve | ADR-0027 @RedisCachePut/@RedisCacheEvict AnnotationParser 对齐 Spring 标准类 + 单注解探测修补(纠正 4 轮 ADR 的环境误诊) (round 19)
 
 `/improve-codebase-architecture` round 19 autocratic one-shot。**目标 = round 18 点名的 `RedisCacheSemanticsIT` 真实失败根因**(round 18 已纠正"环境问题"误诊,但根因方向误判为「cacheOperation==null 短路」,留 round 19 精确定位)。
