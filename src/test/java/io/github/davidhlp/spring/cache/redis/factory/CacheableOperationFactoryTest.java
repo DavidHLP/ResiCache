@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.factory;
 
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -15,6 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * CacheableOperationFactory 单元测试
+ *
+ * <p>ADR-0028:删除 supports() 测试块(main 零调用的死方法不再断言);create 调用跟随
+ * 接口签名窄化为 3 参(method, annotation, key)。
  */
 @DisplayName("CacheableOperationFactory Tests")
 class CacheableOperationFactoryTest {
@@ -59,10 +61,8 @@ class CacheableOperationFactoryTest {
                     "#result != null"
             );
             Method method = getTestMethod();
-            TestClass target = new TestClass();
-            String[] args = {"arg1"};
 
-            RedisCacheableOperation operation = factory.create(method, annotation, target, args, "generated-key");
+            RedisCacheableOperation operation = factory.create(method, annotation, "generated-key");
 
             assertThat(operation.getName()).isEqualTo("testMethod");
             assertThat(operation.getKey()).isEqualTo("generated-key");
@@ -92,7 +92,7 @@ class CacheableOperationFactoryTest {
             );
             Method method = getTestMethod();
 
-            RedisCacheableOperation operation = factory.create(method, annotation, new TestClass(), new Object[]{}, "key");
+            RedisCacheableOperation operation = factory.create(method, annotation, "key");
 
             assertThat(operation.getCacheNames()).containsExactly("priority-cache");
         }
@@ -113,46 +113,15 @@ class CacheableOperationFactoryTest {
             );
             Method method = getTestMethod();
 
-            RedisCacheableOperation operation = factory.create(method, annotation, new TestClass(), new Object[]{}, "key");
+            RedisCacheableOperation operation = factory.create(method, annotation, "key");
 
             assertThat(operation.getCacheNames()).containsExactly("value-cache");
         }
     }
 
-    @Nested
-    @DisplayName("supports tests")
-    class SupportsTests {
-
-        @Test
-        @DisplayName("returns true for RedisCacheable annotation")
-        void supports_redisCacheable_returnsTrue() throws NoSuchMethodException {
-            RedisCacheable annotation = createAnnotation(
-                    new String[]{},
-                    new String[]{},
-                    "",
-                    60L,
-                    false,
-                    0.3,
-                    EarlyExpirationMode.SYNC,
-                    "",
-                    ""
-            );
-
-            assertThat(factory.supports(annotation)).isTrue();
-        }
-
-        @Test
-        @DisplayName("returns false for other annotations")
-        void supports_otherAnnotation_returnsFalse() {
-            Annotation otherAnnotation = new SomeOtherAnnotation();
-
-            assertThat(factory.supports(otherAnnotation)).isFalse();
-        }
-    }
-
     // Test helper class
     static class TestClass {
-        public void testMethod(String arg) {}
+        public void testMethod(String arg) { }
     }
 
     // Test implementation of RedisCacheable
@@ -289,14 +258,6 @@ class CacheableOperationFactoryTest {
         @Override
         public EarlyExpirationMode earlyExpirationMode() {
             return earlyExpirationMode;
-        }
-    }
-
-    // Other annotation for negative testing
-    static class SomeOtherAnnotation implements Annotation {
-        @Override
-        public Class<? extends Annotation> annotationType() {
-            return SomeOtherAnnotation.class;
         }
     }
 }

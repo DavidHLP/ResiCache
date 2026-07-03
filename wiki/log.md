@@ -1000,3 +1000,21 @@ Q2 autonomous-loop v1/v2(round 1–42)已 CLOSED,新一轮项目优化里程碑�
 **验证**:`mvnw verify` BUILD SUCCESS,**782 tests** 0 failures 0 errors,**All coverage checks have been met**;0 公开 API 变化。
 
 **剔除的伪候选**(Explore agent 误判,核实后剔除):`RedisCacheAttributes.applyTo`(ADR-0021 已完整解决)、`RedisProCacheProperties`/`TwoListLRU`(deletion test 在挣价值,深度模块)。
+
+## [2026-07-03] ADR-0028/0029 | Round 20 — OperationFactory seam 收窄 + applyText + hypothetical seam 接受
+
+`/improve-codebase-architecture` round 20 autocratic one-shot(HTML 报告 `/tmp/architecture-review-resicache-20260703-111350.html`,不入仓)5 候选落地:
+
+- **D1 OperationFactory seam 收窄**(候选 1,执行):`supports(Annotation)` main 零调用(ADR-0010 strategy 删除残骸)+ `create` 5 参中 target/args 未用 → 删 supports/annotationClass/AbstractOperationFactory + create 5→3 参 + 4 factory extends→implements + 内联 1-liner materialize + 删未用 @Slf4j;main 1 处 + test ~45 处 create 窄化;删 6 测试 supports 块。Deletion test:复杂度直接消失。
+- **D2 SpringAnnotationAdapter applyText 收敛**(候选 2,执行 — **重开 ADR-0026 D4**):ADR-0026 D4 当时以"3 类 builder 异构,统一需 18 lambda,可读性反降"封口。本轮用 `Consumer<String>` method reference(`builder::setKey` / `builder::key`)抹平 Spring `setX` 与 Lombok `x` 风格差异 —— method reference 可读性远优于当時设想的 lambda,3 build 方法 17 处 if-hasText-set 样板收敛。重开理由:技术方案升级(method reference)消解了原封口依据。
+- **D3 MethodMetadataResolver + BloomHashStrategy hypothetical seam 接受**(候选 3+4,ADR-0029):单-adapter seam,可逆性对冲(ScopedValue 迁移 / hash 策略扩展),保留是更便宜的错误方向。锁定不删,未来复审不得以"单 adapter"为由 re-suggest。
+- **D4 SyncSupport.LockStack**(候选 5,不动):internal private seam,封装"多锁 LIFO 释放"真实不变量,try-with-resources 正确用法;deletion test 中性。不记 ADR。
+- **剔除 4 伪候选**(Explore agent 误判,自审 deletion test + adapter-count 剔除):TypeSupport(deep,NullValue 路由+RCE 白名单 localize)、BloomSupport(deep,rebuilding fail-open 协议 localize)、LockContext.of(leverage,非 shallow,fan_in 43 替代冗长 builder)、CachedValue.Expiry(locality,双时钟不变量集中)。
+
+**Review CR findings**: 阶段 3 自审(test-compile)抓出 sed 盲点 —— `AbstractAnnotationHandlerTest` 4-any+anyString 模式 + `registerAll` 被 sed 误删 target/args(`, target, args, ` 模式在 registerAll 调用也出现,sed 风险显现)+ `OperationFromAttributesTest` sample 变量遗漏(operation 目录未扫)。阶段 4 精确长串 sed 修复,回归 Edit 思路。
+
+**验证**:
+- `mvnw test-compile -B -q` —— BUILD SUCCESS(checkstyle + main/test 编译通过)
+- `mvnw test -Dtest='CacheableOperationFactoryTest,CachePutOperationFactoryTest,EvictOperationFactoryTest,AbstractAnnotationHandlerTest,CacheableAnnotationHandlerTest,EvictAnnotationHandlerTest,CachingAnnotationHandlerTest,SpringAnnotationAdapterTest,OperationFromAttributesTest'` —— **56 tests, 0 failures, 0 errors**(行为不变)
+
+**下一步**: 无 — 候选 1-5 全部裁决落地。HTML 报告 5 候选闭环。

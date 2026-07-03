@@ -69,6 +69,8 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0025-early-expiration-policy-seam-extraction]] —— early-expiration 决策 policy seam 迁出 TtlPolicy(refresh↔avalanche 跨域寄生方法 + `Clock` 依赖归位;`shouldEarlyExpiration` → refresh 自有 `EarlyExpirationPolicy.shouldRefresh`;`DefaultTtlPolicy` 无状态化;5 机制 policy seam 齐整;round 17 跨域寄生 seam)
 - [[0026-round14-contextbuilder-deletion-foreachsafe-and-sealings]] —— Round 14: CacheContextBuilder 删除 + ObserverRegistry.forEachSafe 异常语义统一 + 候选 3/4 封口(D1删Builder/D2 forEachSafe/D3删死常量/D4 SpringAnnotationAdapter封口/D5 typed-key封口)
 - [[0027-annotation-parser-put-evict-spring-standard-alignment]] —— @RedisCachePut/@RedisCacheEvict AnnotationParser 对齐(单注解探测修补 + Spring 标准类,纠正 4 轮 ADR 的环境误诊;D1补@RedisCachePut探测/D2 Evict标准类/D3 Put标准类/D4删import/D5修测试ClassCast)
+- [[0028-operationfactory-seam-narrowing-and-applytext]] —— OperationFactory seam 收窄(删 supports 死链 + create 5参→3参 + 删 AbstractOperationFactory)+ SpringAnnotationAdapter applyText 收敛(3 build 方法 17 处 if-hasText-set → Consumer method reference;**重开 ADR-0026 D4**;round 20)
+- [[0029-single-adapter-hypothetical-seams-acceptance]] —— 单-adapter hypothetical seam 接受策略(MethodMetadataResolver + BloomHashStrategy;可逆性对冲,锁定不删;round 20)
 
 ## 架构(architecture/)
 

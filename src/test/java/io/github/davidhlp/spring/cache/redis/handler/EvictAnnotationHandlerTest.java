@@ -104,7 +104,7 @@ class EvictAnnotationHandlerTest {
                     .build();
 
             when(keyGenerator.generate(target, method, args)).thenReturn(generatedKey);
-            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq(target), eq(args), eq(generatedKey)))
+            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq(generatedKey)))
                     .thenReturn(operation);
 
             handler.doHandle(method, target, args);
@@ -120,7 +120,7 @@ class EvictAnnotationHandlerTest {
             Object[] args = new Object[]{"arg1", "arg2"};
 
             when(keyGenerator.generate(target, method, args)).thenReturn("test-key");
-            when(evictOperationFactory.create(any(), any(), any(), any(), any()))
+            when(evictOperationFactory.create(any(), any(), any()))
                     .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
@@ -137,12 +137,12 @@ class EvictAnnotationHandlerTest {
             String generatedKey = "test-key";
 
             when(keyGenerator.generate(target, method, args)).thenReturn(generatedKey);
-            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq(target), eq(args), eq(generatedKey)))
+            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq(generatedKey)))
                     .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
-            verify(evictOperationFactory).create(eq(method), any(RedisCacheEvict.class), eq(target), eq(args), eq(generatedKey));
+            verify(evictOperationFactory).create(eq(method), any(RedisCacheEvict.class), eq(generatedKey));
         }
     }
 
@@ -160,7 +160,7 @@ class EvictAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(any(Object.class), any(Method.class), any(Object[].class))).thenReturn("key");
-            when(evictOperationFactory.create(any(Method.class), any(RedisCacheEvict.class), any(Object.class), any(Object[].class), any(String.class)))
+            when(evictOperationFactory.create(any(Method.class), any(RedisCacheEvict.class), any(String.class)))
                     .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method1, target, args);
@@ -196,7 +196,7 @@ class EvictAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(evictOperationFactory.create(any(), any(), any(), any(), any()))
+            when(evictOperationFactory.create(any(), any(), any()))
                     .thenThrow(new RuntimeException("Factory error"));
 
             handler.doHandle(method, target, args);

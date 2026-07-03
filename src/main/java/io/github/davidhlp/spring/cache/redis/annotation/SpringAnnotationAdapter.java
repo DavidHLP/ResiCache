@@ -159,24 +159,12 @@ final class SpringAnnotationAdapter {
                 new org.springframework.cache.interceptor.CacheableOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
-        if (StringUtils.hasText(ann.key())) {
-            builder.setKey(ann.key());
-        }
-        if (StringUtils.hasText(ann.condition())) {
-            builder.setCondition(ann.condition());
-        }
-        if (StringUtils.hasText(ann.unless())) {
-            builder.setUnless(ann.unless());
-        }
-        if (StringUtils.hasText(ann.keyGenerator())) {
-            builder.setKeyGenerator(ann.keyGenerator());
-        }
-        if (StringUtils.hasText(ann.cacheManager())) {
-            builder.setCacheManager(ann.cacheManager());
-        }
-        if (StringUtils.hasText(ann.cacheResolver())) {
-            builder.setCacheResolver(ann.cacheResolver());
-        }
+        applyText(ann.key(), builder::setKey);
+        applyText(ann.condition(), builder::setCondition);
+        applyText(ann.unless(), builder::setUnless);
+        applyText(ann.keyGenerator(), builder::setKeyGenerator);
+        applyText(ann.cacheManager(), builder::setCacheManager);
+        applyText(ann.cacheResolver(), builder::setCacheResolver);
         builder.setSync(ann.sync());
         return builder.build();
     }
@@ -186,24 +174,12 @@ final class SpringAnnotationAdapter {
         RedisCachePutOperation.Builder builder = RedisCachePutOperation.builder();
         builder.name(name);
         builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
-        if (StringUtils.hasText(ann.key())) {
-            builder.key(ann.key());
-        }
-        if (StringUtils.hasText(ann.condition())) {
-            builder.condition(ann.condition());
-        }
-        if (StringUtils.hasText(ann.unless())) {
-            builder.unless(ann.unless());
-        }
-        if (StringUtils.hasText(ann.keyGenerator())) {
-            builder.keyGenerator(ann.keyGenerator());
-        }
-        if (StringUtils.hasText(ann.cacheManager())) {
-            builder.cacheManager(ann.cacheManager());
-        }
-        if (StringUtils.hasText(ann.cacheResolver())) {
-            builder.cacheResolver(ann.cacheResolver());
-        }
+        applyText(ann.key(), builder::key);
+        applyText(ann.condition(), builder::condition);
+        applyText(ann.unless(), builder::unless);
+        applyText(ann.keyGenerator(), builder::keyGenerator);
+        applyText(ann.cacheManager(), builder::cacheManager);
+        applyText(ann.cacheResolver(), builder::cacheResolver);
         return builder.build();
     }
 
@@ -212,23 +188,27 @@ final class SpringAnnotationAdapter {
         RedisCacheEvictOperation.Builder builder = RedisCacheEvictOperation.builder();
         builder.name(name);
         builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
-        if (StringUtils.hasText(ann.key())) {
-            builder.key(ann.key());
-        }
-        if (StringUtils.hasText(ann.condition())) {
-            builder.condition(ann.condition());
-        }
-        if (StringUtils.hasText(ann.keyGenerator())) {
-            builder.setKeyGenerator(ann.keyGenerator());
-        }
-        if (StringUtils.hasText(ann.cacheManager())) {
-            builder.setCacheManager(ann.cacheManager());
-        }
-        if (StringUtils.hasText(ann.cacheResolver())) {
-            builder.setCacheResolver(ann.cacheResolver());
-        }
+        applyText(ann.key(), builder::key);
+        applyText(ann.condition(), builder::condition);
+        applyText(ann.keyGenerator(), builder::setKeyGenerator);
+        applyText(ann.cacheManager(), builder::setCacheManager);
+        applyText(ann.cacheResolver(), builder::setCacheResolver);
         builder.allEntries(ann.allEntries());
         builder.beforeInvocation(ann.beforeInvocation());
         return builder.build();
+    }
+
+    /**
+     * 仅当 value 非空时执行 setter(ADR-0029 applyText seam)。
+     *
+     * <p>抹平两类 Builder setter 风格差异:Spring 标准 Builder 用 {@code setX(String)}
+     * (如 {@code CacheableOperation.Builder.setKey}),ResiCache Lombok Builder 用 {@code x(String)}
+     * (如 {@code RedisCachePutOperation.Builder.key})。两者皆兼容 {@code Consumer<String>}
+     * (Lombok 版返回 Builder 被丢弃),收敛 3 处 build 方法共 17 个 {@code if (hasText) set} 样板。
+     */
+    private static void applyText(String value, java.util.function.Consumer<String> setter) {
+        if (StringUtils.hasText(value)) {
+            setter.accept(value);
+        }
     }
 }

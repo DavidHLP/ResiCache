@@ -281,7 +281,7 @@ class OperationFromAttributesTest {
             // 直接用 factory.create
             io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable annotation =
                     makeCacheable(new String[]{"c"}, 60L, true);
-            RedisCacheableOperation viaFactory = factory.create(m, annotation, new Sample(), new Object[]{"x"}, "k");
+            RedisCacheableOperation viaFactory = factory.create(m, annotation, "k");
 
             // 直接用 fromAttributes
             RedisCacheAttributes a = projector.from(annotation);
@@ -304,7 +304,7 @@ class OperationFromAttributesTest {
 
             io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict annotation =
                     makeEvict(new String[]{"c"}, true, true);
-            RedisCacheEvictOperation viaFactory = factory.create(m, annotation, new Sample(), new Object[]{"x"}, "k");
+            RedisCacheEvictOperation viaFactory = factory.create(m, annotation, "k");
 
             RedisCacheAttributes a = projector.from(annotation);
             RedisCacheEvictOperation viaFromAttributes = RedisCacheEvictOperation.fromAttributes(m, "k", a);
@@ -323,7 +323,7 @@ class OperationFromAttributesTest {
 
             io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut annotation =
                     makePut(new String[]{"c"}, 60L);
-            RedisCachePutOperation viaFactory = factory.create(m, annotation, new Sample(), new Object[]{"x"}, "k");
+            RedisCachePutOperation viaFactory = factory.create(m, annotation, "k");
 
             RedisCacheAttributes a = projector.from(annotation);
             RedisCachePutOperation viaFromAttributes = RedisCachePutOperation.fromAttributes(m, "k", a);

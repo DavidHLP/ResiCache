@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.factory;
 
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
 
@@ -15,8 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * EvictOperationFactory 单元测试
  *
- * <p>覆盖 create() 的字段映射(cacheNames/key/allEntries/beforeInvocation 等)与 supports() 判定。
- * 纯 builder 逻辑,无 Spring/testcontainers 依赖。
+ * <p>覆盖 create() 的字段映射(cacheNames/key/allEntries/beforeInvocation 等)。纯 builder
+ * 逻辑,无 Spring/testcontainers 依赖。
+ *
+ * <p>ADR-0028:删除 supports() 测试块(main 零调用的死方法不再断言);create 调用跟随接口
+ * 签名窄化为 3 参(method, annotation, key)。
  */
 @DisplayName("EvictOperationFactory Tests")
 class EvictOperationFactoryTest {
@@ -38,7 +40,7 @@ class EvictOperationFactoryTest {
     @Test
     @DisplayName("create builds operation with mapped fields")
     void create_buildsOperationWithFields() {
-        RedisCacheEvictOperation op = factory.create(method, annotation, this, null, "k1");
+        RedisCacheEvictOperation op = factory.create(method, annotation, "k1");
 
         assertThat(op).isNotNull();
         assertThat(op.getName()).isEqualTo("evictMethod");
@@ -51,26 +53,8 @@ class EvictOperationFactoryTest {
     @Test
     @DisplayName("create uses provided key override")
     void create_usesProvidedKey() {
-        RedisCacheEvictOperation op = factory.create(method, annotation, this, null, "custom-key");
+        RedisCacheEvictOperation op = factory.create(method, annotation, "custom-key");
 
         assertThat(op.getKey()).isEqualTo("custom-key");
     }
-
-    @Test
-    @DisplayName("supports returns true for RedisCacheEvict annotation")
-    void supports_redisCacheEvict_returnsTrue() {
-        assertThat(factory.supports(annotation)).isTrue();
-    }
-
-    @Test
-    @DisplayName("supports returns false for unrelated annotation")
-    void supports_unrelatedAnnotation_returnsFalse() {
-        // Deprecated 不是 RedisCacheEvict → supports false
-        Deprecated deprecated = AnnotatedClass.class.getAnnotation(Deprecated.class);
-
-        assertThat(factory.supports(deprecated)).isFalse();
-    }
-
-    @Deprecated
-    static class AnnotatedClass { }
 }

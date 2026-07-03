@@ -127,9 +127,9 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(any(Object.class), any(Method.class), any(Object[].class))).thenReturn("key");
-            when(cacheableOperationFactory.create(any(Method.class), any(RedisCacheable.class), any(Object.class), any(Object[].class), any(String.class)))
+            when(cacheableOperationFactory.create(any(Method.class), any(RedisCacheable.class), any(String.class)))
                     .thenReturn(RedisCacheableOperation.builder().build());
-            when(evictOperationFactory.create(any(Method.class), any(RedisCacheEvict.class), any(Object.class), any(Object[].class), any(String.class)))
+            when(evictOperationFactory.create(any(Method.class), any(RedisCacheEvict.class), any(String.class)))
                     .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
@@ -146,14 +146,14 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(eq(method), any(RedisCacheable.class), eq(target), eq(args), eq("key")))
+            when(cacheableOperationFactory.create(eq(method), any(RedisCacheable.class), eq("key")))
                     .thenReturn(RedisCacheableOperation.builder().build());
-            when(evictOperationFactory.create(any(), any(), any(), any(), any()))
+            when(evictOperationFactory.create(any(), any(), any()))
                     .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
-            verify(cacheableOperationFactory).create(eq(method), any(RedisCacheable.class), eq(target), eq(args), eq("key"));
+            verify(cacheableOperationFactory).create(eq(method), any(RedisCacheable.class), eq("key"));
         }
 
         @Test
@@ -164,14 +164,14 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(any(), any(), any(), any(), any()))
+            when(cacheableOperationFactory.create(any(), any(), any()))
                     .thenReturn(RedisCacheableOperation.builder().build());
-            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq(target), eq(args), eq("key")))
+            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq("key")))
                     .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
-            verify(evictOperationFactory).create(eq(method), any(RedisCacheEvict.class), eq(target), eq(args), eq("key"));
+            verify(evictOperationFactory).create(eq(method), any(RedisCacheEvict.class), eq("key"));
         }
     }
 
@@ -187,7 +187,7 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(any(), any(), any(), any(), any()))
+            when(cacheableOperationFactory.create(any(), any(), any()))
                     .thenReturn(RedisCacheableOperation.builder().build());
 
             handler.doHandle(method, target, args);
@@ -203,7 +203,7 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(evictOperationFactory.create(any(), any(), any(), any(), any()))
+            when(evictOperationFactory.create(any(), any(), any()))
                     .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
@@ -240,7 +240,7 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(any(), any(), any(), any(), any()))
+            when(cacheableOperationFactory.create(any(), any(), any()))
                     .thenThrow(new RuntimeException("Factory error"));
 
             handler.doHandle(method, target, args);
@@ -258,7 +258,7 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(evictOperationFactory.create(any(), any(), any(), any(), any()))
+            when(evictOperationFactory.create(any(), any(), any()))
                     .thenThrow(new RuntimeException("Factory error"));
 
             handler.doHandle(method, target, args);

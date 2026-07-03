@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.factory;
 
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
@@ -15,6 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * CachePutOperationFactory 单元测试
+ *
+ * <p>ADR-0028:删除 supports() 测试块;create 调用跟随接口签名窄化为 3 参。
  */
 @DisplayName("CachePutOperationFactory Tests")
 class CachePutOperationFactoryTest {
@@ -63,10 +64,8 @@ class CachePutOperationFactoryTest {
                     500000L
             );
             Method method = getTestMethod();
-            TestClass target = new TestClass();
-            String[] args = {"arg1"};
 
-            RedisCachePutOperation operation = factory.create(method, annotation, target, args, "generated-key");
+            RedisCachePutOperation operation = factory.create(method, annotation, "generated-key");
 
             assertThat(operation.getName()).isEqualTo("testMethod");
             assertThat(operation.getKey()).isEqualTo("generated-key");
@@ -100,49 +99,16 @@ class CachePutOperationFactoryTest {
             );
             Method method = getTestMethod();
 
-            RedisCachePutOperation operation = factory.create(method, annotation, new TestClass(), new Object[]{}, "key");
+            RedisCachePutOperation operation = factory.create(method, annotation, "key");
 
             assertThat(operation.isUseBloomFilter()).isFalse();
             assertThat(operation.getExpectedInsertions()).isEqualTo(100000L);
         }
     }
 
-    @Nested
-    @DisplayName("supports tests")
-    class SupportsTests {
-
-        @Test
-        @DisplayName("returns true for RedisCachePut annotation")
-        void supports_redisCachePut_returnsTrue() throws NoSuchMethodException {
-            RedisCachePut annotation = createAnnotation(
-                    new String[]{},
-                    new String[]{},
-                    "",
-                    60L,
-                    false,
-                    0.3,
-                    EarlyExpirationMode.SYNC,
-                    "",
-                    "",
-                    false,
-                    100000L
-            );
-
-            assertThat(factory.supports(annotation)).isTrue();
-        }
-
-        @Test
-        @DisplayName("returns false for other annotations")
-        void supports_otherAnnotation_returnsFalse() {
-            Annotation otherAnnotation = new SomeOtherAnnotation();
-
-            assertThat(factory.supports(otherAnnotation)).isFalse();
-        }
-    }
-
     // Test helper class
     static class TestClass {
-        public void testMethod(String arg) {}
+        public void testMethod(String arg) { }
     }
 
     // Test implementation of RedisCachePut
@@ -283,14 +249,6 @@ class CachePutOperationFactoryTest {
         @Override
         public EarlyExpirationMode earlyExpirationMode() {
             return earlyExpirationMode;
-        }
-    }
-
-    // Other annotation for negative testing
-    static class SomeOtherAnnotation implements Annotation {
-        @Override
-        public Class<? extends Annotation> annotationType() {
-            return SomeOtherAnnotation.class;
         }
     }
 }

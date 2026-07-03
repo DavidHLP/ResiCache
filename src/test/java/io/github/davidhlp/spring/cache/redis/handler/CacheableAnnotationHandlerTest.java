@@ -108,7 +108,7 @@ class CacheableAnnotationHandlerTest {
                     .build();
 
             when(keyGenerator.generate(target, method, args)).thenReturn(generatedKey);
-            when(cacheableOperationFactory.create(eq(method), any(RedisCacheable.class), eq(target), eq(args), eq(generatedKey)))
+            when(cacheableOperationFactory.create(eq(method), any(RedisCacheable.class), eq(generatedKey)))
                     .thenReturn(operation);
 
             handler.doHandle(method, target, args);
@@ -124,7 +124,7 @@ class CacheableAnnotationHandlerTest {
             Object[] args = new Object[]{"arg1", "arg2"};
 
             when(keyGenerator.generate(target, method, args)).thenReturn("test-key");
-            when(cacheableOperationFactory.create(any(), any(), any(), any(), any()))
+            when(cacheableOperationFactory.create(any(), any(), any()))
                     .thenReturn(RedisCacheableOperation.builder().build());
 
             handler.doHandle(method, target, args);
@@ -141,12 +141,12 @@ class CacheableAnnotationHandlerTest {
             String generatedKey = "test-key";
 
             when(keyGenerator.generate(target, method, args)).thenReturn(generatedKey);
-            when(cacheableOperationFactory.create(eq(method), any(RedisCacheable.class), eq(target), eq(args), eq(generatedKey)))
+            when(cacheableOperationFactory.create(eq(method), any(RedisCacheable.class), eq(generatedKey)))
                     .thenReturn(RedisCacheableOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
-            verify(cacheableOperationFactory).create(eq(method), any(RedisCacheable.class), eq(target), eq(args), eq(generatedKey));
+            verify(cacheableOperationFactory).create(eq(method), any(RedisCacheable.class), eq(generatedKey));
         }
     }
 
@@ -176,7 +176,7 @@ class CacheableAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(any(), any(), any(), any(), any()))
+            when(cacheableOperationFactory.create(any(), any(), any()))
                     .thenThrow(new RuntimeException("Factory error"));
 
             handler.doHandle(method, target, args);

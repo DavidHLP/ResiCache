@@ -76,7 +76,7 @@ public abstract class AbstractAnnotationHandler extends AnnotationHandler {
             OperationFactory<A, O> factory, RegisterAction<O> registerAction, String logTag) {
         try {
             String key = generateKey(target, method, args, keyExpression);
-            O operation = factory.create(method, annotation, target, args, key);
+            O operation = factory.create(method, annotation, key);
             Class<?> targetClass = target != null ? target.getClass() : null;
             registerAction.register(method, targetClass, operation);
             log.debug("Registered {} operation: {} with key: {} for caches: {}",

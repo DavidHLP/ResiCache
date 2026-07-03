@@ -85,7 +85,7 @@ class AbstractAnnotationHandlerTest {
 
             assertThat(result).isNotNull().isEmpty();
             assertThat(capturedOps).isEmpty();
-            verify(factory, never()).create(any(), any(), any(), any(), anyString());
+            verify(factory, never()).create(any(), any(), anyString());
         }
 
         @Test
@@ -99,7 +99,7 @@ class AbstractAnnotationHandlerTest {
 
             assertThat(result).isNotNull().isEmpty();
             assertThat(capturedOps).isEmpty();
-            verify(factory, never()).create(any(), any(), any(), any(), anyString());
+            verify(factory, never()).create(any(), any(), anyString());
         }
     }
 
@@ -115,7 +115,7 @@ class AbstractAnnotationHandlerTest {
             TestAnnotation[] annos = { anno };
             CacheOperation op1 = mockOperation();
             // keyExpression "k1" is non-empty, so KeyGenerator is NOT called.
-            when(factory.create(method, anno, target, args, "k1")).thenReturn(op1);
+            when(factory.create(method, anno, "k1")).thenReturn(op1);
 
             List<CacheOperation> result = handler.exposedRegisterAll(
                     method, target, args,
@@ -134,14 +134,14 @@ class AbstractAnnotationHandlerTest {
             TestAnnotation anno = makeAnno("spel:#id");
             TestAnnotation[] annos = { anno };
             CacheOperation op1 = mockOperation();
-            when(factory.create(method, anno, target, args, "spel:#id")).thenReturn(op1);
+            when(factory.create(method, anno, "spel:#id")).thenReturn(op1);
 
             handler.exposedRegisterAll(method, target, args,
                     annos, TestAnnotation::key,
                     factory, recorder, "test");
 
             verify(keyGenerator, never()).generate(any(), any(), any());
-            verify(factory).create(method, anno, target, args, "spel:#id");
+            verify(factory).create(method, anno, "spel:#id");
         }
 
         @Test
@@ -152,7 +152,7 @@ class AbstractAnnotationHandlerTest {
             TestAnnotation[] annos = { anno };
             CacheOperation op1 = mockOperation();
             when(keyGenerator.generate(target, method, args)).thenReturn("generated-key");
-            when(factory.create(method, anno, target, args, "generated-key")).thenReturn(op1);
+            when(factory.create(method, anno, "generated-key")).thenReturn(op1);
 
             handler.exposedRegisterAll(method, target, args,
                     annos, TestAnnotation::key,
@@ -179,9 +179,9 @@ class AbstractAnnotationHandlerTest {
             CacheOperation op2 = mockOperation();
             CacheOperation op3 = mockOperation();
             // All keys are non-empty, so KeyGenerator is NOT called.
-            when(factory.create(method, a1, target, args, "k1")).thenReturn(op1);
-            when(factory.create(method, a2, target, args, "k2")).thenReturn(op2);
-            when(factory.create(method, a3, target, args, "k3")).thenReturn(op3);
+            when(factory.create(method, a1, "k1")).thenReturn(op1);
+            when(factory.create(method, a2, "k2")).thenReturn(op2);
+            when(factory.create(method, a3, "k3")).thenReturn(op3);
 
             List<CacheOperation> result = handler.exposedRegisterAll(
                     method, target, args,
@@ -190,9 +190,9 @@ class AbstractAnnotationHandlerTest {
 
             assertThat(result).containsExactly(op1, op2, op3);
             assertThat(capturedOps).containsExactly(op1, op2, op3);
-            verify(factory, times(1)).create(method, a1, target, args, "k1");
-            verify(factory, times(1)).create(method, a2, target, args, "k2");
-            verify(factory, times(1)).create(method, a3, target, args, "k3");
+            verify(factory, times(1)).create(method, a1, "k1");
+            verify(factory, times(1)).create(method, a2, "k2");
+            verify(factory, times(1)).create(method, a3, "k3");
             verify(keyGenerator, never()).generate(any(), any(), any());
         }
     }
@@ -212,10 +212,10 @@ class AbstractAnnotationHandlerTest {
             CacheOperation op1 = mockOperation();
             CacheOperation op3 = mockOperation();
             // All keys are non-empty, so KeyGenerator is NOT called.
-            when(factory.create(method, a1, target, args, "k1")).thenReturn(op1);
-            when(factory.create(method, a2, target, args, "k2"))
+            when(factory.create(method, a1, "k1")).thenReturn(op1);
+            when(factory.create(method, a2, "k2"))
                     .thenThrow(new RuntimeException("factory boom"));
-            when(factory.create(method, a3, target, args, "k3")).thenReturn(op3);
+            when(factory.create(method, a3, "k3")).thenReturn(op3);
 
             List<CacheOperation> result = handler.exposedRegisterAll(
                     method, target, args,
@@ -234,9 +234,9 @@ class AbstractAnnotationHandlerTest {
             TestAnnotation a1 = makeAnno("k1");
             TestAnnotation a2 = makeAnno("k2");
             TestAnnotation[] annos = { a1, a2 };
-            when(factory.create(method, a1, target, args, "k1"))
+            when(factory.create(method, a1, "k1"))
                     .thenThrow(new RuntimeException("factory boom"));
-            when(factory.create(method, a2, target, args, "k2"))
+            when(factory.create(method, a2, "k2"))
                     .thenThrow(new RuntimeException("factory boom"));
 
             List<CacheOperation> result = handler.exposedRegisterAll(
