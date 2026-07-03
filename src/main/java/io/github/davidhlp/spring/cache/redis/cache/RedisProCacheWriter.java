@@ -131,18 +131,10 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         // 反序列化值
         Object deserializedValue = typeSupport.deserializeFromBytes(value);
 
-        // 构建上下文（带操作配置）
-        CacheContext context =
-                CacheContext.of(CacheInput.builder()
-                        .operation(CacheOperation.PUT)
-                        .cacheName(name)
-                        .redisKey(redisKey)
-                        .actualKey(actualKey)
-                        .valueBytes(value)
-                        .deserializedValue(deserializedValue)
-                        .ttl(ttl)
-                        .cacheOperation(operation)
-                        .build());
+        // 构建上下文(带操作配置)—— operation 已传入,直接走 buildContext,跳过 register 查询(ADR-0034)
+        CacheContext context = buildContext(
+                CacheOperation.PUT, name, redisKey, actualKey,
+                value, deserializedValue, ttl, operation, null);
 
         // 执行责任链（使用缓存的 chain 实例）
         getChain().execute(context);
@@ -176,7 +168,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
      * Path C Step 6 — 异步边界 MethodMetadataResolver snapshot/restore 包装.
      *
      * <p>问题: {@code retrieve()}/{@code store()} 走 {@code CompletableFuture.supplyAsync/runAsync}
-     * 切到 commonPool 线程,链路处理器读 {@link CacheOperationMetadataHolder}
+     * 切到 commonPool 线程,链路处理器读 {@code CacheOperationMetadataHolder}
      * ThreadLocal 拿不到(@Cacheable 的布隆/同步锁/TTL/空值 operation 静默失效)。
      *
      * <p>解决: 提交任务前 snapshot 当前 resolver 状态,异步线程内 restore(写 ThreadLocal),
@@ -244,10 +236,10 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         String keyPattern = typeSupport.bytesToString(pattern);
         String actualKey = extractActualKey(name, keyPattern);
 
-        // 构建上下文
-        CacheContext context =
-                buildContext(CacheOperation.CLEAN, name, keyPattern, actualKey, null, null, null);
-        context.setKeyPattern(keyPattern);
+        // 构建上下文 —— keyPattern 前置进 buildContext,消除原后置 mutate(ADR-0033/0034)
+        CacheContext context = buildContext(
+                CacheOperation.CLEAN, name, keyPattern, actualKey,
+                null, null, null, resolveOperation(name), keyPattern);
 
         // 执行责任链（使用缓存的 chain 实例）
         getChain().execute(context);
@@ -288,38 +280,57 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 构建缓存上下文
+     * 解析方法级 operation 配置(布隆/同步锁/TTL/空值等)—— 通过 AnnotatedElementKey 查 register,
+     * 匹配 Spring 的方法级元数据语义。Path C Step 1:从 MethodMetadataResolver 读 currentKey,
+     * 不再直接访问静态 holder。
+     *
+     * @param cacheName 缓存名称
+     * @return 命中的 operation;无元数据或未命中返回 null
+     */
+    @Nullable
+    private RedisCacheableOperation resolveOperation(@NonNull String cacheName) {
+        AnnotatedElementKey elementKey = methodMetadataResolver.currentKey();
+        if (elementKey == null) {
+            return null;
+        }
+        RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation(cacheName, elementKey);
+        if (operation == null) {
+            log.debug("No metadata found via AnnotatedElementKey for cacheName={}, falling back to actualKey", cacheName);
+        }
+        return operation;
+    }
+
+    /**
+     * 统一的 CacheContext 构造 seam —— 5 个 SDR 入口(GET/PUT/PUT_IF_ABSENT/REMOVE/CLEAN)
+     * 与带 operation 的 put 重载均经此构造,消除原三路分裂(ADR-0034)。
+     *
+     * <p>cacheOperation 由调用方解析:executeChain/clean 走 {@link #resolveOperation} 查 register,
+     * put 5参重载直接传入已持有的 operation。keyPattern 仅 CLEAN 操作非 null —— ADR-0033 已把
+     * keyPattern 升格为 CacheContext direct field,此处前置设置,消除原 clean 后置 mutate。
      *
      * @param operation 操作类型
      * @param cacheName 缓存名称
-     * @param redisKey Redis完整key
-     * @param actualKey 实际key
-     * @param valueBytes 值字节数组
-     * @param deserializedValue 反序列化后的值
+     * @param redisKey Redis 完整 key
+     * @param actualKey 实际 key(去前缀)
+     * @param valueBytes 值字节数组(读路径/REMOVE/CLEAN 为 null)
+     * @param deserializedValue 反序列化后的值(同上为 null)
      * @param ttl TTL
+     * @param cacheOperation 已解析的方法级 operation 配置(可为 null)
+     * @param keyPattern CLEAN 的键模式(非 CLEAN 传 null)
      * @return 缓存上下文
      */
     private CacheContext buildContext(
             CacheOperation operation,
-            String cacheName,
+            @NonNull String cacheName,
             String redisKey,
             String actualKey,
             @Nullable byte[] valueBytes,
             @Nullable Object deserializedValue,
-            @Nullable Duration ttl) {
+            @Nullable Duration ttl,
+            @Nullable RedisCacheableOperation cacheOperation,
+            @Nullable String keyPattern) {
 
-        // 获取缓存操作配置（优先通过 AnnotatedElementKey 查找，匹配 Spring 的方法级元数据语义）
-        // Path C Step 1: 从 MethodMetadataResolver 读取,不再直接访问静态 holder
-        AnnotatedElementKey elementKey = methodMetadataResolver.currentKey();
-        RedisCacheableOperation cacheOperation = null;
-        if (elementKey != null) {
-            cacheOperation = redisCacheRegister.getCacheableOperation(cacheName, elementKey);
-        }
-        if (cacheOperation == null) {
-            log.debug("No metadata found via AnnotatedElementKey for cacheName={}, falling back to actualKey", cacheName);
-        }
-
-        return CacheContext.of(CacheInput.builder()
+        CacheContext context = CacheContext.of(CacheInput.builder()
                 .operation(operation)
                 .cacheName(cacheName)
                 .redisKey(redisKey)
@@ -329,6 +340,10 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 .ttl(ttl)
                 .cacheOperation(cacheOperation)
                 .build());
+        if (keyPattern != null) {
+            context.setKeyPattern(keyPattern);
+        }
+        return context;
     }
 
     /**
@@ -344,10 +359,12 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 同步执行责任链的统一入口:封装 key 解析 → 值反序列化 → 上下文构建 → 链执行 的公共 pipeline。
+     * 同步执行责任链的统一入口(GET/PUT/PUT_IF_ABSENT/REMOVE):封装 key 解析 → 值反序列化 →
+     * operation 解析(register 查询)→ 上下文构建 → 链执行。
      *
      * <p>读路径(GET/PUT_IF_ABSENT)取返回字节;写路径(PUT/REMOVE)忽略返回值。
-     * clean(需 setKeyPattern)与带 operation 的 put 重载因上下文构建方式不同,不经此入口。
+     * 带 operation 的 put 重载(operation 已传入,跳过 register 查询)与 clean(传 keyPattern)
+     * 各自直接调 {@link #buildContext},不经此入口 —— 三路共用同一 buildContext seam(ADR-0034)。
      *
      * @param operation 操作类型
      * @param name 缓存名称
@@ -358,16 +375,17 @@ public class RedisProCacheWriter implements RedisCacheWriter {
      */
     private CacheResult executeChain(
             CacheOperation operation,
-            String name,
-            byte[] key,
+            @NonNull String name,
+            @NonNull byte[] key,
             @Nullable byte[] valueBytes,
             @Nullable Duration ttl) {
         String redisKey = typeSupport.bytesToString(key);
         String actualKey = extractActualKey(name, redisKey);
         Object deserializedValue =
                 valueBytes != null ? typeSupport.deserializeFromBytes(valueBytes) : null;
-        CacheContext context =
-                buildContext(operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl);
+        CacheContext context = buildContext(
+                operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl,
+                resolveOperation(name), null);
         return getChain().execute(context);
     }
 

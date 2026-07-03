@@ -72,6 +72,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0030-redisprocachewriter-dead-accessors-removal]] —— RedisProCacheWriter.getTtl(String)/getExpiration(String) 2 个死 protected 方法删除(零调用零子类零反射,deletion test 通过;round 21)
 - [[0031-redisprocache-timing-helper-seam]] —— RedisProCache 6 处 try-finally + System.nanoTime() + safeRecord timing 样板 → RedisProCacheTimers package-private 工具 seam(registerTimer/registerCounter/safeIncrement/timed/timedGet 5 个静态入口;net -83 body SLOC;byte-equivalent;round 22)
 - [[0032-metadata-keys-extract-seam]] —— chain 包 DefaultMethodMetadataResolver + CacheInvocationContext 2 个 reflectField × 7 行字节级同构 + 3 处 cast-instanceof 分派 → MetadataKeys package-private 工具 seam(reflectField/extractMethod/extractTargetClass 3 个静态入口;可观测性提升 CacheInvocationContext 失败从静默升级为 WARN;round 23 兑现 round 22 R23 队列)
+- [[0034-writer-context-build-single-seam]] —— RedisProCacheWriter context-build 三路分裂(put5参内联 / buildContext / clean 后置 mutate)→ 单一 9参 buildContext seam + resolveOperation helper(round 25 Top rec C1;兑现 ADR-0033 C2 候补 + 清 setKeyPattern 尾巴)
 
 ## 架构(architecture/)
 
@@ -116,5 +117,5 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-07-03 · 共 67 篇文档(含 33 ADR)· 维护见 [[log]]
+最后更新:2026-07-03 · 共 68 篇文档(含 34 ADR)· 维护见 [[log]]
 - [[0033-cacheoutput-typed-decisions]] —— `CacheOutput` 9 字段共享可变袋(2 字段死 + 5 owner 跨包泄漏 + 1 engine control flow 错位)→ typed per-handler decisions(`TtlDecision`/`NullDecision` records)+ `keyPattern` direct field + `skipRemaining` 升格 context 一级;`getOutput()` 公共 API 消失;CacheOutput.java 97 SLOC 整删;round 24 兑现 round 24 HTML report Top recommendation C3

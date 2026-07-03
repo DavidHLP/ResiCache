@@ -25,6 +25,7 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 ## 2026-07-03
 
 - [2026-07-03] fix(env) | WSL2 `docker pull` IPv6 timeout → 三层兜底(daocloud mirror + daemon 代理 drop-in + client 代理)→ [[fix-docker-pull-ipv6-timeout]]
+- [2026-07-03] improve | ADR-0034(round 25)| `RedisProCacheWriter` context-build 三路分裂 → 单一 9参 buildContext seam + resolveOperation helper(clean `setKeyPattern` 后置 mutate 尾巴清)→ [[0034-writer-context-build-single-seam]]
 - [2026-07-03] improve | ADR-0033(round 24)| `CacheOutput` 共享可变袋 → typed per-handler decisions(`TtlDecision`/`NullDecision`),`CacheOutput.java` 97 SLOC 整删 → [[0033-cacheoutput-typed-decisions]]
 - [2026-07-03] improve | ADR-0032(round 23)| `MetadataKeys` 收敛 chain 包 reflectField + cast-instanceof seam → [[0032-metadata-keys-extract-seam]]
 - [2026-07-03] improve | ADR-0031(round 22)| `RedisProCache` try-finally timing 样板 → `RedisProCacheTimers` 工具 seam → [[0031-redisprocache-timing-helper-seam]]
