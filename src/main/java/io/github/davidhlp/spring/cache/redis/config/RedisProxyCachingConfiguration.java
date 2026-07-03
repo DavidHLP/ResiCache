@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.config;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheOperationSource;
 import io.github.davidhlp.spring.cache.redis.cache.RedisCacheInterceptor;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
+import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.handler.AnnotationChainEngine;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -60,12 +61,14 @@ public class RedisProxyCachingConfiguration {
                     CacheOperationSource redisCacheOperationSource,
             RedisProCacheManager cacheManager,
             KeyGenerator keyGenerator,
-            AnnotationChainEngine annotationChainEngine) {
+            AnnotationChainEngine annotationChainEngine,
+            MethodMetadataResolver methodMetadataResolver) {
 
         return new RedisCacheInterceptor(
                 redisCacheOperationSource,
                 cacheManager,
                 keyGenerator,
-                annotationChainEngine);
+                annotationChainEngine,
+                methodMetadataResolver);
     }
 }

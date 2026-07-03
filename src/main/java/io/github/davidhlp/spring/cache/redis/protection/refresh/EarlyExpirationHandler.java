@@ -41,19 +41,7 @@ import java.nio.charset.StandardCharsets;
 @HandlerPriority(HandlerOrder.EARLY_EXPIRATION)
 public class EarlyExpirationHandler extends AbstractCacheHandler {
 
-    /** 上下文属性键：提前过期决策 */
-    private static final String DECISION_KEY = "earlyExpiration.decision";
-
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
-
-    private static final String ATOMIC_TTL_SHORTEN_SCRIPT =
-        "local current = redis.call('get', KEYS[1]) " +
-        "if current == ARGV[1] then " +
-        "    redis.call('expire', KEYS[1], ARGV[2]) " +
-        "    return 1 " +
-        "else " +
-        "    return 0 " +
-        "end";
 
     private final EarlyExpirationPolicy earlyExpirationPolicy;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
@@ -97,21 +85,19 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
         // 先尝试获取缓存值
         CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
 
-        // 将预取的缓存值存入上下文，供 ActualCacheHandler 复用，避免双重 Redis GET
-        context.setAttribute(CacheContext.AttributeKey.PREFETCHED_CACHED_VALUE, cachedValue);
-
         if (cachedValue == null || cachedValue.checkExpired()) {
-            // 缓存不存在或已过期，继续执行后续 Handler
+            // 缓存不存在或已过期，不预取，ActualCacheHandler 走原生 GET 路径
+            // (prefetchDecision 保持 null,handleGet 回退 valueOperations.get)
             return HandlerResult.continueChain();
         }
 
-        // 检查是否需要提前过期
+        // 缓存命中：判定提前过期 + 一次性写入类型化 PrefetchDecision（ADR-0036 / Round 26 C1）
         EarlyExpirationDecision decision = checkEarlyExpiration(context, cachedValue);
-        context.setAttribute(DECISION_KEY, decision);
+        boolean skipped = decision.needsRefresh() && decision.isSync();
+        context.setPrefetchDecision(PrefetchDecision.of(skipped, cachedValue, decision));
 
-        if (decision.needsRefresh() && decision.isSync()) {
-            // 同步提前过期：返回 skipAll，ActualCacheHandler 会返回 miss
-            context.setAttribute(CacheContext.AttributeKey.EARLY_EXPIRATION_SKIPPED, true);
+        if (skipped) {
+            // 同步提前过期：返回 skipAll，ActualCacheHandler 检查 prefetchDecision 后返回 miss
             log.debug("Sync early-expiration triggered, skipping actual cache: cacheName={}, key={}",
                       context.getCacheName(), context.getRedisKey());
             // WS-1.4 per-handler tag:同步提前过期触发事件计数
@@ -213,7 +199,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
             byte[] ttlBytes = String.valueOf(REFRESH_GRACE_PERIOD_SECONDS).getBytes(StandardCharsets.UTF_8);
 
             Long result = connection.eval(
-                ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
+                EarlyExpirationScripts.ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
                 ReturnType.INTEGER,
                 1,
                 keyBytes, expectedValueBytes, ttlBytes
@@ -229,6 +215,9 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
      * @return 提前过期决策
      */
     public static EarlyExpirationDecision getDecision(CacheContext context) {
-        return context.getAttribute(DECISION_KEY, EarlyExpirationDecision.noRefresh());
+        PrefetchDecision prefetch = context.getPrefetchDecision();
+        return prefetch != null && prefetch.decision() != null
+                ? prefetch.decision()
+                : EarlyExpirationDecision.noRefresh();
     }
 }

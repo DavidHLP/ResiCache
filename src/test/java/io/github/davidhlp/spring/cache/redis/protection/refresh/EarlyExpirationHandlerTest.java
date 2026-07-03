@@ -213,7 +213,7 @@ class EarlyExpirationHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
-            assertThat(context.getAttribute("earlyExpiration.skipped", false)).isTrue();
+            assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
             verify(statistics).incMisses("test-cache");
         }
 
@@ -313,7 +313,7 @@ class EarlyExpirationHandlerTest {
             );
             CacheContext context = new CacheContext(input);
             EarlyExpirationDecision storedDecision = EarlyExpirationDecision.syncRefresh();
-            context.setAttribute("earlyExpiration.decision", storedDecision);
+            context.setPrefetchDecision(PrefetchDecision.of(false, null, storedDecision));
 
             EarlyExpirationDecision decision = EarlyExpirationHandler.getDecision(context);
 
@@ -336,7 +336,7 @@ class EarlyExpirationHandlerTest {
 
             handler.doHandle(context);
 
-            EarlyExpirationDecision decision = context.getAttribute("earlyExpiration.decision");
+            EarlyExpirationDecision decision = context.getPrefetchDecision().decision();
             assertThat(decision).isNotNull();
             assertThat(decision.needsRefresh()).isTrue();
         }

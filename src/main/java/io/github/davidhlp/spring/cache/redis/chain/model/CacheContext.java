@@ -17,14 +17,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li><b>input</b> — 不可变 record,请求原始参数,全程只读</li>
  *   <li><b>类型化决策</b> — {@link TtlDecision} (TtlHandler→ActualCacheHandler)、
- *       {@link NullDecision} (NullValueHandler→ActualCacheHandler)、{@link #keyPattern}
+ *       {@link NullDecision} (NullValueHandler→ActualCacheHandler)、{@link PrefetchDecision}
+ *       (EarlyExpirationHandler→ActualCacheHandler)、{@link #keyPattern}
  *       (RedisProCacheWriter→ActualCacheHandler);生产者/消费者一一对应,无共享字段,
  *       编译期类型约束</li>
  *   <li><b>控制流标记</b> — {@link #skipRemaining} 由 {@code ChainEngine} 在
  *       SKIP_ALL 决策时单点置位、{@code BloomFilterHandler.afterChainExecution}
  *       读取以决定是否执行后置回填</li>
- *   <li><b>attributes</b> — 通用字符串键临时数据(原 9 字段共享袋被 2 typed decisions
- *       + 1 keyPattern 取代后,attributes 仅保留少量跨域临时信号)</li>
+ *   <li><b>attributes</b> — 通用字符串键临时数据;业务信号全部类型化后(ADR-0033 + ADR-0036),
+ *       仅保留 observer/bloom/lock 各模块自管的临时键(计时、MDC 回滚、post-process、lock 标记)</li>
  * </ul>
  *
  * <p><b>使用方式</b>:
@@ -39,22 +40,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  */
 public class CacheContext {
-
-    /**
-     * 属性键常量 - 避免 Magic Strings。
-     *
-     * <p>ADR-0026:仅保留在用的 key;{@code CACHE_HIT} / {@code ASYNC_REFRESH_TASK_ID}
-     * 已删（全项目含 test 0 引用，死代码）。
-     */
-    public static final class AttributeKey {
-        private AttributeKey() {}
-
-        /** 提前过期跳过标记 */
-        public static final String EARLY_EXPIRATION_SKIPPED = "earlyExpiration.skipped";
-
-        /** EarlyExpirationHandler 获取的缓存值（供 ActualCacheHandler 复用，避免双重 Redis GET） */
-        public static final String PREFETCHED_CACHED_VALUE = "cache.prefetchedValue";
-    }
 
     /** 输入参数（不可变）。 */
     @Getter
@@ -85,6 +70,16 @@ public class CacheContext {
     @Getter
     @lombok.Setter
     private NullDecision nullDecision;
+
+    /**
+     * 预取/提前过期决策 — 由 {@code EarlyExpirationHandler.doHandle} 写入、
+     * {@code ActualCacheHandler.handleGet} 读取。类型化替代原 attributes Map 的 3 个业务
+     * magic-string key({@code earlyExpiration.skipped}/{@code cache.prefetchedValue}/
+     * {@code earlyExpiration.decision},ADR-0036 / Round 26 C1)。生产者/消费者一一对应。
+     */
+    @Getter
+    @lombok.Setter
+    private PrefetchDecision prefetchDecision;
 
     /**
      * 键模式 — 仅 {@link io.github.davidhlp.spring.cache.redis.chain.CacheOperation#CLEAN}

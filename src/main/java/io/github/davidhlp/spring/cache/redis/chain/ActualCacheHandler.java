@@ -61,8 +61,9 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(context.getOperation(), "Cache operation must not be null");
 
-        // 检查是否已被提前过期处理跳过
-        if (context.getAttribute(CacheContext.AttributeKey.EARLY_EXPIRATION_SKIPPED, false)) {
+        // 检查是否已被提前过期处理跳过（ADR-0036:类型化 PrefetchDecision 替代 attributes magic string）
+        PrefetchDecision prefetch = context.getPrefetchDecision();
+        if (prefetch != null && prefetch.earlyExpirationSkipped()) {
             return HandlerResult.terminate(CacheResult.miss());
         }
 
@@ -99,8 +100,9 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         log.debug("Cache GET: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
         try {
-            // 优先复用 EarlyExpirationHandler 预取的缓存值，避免双重 Redis GET
-            CachedValue cachedValue = context.getAttribute(CacheContext.AttributeKey.PREFETCHED_CACHED_VALUE);
+            // 优先复用 EarlyExpirationHandler 预取的缓存值，避免双重 Redis GET（ADR-0036:类型化）
+            PrefetchDecision prefetchDecision = context.getPrefetchDecision();
+            CachedValue cachedValue = prefetchDecision != null ? prefetchDecision.prefetchedValue() : null;
             if (cachedValue == null) {
                 Object rawValue = valueOperations.get(context.getRedisKey());
                 cachedValue = (rawValue instanceof CachedValue cv) ? cv : null;

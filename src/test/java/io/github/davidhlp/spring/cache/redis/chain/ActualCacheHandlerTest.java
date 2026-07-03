@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.chain;
 import io.github.davidhlp.spring.cache.redis.chain.model.NullDecision;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.model.PrefetchDecision;
 import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
 
 
@@ -103,7 +104,7 @@ class ActualCacheHandlerTest {
         @DisplayName("returns miss when earlyExpiration.skipped attribute is true")
         void doHandle_earlyExpirationSkipped_returnsMiss() {
             CacheContext context = createContext(CacheOperation.GET);
-            context.setAttribute("earlyExpiration.skipped", true);
+            context.setPrefetchDecision(PrefetchDecision.skipped());
 
             HandlerResult result = handler.doHandle(context);
 

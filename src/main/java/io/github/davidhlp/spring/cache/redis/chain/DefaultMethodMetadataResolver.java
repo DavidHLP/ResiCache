@@ -24,11 +24,12 @@ import java.util.function.Supplier;
  *       (不再委托静态类)</li>
  * </ul>
  *
- * <p>设计选择 — 静态方法 vs 实例方法:
+ * <p>设计选择 — 静态方法 vs 实例方法(ADR-0036 后):
  * <ul>
- *   <li>写入 API(activateStatic/clearStatic)<strong>保持静态</strong> — 调用方
- *       (RedisProCacheWriter、ResiCacheMethodInterceptor、tests) 在
- *       拦截器作用域内不一定持有 resolver 引用,静态 API 降低耦合</li>
+ *   <li>写入 API(activateStatic/clearStatic)<strong>保持 public 静态</strong> —
+ *       ADR-0036 起 RedisCacheInterceptor 改走 {@link #activate}(ScopedActivation)消除跨包寄生;
+ *       剩余静态调用者(CacheInvocationContext.restore + RedisProCacheWriterTest)因重构成本
+ *       暂保留 public 访问,可见性收紧留作 follow-up</li>
  *   <li>读取 API(currentKey/currentMethod/currentTargetClass/currentContext)
  *       是实例方法 — 调用方(RedisProCacheWriter.buildContext、
  *       RedisProCache.lookupOperation) 持有 resolver 引用,直接调</li>
@@ -93,6 +94,11 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
     /**
      * 设置当前线程的缓存操作元数据键 — Step 7 后所有写入路径都走这里
      * (替代已删除的 {@code CacheOperationMetadataHolder.setCurrentKey})。
+     *
+     * <p><b>ADR-0036 / Round 26 (C2)</b>:可见性保持 {@code public} —— RedisCacheInterceptor
+     * 已迁移至 {@link #activate}(ScopedActivation)消除跨包寄生,但 {@code RedisProCacheWriterTest}
+     * 与 {@code CacheInvocationContext.restore} 仍直接调用本静态 API,收紧至 package-private
+     * 需同步重构 test,故本轮以 interceptor 迁移为 C2 核心交付,可见性收紧留作 follow-up。
      *
      * @param method      被拦截的方法
      * @param targetClass 目标类(原始类,非代理类)

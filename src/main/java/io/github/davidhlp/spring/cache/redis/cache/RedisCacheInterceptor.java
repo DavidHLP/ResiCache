@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.ScopedActivation;
 import io.github.davidhlp.spring.cache.redis.handler.AnnotationChainEngine;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInvocation;
@@ -36,7 +37,7 @@ import java.lang.reflect.Method;
  * <p><code>invoke()</code> 编排(行为零变化):
  * <ol>
  *   <li>reactive 返回类型({@code Mono}/{@code Flux})旁路 —— 不支持,直接 proceed</li>
- *   <li>{@link DefaultMethodMetadataResolver#activateStatic} ThreadLocal 激活方法元数据</li>
+ *   <li>{@link MethodMetadataResolver#activate} ThreadLocal 激活方法元数据(ADR-0036:经 activate 进入作用域)</li>
  *   <li>{@link AnnotationChainEngine#execute} 推进注解解析责任链(替代原
  *       {@code handlerChain.handle} 递归调用)</li>
  *   <li>{@code super.invoke} 触发 {@code CacheAspectSupport.execute} —— 链增强
@@ -54,21 +55,27 @@ public class RedisCacheInterceptor extends CacheInterceptor {
     /** 注解解析责任链推进引擎 — 替代原 AnnotationHandler 链表 + 手动 setNext 装配 */
     private final AnnotationChainEngine annotationChainEngine;
 
+    /** 方法元数据解析器 — ADR-0035/0036:ThreadLocal 边界 owner,interceptor 经 activate() 进入作用域 */
+    private final MethodMetadataResolver methodMetadataResolver;
+
     /**
      * 构造 advice,委派注解处理责任链装配给 {@link AnnotationChainEngine} 并落位 Spring
      * {@link CacheInterceptor} 依赖.
      *
-     * @param cacheOperationSource  缓存操作源(注解解析入口)
-     * @param cacheManager          缓存管理器
-     * @param keyGenerator          键生成器
-     * @param annotationChainEngine 注解解析责任链引擎(由 Spring 注入 List<AnnotationHandler>)
+     * @param cacheOperationSource    缓存操作源(注解解析入口)
+     * @param cacheManager            缓存管理器
+     * @param keyGenerator            键生成器
+     * @param annotationChainEngine   注解解析责任链引擎(由 Spring 注入 List<AnnotationHandler>)
+     * @param methodMetadataResolver  方法元数据解析器(ADR-0036:替代直接调 activateStatic/clearStatic)
      */
     public RedisCacheInterceptor(
             final CacheOperationSource cacheOperationSource,
             final CacheManager cacheManager,
             final KeyGenerator keyGenerator,
-            final AnnotationChainEngine annotationChainEngine) {
+            final AnnotationChainEngine annotationChainEngine,
+            final MethodMetadataResolver methodMetadataResolver) {
         this.annotationChainEngine = annotationChainEngine;
+        this.methodMetadataResolver = methodMetadataResolver;
         setCacheOperationSource(cacheOperationSource);
         setCacheManager(cacheManager);
         setKeyGenerator(keyGenerator);
@@ -93,12 +100,11 @@ public class RedisCacheInterceptor extends CacheInterceptor {
             return invocation.proceed();
         }
 
-        DefaultMethodMetadataResolver.activateStatic(method, targetClass);
-        try {
+        // ADR-0036:经 resolver.activate() 进入方法元数据作用域(try-with-resources 自动 restore),
+        // 消除原直接调 activateStatic/clearStatic 的跨包寄生 —— 与 async 路径(writer runWithSnapshot)对称
+        try (ScopedActivation ignored = methodMetadataResolver.activate(method, targetClass)) {
             annotationChainEngine.execute(method, target, args);
             return super.invoke(invocation);
-        } finally {
-            DefaultMethodMetadataResolver.clearStatic();
         }
     }
 
