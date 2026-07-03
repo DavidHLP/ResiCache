@@ -71,6 +71,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0027-annotation-parser-put-evict-spring-standard-alignment]] —— @RedisCachePut/@RedisCacheEvict AnnotationParser 对齐(单注解探测修补 + Spring 标准类,纠正 4 轮 ADR 的环境误诊;D1补@RedisCachePut探测/D2 Evict标准类/D3 Put标准类/D4删import/D5修测试ClassCast)
 - [[0028-operationfactory-seam-narrowing-and-applytext]] —— OperationFactory seam 收窄(删 supports 死链 + create 5参→3参 + 删 AbstractOperationFactory)+ SpringAnnotationAdapter applyText 收敛(3 build 方法 17 处 if-hasText-set → Consumer method reference;**重开 ADR-0026 D4**;round 20)
 - [[0029-single-adapter-hypothetical-seams-acceptance]] —— 单-adapter hypothetical seam 接受策略(MethodMetadataResolver + BloomHashStrategy;可逆性对冲,锁定不删;round 20)
+- [[0030-redisprocachewriter-dead-accessors-removal]] —— RedisProCacheWriter.getTtl(String)/getExpiration(String) 2 个死 protected 方法删除(零调用零子类零反射,deletion test 通过;round 21)
 
 ## 架构(architecture/)
 

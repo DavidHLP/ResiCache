@@ -371,19 +371,6 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         return getChain().execute(context);
     }
 
-    // 以下方法用于向后兼容，如果有其他地方调用
-    protected long getTtl(String redisKey) {
-        Object value = valueOperations.get(redisKey);
-        if (value instanceof CachedValue cachedValue) {
-            return cachedValue.getTtl();
-        }
-        return -1;
-    }
-
-    protected long getExpiration(String redisKey) {
-        return redisTemplate.getExpire(redisKey);
-    }
-
     /**
      * 获取缓存的责任链实例（饿汉式单例）
      *

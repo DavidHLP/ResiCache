@@ -1018,3 +1018,44 @@ Q2 autonomous-loop v1/v2(round 1–42)已 CLOSED,新一轮项目优化里程碑�
 - `mvnw test -Dtest='CacheableOperationFactoryTest,CachePutOperationFactoryTest,EvictOperationFactoryTest,AbstractAnnotationHandlerTest,CacheableAnnotationHandlerTest,EvictAnnotationHandlerTest,CachingAnnotationHandlerTest,SpringAnnotationAdapterTest,OperationFromAttributesTest'` —— **56 tests, 0 failures, 0 errors**(行为不变)
 
 **下一步**: 无 — 候选 1-5 全部裁决落地。HTML 报告 5 候选闭环。
+
+---
+
+## [2026-07-03] ADR-0030 | Round 21 — RedisProCacheWriter 死 protected 方法删除
+
+`/improve-codebase-architecture` round 21 autocratic one-shot 报告
+(`/tmp/architecture-review-resicache-round21-1783052090.html`,不入仓)扫描 `cache/` 域,
+基于前轮 ADR-0009~0029 禁区清单筛出 3 候选(1 落地 / 2 信息项):
+
+- **D1 删 `RedisProCacheWriter.getTtl(String)` + `getExpiration(String)` 2 个死 protected
+  方法**(候选 1,执行,ADR-0030):全项目(main+test)零调用 + 零子类
+  (`extends RedisProCacheWriter` 空)+ 零反射 + 模块 wiki `cache-core.md` 未列契约。注释
+  自承"用于向后兼容,如果有其他地方调用"。deletion test 干净通过(删了复杂度消失,不在
+  N 处重现)。与 ADR-0026 D3(删 `AttributeKey` 死常量)同款,但未被前轮触及,本轮新发现。
+  净删 13 SLOC,public API 零变化。
+
+- **D2 `CacheHandlerChainFactory` next 指针 stale comment**(候选 2,**信息项不落地**):
+  line 82-87 注释"单例,避免 handler next 指针被并发修改",但 ADR-0022 已删 next 指针
+  (改 List 快照 index 推进)。注释 stale。**不动理由**:纯文档 friction,单例的新理由
+  (避免重复建链 + observer 重复注册)从代码可读,修正属文档维护非架构深化;留待顺手或 lint。
+
+- **D3 `ChainEngine.execute` line 132/152 `onChainEnd(ctx, CacheResult.success())`**
+  (候选 3,**信息项不落地**):硬编码 success 而非真实 `finalResult`。现有 4 observer
+  (MDC/Timer/FiredCounter/DebugLog)均不消费 onChainEnd 的 result 参数,当前无害。
+  **不动理由**:签名契约隐患而非现存 bug;留作触发器(首个 result-consuming observer
+  出现时必修)。
+
+**反向核实**:Explore agent 自报"无可上报候选",方向正确(代码库已极干净),但漏看
+RedisProCacheWriter 末尾 2 个零调用 protected 方法(注释自我怀疑是强信号)。本轮证明:
+即便 29 轮深化后,deletion test 仍能挤出残骸。
+
+**Review CR findings**: 阶段 3 自审 grep 反射调用(`"getTtl"`/`"getExpiration"`/
+`getMethod("get"`),确认 `@DisplayName("getTtl")` 命中是测 `RedisCacheableOperation.getTtl()`
+非 Writer;`getMethod("getById")` 是测试服务类。零反射。test-compile BUILD SUCCESS 是
+零引用编译期铁证。零 Fix 需要。
+
+**验证**:
+- `mvnw checkstyle:check test-compile -B` —— BUILD SUCCESS(0 violations + main/test 编译通过)
+- `mvnw verify -B -Dmaven.javadoc.skip=true` —— **776 tests, 0 failures, 0 errors; All coverage checks have been met**
+
+**下一步**: 无 — D1 已落地,D2/D3 信息项留触发器。
