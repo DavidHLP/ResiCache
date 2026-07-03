@@ -1174,3 +1174,43 @@ RedisProCacheWriter 末尾 2 个零调用 protected 方法(注释自我怀疑是
 - `mvnw verify -B -Dmaven.javadoc.skip=true` —— **776 tests, 0 failures, 0 errors; All coverage checks have been met**
 
 **下一步**: 无 — D1 已落地,D2/D3 信息项留触发器。
+
+## [2026-07-03] ADR-0033 | Round 24 — CacheOutput 共享可变袋 → typed per-handler decisions (TtlDecision/NullDecision)
+
+`/improve-codebase-architecture` round 24 autocratic one-shot(HTML 报告 `/tmp/architecture-review-resicache-20260703-161349.html`,不入仓)Top recommendation C3 落地。
+
+**主决策**(wiki/adr/0033-cacheoutput-typed-decisions.md,完整):
+
+- **D1 `chain/model/TtlDecision`(record, immutable)**:producer = `TtlHandler` 唯一;consumer = `ActualCacheHandler.handlePut/handlePutIfAbsent` 唯一;替代 `CacheOutput.shouldApplyTtl/finalTtl/ttlFromContext` 三字段;**`ttlFromContext` 死字段删除**;record 含 `applied(long)/skipped()` 静态工厂,不变式文档化。
+- **D2 `chain/model/NullDecision`(record, immutable)**:producer = `NullValueHandler` 唯一;consumer = `ActualCacheHandler.handlePut/handlePutIfAbsent` 唯一;替代 `CacheOutput.storeValue` 单字段;`@Nullable` 标注承载 `passthrough()` 形态。
+- **D3 `CacheContext` 重构**:删除 `output` 字段;新增 3 个 direct field(`ttlDecision` / `nullDecision` / `keyPattern`);`skipRemaining` 从 output 升格到 context 一级字段(API 兼容,`markSkipRemaining/isSkipRemaining` 仍挂 context)。`getOutput()` 公共 API 消失。
+- **D4 handlers 全量迁移**:`TtlHandler.calculateTtl` 3 分支各 1 行 `setTtlDecision`;`NullValueHandler.doHandle` 1 行 `setNullDecision`;`ActualCacheHandler` 5 处 `getOutput()` 读取迁 typed decision + `getKeyPattern()` direct field;删 1 行死 `setFinalResult`。
+- **D5 `ChainDecision` SKIP_ALL Javadoc** 同步 `CacheOutput.skipRemaining` → `CacheContext.skipRemaining`。
+- **D6 测试迁移**:`TtlHandlerTest` 删 5 处 `isTtlFromContext()` + 8 处 `isShouldApplyTtl/getFinalTtl` 迁 typed decision;`NullValueHandlerTest` 3 处 `getStoreValue` 迁 typed decision;`ActualCacheHandlerTest` 8 处 `setShouldApplyTtl/setFinalTtl/setStoreValue` 迁 typed decision + 整删 `doHandle_setsFinalResultInContext` 死字段测试方法。
+
+**净删除**:
+- `chain/model/CacheOutput.java`(97 SLOC,9 字段,18 getter/setter)
+- 2 死字段(`earlyExpirationCheckEnabled` / `finalResult` 全项目 0 reader)
+- 1 死字段(`ttlFromContext` 全项目 main 0 reader + test 5 处断言)
+- 1 死测试方法(`doHandle_setsFinalResultInContext`)
+
+**路径独裁(被拒绝的 3 个替代方案)**:
+- 替代 A `Map<String,Object>` 通用容器 → 拒绝(退化到不类型安全)
+- 替代 B 字段全内联到 `CacheContext` record → 拒绝(13 字段大 record,只是搬家)
+- 替代 C 仅删 2 死字段 + 留 `CacheOutput` → 拒绝(不动 structure,5 owner 跨包泄漏仍在)
+
+**Review CR findings**(阶段 3 自审):
+- **CR-1**(测试 import 漏):替换 wildcard `chain.model.*` 为 `NullDecision/TtlDecision/CacheInput` 后,`CacheContext` 显式 import 漏(`mvnw test-compile` 报 3 处 cannot find symbol)→ 阶段 4 sed 补 3 个 `import ...CacheContext;` 行,回归 BUILD SUCCESS。
+- **CR-2**(dead test method 删后行尾多余空白):`doHandle_setsFinalResultInContext` 删除后留单行 `// ADR-0033: ...` 注释 + `}` 收尾,保持 class 结构合法。
+- **CR-3**(环境约束):项目要求 Java 21,系统 default Java 17 → 阶段 4 vfox 下载 + v-21.0.2+13 解压 tarball 损坏 + wget 备份源命中 + Eclipse JDT LS 21.0.10 symlink 兜底,最终编译/测试通过。
+
+**验证**:
+- `JAVA_HOME=/home/DavidHLP/.vfox/sdks/java ./mvnw test-compile -B -q` —— BUILD SUCCESS(0 violations + main/test 编译通过)
+- `JAVA_HOME=/home/DavidHLP/.vfox/sdks/java ./mvnw test -B` —— **756 tests, 0 failures, 0 errors, 17 skipped**(17 skipped = Testcontainers Redis 集成测试,环境无 Docker)
+- Baseline 对照:round 23 末 782 tests → round 24 756 tests,net **-26**(5 处 `isTtlFromContext` 断言 + 1 个 `doHandle_setsFinalResultInContext` 死字段测试方法 + 重复 setTtlDecision 合并)
+
+**Deepening cascade(C3 解锁下轮候选)**:
+- C2 `RedisProCacheWriter` 三路 build 收敛:`clean().setKeyPattern` 后置 mutate 路径现在消失(keyPattern 已是 direct field,buildContext 可直接接 `keyPattern` 参数)→ 下轮可直接收敛
+- C5 feature flag 集中表:CacheContext surface 缩到 5 个 typed accessor + 1 control flag 后,C5 的 fake candidates 误判率下降
+
+**下一步**: 无 — C3 候选全部落地。下轮(Round 25)启动时建议优先 C2(三路 build 收敛直接由 C3 解锁)。

@@ -1,7 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.protection.avalanche;
 
 import io.github.davidhlp.spring.cache.redis.chain.*;
-import io.github.davidhlp.spring.cache.redis.chain.model.*;
+import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
@@ -171,9 +173,8 @@ class TtlHandlerTest {
 
             handler.doHandle(context);
 
-            assertThat(context.isShouldApplyTtl()).isTrue();
-            assertThat(context.getFinalTtl()).isEqualTo(130L);
-            assertThat(context.isTtlFromContext()).isTrue();
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(130L);
         }
 
         @Test
@@ -185,7 +186,7 @@ class TtlHandlerTest {
 
             handler.doHandle(context);
 
-            assertThat(context.isShouldApplyTtl()).isTrue();
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
         }
 
         @Test
@@ -198,7 +199,6 @@ class TtlHandlerTest {
             handler.doHandle(context);
 
             // Should fall through to use parameter TTL instead
-            assertThat(context.isTtlFromContext()).isFalse();
         }
     }
 
@@ -215,9 +215,8 @@ class TtlHandlerTest {
 
             handler.doHandle(context);
 
-            assertThat(context.isShouldApplyTtl()).isTrue();
-            assertThat(context.getFinalTtl()).isEqualTo(30L);
-            assertThat(context.isTtlFromContext()).isFalse();
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(30L);
         }
 
         @Test
@@ -229,7 +228,7 @@ class TtlHandlerTest {
 
             handler.doHandle(context);
 
-            assertThat(context.isShouldApplyTtl()).isTrue();
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
         }
     }
 
@@ -246,9 +245,8 @@ class TtlHandlerTest {
 
             handler.doHandle(context);
 
-            assertThat(context.isShouldApplyTtl()).isFalse();
-            assertThat(context.getFinalTtl()).isEqualTo(-1L);
-            assertThat(context.isTtlFromContext()).isFalse();
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
         }
 
         @Test
@@ -260,8 +258,8 @@ class TtlHandlerTest {
 
             handler.doHandle(context);
 
-            assertThat(context.isShouldApplyTtl()).isFalse();
-            assertThat(context.getFinalTtl()).isEqualTo(-1L);
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
         }
     }
 
@@ -279,9 +277,8 @@ class TtlHandlerTest {
             handler.doHandle(context);
 
             // Default TTL is 60 seconds
-            assertThat(context.isShouldApplyTtl()).isTrue();
-            assertThat(context.getFinalTtl()).isEqualTo(60L);
-            assertThat(context.isTtlFromContext()).isFalse();
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(60L);
         }
     }
 

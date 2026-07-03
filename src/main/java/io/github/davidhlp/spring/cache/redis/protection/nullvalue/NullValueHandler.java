@@ -10,15 +10,22 @@ import org.springframework.stereotype.Component;
 
 /**
  * 空值处理器
- * 
- * 职责：
- * 1. 检查值是否为 null
- * 2. 根据配置决定是否缓存 null 值
- * 3. 转换 null 值为存储格式
- * 
- * 输出（设置到 CacheOutput）：
- * - storeValue: 转换后的存储值
- * - skipRemaining: 如果不缓存 null，标记跳过后续处理器
+ *
+ * <p>职责：
+ * <ol>
+ *   <li>检查值是否为 null</li>
+ *   <li>根据配置决定是否缓存 null 值</li>
+ *   <li>转换 null 值为存储格式</li>
+ * </ol>
+ *
+ * <p>输出（ADR-0033 类型化决策 — 替代原 {@code CacheOutput.storeValue} 单字段共享袋）：
+ * <ul>
+ *   <li>{@link CacheContext#setNullDecision} 写入 {@link NullDecision}</li>
+ *   <li>{@link ActualCacheHandler#handlePut} / {@link ActualCacheHandler#handlePutIfAbsent}
+ *       通过 {@code context.getNullDecision()} 读取</li>
+ *   <li>当不需要缓存 null 时，返回 {@link HandlerResult#skipAll()}，由
+ *       {@code ChainEngine} 物化 {@code CacheContext.skipRemaining=true}</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -74,7 +81,7 @@ public class NullValueHandler extends AbstractCacheHandler {
         // 转换值为存储格式
         Object storeValue =
                 nullValuePolicy.toStoreValue(deserializedValue, context.getCacheOperation());
-        context.getOutput().setStoreValue(storeValue);
+        context.setNullDecision(NullDecision.of(storeValue));
 
         // 继续执行后续 Handler
         return HandlerResult.continueChain();

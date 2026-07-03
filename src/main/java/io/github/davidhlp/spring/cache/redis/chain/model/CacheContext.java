@@ -1,8 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.chain.model;
 
 import io.github.davidhlp.spring.cache.redis.chain.*;
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import lombok.Getter;
@@ -12,24 +10,32 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 缓存操作上下文 - 组合输入和输出
+ * 缓存操作上下文 — 组合输入 + 类型化 handler 间消息 + 引擎控制流标记.
  *
- * <p>设计原则:
+ * <p><b>ADR-0033 (Round 24)</b>：删除原 {@code CacheOutput} 共享可变袋,改为三段
+ * locality-first 模型:
  * <ul>
- *   <li>input 是只读的，包含原始请求参数</li>
- *   <li>output 是可变的，由各 Handler 设置处理结果</li>
- *   <li>attributes 用于 Handler 间传递临时数据和后置处理标记</li>
- *   <li>每个 Handler 只访问/修改自己关心的字段</li>
+ *   <li><b>input</b> — 不可变 record,请求原始参数,全程只读</li>
+ *   <li><b>类型化决策</b> — {@link TtlDecision} (TtlHandler→ActualCacheHandler)、
+ *       {@link NullDecision} (NullValueHandler→ActualCacheHandler)、{@link #keyPattern}
+ *       (RedisProCacheWriter→ActualCacheHandler);生产者/消费者一一对应,无共享字段,
+ *       编译期类型约束</li>
+ *   <li><b>控制流标记</b> — {@link #skipRemaining} 由 {@code ChainEngine} 在
+ *       SKIP_ALL 决策时单点置位、{@code BloomFilterHandler.afterChainExecution}
+ *       读取以决定是否执行后置回填</li>
+ *   <li><b>attributes</b> — 通用字符串键临时数据(原 9 字段共享袋被 2 typed decisions
+ *       + 1 keyPattern 取代后,attributes 仅保留少量跨域临时信号)</li>
  * </ul>
  *
- * <p>使用方式:
+ * <p><b>使用方式</b>:
  * <ul>
- *   <li>构造：{@code CacheContext.of(CacheInput.builder()…build())}（ADR-0026：单一构造路径，
- *       原 CacheContextBuilder pass-through 重复墙已删）</li>
- *   <li>读取操作参数：context.getOperation(), context.getCacheName() 等</li>
- *   <li>设置处理结果：context.getOutput().setFinalTtl(...), context.getOutput().setStoreValue(...)</li>
- *   <li>检查状态：context.isSkipRemaining(), context.getOutput().isEarlyExpirationCheckEnabled()</li>
- *   <li>属性传递：context.setAttribute(key, value), context.getAttribute(key)</li>
+ *   <li>构造：{@code CacheContext.of(new CacheInput(operation, name, key, …))}</li>
+ *   <li>读取操作参数：{@code context.getOperation()}, {@code context.getCacheName()} 等</li>
+ *   <li>读取 handler 间决策：{@code context.getTtlDecision().finalTtl()}、
+ *       {@code context.getNullDecision().storeValue()}</li>
+ *   <li>读取 keyPattern(CLEAN):{@code context.getKeyPattern()}</li>
+ *   <li>检查控制流：{@code context.isSkipRemaining()}</li>
+ *   <li>属性传递：{@code context.setAttribute(key, value)}, {@code context.getAttribute(key)}</li>
  * </ul>
  */
 public class CacheContext {
@@ -37,7 +43,7 @@ public class CacheContext {
     /**
      * 属性键常量 - 避免 Magic Strings。
      *
-     * <p>ADR-0026：仅保留在用的 2 个 key；{@code CACHE_HIT} / {@code ASYNC_REFRESH_TASK_ID}
+     * <p>ADR-0026:仅保留在用的 key;{@code CACHE_HIT} / {@code ASYNC_REFRESH_TASK_ID}
      * 已删（全项目含 test 0 引用，死代码）。
      */
     public static final class AttributeKey {
@@ -50,14 +56,9 @@ public class CacheContext {
         public static final String PREFETCHED_CACHED_VALUE = "cache.prefetchedValue";
     }
 
-    /** 输入参数（不可变） */
+    /** 输入参数（不可变）。 */
     @Getter
     private final CacheInput input;
-
-    /** 输出状态（可变）。{@code @Getter} 生成 {@code getOutput()}，供 ActualCacheHandler /
-     * TtlHandler / NullValueHandler 等调用（ADR-0026：原手写兜底 + 编译侥幸注释已删）。 */
-    @Getter
-    private final CacheOutput output;
 
     /**
      * 临时属性（用于 Handler 间传递数据和后置处理标记）
@@ -66,9 +67,46 @@ public class CacheContext {
     @Getter
     private final Map<String, Object> attributes = new ConcurrentHashMap<>();
 
+    /**
+     * TTL 决策 — 由 {@code TtlHandler.doHandle} 写入、
+     * {@code ActualCacheHandler.handlePut/handlePutIfAbsent} 读取。
+     * 类型化替代原 {@code CacheOutput.shouldApplyTtl}/{@code finalTtl}/{@code ttlFromContext}
+     * 三字段共享袋（ADR-0033）。
+     */
+    @Getter
+    @lombok.Setter
+    private TtlDecision ttlDecision;
+
+    /**
+     * Null 值处理决策 — 由 {@code NullValueHandler.doHandle} 写入、
+     * {@code ActualCacheHandler.handlePut/handlePutIfAbsent} 读取。
+     * 类型化替代原 {@code CacheOutput.storeValue} 单字段（ADR-0033）。
+     */
+    @Getter
+    @lombok.Setter
+    private NullDecision nullDecision;
+
+    /**
+     * 键模式 — 仅 {@link io.github.davidhlp.spring.cache.redis.chain.CacheOperation#CLEAN}
+     * 操作由 {@code RedisProCacheWriter.clean} 写入,
+     * {@code ActualCacheHandler.handleClean} 读取。从原 {@code CacheOutput.keyPattern}
+     * 迁移到 context 一级字段（ADR-0033：writer→handler 跨包共享，提到 context 减少泄漏）。
+     */
+    @Getter
+    @lombok.Setter
+    @org.springframework.lang.Nullable
+    private String keyPattern;
+
+    /**
+     * 引擎控制流标记 — SKIP_ALL 决策的物化状态。由 {@code ChainEngine.driveChain}
+     * 在遇到 SKIP_ALL 时单点置位，{@code ChainEngine.driveChain} 节点循环开头
+     * 检测短路、{@code BloomFilterHandler.afterChainExecution} 读它决定是否执行后置回填。
+     * <p>handler 不应自行读它判自身行为（仅在返回后才生效）—— 与 ADR-0009 engine 推进协议一致。
+     */
+    private boolean skipRemaining = false;
+
     public CacheContext(CacheInput input) {
         this.input = input;
-        this.output = new CacheOutput();
     }
 
     // ==================== 便捷访问方法（委托到 input） ====================
@@ -105,23 +143,17 @@ public class CacheContext {
         return input.cacheOperation();
     }
 
-    // ==================== 便捷访问方法（委托到 output） ====================
+    // ==================== 控制流（skipRemaining） ====================
 
-    // TTL 相关
-    public boolean isShouldApplyTtl() { return output.isShouldApplyTtl(); }
-    public long getFinalTtl() { return output.getFinalTtl(); }
-    public boolean isTtlFromContext() { return output.isTtlFromContext(); }
+    /** 是否已请求跳过后续处理器 — ChainEngine 在 SKIP_ALL 时物化此标记。 */
+    public boolean isSkipRemaining() {
+        return skipRemaining;
+    }
 
-    // NullValue 相关
-    public Object getStoreValue() { return output.getStoreValue(); }
-
-    // 控制标记
-    public boolean isSkipRemaining() { return output.isSkipRemaining(); }
-    public void markSkipRemaining() { output.markSkipRemaining(); }
-
-    // KeyPattern
-    public String getKeyPattern() { return output.getKeyPattern(); }
-    public void setKeyPattern(String pattern) { output.setKeyPattern(pattern); }
+    /** 物化跳过标记 — 仅 ChainEngine.driveChain 在 SKIP_ALL 分支调用。 */
+    public void markSkipRemaining() {
+        this.skipRemaining = true;
+    }
 
     // ==================== 属性访问（用于 Handler 间传递数据） ====================
 

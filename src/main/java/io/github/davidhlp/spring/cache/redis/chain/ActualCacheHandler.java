@@ -68,10 +68,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         CacheResult result = dispatchOperation(context);
 
-        // 保存最终结果
-        context.getOutput().setFinalResult(result);
-
-        // 终止责任链
+        // 终止责任链（ADR-0033:原 CacheOutput.finalResult 死字段删除,结果仅通过 HandlerResult 返回）
         return HandlerResult.terminate(result);
     }
 
@@ -159,22 +156,25 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         log.debug("Cache PUT: cacheName={}, key={}, shouldApplyTtl={}, finalTtl={}",
                   context.getCacheName(), context.getRedisKey(),
-                  context.getOutput().isShouldApplyTtl(), context.getOutput().getFinalTtl());
+                  context.getTtlDecision() != null && context.getTtlDecision().shouldApplyTtl(),
+                  context.getTtlDecision() != null ? context.getTtlDecision().finalTtl() : -1L);
 
         try {
             // 取消可能的异步提前过期任务
             earlyExpirationExecutor.cancel(context.getRedisKey());
 
-            // 获取存储值
-            Object storeValue = context.getOutput().getStoreValue();
+            // 获取存储值（ADR-0033:NullValueHandler 写入 NullDecision；null 表示沿用 input.deserializedValue）
+            Object storeValue = context.getNullDecision() != null
+                    ? context.getNullDecision().storeValue()
+                    : null;
             if (storeValue == null) {
                 storeValue = context.getDeserializedValue();
             }
 
-            // 创建 CachedValue 并存储
+            // 创建 CachedValue 并存储（ADR-0033:从 TtlDecision 读取）
             CachedValue cachedValue;
-            if (context.getOutput().isShouldApplyTtl()) {
-                long ttl = context.getOutput().getFinalTtl();
+            if (context.getTtlDecision() != null && context.getTtlDecision().shouldApplyTtl()) {
+                long ttl = context.getTtlDecision().finalTtl();
                 cachedValue = CachedValue.of(storeValue, ttl);
                 valueOperations.set(context.getRedisKey(), cachedValue, Duration.ofSeconds(ttl));
             } else {
@@ -206,8 +206,10 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         log.debug("Cache PUT_IF_ABSENT: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
         try {
-            // 获取存储值
-            Object storeValue = context.getOutput().getStoreValue();
+            // 获取存储值（ADR-0033:NullDecision 优先,否则沿用 input.deserializedValue）
+            Object storeValue = context.getNullDecision() != null
+                    ? context.getNullDecision().storeValue()
+                    : null;
             if (storeValue == null) {
                 storeValue = context.getDeserializedValue();
             }
@@ -216,8 +218,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             CachedValue cachedValue;
             Boolean success;
 
-            if (context.getOutput().isShouldApplyTtl()) {
-                long ttl = context.getOutput().getFinalTtl();
+            if (context.getTtlDecision() != null && context.getTtlDecision().shouldApplyTtl()) {
+                long ttl = context.getTtlDecision().finalTtl();
                 cachedValue = CachedValue.of(storeValue, ttl);
                 success = valueOperations.setIfAbsent(context.getRedisKey(), cachedValue, Duration.ofSeconds(ttl));
             } else {
@@ -280,7 +282,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
     private CacheResult handleClean(CacheContext context) {
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
 
-        String keyPattern = context.getOutput().getKeyPattern();
+        String keyPattern = context.getKeyPattern();
         Assert.hasText(keyPattern, "Key pattern must not be empty");
 
         log.debug("Cache CLEAN: cacheName={}, pattern={}", context.getCacheName(), keyPattern);

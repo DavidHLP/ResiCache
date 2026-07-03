@@ -13,16 +13,21 @@ import java.time.Duration;
 
 /**
  * TTL 处理器
- * 
- * 职责：
- * 1. 计算最终的 TTL 值
- * 2. 支持从配置或参数获取 TTL
- * 3. 支持随机化 TTL（防止缓存雪崩）
- * 
- * 输出（设置到 CacheOutput）：
- * - shouldApplyTtl: 是否应用 TTL
- * - finalTtl: 最终 TTL（秒）
- * - ttlFromContext: TTL 是否来自配置
+ *
+ * <p>职责：
+ * <ol>
+ *   <li>计算最终的 TTL 值</li>
+ *   <li>支持从配置或参数获取 TTL</li>
+ *   <li>支持随机化 TTL（防止缓存雪崩）</li>
+ * </ol>
+ *
+ * <p>输出（ADR-0033 类型化决策 — 替代原 {@code CacheOutput} 三字段共享袋）：
+ * <ul>
+ *   <li>{@link CacheContext#setTtlDecision} 写入 {@link TtlDecision}</li>
+ *   <li>{@link ActualCacheHandler#handlePut} / {@link ActualCacheHandler#handlePutIfAbsent}
+ *       通过 {@code context.getTtlDecision()} 读取</li>
+ *   <li>原 {@code ttlFromContext} 字段已删（main code 0 reader，test 5 处断言随之删）</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -60,7 +65,7 @@ public class TtlHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 计算 TTL
+     * 计算 TTL — ADR-0033 类型化决策替代原 {@code CacheOutput} 三字段共享袋。
      */
     private void calculateTtl(CacheContext context) {
         Duration ttl = context.getTtl();
@@ -77,9 +82,7 @@ public class TtlHandler extends AbstractCacheHandler {
                             context.getCacheOperation().isRandomTtl(),
                             context.getCacheOperation().getVariance());
 
-            context.getOutput().setFinalTtl(finalTtl);
-            context.getOutput().setShouldApplyTtl(true);
-            context.getOutput().setTtlFromContext(true);
+            context.setTtlDecision(TtlDecision.applied(finalTtl));
 
             // guide §223b1:TTL jitter 应用计数(randomTtl=true 时 variance 展开)
             if (context.getCacheOperation().isRandomTtl()) {
@@ -97,9 +100,7 @@ public class TtlHandler extends AbstractCacheHandler {
         } else if (ttlPolicy.shouldApply(ttl)) {
             // 使用参数中的 TTL
             long finalTtl = ttl.getSeconds();
-            context.getOutput().setFinalTtl(finalTtl);
-            context.getOutput().setShouldApplyTtl(true);
-            context.getOutput().setTtlFromContext(false);
+            context.setTtlDecision(TtlDecision.applied(finalTtl));
 
             log.debug(
                     "Using parameter TTL: cacheName={}, key={}, ttl={}s",
@@ -108,9 +109,7 @@ public class TtlHandler extends AbstractCacheHandler {
                     finalTtl);
         } else {
             // 不应用 TTL（永久缓存）
-            context.getOutput().setFinalTtl(-1);
-            context.getOutput().setShouldApplyTtl(false);
-            context.getOutput().setTtlFromContext(false);
+            context.setTtlDecision(TtlDecision.skipped());
 
             log.debug(
                     "No TTL applied: cacheName={}, key={}",

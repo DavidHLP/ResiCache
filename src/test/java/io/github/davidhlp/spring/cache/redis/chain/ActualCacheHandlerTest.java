@@ -1,6 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.chain.model.*;
+import io.github.davidhlp.spring.cache.redis.chain.model.NullDecision;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
 
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
@@ -185,9 +188,8 @@ class ActualCacheHandlerTest {
         @DisplayName("stores value with TTL when shouldApplyTtl is true")
         void handlePut_withTtl_storesValueWithTtl() {
             CacheContext context = createContext(CacheOperation.PUT);
-            context.getOutput().setShouldApplyTtl(true);
-            context.getOutput().setFinalTtl(120);
-            context.getOutput().setStoreValue("storeValue");
+            context.setTtlDecision(TtlDecision.applied(120));
+            context.setNullDecision(NullDecision.of("storeValue"));
 
             HandlerResult result = handler.doHandle(context);
 
@@ -201,8 +203,8 @@ class ActualCacheHandlerTest {
         @DisplayName("stores value without TTL when shouldApplyTtl is false")
         void handlePut_withoutTtl_storesValueWithoutTtl() {
             CacheContext context = createContext(CacheOperation.PUT);
-            context.getOutput().setShouldApplyTtl(false);
-            context.getOutput().setStoreValue("storeValue");
+            context.setTtlDecision(TtlDecision.skipped());
+            context.setNullDecision(NullDecision.of("storeValue"));
 
             HandlerResult result = handler.doHandle(context);
 
@@ -215,7 +217,7 @@ class ActualCacheHandlerTest {
         @DisplayName("uses deserialized value when store value is null")
         void handlePut_noStoreValue_usesDeserializedValue() {
             CacheContext context = createContext(CacheOperation.PUT);
-            context.getOutput().setShouldApplyTtl(false);
+            context.setTtlDecision(TtlDecision.skipped());
             // storeValue is null, so it will use deserializedValue which is "value"
 
             HandlerResult result = handler.doHandle(context);
@@ -229,7 +231,7 @@ class ActualCacheHandlerTest {
         @DisplayName("delegates to error handler on exception")
         void handlePut_exception_delegatesToErrorHandler() {
             CacheContext context = createContext(CacheOperation.PUT);
-            context.getOutput().setShouldApplyTtl(false);
+            context.setTtlDecision(TtlDecision.skipped());
             Exception exception = new RuntimeException("Redis error");
             CacheResult errorResult = CacheResult.failure(exception);
             doThrow(exception).when(valueOperations).set(anyString(), any());
@@ -251,9 +253,8 @@ class ActualCacheHandlerTest {
         @DisplayName("stores value when key does not exist")
         void handlePutIfAbsent_keyNotExists_storesValue() {
             CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT);
-            context.getOutput().setShouldApplyTtl(true);
-            context.getOutput().setFinalTtl(120);
-            context.getOutput().setStoreValue("storeValue");
+            context.setTtlDecision(TtlDecision.applied(120));
+            context.setNullDecision(NullDecision.of("storeValue"));
             when(valueOperations.setIfAbsent(eq("test:key"), any(CachedValue.class), eq(Duration.ofSeconds(120))))
                 .thenReturn(true);
 
@@ -284,7 +285,7 @@ class ActualCacheHandlerTest {
         @DisplayName("returns existing value when setIfAbsent fails")
         void handlePutIfAbsent_setFails_returnsExistingValue() {
             CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT);
-            context.getOutput().setShouldApplyTtl(false);
+            context.setTtlDecision(TtlDecision.skipped());
             CachedValue existingValue = CachedValue.of("existingValue", 60);
             byte[] returnValue = "convertedExisting".getBytes();
             when(valueOperations.get("test:key"))
@@ -363,7 +364,7 @@ class ActualCacheHandlerTest {
             when(valueOperations.get("test:key")).thenReturn(null);
 
             CacheContext contextPut = createContext(CacheOperation.PUT);
-            contextPut.getOutput().setShouldApplyTtl(false);
+            contextPut.setTtlDecision(TtlDecision.skipped());
 
             CacheContext contextRemove = createContext(CacheOperation.REMOVE);
             when(redisTemplate.delete("test:key")).thenReturn(true);
@@ -377,16 +378,8 @@ class ActualCacheHandlerTest {
             assertThat(resultRemove.shouldTerminate()).isTrue();
         }
 
-        @Test
-        @DisplayName("sets final result in context output")
-        void doHandle_setsFinalResultInContext() {
-            CacheContext context = createContext(CacheOperation.GET);
-            when(valueOperations.get("test:key")).thenReturn(null);
-
-            handler.doHandle(context);
-
-            assertThat(context.getOutput().getFinalResult()).isNotNull();
-            assertThat(context.getOutput().getFinalResult().isSuccess()).isTrue();
-        }
+        // ADR-0033: dead `setFinalResult` field removed; final result is now returned via HandlerResult
+        // (verified above via result.shouldTerminate() + result.result().isSuccess()), no separate
+        // context-output assertion needed.
     }
 }

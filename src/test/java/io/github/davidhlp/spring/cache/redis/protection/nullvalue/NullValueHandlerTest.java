@@ -1,7 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.protection.nullvalue;
 
 import io.github.davidhlp.spring.cache.redis.chain.*;
-import io.github.davidhlp.spring.cache.redis.chain.model.*;
+import io.github.davidhlp.spring.cache.redis.chain.model.NullDecision;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
@@ -139,7 +141,7 @@ class NullValueHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isNotEqualTo(ChainDecision.SKIP_ALL);
-            assertThat(context.getOutput().getStoreValue()).isEqualTo("NULL_PLACEHOLDER");
+            assertThat(context.getNullDecision().storeValue()).isEqualTo("NULL_PLACEHOLDER");
         }
 
         @Test
@@ -151,7 +153,7 @@ class NullValueHandlerTest {
 
             handler.doHandle(context);
 
-            assertThat(context.getOutput().getStoreValue()).isEqualTo("NULL_PLACEHOLDER");
+            assertThat(context.getNullDecision().storeValue()).isEqualTo("NULL_PLACEHOLDER");
         }
     }
 
@@ -170,7 +172,7 @@ class NullValueHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isNotEqualTo(ChainDecision.SKIP_ALL);
-            assertThat(context.getOutput().getStoreValue()).isEqualTo(storeValue);
+            assertThat(context.getNullDecision().storeValue()).isEqualTo(storeValue);
         }
 
         @Test
