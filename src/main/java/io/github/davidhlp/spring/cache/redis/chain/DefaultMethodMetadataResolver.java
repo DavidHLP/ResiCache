@@ -1,10 +1,13 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.context.expression.AnnotatedElementKey;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Path C (WS-1.3) — 方法元数据解析器默认实现(且 ThreadLocal 所有者).
@@ -105,6 +108,46 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
      */
     public static void clearStatic() {
         CURRENT_KEY.remove();
+    }
+
+    // ==================== 异步边界管理(ADR-0035) ====================
+
+    /**
+     * ADR-0035 — 在异步边界(commonPool 切线程)内执行 work,snapshot/restore 自身
+     * ThreadLocal + MDC,保证 work 读到的 context 与提交线程一致。
+     *
+     * <p>归位:原 {@code RedisProCacheWriter.withMethodMetadataSnapshot} 持有本类
+     * snapshot/restore + {@link #clearStatic} 的跨域寄生逻辑(30 行)收敛到本方法 ——
+     * resolver 自管自身的 ThreadLocal 边界,writer 不再知道 {@code clearStatic} 的存在。
+     *
+     * <p>MDC 一并内聚:同为「提交线程 → commonPool 线程」需透传的调用 context,
+     * 集中一处优于分散(writer 各自 snapshot/restore)。非 ThreadLocal 实现走接口默认 no-op。
+     */
+    @Override
+    public <T> T runWithSnapshot(Supplier<T> work) {
+        CacheInvocationContext snapshot = CacheInvocationContext.snapshot(this);
+        boolean restored = false;
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+        boolean mdcRestored = false;
+        try {
+            if (snapshot != null) {
+                snapshot.restore(this);
+                restored = true;
+            }
+            if (mdcSnapshot != null && !mdcSnapshot.isEmpty()) {
+                MDC.setContextMap(mdcSnapshot);
+                mdcRestored = true;
+            }
+            return work.get();
+        } finally {
+            // 仅在 restore 过的线程上清,避免误清其他并发调用方设置的状态
+            if (restored) {
+                clearStatic();
+            }
+            if (mdcRestored) {
+                MDC.clear();
+            }
+        }
     }
 
     // ==================== 反射工具 ====================

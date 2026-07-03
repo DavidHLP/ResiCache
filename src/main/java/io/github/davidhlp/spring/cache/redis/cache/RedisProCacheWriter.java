@@ -2,16 +2,13 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
-import io.github.davidhlp.spring.cache.redis.chain.CacheInvocationContext;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
-import org.slf4j.MDC;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.springframework.context.expression.AnnotatedElementKey;
 
@@ -26,9 +23,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
 
 /**
  * Redis 增强缓存写入器（基于责任链模式重构）
@@ -88,9 +83,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     @Override
     public boolean supportsAsyncRetrieve() {
-        // Path C Step 6 落地:retrieve()/store() 已带 CacheInvocationContext snapshot/restore,
-        // 异步边界(commonPool 切线程)可正确透传方法级元数据(布隆/同步锁/TTL/空值
-        // 等 operation 配置)。恢复 true 让 SDR 走异步 retrieve 路径(性能优化)。
+        // Path C Step 6 落地:retrieve()/store() 经 resolver.runWithSnapshot 透传方法级元数据
+        // (布隆/同步锁/TTL/空值等 operation 配置)+ MDC 到 commonPool 异步线程。恢复 true 让
+        // SDR 走异步 retrieve 路径(性能优化)。边界管理归位 MethodMetadataResolver(ADR-0035)。
         return true;
     }
 
@@ -104,10 +99,10 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @NonNull
     public CompletableFuture<byte[]> retrieve(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        // Path C Step 6:snapshot 当前 MethodMetadataResolver 状态,commonPool 异步
-        // 线程内 restore 保证链处理器读到正确方法级元数据(布隆/同步锁/TTL 等)。
+        // Path C Step 6 / ADR-0035:resolver.runWithSnapshot 在 commonPool 异步线程内
+        // snapshot/restore 方法元数据 + MDC,保证链处理器读到正确 context。
         return CompletableFuture.supplyAsync(
-                () -> withMethodMetadataSnapshot(() -> get(name, key, ttl)));
+                () -> methodMetadataResolver.runWithSnapshot(() -> get(name, key, ttl)));
     }
 
     /**
@@ -156,58 +151,12 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        // Path C Step 6:同 retrieve(),snapshot 后在 commonPool 异步线程内 restore。
+        // Path C Step 6 / ADR-0035:同 retrieve(),resolver.runWithSnapshot 透传 context。
         return CompletableFuture.runAsync(
-                () -> withMethodMetadataSnapshot(() -> {
+                () -> methodMetadataResolver.runWithSnapshot(() -> {
                     put(name, key, value, ttl);
                     return null;
                 }));
-    }
-
-    /**
-     * Path C Step 6 — 异步边界 MethodMetadataResolver snapshot/restore 包装.
-     *
-     * <p>问题: {@code retrieve()}/{@code store()} 走 {@code CompletableFuture.supplyAsync/runAsync}
-     * 切到 commonPool 线程,链路处理器读 {@code CacheOperationMetadataHolder}
-     * ThreadLocal 拿不到(@Cacheable 的布隆/同步锁/TTL/空值 operation 静默失效)。
-     *
-     * <p>解决: 提交任务前 snapshot 当前 resolver 状态,异步线程内 restore(写 ThreadLocal),
-     * finally 再清,防 commonPool 线程复用导致 ThreadLocal 跨任务泄漏。
-     *
-     * <p>同步路径(get/put)无需 snapshot,链路在调用线程内执行,ThreadLocal 自然可见;
-     * 本方法只用于异步路径。
-     *
-     * @param work 异步工作(supply/run lambda)
-     * @return work 结果
-     */
-    private <T> T withMethodMetadataSnapshot(Supplier<T> work) {
-        CacheInvocationContext snapshot =
-                CacheInvocationContext.snapshot(methodMetadataResolver);
-        boolean restored = false;
-        // WS-1.4 tracing 跨 commonPool 透传:capture MDC(traceId/spanId 等)在
-        // 提交任务时,async 线程内 restore 保证日志/Trace 上下文可关联;
-        // finally 再清(防 commonPool 线程复用导致 MDC 跨任务泄漏)。
-        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        boolean mdcRestored = false;
-        try {
-            if (snapshot != null) {
-                snapshot.restore(methodMetadataResolver);
-                restored = true;
-            }
-            if (mdcSnapshot != null && !mdcSnapshot.isEmpty()) {
-                MDC.setContextMap(mdcSnapshot);
-                mdcRestored = true;
-            }
-            return work.get();
-        } finally {
-            // 仅在 restore 过的线程上清,避免误清其他并发调用方设置的状态
-            if (restored) {
-                DefaultMethodMetadataResolver.clearStatic();
-            }
-            if (mdcRestored) {
-                MDC.clear();
-            }
-        }
     }
 
     @Override

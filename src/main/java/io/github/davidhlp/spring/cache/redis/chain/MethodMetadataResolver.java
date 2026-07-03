@@ -68,4 +68,25 @@ public interface MethodMetadataResolver {
      * @return AutoCloseable 句柄
      */
     ScopedActivation activate(Method method, Class<?> targetClass);
+
+    /**
+     * Path C Step 6 / ADR-0035 — 在异步边界(commonPool 切线程)内执行 work,
+     * 保证 work 读到的方法元数据 + MDC 与提交线程一致。
+     *
+     * <p>默认 no-op(直接执行 work)—— 适用于非 ThreadLocal 实现(如未来
+     * {@code ScopedValue}-based resolver)。{@link DefaultMethodMetadataResolver}
+     * 覆盖本方法,snapshot/restore 自身 ThreadLocal + MDC,防 commonPool 线程复用
+     * 导致 context 跨任务泄漏。
+     *
+     * <p>边界管理归位本 resolver(owner),消除原 {@code RedisProCacheWriter}
+     * 持有 snapshot/restore + {@code DefaultMethodMetadataResolver.clearStatic}
+     * 的跨域寄生(ADR-0035)。
+     *
+     * @param work 异步工作
+     * @param <T>  返回类型
+     * @return work 结果
+     */
+    default <T> T runWithSnapshot(java.util.function.Supplier<T> work) {
+        return work.get();
+    }
 }
