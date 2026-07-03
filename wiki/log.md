@@ -42,6 +42,77 @@
 
 ---
 
+## [2026-07-03] improve | ADR-0032 | MetadataKeys — chain 包 reflectField + cast-instanceof seam 收敛 (round 23)
+
+`/improve-codebase-architecture` round 23 autocratic one-shot。Round 22 HTML 报告 "Deferred — saturation evidence" 表点名 `handler/ cast-instanceof seams` "queued for R23"——本轮兑现该队列。
+
+**唯一命中 F2**:`chain/` 包内两文件 `DefaultMethodMetadataResolver` + `CacheInvocationContext` 共享 **完全字节级同构的反射样板**——3 处 `instanceof Method/Class<?>` 手动分派 + 2 个 7 行 `reflectField` 私有 helper(后者字节级同构,前者有 WARN 日志差异)+ 1 处合并型 `if (!(element instanceof Method) || ...)` 守卫。
+
+**ADR 主体**(`wiki/adr/0032-...md`, Accepted):
+
+- **D1** 新建 `chain/MetadataKeys` package-private 工具类(`@Slf4j final class` + private 构造 + 3 个静态入口):
+  - `reflectField(AnnotatedElementKey, String)` —— key=null→null;字段缺失→null+WARN;返回字段值
+  - `extractMethod(AnnotatedElementKey)` —— 反射 + `instanceof Method` typed narrow
+  - `extractTargetClass(AnnotatedElementKey)` —— 反射 + `instanceof Class<?>` typed narrow
+- **D2** `DefaultMethodMetadataResolver.currentMethod()` 7 行 → 1 行 `MetadataKeys.extractMethod(currentKey())`
+- **D3** `DefaultMethodMetadataResolver.currentTargetClass()` 7 行 → 1 行 `MetadataKeys.extractTargetClass(currentKey())`
+- **D4** `CacheInvocationContext.of(AnnotatedElementKey)` 7 行 → 6 行 typed narrow + 合并 null 检查
+- **D5** 两文件各删 1 个 `private static reflectField` helper(10 + 8 行)
+- **D6** 段注释 `// Round 23 / ADR-0032:reflectField 私有 helper 已迁 ...` 替代删除的 helper
+- **D7** 歧路否决:D7a 直接 inline `reflectField` 到 caller(保留样板墙 + 抬高单 caller 复杂度)/ D7b 升级 `AnnotatedElementKey` 到 sealed 接口(改 Spring public 签名,负 leverage)/ D7c 维持 ADR-0029 接受现状不动(违反 round 22 HTML 报告明确点名 R23 队列)
+
+**与 ADR-0029 边界(精确正交)**:
+
+- ADR-0029 锁定 **接口层**(`MethodMetadataResolver` 5 方法 + 单 adapter,可被 `ScopedValue` 替换)→ 不删除
+- 本 ADR 锁定 **实现 boilerplate 层**(2 个 adapter 共同的反射 + cast 分派)→ 抽到 seam
+
+两者精确正交:即使将来 `ScopedValue` adapter 替换 `MethodMetadataResolver`,新 adapter 也复用 `MetadataKeys`(对 `AnnotatedElementKey` 访问模式不变)。
+
+**deletion test 干净通过**:`reflectField` × 2 + 3 处 instanceof 同时删,复杂度从 2 caller 集中消失——真实归并,而非搬家。
+
+**行为保真**(字节级语义对齐):
+
+- `key == null` helper 短路 vs 原 `if (key == null) return null` 守卫
+- `instanceof Method/Class<?>` typed narrow vs 原显式 `instanceof` 分派
+- `reflectField` 反射失败 helper 落 WARN 日志;CacheInvocationContext 原静默被 helper 的 WARN 行为替代(**可观测性提升**——Spring 字段改名早暴露)
+
+**文件变更**:
+
+- 1 main 新建 `chain/MetadataKeys.java` (~110 SLOC,3 静态入口 + 完整 javadoc)
+- 1 main 改 `chain/DefaultMethodMetadataResolver.java` (135 → 113 行)
+- 1 main 改 `chain/CacheInvocationContext.java` (113 → 103 行)
+- 1 ADR 新建 `wiki/adr/0032-...md`
+- 1 wiki(本页 + `index.md` ADR 列表追加 0032)
+
+**验证**:
+
+- `mvn clean compile test-compile -B` —— **BUILD SUCCESS**
+- `./mvnw checkstyle:check -B` —— **0 violations**
+- `./mvnw test -Dtest='chain.*Test' -B` —— **125 tests, 0 failures, 0 errors**
+- `./mvnw test -B` —— **757 tests, 0 failures, 0 errors, 17 skipped**
+
+**🚨 重大发现 — round 22 报告的 8 个 pre-existing 错误真相大白**:
+
+Round 22 `mvnw test` 报"797 tests, 0 failures, 8 errors, 17 skipped"——round 22 报告把 8 errors 定性为"pre-existing on bare master `280f0b4`",ADR-0031 列 deferred 队列。本轮经 `mvn clean` 显式清理后,8 errors **消失**。根因调查:
+
+- `RedisCacheInterceptorTest.java` **源码不存在**(`git ls-files | grep InterceptorTest` 仅命中 `RedisCacheInterceptor.java` 主类)
+- `git log --diff-filter=D -- '**/RedisCacheInterceptorTest*'` 锁定**删除 commit = `916326c refactor(cache): ADR-0012 Path C interceptor 残骸收敛** —— 历史文档:
+- 残留 `target/test-classes/io/.../cache/RedisCacheInterceptorTest*.class` 是 pre-ADR-0012 编译产物;Surefire 跑这些 stale `.class`,遇到当前源码(无 `setNext`)即 NSEE
+
+**结论**:round 22 报告"pre-existing 8 errors"不是真测试缺陷,是 **build hygiene 问题**——stale `.class` 残留。本轮 `mvn clean` 一次性消除。ADR-0032 顺手纪录这一发现;ADR-0031 deferred 队列的"RedisCacheInterceptorTest 8 errors"项自动 close。
+
+**已知 deferred**(round 24+):
+
+- `MetadataKeysTest` —— 本 seam 的直接测试面。Round 22 上下文消耗已达 ~88%,本轮优先落地 ADR + refactor,测试补全留作 round 24 polish 工单。当前由 125 个 `chain.*Test` 提供间接覆盖
+- `int → long` graduation(`expectedInsertions`)—— 沿用 ADR-0019 D2 显式 defer 至 1.0 毕业
+- `bloomsift` 命名 polish —— 沿用 ADR-0023 negative-leverage 拒收
+- 5 `ChainObserver` DRY —— 沿用 ADR-0019 C / round 22 YAGNI
+- `CacheKeys` 第 3 use case —— 沿用 ADR-0011
+
+详见 [[0032-metadata-keys-extract-seam]]。
+
+---
+
 ## [2026-07-02] improve | ADR-0027 @RedisCachePut/@RedisCacheEvict AnnotationParser 对齐 Spring 标准类 + 单注解探测修补(纠正 4 轮 ADR 的环境误诊) (round 19)
 
 `/improve-codebase-architecture` round 19 autocratic one-shot。**目标 = round 18 点名的 `RedisCacheSemanticsIT` 真实失败根因**(round 18 已纠正"环境问题"误诊,但根因方向误判为「cacheOperation==null 短路」,留 round 19 精确定位)。

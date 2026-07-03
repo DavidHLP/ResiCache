@@ -55,15 +55,12 @@ public record CacheInvocationContext(
      * @return 上下文,key 为 null 时返回 {@code null}
      */
     public static CacheInvocationContext of(AnnotatedElementKey key) {
-        if (key == null) {
+        Method method = MetadataKeys.extractMethod(key);
+        Class<?> targetClass = MetadataKeys.extractTargetClass(key);
+        if (method == null || targetClass == null) {
             return null;
         }
-        Object element = reflectField(key, "element");
-        Object targetClass = reflectField(key, "targetClass");
-        if (!(element instanceof Method) || !(targetClass instanceof Class<?>)) {
-            return null;
-        }
-        return new CacheInvocationContext((Method) element, (Class<?>) targetClass, key);
+        return new CacheInvocationContext(method, targetClass, key);
     }
 
     /**
@@ -101,13 +98,6 @@ public record CacheInvocationContext(
         }
     }
 
-    private static Object reflectField(AnnotatedElementKey key, String fieldName) {
-        try {
-            java.lang.reflect.Field f = AnnotatedElementKey.class.getDeclaredField(fieldName);
-            f.setAccessible(true);
-            return f.get(key);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            return null;
-        }
-    }
+    // Round 23 / ADR-0032:`reflectField` 私有 helper 已迁到 package-private
+    // {@link MetadataKeys} 工具 seam;本 record 不再持有反射样板。
 }

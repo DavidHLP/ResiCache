@@ -55,22 +55,12 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
 
     @Override
     public Method currentMethod() {
-        AnnotatedElementKey key = currentKey();
-        if (key == null) {
-            return null;
-        }
-        Object element = reflectField(key, "element");
-        return element instanceof Method ? (Method) element : null;
+        return MetadataKeys.extractMethod(currentKey());
     }
 
     @Override
     public Class<?> currentTargetClass() {
-        AnnotatedElementKey key = currentKey();
-        if (key == null) {
-            return null;
-        }
-        Object targetClass = reflectField(key, "targetClass");
-        return targetClass instanceof Class<?> ? (Class<?>) targetClass : null;
+        return MetadataKeys.extractTargetClass(currentKey());
     }
 
     @Override
@@ -118,18 +108,6 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
     }
 
     // ==================== 反射工具 ====================
-
-    /**
-     * 反射读取 {@link AnnotatedElementKey} 的 private 字段(Spring 6.2 之前无公开 getter)。
-     */
-    private static Object reflectField(AnnotatedElementKey key, String fieldName) {
-        try {
-            java.lang.reflect.Field f = AnnotatedElementKey.class.getDeclaredField(fieldName);
-            f.setAccessible(true);
-            return f.get(key);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            log.warn("Failed to reflect field '{}' from AnnotatedElementKey", fieldName, e);
-            return null;
-        }
-    }
+    // Round 23 / ADR-0032:`reflectField` 私有 helper 已迁到 package-private
+    // {@link MetadataKeys} 工具 seam;本类不再持有反射样板。
 }
