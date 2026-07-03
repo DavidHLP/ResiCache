@@ -114,8 +114,9 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[add-protection-handler]] —— 4 步新增防护 handler(含示例)
 - [[configure-behavior]] —— 三层配置实操与典型套餐
 - [[fix-docker-pull-ipv6-timeout]] —— 修复 Docker 拉取镜像 IPv6 timeout(WSL2 + 大陆网络环境)
+- [[fix-wsl2-testcontainers-socat-forward]] —— 修复 WSL2 native docker 下 testcontainers 集成测试不通(bridge + socat 中转)
 
 ---
 
-最后更新:2026-07-03 · 共 42 页 · 维护见 [[log]]
+最后更新:2026-07-03 · 共 43 页 · 维护见 [[log]]
 - [[0033-cacheoutput-typed-decisions]] —— `CacheOutput` 9 字段共享可变袋(2 字段死 + 5 owner 跨包泄漏 + 1 engine control flow 错位)→ typed per-handler decisions(`TtlDecision`/`NullDecision` records)+ `keyPattern` direct field + `skipRemaining` 升格 context 一级;`getOutput()` 公共 API 消失;CacheOutput.java 97 SLOC 整删;round 24 兑现 round 24 HTML report Top recommendation C3
