@@ -79,7 +79,7 @@ public class MetricsAutoConfiguration { ... }
 
 ## 责任链执行可观测性(chain execution observability)
 
-除 handler 内就地统计外,责任链执行本身提供两个独立的 runtime 观测信号(见 [[chain-of-responsponsibility]]):
+除 handler 内就地统计外,责任链执行本身提供两个独立的 runtime 观测信号(见 [[chain-of-responsibility]]):
 
 ### `resicache.chain.execute` Micrometer Timer(WS-1.4)
 

@@ -45,7 +45,7 @@ wiki/
 ├── modules/             模块实体页:cache-core、annotations、serialization 等
 ├── concepts/            缓存领域概念:穿透/击穿/雪崩/热key
 ├── how-to/              操作指南:加 handler、配置行为
-└── meta/                元数据:lint 报告、dashboard、canvas 地图
+└── meta/                元数据:milestone、MOC、canvas 地图
 ```
 
 内容页 25 + meta 若干。完整清单见 [[index]]。

@@ -7,7 +7,7 @@ tags:
   - 机制
   - 拓扑
   - 责任链
-related: [chain-of-responsibility, cache-lifecycle, dashboard, modules-moc, overview]
+related: [chain-of-responsibility, cache-lifecycle, modules-moc, overview]
 status: stable
 created: 2026-06-21
 updated: 2026-06-21

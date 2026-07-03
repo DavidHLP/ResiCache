@@ -35,8 +35,6 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[log/archive-2026-q2]] —— 2026 Q2 归档(autonomous-loop v1/v2 round 1–42)
 - [[milestone-2026-q3]] —— **Active 里程碑**:项目优化(2026 Q3)
 - [[index]] —— 本页
-- [[dashboard]] —— Dataview 仪表盘(近期更新 / 分类 / 待完善)
-- [[lint-report-2026-06-21]] —— Lint 健康检查报告
 - [[mechanisms-moc]] —— 机制拓扑 MOC(责任链档位 + 问题 ↔ 防御组合)
 - [[modules-moc]] —— 模块依赖 MOC(三层模型 + 关键调用链)
 
@@ -118,5 +116,5 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-07-03 · 共 43 页 · 维护见 [[log]]
+最后更新:2026-07-03 · 共 67 篇文档(含 33 ADR)· 维护见 [[log]]
 - [[0033-cacheoutput-typed-decisions]] —— `CacheOutput` 9 字段共享可变袋(2 字段死 + 5 owner 跨包泄漏 + 1 engine control flow 错位)→ typed per-handler decisions(`TtlDecision`/`NullDecision` records)+ `keyPattern` direct field + `skipRemaining` 升格 context 一级;`getOutput()` 公共 API 消失;CacheOutput.java 97 SLOC 整删;round 24 兑现 round 24 HTML report Top recommendation C3
