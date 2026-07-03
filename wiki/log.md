@@ -1,3 +1,28 @@
+## [2026-07-03] fix(env) | WSL2 Docker pull IPv6 timeout → 三层兜底(mirror + daemon 代理 + 客户端代理)
+
+`docker pull` 报 `dial tcp [2a03:2880:f107:83:face:b00c:0:25de]:443: i/o timeout`,Docker daemon 走 IPv6 直连 `registry-1.docker.io`(`2a03:2880::/32` Facebook 段)失败,但 `curl` 走 shell `HTTPS_PROXY=http://127.0.0.1:7897` 200 OK。
+
+**根因(三层叠加)**:1) systemd 启动的 `dockerd` 进程与 shell 环境的代理变量隔离,不继承 `HTTPS_PROXY`;2) DNS 优先返回 AAAA 记录,走直连被防火墙阻断;3) 无大陆 mirror 兜底。
+
+**修复(三层兜底)**,全部已落盘 + 验证:
+
+- **L1 mirror** `/etc/docker/daemon.json` —— `registry-mirrors: [https://docker.m.daocloud.io]`(探活 HTTP:401 健康,响应 0.22s)
+- **L2 daemon 代理** `/etc/systemd/system/docker.service.d/http-proxy.conf` —— `HTTP_PROXY` / `HTTPS_PROXY` 大小写双写 + `NO_PROXY` 涵盖 mirror 端点避免环路
+- **L3 客户端代理** `~/.docker/config.json` —— `proxies.default.{httpProxy,httpsProxy,noProxy}` + 600 权限
+
+**验证**:`docker pull hello-world` ✅ / `docker pull alpine` ✅ / `docker pull testcontainers/ryuk:0.11.0` ✅(ResiCache 集成测试关键镜像)/ `docker run --rm hello-world` 输出 `Hello from Docker!` ✅ / `docker info | grep Registry Mirrors` 输出 `https://docker.m.daocloud.io/` ✅。
+
+**自审(踩过的坑)**:1) `storage-driver: overlay2` 与 `features.containerd-snapshotter` 互斥 — 已删除(系统已用 `io.containerd.snapshotter.v1`);2) `credsStore: ""` 是反模式,会让 `docker login` 误调 helper — 已删除;3) 旧 mirror 探活:163 / ustc / sjtug / baidubce / aliyun public 全 HTTP:000 不可达,daocloud 唯一稳定;4) `NO_PROXY` 必须涵盖 `*.daocloud.io` / `*.docker.io` 避免代理环路。
+
+**文件变更**:
+
+- 3 系统级配置(`/etc/docker/daemon.json` + systemd drop-in + `~/.docker/config.json`)
+- 1 wiki 文档(`wiki/how-to/fix-docker-pull-ipv6-timeout.md`,含症状 / 根因 / 修复 / 验证 / 自审 5 段)
+- 2 wiki 索引(`wiki/index.md` how-to 段加新条目 + 末行计数 41→42 页)
+- 0 ADR(本任务非架构决策,占用 ADR 编号不合规)
+
+**未触动 ResiCache 源码**:daemon.json / systemd drop-in / config.json 均为系统级配置,不属于项目代码;但 ResiCache testcontainers 集成测试的 ryuk 镜像已成功拉取,后续 `./mvnw verify` 可继续。
+
 ## [2026-07-03] improve | ADR-0031 | RedisProCache 6 处 try-finally timing 样板 → RedisProCacheTimers 工具 seam(round 22)
 
 `/improve-codebase-architecture` round 22 autocratic one-shot。Round 21 ADR-0030 死 protected 删除 + Round 20 ADR-0029 hypothetical-seam 接受合宣示"saturation 已抵",本轮转向饱和预言**反向探测**:全仓 grep + codebase-memory 图深扫 `cache/` 域(此前 round 1–21 完全未抽 timing seam)。
