@@ -22,6 +22,10 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ---
 
+## 2026-07-04
+
+- [2026-07-04] improve | ADR-0037(round 27)| `TwoListLRU` 锁 wrapper 死代码 + false seam 删除(`readLockForKey` 零调用 + `writeLockForKey` 误导命名 + `promoteNodeSafe` 零语义包装;byte-equivalent,39 eviction 测试全绿;附带 eviction.md ADR-0010 stale 残留清理)→ [[0037-twolistlru-lock-wrapper-dead-code-and-false-seam-removal]]
+
 ## 2026-07-03
 
 - [2026-07-03] improve | ADR-0036(round 26)| PrefetchDecision 类型化(attributes 3 业务 key 收编)+ Interceptor activate 归位(消除跨包寄生)+ Lua 外置 EarlyExpirationScripts(守 0029);C4 HierarchicalBloom 撤销(@Primary 默认部署)→ [[0036-prefetch-decision-interceptor-activate-lua-script]]

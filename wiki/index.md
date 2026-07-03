@@ -75,6 +75,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0034-writer-context-build-single-seam]] —— RedisProCacheWriter context-build 三路分裂(put5参内联 / buildContext / clean 后置 mutate)→ 单一 9参 buildContext seam + resolveOperation helper(round 25 Top rec C1;兑现 ADR-0033 C2 候补 + 清 setKeyPattern 尾巴)
 - [[0035-async-snapshot-resolver-attribution]] —— async snapshot/restore 跨域寄生归位 MethodMetadataResolver.runWithSnapshot(writer 删 30 行 withMethodMetadataSnapshot + 5 import;MDC 一并内聚;byte-equivalent;round 25 Worth exploring C2)
 - [[0036-prefetch-decision-interceptor-activate-lua-script]] —— Round 26 三连深化:C1 PrefetchDecision 类型化(attributes 3 业务 key 收编,ADR-0033 续篇)+ C2 Interceptor activate 归位(消除跨包寄生,ADR-0035 续篇)+ C3 Lua 外置 EarlyExpirationScripts(守 ADR-0029);C4 HierarchicalBloom 撤销(@Primary 默认部署)
+- [[0037-twolistlru-lock-wrapper-dead-code-and-false-seam-removal]] —— `TwoListLRU` 锁 wrapper 死代码 + false seam 删除(`readLockForKey` 零调用 + `writeLockForKey` 误导命名 false seam + `promoteNodeSafe` 零语义包装;byte-equivalent 39 测试绿;附带 eviction.md ADR-0010 stale 清理;round 27)
 
 ## 架构(architecture/)
 
@@ -119,5 +120,5 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-07-03 · 共 69 篇文档(含 35 ADR)· 维护见 [[log]]
+最后更新:2026-07-04 · 共 70 篇文档(含 36 ADR)· 维护见 [[log]]
 - [[0033-cacheoutput-typed-decisions]] —— `CacheOutput` 9 字段共享可变袋(2 字段死 + 5 owner 跨包泄漏 + 1 engine control flow 错位)→ typed per-handler decisions(`TtlDecision`/`NullDecision` records)+ `keyPattern` direct field + `skipRemaining` 升格 context 一级;`getOutput()` 公共 API 消失;CacheOutput.java 97 SLOC 整删;round 24 兑现 round 24 HTML report Top recommendation C3

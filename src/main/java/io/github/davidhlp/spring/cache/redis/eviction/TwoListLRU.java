@@ -95,25 +95,6 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 获取指定key对应的读锁，用于并发读取
-     *
-     * @return 对应的ReadLock
-     */
-    private ReentrantReadWriteLock.ReadLock readLockForKey() {
-        return globalLock.readLock();
-    }
-
-    /**
-     * 获取指定key对应的写锁，用于修改操作
-     *
-     * @param key 键
-     * @return 对应的WriteLock
-     */
-    private ReentrantReadWriteLock.WriteLock writeLockForKey() {
-        return globalLock.writeLock();
-    }
-
-    /**
      * 添加元素
      *
      * @param key 键
@@ -125,7 +106,7 @@ public class TwoListLRU<K, V> {
             throw new IllegalArgumentException("Key cannot be null");
         }
 
-        writeLockForKey().lock();
+        globalLock.writeLock().lock();
         try {
             Node<K, V> existingNode = nodeMap.get(key);
             if (existingNode != null) {
@@ -156,7 +137,7 @@ public class TwoListLRU<K, V> {
                 return false;
             }
         } finally {
-            writeLockForKey().unlock();
+            globalLock.writeLock().unlock();
         }
     }
 
@@ -171,7 +152,7 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        writeLockForKey().lock();
+        globalLock.writeLock().lock();
         try {
             Node<K, V> node = nodeMap.get(key);
             if (node == null) {
@@ -183,10 +164,10 @@ public class TwoListLRU<K, V> {
                 return node.value;
             }
 
-            promoteNodeSafe(node);
+            promoteNodeUnsafe(node);
             return node.value;
         } finally {
-            writeLockForKey().unlock();
+            globalLock.writeLock().unlock();
         }
     }
 
@@ -201,7 +182,7 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        writeLockForKey().lock();
+        globalLock.writeLock().lock();
         try {
             Node<K, V> node = nodeMap.remove(key);
             if (node == null) {
@@ -224,7 +205,7 @@ public class TwoListLRU<K, V> {
             }
             return node.value;
         } finally {
-            writeLockForKey().unlock();
+            globalLock.writeLock().unlock();
         }
     }
 
@@ -276,7 +257,7 @@ public class TwoListLRU<K, V> {
 
     /** 清空所有元素 */
     public void clear() {
-        writeLockForKey().lock();
+        globalLock.writeLock().lock();
         try {
             nodeMap.clear();
 
@@ -294,22 +275,13 @@ public class TwoListLRU<K, V> {
                 log.debug("Cleared all entries");
             }
         } finally {
-            writeLockForKey().unlock();
+            globalLock.writeLock().unlock();
         }
     }
 
     /**
-     * 提升节点优先级（调用者必须持有全局写锁）
-     *
-     * @param node 待提升的节点
-     */
-    private void promoteNodeSafe(Node<K, V> node) {
-        // Caller holds global lock, no additional locking needed
-        promoteNodeUnsafe(node);
-    }
-
-    /**
-     * 提升节点优先级（非线程安全，需要持有写锁）
+     * 提升节点优先级（非线程安全，需要持写锁）— Active List 内提到头部,或 Inactive→Active 升级.
+     * 由 {@code put}/{@code get} 在持有 {@link #globalLock} 写锁时调用.
      *
      * @param node 待提升的节点
      */

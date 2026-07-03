@@ -10,12 +10,10 @@ tags:
 related: [cache-core, cache-lifecycle]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/TwoListLRU.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/TwoListEvictionStrategy.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/EvictionStrategy.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/EvictionStats.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-07-04
 ---
 
 # 淘汰策略(`eviction` 包)
@@ -58,21 +56,12 @@ updated: 2026-06-21
 
 ## 线程安全与回调
 
-- `ReentrantReadWriteLock` + `ConcurrentHashMap` 保证并发安全(读锁并发查、写锁独占写);
-- `EvictionCallback<K,V>` 内部接口(`TwoListLRU.java:534`)——元素被淘汰时回调,可联动清理资源、发事件;
+- `ReentrantReadWriteLock` + `ConcurrentHashMap` 保证并发安全(写锁保护双链表结构修改,`ConcurrentHashMap` 支持无锁查找);
+- `EvictionCallback<K,V>` 内部接口——元素被淘汰时回调,可联动清理资源、发事件;
 - `evictionPredicate`(`Predicate<V>`)——自定义淘汰谓词,决定哪些值可被淘汰(返回 false 跳过本次淘汰);
-- `totalEvictions`(`AtomicLong`)——累计淘汰计数(线程安全);
-- `validateConsistency()` —— 仅测试 / 调试用,校验内部结构一致性。
+- `totalEvictions`(`AtomicLong`)——累计淘汰计数(线程安全)。
 
-## TwoListEvictionStrategy
-
-`src/main/java/io/github/davidhlp/spring/cache/redis/eviction/TwoListEvictionStrategy.java:9`
-
-```java
-public class TwoListEvictionStrategy<K, V> implements EvictionStrategy<K, V>
-```
-
-把 `TwoListLRU` 包装成标准淘汰策略接口,持有 active / inactive 容量上限,对外暴露统一的淘汰 API。`EvictionStats` 承载统计快照(各链表大小、淘汰次数)供观测。
+> ADR-0010 已删 `TwoListEvictionStrategy` / `EvictionStrategy`(本包不再有策略包装层,`RedisCacheRegister` 直接持有 `TwoListLRU`)。ADR-0037 清理了 `readLockForKey` / `writeLockForKey` / `promoteNodeSafe` 三个遗留锁 wrapper(死代码 + false seam);并发模型仍是单一 `globalLock` 写锁保护所有链表操作。
 
 ## 适用场景
 
@@ -102,9 +91,9 @@ localFilters.setEvictionCallback((key, bitmap) -> {
     log.debug("Local LRU evicted: {}", key);
     // 可选:发事件、清理关联资源
 });
-localFilters.add("users:bloom", bitmap);
-boolean hot = localFilters.touch("users:bloom");   // 标记访问;可能晋升
-EvictionStats stats = localFilters.stats();      // 观测
+localFilters.put("users:bloom", bitmap);          // 写入(可能触发淘汰)
+Bitmap v = localFilters.get("users:bloom");        // 读 + 命中晋升
+EvictionStats stats = EvictionStats.of(localFilters, 1024, 512);  // 观测快照
 ```
 
 ## 相关
