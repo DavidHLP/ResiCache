@@ -92,11 +92,10 @@ public class RedisProCacheConfiguration {
             RedisCacheRegister redisCacheRegister,
             SyncSupport syncSupport,
             MethodMetadataResolver methodMetadataResolver,
-            RedisProCacheProperties properties,
-            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+            RedisProCacheProperties properties) {
         // 构建 per-cache 配置映射
         Map<String, RedisCacheConfiguration> initialCacheConfigurations = buildInitialCacheConfigurations(
-                properties, defaultRedisCacheConfiguration, objectMapper);
+                properties, defaultRedisCacheConfiguration);
 
         MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
         if (meterRegistry == null) {
@@ -123,8 +122,7 @@ public class RedisProCacheConfiguration {
      */
     private Map<String, RedisCacheConfiguration> buildInitialCacheConfigurations(
             RedisProCacheProperties properties,
-            RedisCacheConfiguration defaultConfig,
-            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+            RedisCacheConfiguration defaultConfig) {
         Map<String, RedisCacheConfiguration> result = new java.util.HashMap<>();
         if (properties.getCaches() == null || properties.getCaches().isEmpty()) {
             return result;

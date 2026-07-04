@@ -80,6 +80,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0038-cachedvalue-wither-handlerpriority-order-noop-observer-dead-code-removal]] —— `CachedValue.withExpired/withAccessUpdate` 零调用 wither + `HandlerPriority.order()` deprecated 零读取死参数 + `NoOpAnnotationChainObserver` YAGNI 单例整删(byte-equivalent;Explore agent 6 候选核实斩 3 误诊;附带 index.md ADR-0033 错位修正;round 28)
 - [[0039-cacheresult-dead-fields-and-noop-removal]] —— `CacheResult` 5 字段共享袋 → 2 字段(删 `hit`/`rejectedByBloomFilter`/`exception` 死字段 + 死读法,`failure(e)`→`failure()`)+ `NoOpChainObserver` YAGNI 单例整删(ADR-0038 同构漏网;byte-equivalent;6 测试类绿;round 29 HTML review Top rec C1+C2 合并)
 - [[0040-lockcontext-nulldecision-dead-factory-removal]] —— `LockContext.noLock()` + `NullDecision.passthrough()` 零调用 YAGNI 死工厂删除(ADR-0033 typed decision + LockContext 漏网;byte-equivalent;同步 ADR-0033 示例;round 30 Python 全仓扫描定位;同 ADR-0039 续篇)
+- [[0041-cache-manager-objectmapper-dead-param-removal]] —— `RedisProCacheConfiguration.cacheManager` + `buildInitialCacheConfigurations` ObjectMapper 死参数删除(@Bean 注入仅为转发给方法体从不引用的私有方法;对比真消费者 redisCacheTemplate/defaultRedisCacheConfiguration/TypeSupport;byte-equivalent;附 JacksonConfig @ConditionalOnMissingBean 后续观察;round 31 跨域结构扫描)
 
 ## 架构(architecture/)
 
@@ -124,4 +125,4 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
 ---
 
-最后更新:2026-07-04 · 共 71 篇文档(含 37 ADR)· 维护见 [[log]]
+最后更新:2026-07-04 · 共 72 篇文档(含 38 ADR)· 维护见 [[log]]
