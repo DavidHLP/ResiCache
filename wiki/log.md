@@ -24,6 +24,7 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ## 2026-07-04
 
+- [2026-07-04] archive | Q3 季中归档(44 commits / ADR-0009~0041 / 阶段 0-9 + 经验总结)→ [[archive-2026-q3]]
 - [2026-07-04] improve | ADR-0041(round 31)| `RedisProCacheConfiguration.cacheManager` + `buildInitialCacheConfigurations` ObjectMapper 死参数删除(@Bean 注入仅为转发给方法体从不引用的私有方法;对比真消费者 redisCacheTemplate/defaultRedisCacheConfiguration/TypeSupport;byte-equivalent;附 JacksonConfig @ConditionalOnMissingBean 后续观察)→ [[0041-cache-manager-objectmapper-dead-param-removal]]
 - [2026-07-04] improve | ADR-0040(round 30)| `LockContext.noLock()` + `NullDecision.passthrough()` 零调用 YAGNI 死工厂删除(ADR-0033 typed decision 漏网;byte-equivalent;Python 全仓扫描定位;同步 ADR-0033 示例)→ [[0040-lockcontext-nulldecision-dead-factory-removal]]
 - [2026-07-04] improve | ADR-0039(round 29)| `CacheResult` 5 字段共享袋 → 2 字段(删 `hit`/`rejectedByBloomFilter`/`exception` 死字段 + 死读法,`failure(e)`→`failure()`)+ `NoOpChainObserver` YAGNI 单例整删(ADR-0038 同构漏网;byte-equivalent;CR 自审斩 3 漏改测试文件;6 测试类绿)→ [[0039-cacheresult-dead-fields-and-noop-removal]]
@@ -98,4 +99,6 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ---
 
-**归档**:2026-06-21 ~ 06-30 的 round-by-round 细节 + autonomous-loop v1/v2(round 1–42)见 [[log/archive-2026-q2]]。
+**归档**:
+- Q2(2026-06-21 ~ 06-30)round-by-round 细节 + autonomous-loop v1/v2(round 1–42)见 [[log/archive-2026-q2]]。
+- Q3 季中(2026-06-30 ~ 2026-07-04)44 commits / ADR-0009~0041 / 阶段 0-9 见 [[log/archive-2026-q3]]。

@@ -5,10 +5,10 @@ tags:
   - meta
   - 里程碑
   - 优化
-related: [log, archive-2026-q2, README]
+related: [log, archive-2026-q2, archive-2026-q3, README]
 status: historical
 created: 2026-06-30
-updated: 2026-06-30
+updated: 2026-07-04
 ---
 
 # 项目优化里程碑 · 2026 Q3
@@ -35,7 +35,9 @@ updated: 2026-06-30
 - 本页保留作为「Q3 启动」历史节点;日常 commit 进度走 `wiki/log.md`「日期 + 主题」
   摘要风格。
 - 季末归档:`wiki/log/archive-2026-q3.md`(单 commit SHA 级细节)。
+- **季中归档已兑现(2026-07-04)**:44 commits / ADR-0009~0041 已沉淀至 [[archive-2026-q3]],
+  覆盖阶段 0(Q3 启动)~ 阶段 9(文档诚实化与测试基建)+ 6 条经验总结;Q3 季末(09-30)再追加阶段 10+。
 
 ---
 
-**最后更新**:2026-06-30(本页转为历史节点)
+**最后更新**:2026-07-04(季中归档兑现)
