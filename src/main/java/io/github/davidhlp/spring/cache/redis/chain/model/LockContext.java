@@ -47,16 +47,4 @@ public record LockContext(
                 .build();
     }
 
-    /**
-     * 创建一个"不需要锁"的上下文
-     *
-     * <p>用于明确表示某个操作不需要加锁。
-     */
-    public static LockContext noLock() {
-        return LockContext.builder()
-                .syncLock(false)
-                .lockKey(null)
-                .timeoutSeconds(0)
-                .build();
-    }
 }

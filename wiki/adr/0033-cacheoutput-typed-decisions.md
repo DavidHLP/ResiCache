@@ -79,7 +79,6 @@ public record TtlDecision(long finalTtl, boolean shouldApplyTtl) {
 
 ```java
 public record NullDecision(@Nullable Object storeValue) {
-    public static NullDecision passthrough() { return new NullDecision(null); }
     public static NullDecision of(@Nullable Object storeValue) { return new NullDecision(storeValue); }
 }
 ```

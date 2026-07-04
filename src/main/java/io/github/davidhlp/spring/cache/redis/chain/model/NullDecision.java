@@ -22,12 +22,7 @@ import org.springframework.lang.Nullable;
  */
 public record NullDecision(@Nullable Object storeValue) {
 
-    /** 决策中"无转换，沿用输入值"的形态。 */
-    public static NullDecision passthrough() {
-        return new NullDecision(null);
-    }
-
-    /** 决策中"使用此值"的形态。 */
+    /** 决策中"使用此值"的形态（{@code null} 表示沿用 {@link CacheInput#deserializedValue()}）。 */
     public static NullDecision of(@Nullable Object storeValue) {
         return new NullDecision(storeValue);
     }
