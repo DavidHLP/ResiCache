@@ -51,9 +51,11 @@ public class CacheErrorHandler {
         
         return switch (strategy) {
             case FAIL_FAST -> {
-                log.error("Cache {} failed: cacheName={}, key={}", 
+                log.error("Cache {} failed: cacheName={}, key={}",
                           operation, cacheName, key, e);
-                yield CacheResult.failure(e);
+                // ADR-0039:CacheResult.failure() 不再携带 exception(零生产读者);
+                // 异常已在上方 log.error(...) 记录,此处仅置 success=false
+                yield CacheResult.failure();
             }
             case GRACEFUL_DEGRADATION -> {
                 log.warn("Cache {} failed, degrading gracefully: cacheName={}, key={}, error={}", 

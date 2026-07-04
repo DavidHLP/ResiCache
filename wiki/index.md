@@ -78,6 +78,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0036-prefetch-decision-interceptor-activate-lua-script]] —— Round 26 三连深化:C1 PrefetchDecision 类型化(attributes 3 业务 key 收编,ADR-0033 续篇)+ C2 Interceptor activate 归位(消除跨包寄生,ADR-0035 续篇)+ C3 Lua 外置 EarlyExpirationScripts(守 ADR-0029);C4 HierarchicalBloom 撤销(@Primary 默认部署)
 - [[0037-twolistlru-lock-wrapper-dead-code-and-false-seam-removal]] —— `TwoListLRU` 锁 wrapper 死代码 + false seam 删除(`readLockForKey` 零调用 + `writeLockForKey` 误导命名 false seam + `promoteNodeSafe` 零语义包装;byte-equivalent 39 测试绿;附带 eviction.md ADR-0010 stale 清理;round 27)
 - [[0038-cachedvalue-wither-handlerpriority-order-noop-observer-dead-code-removal]] —— `CachedValue.withExpired/withAccessUpdate` 零调用 wither + `HandlerPriority.order()` deprecated 零读取死参数 + `NoOpAnnotationChainObserver` YAGNI 单例整删(byte-equivalent;Explore agent 6 候选核实斩 3 误诊;附带 index.md ADR-0033 错位修正;round 28)
+- [[0039-cacheresult-dead-fields-and-noop-removal]] —— `CacheResult` 5 字段共享袋 → 2 字段(删 `hit`/`rejectedByBloomFilter`/`exception` 死字段 + 死读法,`failure(e)`→`failure()`)+ `NoOpChainObserver` YAGNI 单例整删(ADR-0038 同构漏网;byte-equivalent;6 测试类绿;round 29 HTML review Top rec C1+C2 合并)
 
 ## 架构(architecture/)
 

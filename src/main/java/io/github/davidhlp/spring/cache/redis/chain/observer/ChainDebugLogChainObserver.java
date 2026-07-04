@@ -21,7 +21,7 @@ import org.slf4j.MDC;
  *
  * <p>{@code requestId} 从 MDC 读取 — 该 MDC key 由 {@link MDCStampChainObserver}
  * 在 {@code onChainStart} 写入。本类不感知 MDC 写入逻辑，只读取现成 key。
- * 若 {@code MDCStampChainObserver} 未装配（如单元测试用 {@link NoOpChainObserver}）
+ * 若 {@code MDCStampChainObserver} 未装配（如单元测试用空 observer 列表）
  * 则 requestId 为 null，日志降级为不含 id 形式（仅影响 DEBUG 可读性，不影响功能）。
  *
  * <p>线程安全：MDC 是 ThreadLocal，本类在调用方线程上读取（Engine 串行调用

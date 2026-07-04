@@ -109,7 +109,7 @@ class ActualCacheHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.shouldTerminate()).isTrue();
-            assertThat(result.result().isHit()).isFalse();
+            assertThat(result.result().getResultBytes()).isNull();
             assertThat(result.result().isSuccess()).isTrue();
         }
     }
@@ -132,7 +132,6 @@ class ActualCacheHandlerTest {
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
-            assertThat(result.result().isHit()).isTrue();
             assertThat(result.result().getResultBytes()).isEqualTo(returnValue);
         }
 
@@ -146,7 +145,7 @@ class ActualCacheHandlerTest {
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
-            assertThat(result.result().isHit()).isFalse();
+            assertThat(result.result().getResultBytes()).isNull();
         }
 
         @Test
@@ -161,7 +160,7 @@ class ActualCacheHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.shouldTerminate()).isTrue();
-            assertThat(result.result().isHit()).isFalse();
+            assertThat(result.result().getResultBytes()).isNull();
         }
 
         @Test
@@ -234,7 +233,7 @@ class ActualCacheHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT);
             context.setTtlDecision(TtlDecision.skipped());
             Exception exception = new RuntimeException("Redis error");
-            CacheResult errorResult = CacheResult.failure(exception);
+            CacheResult errorResult = CacheResult.failure();
             doThrow(exception).when(valueOperations).set(anyString(), any());
             when(errorHandler.handlePutError(eq("test-cache"), eq("test:key"), eq(exception)))
                 .thenReturn(errorResult);
@@ -308,7 +307,7 @@ class ActualCacheHandlerTest {
         void handlePutIfAbsent_exception_delegatesToErrorHandler() {
             CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT);
             Exception exception = new RuntimeException("Redis error");
-            CacheResult errorResult = CacheResult.failure(exception);
+            CacheResult errorResult = CacheResult.failure();
             when(valueOperations.get("test:key")).thenThrow(exception);
             when(errorHandler.handlePutIfAbsentError(eq("test-cache"), eq("test:key"), eq(exception)))
                 .thenReturn(errorResult);
@@ -342,7 +341,7 @@ class ActualCacheHandlerTest {
         void handleRemove_exception_delegatesToErrorHandler() {
             CacheContext context = createContext(CacheOperation.REMOVE);
             Exception exception = new RuntimeException("Redis error");
-            CacheResult errorResult = CacheResult.failure(exception);
+            CacheResult errorResult = CacheResult.failure();
             when(redisTemplate.delete("test:key")).thenThrow(exception);
             when(errorHandler.handleRemoveError(eq("test-cache"), eq("test:key"), eq(exception)))
                 .thenReturn(errorResult);

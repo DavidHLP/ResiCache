@@ -26,9 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ChainObserver 实现测试 — ADR-0009 引入的 4 个标准 observer 的契约。
  *
  * <p>每个 observer 独立测试其特定钩子的行为（MDC stamp / DEBUG log / Timer / fired counter），
- * 验证与 Engine 解耦后能正确实现单一职责。NoOpChainObserver 的"什么都不做"语义由
- * {@link io.github.davidhlp.spring.cache.redis.chain.ChainEngineTest#observerOrchestration}
- * 隐式覆盖（添加 NoOp 不应影响其它 observer）。
+ * 验证与 Engine 解耦后能正确实现单一职责。空 observer 列表的"什么都不做"语义由
+ * {@link io.github.davidhlp.spring.cache.redis.chain.ChainEngine} 的 ObserverRegistry
+ * 空列表分支承载（ADR-0039 删除 NoOpChainObserver 后,空观测无需占位单例）。
  */
 @DisplayName("ChainObserver Implementations")
 class ChainObserverTest {
@@ -47,27 +47,6 @@ class ChainObserverTest {
         handler = new CacheHandler() {
             @Override public HandlerResult handle(CacheContext c) { return HandlerResult.continueChain(); }
         };
-    }
-
-    @Nested
-    @DisplayName("NoOpChainObserver")
-    class NoOpTests {
-
-        @Test
-        @DisplayName("所有钩子都不抛异常,且不修改 context/MDC/counter")
-        void allHooks_areSilentAndSafe() {
-            ChainObserver observer = NoOpChainObserver.INSTANCE;
-            // 不应抛异常 / 不应影响 context / MDC
-            observer.onChainStart(ctx);
-            observer.beforeNode(handler, ctx);
-            observer.afterNode(handler, ctx, HandlerResult.continueChain());
-            observer.onChainEnd(ctx, CacheResult.success());
-
-            // 副作用检查
-            assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNull();
-            org.assertj.core.api.Assertions.assertThat(
-                    (Object) ctx.getAttribute(ChainTimerChainObserver.START_NANOS_ATTR)).isNull();
-        }
     }
 
     @Nested

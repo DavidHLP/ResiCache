@@ -259,7 +259,7 @@ class BloomFilterHandlerTest {
         void afterChainExecution_notSuccess_doesNothing() {
             CacheContext context = createContext(CacheOperation.PUT, cacheOperation);
             context.setAttribute("bloom.postProcess", true);
-            CacheResult chainResult = CacheResult.failure(new RuntimeException("test"));
+            CacheResult chainResult = CacheResult.failure();
 
             handler.afterChainExecution(context, chainResult);
 

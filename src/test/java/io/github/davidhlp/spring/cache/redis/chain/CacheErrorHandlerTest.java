@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.chain.model.*;
-
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -11,7 +8,11 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheErrorHandler 单元测试
+ * CacheErrorHandler 单元测试 — ADR-0039 后契约。
+ *
+ * <p>CacheResult 收敛为 2 字段(success / resultBytes)后,本测试通过 isSuccess()
+ * 验证 FAIL_FAST(失败 → success=false)/ GRACEFUL_DEGRADATION / SILENT(降级为 miss → success=true)
+ * 三策略的返回语义。删除的字段读法(isFailure / isHit / getException)已随 ADR-0039 移除。
  */
 @DisplayName("CacheErrorHandler Tests")
 class CacheErrorHandlerTest {
@@ -41,8 +42,6 @@ class CacheErrorHandlerTest {
                     CacheErrorHandler.ErrorStrategy.FAIL_FAST);
 
             assertThat(result.isSuccess()).isFalse();
-            assertThat(result.isFailure()).isTrue();
-            assertThat(result.getException()).isEqualTo(e);
         }
 
         @Test
@@ -72,7 +71,6 @@ class CacheErrorHandlerTest {
                     CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isHit()).isFalse();
         }
 
         @Test
@@ -85,7 +83,6 @@ class CacheErrorHandlerTest {
                     CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isFailure()).isFalse();
         }
     }
 
@@ -103,7 +100,6 @@ class CacheErrorHandlerTest {
                     CacheErrorHandler.ErrorStrategy.SILENT);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isHit()).isFalse();
         }
 
         @Test
@@ -132,7 +128,6 @@ class CacheErrorHandlerTest {
             CacheResult result = handler.handleGetError("test-cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isHit()).isFalse();
         }
 
         @Test
@@ -143,7 +138,6 @@ class CacheErrorHandlerTest {
             CacheResult result = handler.handleGetError("cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isHit()).isFalse();
         }
 
         @Test
@@ -170,7 +164,6 @@ class CacheErrorHandlerTest {
             CacheResult result = handler.handlePutError("test-cache", "key", e);
 
             assertThat(result.isSuccess()).isFalse();
-            assertThat(result.isFailure()).isTrue();
         }
 
         @Test
@@ -180,8 +173,7 @@ class CacheErrorHandlerTest {
 
             CacheResult result = handler.handlePutError("cache", "key", e);
 
-            assertThat(result.isFailure()).isTrue();
-            assertThat(result.getException()).isEqualTo(e);
+            assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
@@ -206,7 +198,7 @@ class CacheErrorHandlerTest {
 
             CacheResult result = handler.handlePutIfAbsentError("test-cache", "key", e);
 
-            assertThat(result.isFailure()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
@@ -216,8 +208,7 @@ class CacheErrorHandlerTest {
 
             CacheResult result = handler.handlePutIfAbsentError("cache", "key", e);
 
-            assertThat(result.isFailure()).isTrue();
-            assertThat(result.getException()).isEqualTo(e);
+            assertThat(result.isSuccess()).isFalse();
         }
     }
 
@@ -233,7 +224,6 @@ class CacheErrorHandlerTest {
             CacheResult result = handler.handleRemoveError("test-cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isHit()).isFalse();
         }
 
         @Test
@@ -244,7 +234,6 @@ class CacheErrorHandlerTest {
             CacheResult result = handler.handleRemoveError("cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isFailure()).isFalse();
         }
     }
 
@@ -259,7 +248,7 @@ class CacheErrorHandlerTest {
 
             CacheResult result = handler.handleCleanError("test-cache", "pattern:*", e);
 
-            assertThat(result.isFailure()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
@@ -269,8 +258,7 @@ class CacheErrorHandlerTest {
 
             CacheResult result = handler.handleCleanError("cache", "pattern", e);
 
-            assertThat(result.isFailure()).isTrue();
-            assertThat(result.getException()).isEqualTo(e);
+            assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
@@ -281,7 +269,7 @@ class CacheErrorHandlerTest {
 
             CacheResult result = handler.handleCleanError("cache", pattern, e);
 
-            assertThat(result.isFailure()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
         }
     }
 
@@ -297,8 +285,8 @@ class CacheErrorHandlerTest {
             CacheResult putResult = handler.handlePutError("cache", "key", e);
             CacheResult putIfAbsentResult = handler.handlePutIfAbsentError("cache", "key", e);
 
-            assertThat(putResult.isFailure()).isTrue();
-            assertThat(putIfAbsentResult.isFailure()).isTrue();
+            assertThat(putResult.isSuccess()).isFalse();
+            assertThat(putIfAbsentResult.isSuccess()).isFalse();
         }
 
         @Test
@@ -309,7 +297,6 @@ class CacheErrorHandlerTest {
             CacheResult result = handler.handleRemoveError("cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isFailure()).isFalse();
         }
 
         @Test
@@ -320,7 +307,6 @@ class CacheErrorHandlerTest {
             CacheResult result = handler.handleGetError("cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
-            assertThat(result.isHit()).isFalse();
         }
     }
 }
