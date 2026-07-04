@@ -24,6 +24,7 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ## 2026-07-04
 
+- [2026-07-04] improve | ADR-0042 | lock 高并发优化 — `SyncSupport` per-key `synchronized(monitor)` → in-flight `CompletableFuture` single-flight(候选 1:leader 持锁跑 loader / follower join future / ThreadLocal 重入检测 / 失败传播语义改变)+ `CacheHandlerChain.execute` 去冗余读锁(候选 3:与 ADR-0022 同向);候选 2(布隆位图)/ 候选 4(LockOrchestrator 拆分)评估后扼杀;顺带修构造函数 sort 入参 fragility;4 新并发测试 → [[0042-syncsupport-singleflight-future-and-chain-readlock-removal]]
 - [2026-07-04] archive | Q3 季中归档(44 commits / ADR-0009~0041 / 阶段 0-9 + 经验总结)→ [[archive-2026-q3]]
 - [2026-07-04] improve | ADR-0041(round 31)| `RedisProCacheConfiguration.cacheManager` + `buildInitialCacheConfigurations` ObjectMapper 死参数删除(@Bean 注入仅为转发给方法体从不引用的私有方法;对比真消费者 redisCacheTemplate/defaultRedisCacheConfiguration/TypeSupport;byte-equivalent;附 JacksonConfig @ConditionalOnMissingBean 后续观察)→ [[0041-cache-manager-objectmapper-dead-param-removal]]
 - [2026-07-04] improve | ADR-0040(round 30)| `LockContext.noLock()` + `NullDecision.passthrough()` 零调用 YAGNI 死工厂删除(ADR-0033 typed decision 漏网;byte-equivalent;Python 全仓扫描定位;同步 ADR-0033 示例)→ [[0040-lockcontext-nulldecision-dead-factory-removal]]

@@ -158,6 +158,20 @@ resi-cache:
 
 只有 `sync=true` 且操作是 `GET` / `PUT` / `PUT_IF_ABSENT` 才加锁。非 sync 的普通读写不经此 handler——锁是有开销的,只给真正需要击穿保护的热点 key 用。
 
+## 演进(ADR-0042)
+
+`SyncSupport.executeSync` 的 per-key `synchronized(monitor)` + `MonitorHolder` 引用计数已替换为
+**in-flight `CompletableFuture` single-flight**:
+
+- **leader**(`putIfAbsent` CAS 选举)持分布式锁跑 loader,`complete`/`completeExceptionally` future
+- **follower** `join` leader future —— 零重复持锁 / 零重复回源 / 零 double-check GET
+- **可重入**(future 不可重入陷阱):chain 内 `SyncLockHandler` 嵌套重入走 `ThreadLocal` fast-path
+  直接跑 loader,等价原 `synchronized` 可重入,且省去二次分布式锁往返
+- **失败语义改变**:follower 继承 leader 异常(不再独立 double-check 自救),更符合击穿保护精神
+
+吞吐收益:同 key 高并发读 miss 的 follower 串行开销 `O(N×(锁+GET))` → `O(ε)`。
+详见 [[0042-syncsupport-singleflight-future-and-chain-readlock-removal|ADR-0042]]。
+
 ## 相关
 
 - [[cache-breakdown]] —— 击穿的定义与本机制的关系

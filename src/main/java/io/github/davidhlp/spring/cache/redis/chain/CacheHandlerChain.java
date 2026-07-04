@@ -7,8 +7,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * 责任链管理器 — ADR-0009 抽 Engine 后的 thin facade；ADR-0022 起为链结构单一真理源。
@@ -19,14 +17,19 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * <ul>
  *   <li>{@code List<CacheHandler> handlers} 维护（addHandler / size / clear / getHandlerNames）—
  *       <b>ADR-0022</b> 起为链结构唯一表示，不再并行维护 next 指针链 / head 引用</li>
- *   <li>{@link ReadWriteLock} 守护链结构并发修改</li>
+ *   <li>{@code synchronized(chainGuard)} 守护 handlers 结构性修改(addHandler/clear 与
+ *       size/getHandlerNames 互斥);<b>execute() 无锁</b> —— 委派 Engine,后者用
+ *       {@link ChainEngine#chainSnapshotRef AtomicReference} 不可变快照({@code List.copyOf})
+ *       提供完整并发隔离。原 facade {@code ReadWriteLock} 是 ADR-0022 删 next 指针前遗留的
+ *       双轨冗余(读写锁与 AtomicReference 守护同一份语义),现收敛为单一真理源(snapshot),
+ *       execute 零锁开销</li>
  *   <li>{@link #execute(CacheContext)} 委派给 {@link ChainEngine#execute(CacheContext)}</li>
  *   <li>{@link #MDC_REQUEST_ID_KEY} 常量（供 {@code MDCStampChainObserver} 引用）</li>
  * </ul>
  *
  * <p>执行流程：facade 在 {@link #addHandler(CacheHandler)} / {@link #clear()} 时
  * 同步刷新 {@link ChainEngine#setChainSnapshot(List)}，让 Engine 拿到最新链快照；
- * {@link #execute(CacheContext)} 仅做读锁 + 委派，无任何推进 / 观测逻辑。
+ * {@link #execute(CacheContext)} 直接委派 Engine,无任何锁。
  *
  * <p><b>back-compat 兜底</b>：保留无参构造（{@code @Autowired} 注入 Engine），
  * 用户若需自定义 ChainEngine（如额外加 observer），声明
@@ -51,8 +54,13 @@ public class CacheHandlerChain {
 
     /** 所有处理器列表（用于调试和后置处理；ADR-0022 起为链结构单一真理源） */
     private final List<CacheHandler> handlers = new ArrayList<>();
-    /** 读写锁，保证线程安全（addHandler/clear 写，execute/size/getHandlerNames 读） */
-    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    /**
+     * 守护 handlers 列表结构性修改的内部锁监视器。
+     * <p>仅 {@link #addHandler}/{@link #clear}/{@link #size}/{@link #getHandlerNames} 持有;
+     * {@link #execute} <b>不</b>持锁(Engine AtomicReference 快照已隔离)。
+     */
+    private final Object chainGuard = new Object();
 
     /** 推进引擎 — 由 Spring 注入（{@code @Autowired} 字段注入避免构造重排耦合）。 */
     @Autowired
@@ -81,38 +89,29 @@ public class CacheHandlerChain {
      * @return 当前 facade（支持链式调用）
      */
     public CacheHandlerChain addHandler(CacheHandler handler) {
-        lock.writeLock().lock();
-        try {
+        synchronized (chainGuard) {
             handlers.add(handler);
             // 同步刷新 Engine 持有的快照引用 — Engine.execute 直接读 snapshot 避免并发改链
             engine.setChainSnapshot(List.copyOf(handlers));
             log.debug("Added handler to chain: {}", handler.getClass().getSimpleName());
             return this;
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
     /**
-     * 执行责任链 — 委派给 {@link ChainEngine#execute(CacheContext)}。
+     * 执行责任链 — 委派给 {@link ChainEngine#execute(CacheContext)}（无锁）。
      *
-     * <p>本 facade 仅做"读锁 + 委派"，所有推进 / 观测 / post-process 逻辑在
-     * Engine 中实现。Engine 通过 {@link ChainEngine#setChainSnapshot(List)} 拿到的快照遍历
-     * handler，本调用方线程在 facade 持有的读锁内做 addHandler 会被阻塞，
-     * Engine 看到的快照与 facade 看到的 head 一致。
+     * <p>本 facade 不持任何锁:Engine 内部用 {@link ChainEngine#chainSnapshotRef AtomicReference}
+     * 发布不可变快照({@code List.copyOf}),{@code execute} 读快照与 {@code addHandler}/
+     * {@code clear} 改链完全隔离(ADR-0022)。原 facade 读锁是删 next 指针前遗留的双轨冗余,
+     * 现收敛为单一真理源(snapshot),execute 零锁开销。
      *
      * @param context 缓存上下文
      * @return 处理结果
      */
     public CacheResult execute(CacheContext context) {
-        lock.readLock().lock();
-        try {
-            // 委派 Engine — 空链保护（snapshot empty → WARN + success）、aroundChain/perNode
-            // 观测、post-process 全在 Engine；facade 仅持读锁避免与 addHandler/clear 并发
-            return engine.execute(context);
-        } finally {
-            lock.readLock().unlock();
-        }
+        // 委派 Engine — 空链保护 / aroundChain/perNode 观测 / post-process 全在 Engine
+        return engine.execute(context);
     }
 
     /**
@@ -121,11 +120,8 @@ public class CacheHandlerChain {
      * @return 处理器数量
      */
     public int size() {
-        lock.readLock().lock();
-        try {
+        synchronized (chainGuard) {
             return handlers.size();
-        } finally {
-            lock.readLock().unlock();
         }
     }
 
@@ -133,14 +129,11 @@ public class CacheHandlerChain {
      * 清空责任链 — 同步刷新 Engine 快照为 null。
      */
     public void clear() {
-        lock.writeLock().lock();
-        try {
+        synchronized (chainGuard) {
             handlers.clear();
             // 同步 Engine 持有的快照引用 — Engine 见到 null/empty 时直接返回 success
             engine.setChainSnapshot(null);
             log.debug("Handler chain cleared");
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
@@ -150,11 +143,8 @@ public class CacheHandlerChain {
      * @return 处理器名称列表
      */
     public List<String> getHandlerNames() {
-        lock.readLock().lock();
-        try {
+        synchronized (chainGuard) {
             return handlers.stream().map(h -> h.getClass().getSimpleName()).toList();
-        } finally {
-            lock.readLock().unlock();
         }
     }
 }
