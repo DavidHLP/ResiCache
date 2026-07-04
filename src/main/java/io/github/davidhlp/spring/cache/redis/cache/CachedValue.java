@@ -214,22 +214,6 @@ public final class CachedValue {
     }
 
     /**
-     * 创建新的 CachedValue，标记为已过期
-     */
-    public CachedValue withExpired() {
-        return new CachedValue(value, type, ttl, createdTime, startNanoTime,
-                               lastAccessTime, visitTimes, true, version);
-    }
-
-    /**
-     * 创建新的 CachedValue，更新访问时间和访问次数
-     */
-    public CachedValue withAccessUpdate() {
-        return new CachedValue(value, type, ttl, createdTime, startNanoTime,
-                               System.currentTimeMillis(), visitTimes + 1, expired, version);
-    }
-
-    /**
      * 过期时间计算的内聚单元：双时钟策略（单调时钟优先、旧数据降级 wall-clock）集中于此，
      * 消除原 checkExpired/getRemainingTtl 各自重复的 startNanoTime>0 分支判断。
      *

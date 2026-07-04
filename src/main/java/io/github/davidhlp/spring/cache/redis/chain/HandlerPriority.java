@@ -20,12 +20,4 @@ public @interface HandlerPriority {
      * @return 执行顺序枚举值，数值越小越先执行
      */
     HandlerOrder value();
-
-    /**
-     * 兼容旧版本的 int 类型顺序值
-     * @return 顺序值，数值越小越先执行
-     * @deprecated 使用 {@link #value()} 代替
-     */
-    @Deprecated
-    int order() default -1;
 }

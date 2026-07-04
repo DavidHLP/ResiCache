@@ -24,6 +24,7 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ## 2026-07-04
 
+- [2026-07-04] improve | ADR-0038(round 28)| 3 处零调用死代码清理(`CachedValue.withExpired/withAccessUpdate` 零调用 wither + `HandlerPriority.order()` deprecated 零读取死参数 + `NoOpAnnotationChainObserver` YAGNI 单例整删;byte-equivalent;Explore agent 6 候选核实斩 3 误诊;附带 index.md ADR-0033 错位修正)→ [[0038-cachedvalue-wither-handlerpriority-order-noop-observer-dead-code-removal]]
 - [2026-07-04] improve | ADR-0037(round 27)| `TwoListLRU` 锁 wrapper 死代码 + false seam 删除(`readLockForKey` 零调用 + `writeLockForKey` 误导命名 + `promoteNodeSafe` 零语义包装;byte-equivalent,39 eviction 测试全绿;附带 eviction.md ADR-0010 stale 残留清理)→ [[0037-twolistlru-lock-wrapper-dead-code-and-false-seam-removal]]
 
 ## 2026-07-03
