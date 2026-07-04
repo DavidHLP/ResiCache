@@ -56,12 +56,12 @@ updated: 2026-07-04
 
 ## 线程安全与回调
 
-- `ReentrantReadWriteLock` + `ConcurrentHashMap` 保证并发安全(写锁保护双链表结构修改,`ConcurrentHashMap` 支持无锁查找);
+- `ReentrantLock` + `ConcurrentHashMap` 保证并发安全(互斥锁保护双链表结构修改,`ConcurrentHashMap` 支持无锁查找);
 - `EvictionCallback<K,V>` 内部接口——元素被淘汰时回调,可联动清理资源、发事件;
 - `evictionPredicate`(`Predicate<V>`)——自定义淘汰谓词,决定哪些值可被淘汰(返回 false 跳过本次淘汰);
 - `totalEvictions`(`AtomicLong`)——累计淘汰计数(线程安全)。
 
-> ADR-0010 已删 `TwoListEvictionStrategy` / `EvictionStrategy`(本包不再有策略包装层,`RedisCacheRegister` 直接持有 `TwoListLRU`)。ADR-0037 清理了 `readLockForKey` / `writeLockForKey` / `promoteNodeSafe` 三个遗留锁 wrapper(死代码 + false seam);并发模型仍是单一 `globalLock` 写锁保护所有链表操作。
+> ADR-0010 已删 `TwoListEvictionStrategy` / `EvictionStrategy`(本包不再有策略包装层,`RedisCacheRegister` 直接持有 `TwoListLRU`)。ADR-0037 清理了 `readLockForKey` / `writeLockForKey` / `promoteNodeSafe` 三个遗留锁 wrapper(死代码 + false seam);**ADR-0043 进一步将 `globalLock` 从 `ReentrantReadWriteLock` 降级为 `ReentrantLock`** —— 全文件 6 lock + 4 unlock 零 `readLock()` 调用,降级后每实例削减 ~50% Lock 内存、写路径 CAS 略短、接口诚实化为 exclusive-only(对比:同项目 `LocalBloomIFilter` 取双锁是真 RWLock 用例保留)。
 
 ## 适用场景
 

@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 
 @Slf4j
@@ -38,13 +38,20 @@ public class TwoListLRU<K, V> {
     private final Node<K, V> inactiveTail;
 
     /**
-     * 全局写锁，保护所有链表操作。
+     * 全局互斥锁，保护所有链表操作。
      *
-     * <p>注意：此LRU算法需要同时操作active和inactive两个链表，
-     * 节点在两个链表之间移动时需要保证原子性，因此全局锁是正确性要求而非性能瓶颈。
+     * <p>注意：此 LRU 算法需要同时操作 active 和 inactive 两个链表，
+     * 节点在两个链表之间移动时需要保证原子性，因此全局互斥锁是正确性要求而非性能瓶颈。
      * 节点查找本身是线程安全的（ConcurrentHashMap），锁仅在链表结构修改时需要。
+     *
+     * <p><b>ADR-0043</b>:原 {@link java.util.concurrent.locks.ReentrantReadWriteLock} 是 false seam —
+     * 所有路径（{@code put}/{@code get}/{@code remove}/{@code clear}）均只取
+     * {@code writeLock()}，从不取 {@code readLock()}。{@code get()} 即使命中
+     * 头部节点仍需持锁（晋升路径需修改链表）；降级为 {@link ReentrantLock}
+     * 砍掉双 Sync 队列内存与单次获取的 CAS 开销，并诚实化接口语义
+     * （"exclusive-only" 比 "看似可并发读" 更准确反映实际行为）。
      */
-    private final ReentrantReadWriteLock globalLock = new ReentrantReadWriteLock();
+    private final ReentrantLock globalLock = new ReentrantLock();
 
     /** 当前Active List大小 — 使用AtomicInteger支持无锁读取 */
     private final AtomicInteger activeSizeCounter = new AtomicInteger(0);
@@ -106,7 +113,7 @@ public class TwoListLRU<K, V> {
             throw new IllegalArgumentException("Key cannot be null");
         }
 
-        globalLock.writeLock().lock();
+        globalLock.lock();
         try {
             Node<K, V> existingNode = nodeMap.get(key);
             if (existingNode != null) {
@@ -137,7 +144,7 @@ public class TwoListLRU<K, V> {
                 return false;
             }
         } finally {
-            globalLock.writeLock().unlock();
+            globalLock.unlock();
         }
     }
 
@@ -152,7 +159,7 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        globalLock.writeLock().lock();
+        globalLock.lock();
         try {
             Node<K, V> node = nodeMap.get(key);
             if (node == null) {
@@ -167,7 +174,7 @@ public class TwoListLRU<K, V> {
             promoteNodeUnsafe(node);
             return node.value;
         } finally {
-            globalLock.writeLock().unlock();
+            globalLock.unlock();
         }
     }
 
@@ -182,7 +189,7 @@ public class TwoListLRU<K, V> {
             return null;
         }
 
-        globalLock.writeLock().lock();
+        globalLock.lock();
         try {
             Node<K, V> node = nodeMap.remove(key);
             if (node == null) {
@@ -205,7 +212,7 @@ public class TwoListLRU<K, V> {
             }
             return node.value;
         } finally {
-            globalLock.writeLock().unlock();
+            globalLock.unlock();
         }
     }
 
@@ -257,7 +264,7 @@ public class TwoListLRU<K, V> {
 
     /** 清空所有元素 */
     public void clear() {
-        globalLock.writeLock().lock();
+        globalLock.lock();
         try {
             nodeMap.clear();
 
@@ -275,13 +282,13 @@ public class TwoListLRU<K, V> {
                 log.debug("Cleared all entries");
             }
         } finally {
-            globalLock.writeLock().unlock();
+            globalLock.unlock();
         }
     }
 
     /**
-     * 提升节点优先级（非线程安全，需要持写锁）— Active List 内提到头部,或 Inactive→Active 升级.
-     * 由 {@code put}/{@code get} 在持有 {@link #globalLock} 写锁时调用.
+     * 提升节点优先级（非线程安全，需要持锁）— Active List 内提到头部,或 Inactive→Active 升级.
+     * 由 {@code put}/{@code get} 在持有 {@link #globalLock} 互斥锁时调用.
      *
      * @param node 待提升的节点
      */
@@ -323,7 +330,7 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 添加节点到Active List头部（非线程安全，需要持有写锁）
+     * 添加节点到Active List头部（非线程安全，需要持有 globalLock 互斥锁）
      *
      * @param node 待添加的节点
      * @return 是否添加成功
@@ -365,7 +372,7 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 降级或淘汰Active List中最老的节点（非线程安全，需要持有写锁）
+     * 降级或淘汰Active List中最老的节点（非线程安全，需要持有 globalLock 互斥锁）
      *
      * @return 是否成功腾出空间
      */
@@ -428,7 +435,7 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 淘汰Inactive List中最老的节点（非线程安全，需要持有写锁）
+     * 淘汰Inactive List中最老的节点（非线程安全，需要持有 globalLock 互斥锁）
      *
      * @return 是否淘汰成功
      */
@@ -452,7 +459,7 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 在指定节点后插入新节点（非线程安全，需要持有写锁）
+     * 在指定节点后插入新节点（非线程安全，需要持有 globalLock 互斥锁）
      *
      * @param prev 前驱节点
      * @param node 待插入的节点
@@ -468,7 +475,7 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 修复链表链接（非线程安全，需要持有写锁）
+     * 修复链表链接（非线程安全，需要持有 globalLock 互斥锁）
      *
      * @param prev 前驱节点
      * @param next 后继节点
@@ -481,7 +488,7 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 从链表中移除节点（非线程安全，需要持有写锁）
+     * 从链表中移除节点（非线程安全，需要持有 globalLock 互斥锁）
      *
      * @param node 待移除的节点
      */
