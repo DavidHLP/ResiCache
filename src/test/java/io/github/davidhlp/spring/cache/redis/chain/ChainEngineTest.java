@@ -35,9 +35,17 @@ class ChainEngineTest {
 
     private ChainEngine engine;
 
+    /**
+     * ADR-0046:Engine 不再持 chainSnapshotRef — 测试改用本字段在每个测试方法
+     * 里显式装好链快照,作为 {@link ChainEngine#execute(List, CacheContext)} 的
+     * 第一参数传入。{@link #installChain(CacheHandler...)} helper 负责赋值。
+     */
+    private List<CacheHandler> snapshot;
+
     @BeforeEach
     void setUp() {
         engine = new ChainEngine();
+        snapshot = null;
     }
 
     private CacheContext newCtx() {
@@ -50,8 +58,8 @@ class ChainEngineTest {
     }
 
     private void installChain(CacheHandler... handlers) {
-        // ADR-0022:链结构为单一 List 快照 — 无需 setNext 链接,Engine 按 index 推进
-        engine.setChainSnapshot(List.of(handlers));
+        // ADR-0046:Engine 不再持 chainSnapshotRef — 链快照作为 execute 的第一参数传入
+        this.snapshot = List.of(handlers);
     }
 
     // ==================== 推进协议 ====================
@@ -66,7 +74,7 @@ class ChainEngineTest {
             CacheHandler h = new RecordingHandler("h1", HandlerResult.continueWith(null));
             installChain(h);
 
-            CacheResult result = engine.execute(newCtx());
+            CacheResult result = engine.execute(snapshot, newCtx());
 
             assertThat(result.isSuccess()).isTrue();
         }
@@ -81,7 +89,7 @@ class ChainEngineTest {
                     HandlerResult.continueWith(CacheResult.success()));
             installChain(h1, h2, h3);
 
-            engine.execute(newCtx());
+            engine.execute(snapshot, newCtx());
 
             assertThat(visitOrder).containsExactly("h1", "h2", "h3");
         }
@@ -94,7 +102,7 @@ class ChainEngineTest {
             CacheHandler h2 = new RecordingHandler("h2", visitOrder, HandlerResult.continueChain());
             installChain(h1, h2);
 
-            engine.execute(newCtx());
+            engine.execute(snapshot, newCtx());
 
             assertThat(visitOrder).containsExactly("h1");
         }
@@ -116,7 +124,7 @@ class ChainEngineTest {
             installChain(h1, h2);
 
             CacheContext ctx = newCtx();
-            engine.execute(ctx);
+            engine.execute(snapshot, ctx);
 
             // h2 确实没被求值(SKIP_ALL 已物化,下一个 iteration 检测到 isSkipRemaining)
             assertThat(nextCalled.get()).isFalse();
@@ -128,7 +136,7 @@ class ChainEngineTest {
             CacheHandler h = new RecordingHandler("h1", HandlerResult.continueWith(null));
             installChain(h);
 
-            CacheResult result = engine.execute(newCtx());
+            CacheResult result = engine.execute(snapshot, newCtx());
 
             assertThat(result.isSuccess()).isTrue();
         }
@@ -147,7 +155,7 @@ class ChainEngineTest {
             engine.addObserver(observer);
             installChain(new RecordingHandler("h1", HandlerResult.continueWith(CacheResult.success())));
 
-            engine.execute(newCtx());
+            engine.execute(snapshot, newCtx());
 
             InOrder inOrder = inOrder(observer);
             inOrder.verify(observer).onChainStart(any());
@@ -168,15 +176,22 @@ class ChainEngineTest {
             CacheHandler h2 = new RecordingHandler("h2", HandlerResult.continueWith(CacheResult.success()));
             installChain(h0, h1, h2);
 
-            CacheResult result = engine.executeChainFragment(newCtx(), h0);
+            // ADR-0046:fragment 隐式从 ThreadLocal 读快照 — 直接用 test helper 设入
+            // (绕开 execute 避免触发 aroundChain 观测,正是本测试要验证 fragment 不触发它们)
+            engine.setCurrentSnapshotForTest(snapshot);
+            try {
+                CacheResult result = engine.executeChainFragment(newCtx(), h0);
 
-            assertThat(result.isSuccess()).isTrue();
-            // aroundChain 未触发(fragment 不应 stamp MDC / record Timer)
-            verify(observer, times(0)).onChainStart(any());
-            verify(observer, times(0)).onChainEnd(any(), any());
-            // perNode 对 from(h0)之后的 h1/h2 各调一次 → 共 2 次
-            verify(observer, times(2)).beforeNode(any(), any());
-            verify(observer, times(2)).afterNode(any(), any(), any());
+                assertThat(result.isSuccess()).isTrue();
+                // aroundChain 未触发(fragment 不应 stamp MDC / record Timer)
+                verify(observer, times(0)).onChainStart(any());
+                verify(observer, times(0)).onChainEnd(any(), any());
+                // perNode 对 from(h0)之后的 h1/h2 各调一次 → 共 2 次
+                verify(observer, times(2)).beforeNode(any(), any());
+                verify(observer, times(2)).afterNode(any(), any(), any());
+            } finally {
+                engine.clearCurrentSnapshotForTest();
+            }
         }
 
         @Test
@@ -193,7 +208,7 @@ class ChainEngineTest {
             HandlerResult expected = HandlerResult.terminate(CacheResult.success());
             installChain(new RecordingHandler("h1", expected));
 
-            engine.execute(newCtx());
+            engine.execute(snapshot, newCtx());
 
             assertThat(captured[0]).isSameAs(expected);
         }
@@ -213,7 +228,7 @@ class ChainEngineTest {
             CacheHandler pp = new PostProcessRecordingHandler("pp", ppCalled);
             installChain(main, pp);
 
-            engine.execute(newCtx());
+            engine.execute(snapshot, newCtx());
 
             assertThat(ppCalled.get()).isTrue();
         }
@@ -226,7 +241,7 @@ class ChainEngineTest {
             installChain(main, pp);
 
             // 不应抛异常
-            CacheResult result = engine.execute(newCtx());
+            CacheResult result = engine.execute(snapshot, newCtx());
 
             // main 返回 success — 即使 pp 抛异常,主链 result 仍是 success
             assertThat(result.isSuccess()).isTrue();
@@ -240,7 +255,7 @@ class ChainEngineTest {
             CacheHandler pp = new PostProcessRecordingHandler("pp", ppCalled, false);
             installChain(main, pp);
 
-            engine.execute(newCtx());
+            engine.execute(snapshot, newCtx());
 
             assertThat(ppCalled.get()).isFalse();
         }
@@ -255,17 +270,16 @@ class ChainEngineTest {
         @Test
         @DisplayName("空链(snapshot=null) → 返回 success,WARN 一次")
         void nullSnapshot_returnsSuccess() {
-            // 不调用 setChainSnapshot → snapshot 是 null
+            // snapshot 字段为 null(默认) → 直接传 null 进 execute
             // 用 spy 拦截 logger 不易,改为验证返回值即可
-            CacheResult result = engine.execute(newCtx());
+            CacheResult result = engine.execute(null, newCtx());
             assertThat(result.isSuccess()).isTrue();
         }
 
         @Test
         @DisplayName("空链(snapshot=空列表) → 返回 success")
         void emptySnapshot_returnsSuccess() {
-            engine.setChainSnapshot(List.of());
-            CacheResult result = engine.execute(newCtx());
+            CacheResult result = engine.execute(List.of(), newCtx());
             assertThat(result.isSuccess()).isTrue();
         }
 
@@ -279,7 +293,7 @@ class ChainEngineTest {
             };
             installChain(throwing);
 
-            assertThatThrownBy(() -> engine.execute(newCtx()))
+            assertThatThrownBy(() -> engine.execute(snapshot, newCtx()))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessage("boom");
         }
@@ -332,7 +346,7 @@ class ChainEngineTest {
         public String toString() { return name; }
     }
 
-    static class PostProcessRecordingHandler implements CacheHandler, PostProcessHandler {
+    static class PostProcessRecordingHandler implements CacheHandler {
         private final String name;
         private final AtomicBoolean called;
         private final boolean requires;
@@ -364,7 +378,7 @@ class ChainEngineTest {
         }
     }
 
-    static class ThrowingPostProcessor implements CacheHandler, PostProcessHandler {
+    static class ThrowingPostProcessor implements CacheHandler {
 
         @Override
         public HandlerResult handle(CacheContext context) {

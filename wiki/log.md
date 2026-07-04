@@ -22,6 +22,12 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ---
 
+## 2026-07-04 (continued, round 33)
+
+- [2026-07-04] improve | ADR-0044/0045/0046(round 33) | `/improve-codebase-architecture` 三连深化:(C1) `AnnotationChainObserver` 死 observer 通道删除(0 生产实现 + 6 测试删除,Engine 净 -44 SLOC);(C3+C4) `PostProcessHandler` 折回 `CacheHandler` default no-op + `BloomFilterHandler.POST_PROCESS_KEY` / `SyncLockHandler.LOCK_ACQUIRED_KEY` 死 seam 删除(seam type check 消灭 + 净 -49 SLOC);(C5) `ChainEngine.chainSnapshotRef` 删除 + ThreadLocal 快照 + `CacheHandlerChain` 全收口(链 list 单一真理源收敛);**注意:HTML 报告 C2(AttributeKey 嵌套类)在 context check 中判定为误诊,源码不存在,扼杀**;742 tests / 0 failures / 0 errors / 17 skipped(byte-equivalent 全绿)
+
+---
+
 ## 2026-07-04
 
 - [2026-07-04] improve | ADR-0042 | lock 高并发优化 — `SyncSupport` per-key `synchronized(monitor)` → in-flight `CompletableFuture` single-flight(候选 1:leader 持锁跑 loader / follower join future / ThreadLocal 重入检测 / 失败传播语义改变)+ `CacheHandlerChain.execute` 去冗余读锁(候选 3:与 ADR-0022 同向);候选 2(布隆位图)/ 候选 4(LockOrchestrator 拆分)评估后扼杀;顺带修构造函数 sort 入参 fragility;4 新并发测试 → [[0042-syncsupport-singleflight-future-and-chain-readlock-removal]]

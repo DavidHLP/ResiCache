@@ -355,7 +355,7 @@ class CacheHandlerChainTest {
         }
     }
 
-    static class TestPostProcessor implements CacheHandler, PostProcessHandler {
+    static class TestPostProcessor implements CacheHandler {
         private final AtomicBoolean called;
         private final boolean requiresPostProcess;
 

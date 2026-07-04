@@ -159,7 +159,7 @@ class CacheHandlerChainExceptionTest {
     /**
      * Test post-processor implementation
      */
-    static class TestPostProcessor implements CacheHandler, PostProcessHandler {
+    static class TestPostProcessor implements CacheHandler {
         boolean afterChainExecutionCalled = false;
         boolean shouldThrowException = false;
 

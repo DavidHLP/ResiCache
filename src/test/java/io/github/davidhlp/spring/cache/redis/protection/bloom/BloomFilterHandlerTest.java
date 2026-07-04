@@ -138,7 +138,6 @@ class BloomFilterHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.shouldTerminate()).isFalse();
-            assertThat(Boolean.class.cast(context.getAttribute("bloom.postProcess"))).isEqualTo(true);
         }
     }
 
@@ -154,7 +153,6 @@ class BloomFilterHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.shouldTerminate()).isFalse();
-            assertThat(Boolean.class.cast(context.getAttribute("bloom.postProcess"))).isEqualTo(true);
         }
     }
 
@@ -170,7 +168,6 @@ class BloomFilterHandlerTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.shouldTerminate()).isFalse();
-            assertThat(Boolean.class.cast(context.getAttribute("bloom.postProcess"))).isEqualTo(true);
         }
     }
 
@@ -182,17 +179,16 @@ class BloomFilterHandlerTest {
         @DisplayName("returns true when post process is marked")
         void requiresPostProcess_marked_returnsTrue() {
             CacheContext context = createContext(CacheOperation.PUT, cacheOperation);
-            context.setAttribute("bloom.postProcess", true);
-
             boolean result = handler.requiresPostProcess(context);
 
             assertThat(result).isTrue();
         }
 
         @Test
-        @DisplayName("returns false when post process is not marked")
-        void requiresPostProcess_notMarked_returnsFalse() {
-            CacheContext context = createContext(CacheOperation.PUT, cacheOperation);
+        @DisplayName("returns false for GET operation (no post-process needed)")
+        void requiresPostProcess_getOperation_returnsFalse() {
+            // ADR-0045:requiresPostProcess 改走 operation enum 派生,GET 不参与后置
+            CacheContext context = createContext(CacheOperation.GET, cacheOperation);
 
             boolean result = handler.requiresPostProcess(context);
 
@@ -207,9 +203,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("adds key to bloom filter on PUT success")
         void afterChainExecution_putSuccess_addsToBloomFilter() {
-            CacheContext context = createContext(CacheOperation.PUT, cacheOperation);
-            context.setAttribute("bloom.postProcess", true);
-            CacheResult chainResult = CacheResult.success();
+            CacheContext context = createContext(CacheOperation.PUT, cacheOperation);            CacheResult chainResult = CacheResult.success();
 
             handler.afterChainExecution(context, chainResult);
 
@@ -219,9 +213,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("adds key to bloom filter on PUT_IF_ABSENT success")
         void afterChainExecution_putIfAbsentSuccess_addsToBloomFilter() {
-            CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT, cacheOperation);
-            context.setAttribute("bloom.postProcess", true);
-            CacheResult chainResult = CacheResult.success();
+            CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT, cacheOperation);            CacheResult chainResult = CacheResult.success();
 
             handler.afterChainExecution(context, chainResult);
 
@@ -231,9 +223,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("clears bloom filter on CLEAN success with pattern ending wildcard")
         void afterChainExecution_cleanWithPattern_clearsBloomFilter() {
-            CacheContext context = createContext(CacheOperation.CLEAN, cacheOperation);
-            context.setAttribute("bloom.postProcess", true);
-            context.setKeyPattern("test:*");
+            CacheContext context = createContext(CacheOperation.CLEAN, cacheOperation);            context.setKeyPattern("test:*");
             CacheResult chainResult = CacheResult.success();
 
             handler.afterChainExecution(context, chainResult);
@@ -244,9 +234,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("clears bloom filter on CLEAN even without wildcard pattern")
         void afterChainExecution_cleanWithoutWildcard_clearsBloomFilter() {
-            CacheContext context = createContext(CacheOperation.CLEAN, cacheOperation);
-            context.setAttribute("bloom.postProcess", true);
-            context.setKeyPattern("test:single");
+            CacheContext context = createContext(CacheOperation.CLEAN, cacheOperation);            context.setKeyPattern("test:single");
             CacheResult chainResult = CacheResult.success();
 
             handler.afterChainExecution(context, chainResult);
@@ -257,9 +245,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("does nothing when result is not success")
         void afterChainExecution_notSuccess_doesNothing() {
-            CacheContext context = createContext(CacheOperation.PUT, cacheOperation);
-            context.setAttribute("bloom.postProcess", true);
-            CacheResult chainResult = CacheResult.failure();
+            CacheContext context = createContext(CacheOperation.PUT, cacheOperation);            CacheResult chainResult = CacheResult.failure();
 
             handler.afterChainExecution(context, chainResult);
 
@@ -269,9 +255,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("does nothing when context is skip remaining")
         void afterChainExecution_skipRemaining_doesNothing() {
-            CacheContext context = createContext(CacheOperation.PUT, cacheOperation);
-            context.setAttribute("bloom.postProcess", true);
-            context.markSkipRemaining();
+            CacheContext context = createContext(CacheOperation.PUT, cacheOperation);            context.markSkipRemaining();
             CacheResult chainResult = CacheResult.success();
 
             handler.afterChainExecution(context, chainResult);

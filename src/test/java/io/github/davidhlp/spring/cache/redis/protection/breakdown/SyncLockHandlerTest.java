@@ -77,17 +77,6 @@ class SyncLockHandlerTest {
     @DisplayName("shouldHandle tests")
     class ShouldHandleTests {
 
-        @Test
-        @DisplayName("returns false when lock already acquired by upstream")
-        void shouldHandle_lockAlreadyAcquired_returnsFalse() {
-            RedisCacheableOperation operation = createSyncOperation(true, 10);
-            CacheContext context = createContext(CacheOperation.GET, operation);
-            context.setAttribute("sync.lock.acquired", true);
-
-            boolean result = handler.shouldHandle(context);
-
-            assertThat(result).isFalse();
-        }
 
         @Test
         @DisplayName("returns false when cache operation is null")
@@ -233,8 +222,6 @@ class SyncLockHandlerTest {
             when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(CacheResult.success());
 
             handler.doHandle(context);
-
-            assertThat(context.getAttribute("sync.lock.acquired", false)).isTrue();
         }
 
         @Test

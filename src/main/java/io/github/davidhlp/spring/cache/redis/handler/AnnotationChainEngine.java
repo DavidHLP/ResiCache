@@ -1,7 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
-import io.github.davidhlp.spring.cache.redis.chain.ObserverRegistry;
-
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.stereotype.Component;
@@ -70,35 +68,11 @@ public class AnnotationChainEngine {
     /** 注入的所有 AnnotationHandler 实现(Spring 自动按 List 注入 4 个具体 handler) */
     private final List<AnnotationHandler> handlers;
 
-    /** observer 列表 — 委派到 {@link ObserverRegistry}(ADR-0016 单一 seam). */
-    private final ObserverRegistry<AnnotationChainObserver> observers = new ObserverRegistry<>();
-
     public AnnotationChainEngine(List<AnnotationHandler> handlers) {
         this.handlers = List.copyOf(handlers);
         log.debug("AnnotationChainEngine initialized with {} handlers: {}",
                 this.handlers.size(),
                 this.handlers.stream().map(h -> h.getClass().getSimpleName()).toList());
-    }
-
-    /**
-     * 注册一个 observer。重复注册同名 observer 由调用方负责去重(Engine 不强制
-     * 唯一性,避免反射 / class 名比较的开销)。注册时机:Engine 创建后、首次
-     * execute 前。
-     *
-     * @param observer 待注册的 observer(不为 null)
-     * @throws IllegalArgumentException 若 observer 为 null
-     */
-    public void addObserver(AnnotationChainObserver observer) {
-        observers.add(observer);
-    }
-
-    /**
-     * 暴露当前已注册的 observer 列表(只读快照)。测试与诊断用;运行期勿修改。
-     *
-     * @return 不可变 observer 列表快照
-     */
-    public List<AnnotationChainObserver> observers() {
-        return observers.snapshot();
     }
 
     /**
@@ -130,33 +104,23 @@ public class AnnotationChainEngine {
         // 但本 seam 期望 target 非 null(对应拦截器契约),只做 args null 兜底
         Object[] safeArgs = args != null ? args : new Object[0];
 
-        // 1. aroundChain:onChainStart（forEachSafe 异常隔离 — observer 抛异常吞 + 记 ERROR，
-        //    不阻断主链；语义与 ChainEngine 一致，ADR-0026）
-        observers.forEachSafe(o -> o.onChainStart(method, target, safeArgs));
-
-        // 2. 遍历 handler 求值
+        // ADR-0044：observer 通道已删除（AnnotationChainObserver 0 生产实现），
+        // 直接遍历 handlers — per-handler 异常隔离即可。
         List<CacheOperation> collected = new ArrayList<>();
-        try {
-            for (AnnotationHandler handler : handlers) {
-                if (!handler.canHandle(method)) {
-                    continue;
-                }
-                try {
-                    List<CacheOperation> ops = handler.doHandle(method, target, safeArgs);
-                    if (ops != null && !ops.isEmpty()) {
-                        collected.addAll(ops);
-                    }
-                } catch (Exception handlerEx) {
-                    // 单 handler 异常隔离:记 ERROR 日志,继续遍历剩余 handler
-                    log.error("AnnotationHandler.doHandle failed: {}, method: {}",
-                            handler.getClass().getSimpleName(), method.getName(), handlerEx);
-                }
+        for (AnnotationHandler handler : handlers) {
+            if (!handler.canHandle(method)) {
+                continue;
             }
-        } finally {
-            // 3. aroundChain:onChainEnd(try/finally 守护,异常路径也保证触发)
-            //    forEachSafe 异常隔离 — 单 observer 失败不阻断其他 observer 的 onChainEnd(ADR-0026)
-            List<CacheOperation> snapshot = Collections.unmodifiableList(collected);
-            observers.forEachSafe(o -> o.onChainEnd(method, target, safeArgs, snapshot));
+            try {
+                List<CacheOperation> ops = handler.doHandle(method, target, safeArgs);
+                if (ops != null && !ops.isEmpty()) {
+                    collected.addAll(ops);
+                }
+            } catch (Exception handlerEx) {
+                // 单 handler 异常隔离：记 ERROR 日志，继续遍历剩余 handler
+                log.error("AnnotationHandler.doHandle failed: {}, method: {}",
+                        handler.getClass().getSimpleName(), method.getName(), handlerEx);
+            }
         }
 
         return Collections.unmodifiableList(collected);

@@ -100,9 +100,7 @@ class BloomFilterFalsePositiveTest {
         @Test
         @DisplayName("PUT success adds key to bloom filter")
         void putSuccess_addsToBloomFilter() {
-            CacheContext context = createContext(CacheOperation.PUT);
-            context.setAttribute("bloom.postProcess", true);
-            CacheResult chainResult = CacheResult.success();
+            CacheContext context = createContext(CacheOperation.PUT);            CacheResult chainResult = CacheResult.success();
 
             handler.afterChainExecution(context, chainResult);
 

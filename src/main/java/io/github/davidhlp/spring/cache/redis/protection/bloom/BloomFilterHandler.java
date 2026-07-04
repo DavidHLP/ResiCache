@@ -24,11 +24,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @HandlerPriority(HandlerOrder.BLOOM_FILTER)
-public class BloomFilterHandler extends AbstractCacheHandler
-        implements PostProcessHandler {
-
-    /** 后置处理标记 — Bloom 短路 / 后置回填的轻量状态。 */
-    private static final String POST_PROCESS_KEY = "bloom.postProcess";
+public class BloomFilterHandler extends AbstractCacheHandler {
 
     private final BloomSupport bloomSupport;
     private final CacheStatisticsCollector statistics;
@@ -98,46 +94,50 @@ public class BloomFilterHandler extends AbstractCacheHandler
     /**
      * 处理 PUT 操作
      *
-     * <p>标记需要后置处理，继续责任链。
-     * 后续 Handler 执行完成后，会检查标记并执行后置逻辑。
+     * <p>PUT 需要后置回填布隆 — opt-in 走 {@link #requiresPostProcess(CacheContext)}
+     * 按 {@link CacheContext#getOperation()} 派生,不再用 stringly-typed
+     * attributes 标记(ADR-0045)。
      */
     private HandlerResult handlePut(CacheContext context) {
-        // 标记需要后置处理
-        context.setAttribute(POST_PROCESS_KEY, true);
-
-        // 继续执行后续 Handler
         return HandlerResult.continueChain();
     }
 
     /**
      * 处理 PUT_IF_ABSENT 操作
      *
-     * <p>同 PUT，标记后置处理。
+     * <p>同 PUT — 后置回填走 requiresPostProcess 操作类型判定。
      */
     private HandlerResult handlePutIfAbsent(CacheContext context) {
-        context.setAttribute(POST_PROCESS_KEY, true);
         return HandlerResult.continueChain();
     }
 
     /**
      * 处理 CLEAN 操作
      *
-     * <p>标记后置处理。
+     * <p>清空布隆过滤器。
      */
     private HandlerResult handleClean(CacheContext context) {
-        context.setAttribute(POST_PROCESS_KEY, true);
         return HandlerResult.continueChain();
     }
 
     /**
-     * 判断是否需要执行后置处理
+     * 判断是否需要执行后置处理 — ADR-0045 替代原 POST_PROCESS_KEY stringly-typed
+     * 标记,从 {@link CacheContext#getOperation()} 直接派生:
+     * <ul>
+     *   <li>PUT / PUT_IF_ABSENT — 回填布隆</li>
+     *   <li>CLEAN — 清空布隆</li>
+     *   <li>GET 等其他操作 — 无需后置</li>
+     * </ul>
      *
-     * <p>只在标记了 POST_PROCESS_KEY 且操作成功时执行。
+     * <p>locality-first:post-process 判定走类型化的 operation enum,不再跨 seam
+     * 通过 {@code context.setAttribute} 写 stringly-typed 标记。
      */
     @Override
     public boolean requiresPostProcess(CacheContext context) {
-        Boolean postProcess = context.getAttribute(POST_PROCESS_KEY);
-        return postProcess != null && postProcess;
+        CacheOperation op = context.getOperation();
+        return op == CacheOperation.PUT
+                || op == CacheOperation.PUT_IF_ABSENT
+                || op == CacheOperation.CLEAN;
     }
 
     /**

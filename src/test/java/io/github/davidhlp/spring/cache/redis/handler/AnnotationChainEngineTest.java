@@ -199,81 +199,6 @@ class AnnotationChainEngineTest {
         }
     }
 
-    // ==================== 观测编排 ====================
-
-    @Nested
-    @DisplayName("observer orchestration")
-    class ObserverTests {
-
-        @Test
-        @DisplayName("aroundChain:onChainStart → 所有 handler 求值 → onChainEnd 顺序执行")
-        void aroundChain_calledInOrder() {
-            AnnotationChainObserver observer = mock(AnnotationChainObserver.class);
-            TestHandler h1 = new TestHandler("h1");
-            h1.doHandleResult = List.of(mock(CacheOperation.class));
-            engine = new AnnotationChainEngine(List.of(h1));
-            engine.addObserver(observer);
-
-            engine.execute(noAnnotationMethod, new Object(), new Object[0]);
-
-            InOrder inOrder = inOrder(observer);
-            inOrder.verify(observer).onChainStart(eq(noAnnotationMethod), any(), any());
-            inOrder.verify(observer).onChainEnd(eq(noAnnotationMethod), any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("onChainEnd 收到 handler.doHandle 的真实结果(不可变 list)")
-        void onChainEndReceivesResult() {
-            List<CacheOperation>[] captured = new List[1];
-            AnnotationChainObserver capture = new AnnotationChainObserver() { @Override public void onChainEnd(Method method, Object target, Object[] args, List<CacheOperation> result) { captured[0] = result; } };
-            TestHandler h1 = new TestHandler("h1");
-            h1.doHandleResult = List.of(mock(CacheOperation.class));
-            engine = new AnnotationChainEngine(List.of(h1));
-            engine.addObserver(capture);
-
-            engine.execute(noAnnotationMethod, new Object(), new Object[0]);
-
-            assertThat(captured[0]).hasSize(1);
-        }
-
-        @Test
-        @DisplayName("observer 异常不阻塞主链(与 ChainEngine.execute 行为一致)")
-        void observerException_doesNotBlockChain() {
-            AnnotationChainObserver faulty = mock(AnnotationChainObserver.class);
-            org.mockito.Mockito.doThrow(new RuntimeException("observer boom"))
-                    .when(faulty).onChainStart(any(), any(), any());
-            TestHandler h1 = new TestHandler("h1");
-            h1.doHandleResult = List.of(mock(CacheOperation.class));
-            engine = new AnnotationChainEngine(List.of(h1));
-            engine.addObserver(faulty);
-
-            // observer 异常被 Engine 捕获并打 ERROR,主链继续
-            List<CacheOperation> result = engine.execute(noAnnotationMethod, new Object(), new Object[0]);
-
-            assertThat(result).hasSize(1);
-        }
-
-        @Test
-        @DisplayName("onChainEnd 在异常路径下也保证触发(try/finally 守护)")
-        void onChainEnd_triggeredOnExceptionPath() {
-            AtomicBoolean onChainEndCalled = new AtomicBoolean(false);
-            AnnotationChainObserver capture = new AnnotationChainObserver() { @Override public void onChainEnd(Method method, Object target, Object[] args, List<CacheOperation> result) { onChainEndCalled.set(true); } };
-            TestHandler h1 = new TestHandler("h1") {
-                @Override
-                protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
-                    throw new RuntimeException("h1 boom");
-                }
-            };
-            engine = new AnnotationChainEngine(List.of(h1));
-            engine.addObserver(capture);
-
-            // h1 抛异常被 Engine per-handler try/catch 捕获,onChainEnd 仍触发
-            engine.execute(noAnnotationMethod, new Object(), new Object[0]);
-
-            assertThat(onChainEndCalled.get()).isTrue();
-        }
-    }
-
     // ==================== API surface ====================
 
     @Nested
@@ -303,27 +228,7 @@ class AnnotationChainEngineTest {
             assertThat(result).hasSize(1);
         }
 
-        @Test
-        @DisplayName("addObserver(null) 抛 IllegalArgumentException")
-        void addObserver_null_throws() {
-            engine = new AnnotationChainEngine(Collections.emptyList());
 
-            assertThatThrownBy(() -> engine.addObserver(null))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("observer");
-        }
-
-        @Test
-        @DisplayName("observers() 返回不可变快照")
-        void observers_returnsImmutableSnapshot() {
-            engine = new AnnotationChainEngine(Collections.emptyList());
-            engine.addObserver(new AnnotationChainObserver() {});
-
-            List<AnnotationChainObserver> snapshot = engine.observers();
-
-            assertThatThrownBy(() -> snapshot.add(mock(AnnotationChainObserver.class)))
-                    .isInstanceOf(UnsupportedOperationException.class);
-        }
 
         @Test
         @DisplayName("execute 返回的 list 是不可变(防止 handler 误改)")

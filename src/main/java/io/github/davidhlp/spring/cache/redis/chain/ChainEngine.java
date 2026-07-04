@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 责任链推进引擎 — ADR-0009 (Chain Engine extraction) D1.
@@ -18,8 +17,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link CacheHandlerChain#execute(CacheContext)} 的并行实现（约 600 SLOC
  * 中 ~120 SLOC 是引擎样板）。
  *
- * <p><b>推进协议</b>：Engine 持有有序的 {@link CacheHandler} 列表（snapshot
- * 形式，对应原 CacheHandlerChain 的 {@code List<CacheHandler> handlers}），
+ * <p><b>推进协议</b>：Engine 接收有序的 {@link CacheHandler} 快照（由
+ * {@link CacheHandlerChain#execute(CacheContext)} 在 synchronized 块内一次性拍出），
  * 按顺序调用每个 handler 的 {@code handle(ctx)}；handler 返回的
  * {@link HandlerResult#decision()} 决定走向：
  *
@@ -38,11 +37,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * Engine 自身不感知 MDC / Timer / Counter / DEBUG log 等具体关注点 —
  * 这是 WS-1.4 Observation Span 升级路径的核心 leverage。
  *
- * <p><b>Post-process</b>：链主路径完成后，Engine 遍历所有 handler，对实现
- * {@link PostProcessHandler} 的 handler 调用其
- * {@link PostProcessHandler#afterChainExecution(CacheContext, CacheResult)} —
- * 替换原 {@code CacheHandlerChain.executePostProcess} 私有方法。失败 try/catch
- * 不污染主链（与原行为一致）。
+ * <p><b>Post-process</b>：链主路径完成后，Engine 遍历所有 handler，对
+ * {@link CacheHandler#requiresPostProcess(CacheContext)} 返回 {@code true}
+ * 的 handler 调用其 {@link CacheHandler#afterChainExecution(CacheContext, CacheResult)}
+ * — 替换原 {@code CacheHandlerChain.executePostProcess} 私有方法。失败 try/catch
+ * 不污染主链（与原行为一致）。<b>ADR-0045</b> 替代了原 {@code instanceof
+ * PostProcessHandler} 分支,opt-in 语义改走类型化的 requiresPostProcess hook,
+ * 消灭了 seam 边界 type check。
  *
  * <p><b>executeFragment</b>：{@link SyncLockHandler} 锁内推进用，跳过
  * aroundChain 观测（避免重复 stamp MDC / 重复 record Timer）+ 不做
@@ -51,7 +52,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p><b>线程安全</b>：Engine 单例 Bean，{@link #observers} 字段为
  * {@link ObserverRegistry}（内部 {@code CopyOnWriteArrayList}，启动期单写、热期
  * 多读），observer 自身必须线程安全。Handler 列表由 {@link CacheHandlerChain}
- * 持锁读快照传入，Engine 内部不修改该列表。
+ * 完全持有;Engine 内部不修改该列表。
+ *
+ * <p><b>ADR-0046</b>:Engine 上的 {@code chainSnapshotRef} + {@code setChainSnapshot}
+ * 已删除 — 链 list 单一真理源完全收敛在 {@code CacheHandlerChain},Engine 通过
+ * {@link #execute(List, CacheContext)} 接收快照参数,并用 ThreadLocal
+ * ({@link #CURRENT_SNAPSHOT})在 execute entry 设入 / finally 清出,供
+ * {@link #executeChainFragment(CacheContext, CacheHandler)} 隐式读取。Thread-local
+ * 取代全局 AtomicReference,per-thread 隔离更强(并发 execute 互不污染)。
  *
  * <p><b>Observer 列表管理委派</b>(ADR-0016):{@code addObserver} / {@code observers}
  * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与
@@ -65,8 +73,15 @@ public class ChainEngine {
     /** 注册的 observer 列表 — 委派到 {@link ObserverRegistry}(ADR-0016 单一 seam). */
     private final ObserverRegistry<ChainObserver> observers = new ObserverRegistry<>();
 
-    /** 工厂建链后注入（{@link CacheHandlerChainFactory#createChain}）。 */
-    private final AtomicReference<List<CacheHandler>> chainSnapshotRef = new AtomicReference<>();
+    /**
+     * 当前线程正在执行的 handler 链快照(ADR-0046):由 {@link #execute(List, CacheContext)}
+     * entry 处 set,finally 块 remove;供 {@link #executeChainFragment(CacheContext, CacheHandler)}
+     * 在同线程隐式读取(SyncLockHandler 锁内推进)。
+     *
+     * <p>取代了原 {@code AtomicReference chainSnapshotRef} 全局字段 — ThreadLocal
+     * 提供 per-thread 隔离,并发 execute 互不污染。
+     */
+    private static final ThreadLocal<List<CacheHandler>> CURRENT_SNAPSHOT = new ThreadLocal<>();
 
     public ChainEngine() {
         // observers 由外部 addObserver(...) 注入；ChainHandlerChainFactory 在装配时调用
@@ -94,18 +109,30 @@ public class ChainEngine {
     }
 
     /**
-     * 设置当前生效的 handler 链快照（由 {@link CacheHandlerChain} 在 addHandler /
-     * clear 时调用）。Engine 每次 {@link #execute} 读取该快照遍历，
-     * 避免 {@link CacheHandlerChain} 修改链表时被 Engine 边遍历边改。
-     *
-     * @param snapshot 当前 handler 链快照（可能为 null 表示空链）
+     * <b>仅供测试使用</b>(package-private):直接设入 {@link #CURRENT_SNAPSHOT},
+     * 模拟 {@link #execute(List, CacheContext)} 已为当前线程准备好快照的状态。
+     * <p>测试场景:验证 {@link #executeChainFragment(CacheContext, CacheHandler)}
+     * 在快照就绪时的行为,而无需走完整 execute 流程(后者会触发 observer 钩子)。
+     * <p>生产代码请用 {@link #execute(List, CacheContext)} — 它会正确管理
+     * ThreadLocal 的 set / remove 配对。
      */
-    public void setChainSnapshot(List<CacheHandler> snapshot) {
-        chainSnapshotRef.set(snapshot);
+    void setCurrentSnapshotForTest(List<CacheHandler> snapshot) {
+        CURRENT_SNAPSHOT.set(snapshot);
+    }
+
+    /**
+     * <b>仅供测试使用</b>(package-private):清空 {@link #CURRENT_SNAPSHOT}。
+     */
+    void clearCurrentSnapshotForTest() {
+        CURRENT_SNAPSHOT.remove();
     }
 
     /**
      * 执行责任链 — 整条 chain 全生命周期（head handle + post-process + 观测）。
+     *
+     * <p><b>ADR-0046</b>:接收 {@code snapshot} 作为参数(由 {@link CacheHandlerChain}
+     * 在 synchronized 块内拍出),Engine 不再持有 list 状态;ThreadLocal 在 entry
+     * 处 set,finally 块 remove,供 {@code executeChainFragment} 隐式读。
      *
      * <p>执行流程：
      * <ol>
@@ -116,43 +143,48 @@ public class ChainEngine {
      *   <li>post-process 遍历</li>
      * </ol>
      *
-     * @param context 缓存上下文
+     * @param snapshot handler 链快照（{@link CacheHandlerChain} 一次性 {@code List.copyOf} 产出）
+     * @param context  缓存上下文
      * @return 链执行最终结果（post-process 已执行）
      */
-    public CacheResult execute(CacheContext context) {
-        List<CacheHandler> snapshot = chainSnapshotRef.get();
-        if (snapshot == null || snapshot.isEmpty()) {
-            log.warn("Handler chain is empty!");
-            // 仍然走 onChainStart/onChainEnd 配对 — observer 可能在 start 注册
-            // thread-local 资源（如 Timer.Sample），不配对会泄漏
+    public CacheResult execute(List<CacheHandler> snapshot, CacheContext context) {
+        CURRENT_SNAPSHOT.set(snapshot);
+        try {
+            if (snapshot == null || snapshot.isEmpty()) {
+                log.warn("Handler chain is empty!");
+                // 仍然走 onChainStart/onChainEnd 配对 — observer 可能在 start 注册
+                // thread-local 资源（如 Timer.Sample），不配对会泄漏
+                observers.forEachSafe(o -> o.onChainStart(context));
+                try {
+                    return CacheResult.success();
+                } finally {
+                    observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
+                }
+            }
+
+            log.debug("Executing handler chain for operation: {}, cacheName: {}, key: {}",
+                    context.getOperation(), context.getCacheName(), context.getRedisKey());
+
+            // aroundChain 观测：start
             observers.forEachSafe(o -> o.onChainStart(context));
+
+            CacheResult finalResult;
             try {
-                return CacheResult.success();
+                // 节点推进主循环
+                finalResult = driveChain(snapshot, context);
+
+                // post-process 遍历（在 onChainEnd 之前，与原 CacheHandlerChain.execute 顺序一致 —
+                // 任何 observer 依赖"链已完全结束"语义时应看到 post-process 副作用）
+                executePostProcess(snapshot, context, finalResult);
             } finally {
+                // aroundChain 观测：end（即使主路径异常也调用，保证 observer 资源配对）
                 observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
             }
-        }
 
-        log.debug("Executing handler chain for operation: {}, cacheName: {}, key: {}",
-                context.getOperation(), context.getCacheName(), context.getRedisKey());
-
-        // aroundChain 观测：start
-        observers.forEachSafe(o -> o.onChainStart(context));
-
-        CacheResult finalResult;
-        try {
-            // 节点推进主循环
-            finalResult = driveChain(snapshot, context);
-
-            // post-process 遍历（在 onChainEnd 之前，与原 CacheHandlerChain.execute 顺序一致 —
-            // 任何 observer 依赖"链已完全结束"语义时应看到 post-process 副作用）
-            executePostProcess(snapshot, context, finalResult);
+            return finalResult;
         } finally {
-            // aroundChain 观测：end（即使主路径异常也调用，保证 observer 资源配对）
-            observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
+            CURRENT_SNAPSHOT.remove();
         }
-
-        return finalResult;
     }
 
     /**
@@ -177,7 +209,7 @@ public class ChainEngine {
         if (from == null) {
             return CacheResult.success();
         }
-        List<CacheHandler> snapshot = chainSnapshotRef.get();
+        List<CacheHandler> snapshot = CURRENT_SNAPSHOT.get();
         if (snapshot == null || snapshot.isEmpty()) {
             return CacheResult.success();
         }
@@ -261,22 +293,24 @@ public class ChainEngine {
     /**
      * Post-process 遍历 — 替换原 {@code CacheHandlerChain.executePostProcess}。
      * 失败 try/catch 不污染主链（与原行为一致），打 ERROR 日志。
+     *
+     * <p><b>ADR-0045</b>：原 {@code handler instanceof PostProcessHandler} 分支删除,
+     * 改走 {@link CacheHandler#requiresPostProcess(CacheContext)} 类型化 hook —
+     * handler 通过 override 该方法 opt-in,默认 false 不参与。
      */
     private void executePostProcess(List<CacheHandler> handlers, CacheContext context, CacheResult result) {
         for (CacheHandler handler : handlers) {
-            if (handler instanceof PostProcessHandler postHandler) {
-                if (postHandler.requiresPostProcess(context)) {
-                    try {
-                        postHandler.afterChainExecution(context, result);
-                        log.debug("Post-processing executed for: {}",
-                                handler.getClass().getSimpleName());
-                    } catch (Exception e) {
-                        log.error("Post-processing failed for: {}, operation: {}, key: {}",
-                                handler.getClass().getSimpleName(),
-                                context.getOperation(),
-                                context.getRedisKey(), e);
-                        // 后置处理失败不影响主链结果
-                    }
+            if (handler.requiresPostProcess(context)) {
+                try {
+                    handler.afterChainExecution(context, result);
+                    log.debug("Post-processing executed for: {}",
+                            handler.getClass().getSimpleName());
+                } catch (Exception e) {
+                    log.error("Post-processing failed for: {}, operation: {}, key: {}",
+                            handler.getClass().getSimpleName(),
+                            context.getOperation(),
+                            context.getRedisKey(), e);
+                    // 后置处理失败不影响主链结果
                 }
             }
         }

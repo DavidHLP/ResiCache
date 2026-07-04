@@ -40,16 +40,16 @@ import org.springframework.util.Assert;
  *       也会按 perNode 出现 — 与原"只在外层打点"的不对称语义相比更可解释</li>
  * </ul>
  *
- * <p>通过标记 {@code lockAcquired} 避免下游 Handler 重复加锁（基类
- * {@code shouldHandle} 检测此标记后直接返 false）。
+ * <p><b>ADR-0045</b>：原通过 {@code context.setAttribute("sync.lock.acquired", true)}
+ * + 基类 {@code shouldHandle} 检测此 stringly-typed 标记的"重入守护"已删除 ——
+ * 实际生产路径下,fragment 推进 ({@code engine.executeChainFragment(ctx, this)})
+ * 按 ADR-0022 {@code indexOf(this) + 1} 定位后继,不会再回到 SyncLockHandler 自身,
+ * 该标记属于 dead seam。删除后 locality 改善 + context 属性袋收窄。
  */
 @Slf4j
 @Component
 @HandlerPriority(HandlerOrder.SYNC_LOCK)
 public class SyncLockHandler extends AbstractCacheHandler {
-
-    /** 上下文属性键：标记锁已获取。 */
-    private static final String LOCK_ACQUIRED_KEY = "sync.lock.acquired";
 
     private static final long DEFAULT_LOCK_TIMEOUT = 10;
 
@@ -92,11 +92,6 @@ public class SyncLockHandler extends AbstractCacheHandler {
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
-        // 检查是否已被上游处理
-        if (context.getAttribute(LOCK_ACQUIRED_KEY, false)) {
-            return false;
-        }
-
         if (context.getCacheOperation() == null || !context.getCacheOperation().isSync()) {
             return false;
         }
@@ -119,9 +114,6 @@ public class SyncLockHandler extends AbstractCacheHandler {
 
         log.debug("Executing with sync lock: cacheName={}, key={}, timeout={}s",
                   context.getCacheName(), lockContext.lockKey(), lockContext.timeoutSeconds());
-
-        // 标记锁已获取（防止下游重复加锁）
-        context.setAttribute(LOCK_ACQUIRED_KEY, true);
 
         // WS-1.4 per-handler tag:分布式锁成功获取事件计数
         safeIncrementSemantic();
