@@ -53,11 +53,12 @@ public class BloomFilterHandler extends AbstractCacheHandler {
 
     @Override
     protected HandlerResult doHandle(CacheContext context) {
+        // ADR-0047:C7 收敛 — 三个空分支(原 handlePut / handlePutIfAbsent / handleClean)
+        // 已 inline 到此处。PUT/PIF/CLEAN 的"实际工作"在 afterChainExecution() 后置路径,
+        // requiresPostProcess() 派生自 operation 枚举(ADR-0045),不在此处重复分派。
         return switch (context.getOperation()) {
             case GET -> handleGet(context);
-            case PUT -> handlePut(context);
-            case PUT_IF_ABSENT -> handlePutIfAbsent(context);
-            case CLEAN -> handleClean(context);
+            case PUT, PUT_IF_ABSENT, CLEAN -> HandlerResult.continueChain();
             default -> HandlerResult.continueChain();
         };
     }
@@ -88,35 +89,6 @@ public class BloomFilterHandler extends AbstractCacheHandler {
                 "Bloom filter passed (key might exist): cacheName={}, key={}",
                 context.getCacheName(),
                 context.getRedisKey());
-        return HandlerResult.continueChain();
-    }
-
-    /**
-     * 处理 PUT 操作
-     *
-     * <p>PUT 需要后置回填布隆 — opt-in 走 {@link #requiresPostProcess(CacheContext)}
-     * 按 {@link CacheContext#getOperation()} 派生,不再用 stringly-typed
-     * attributes 标记(ADR-0045)。
-     */
-    private HandlerResult handlePut(CacheContext context) {
-        return HandlerResult.continueChain();
-    }
-
-    /**
-     * 处理 PUT_IF_ABSENT 操作
-     *
-     * <p>同 PUT — 后置回填走 requiresPostProcess 操作类型判定。
-     */
-    private HandlerResult handlePutIfAbsent(CacheContext context) {
-        return HandlerResult.continueChain();
-    }
-
-    /**
-     * 处理 CLEAN 操作
-     *
-     * <p>清空布隆过滤器。
-     */
-    private HandlerResult handleClean(CacheContext context) {
         return HandlerResult.continueChain();
     }
 
