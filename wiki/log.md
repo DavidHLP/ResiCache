@@ -123,3 +123,15 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 **归档**:
 - Q2(2026-06-21 ~ 06-30)round-by-round 细节 + autonomous-loop v1/v2(round 1–42)见 [[log/archive-2026-q2]]。
 - Q3 季中(2026-06-30 ~ 2026-07-04)44 commits / ADR-0009~0041 / 阶段 0-9 见 [[log/archive-2026-q3]]。
+
+## [2026-07-05] refactor | wiki 瘦身与重构一次性落地(B1-B7)
+
+ADR 二分 + 入口瘦身 + 易变剥离 + 角色分流。总行数 11328→10510(-7%)。
+
+- **B1/B4** index/overview/README 三入口瘦身(136→62 / 85→40 / 147→82);补 4 篇漏列 ADR(0042/0047/0048/0049)、修 0043 错位、消三重计数矛盾
+- **B2/B3** ADR 二分:0009-0051(43 篇)下沉 `adr/rounds/`,黑名单清洗删过程段(实施/平行问题/后续等),清 25 处 `/tmp` 死链;新增 `adr/INDEX.md` + `adr/rounds/CHRONICLE.md`
+- **B5** observability 186→93 减负,R24/R25 推理下沉 rounds 卡片;README 立「符号引用优先」规范
+- **B6** how-to 2 篇环境笔记 → `meta/env-notes/`(log-q3 经通读保留:commit 历史是 log 正职)
+- **B7** 角色分流:`meta/for-onboarding.md` + `meta/for-implementer.md`
+- 口径修正:总行数目标(plan 估算 ≤7000)调整为 ≤11000;结构质量(二分/单一真理源/死链归零)优先于行数 KPI
+- 顺手修预存在断链:chain-of-responsibility ADR-0009 标识 ×2、0026 0016 slug slug
