@@ -8,7 +8,7 @@ tags:
 related: [overview, log, README]
 status: stable
 created: 2026-06-21
-updated: 2026-07-02
+updated: 2026-07-05
 ---
 
 # 内容索引
@@ -86,7 +86,8 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0044-annotationchainobserver-yagni-dead-channel-removal]] —— `AnnotationChainObserver` 死 observer 通道删除(0 生产实现;Engine 退化为单职责;round 33)
 - [[0045-postprocesshandler-cachehandler-merge-and-parasitic-keys-attribution]] —— `PostProcessHandler` 折回 `CacheHandler` default no-op + 寄生属性键归位(Bloom POST_PROCESS_KEY / SyncLock LOCK_ACQUIRED_KEY;seam type check 消灭;round 33)
 - [[0046-chainengine-snapshot-threadlocal-ownership-realignment]] —— `ChainEngine.chainSnapshotRef` 删除 + ThreadLocal 快照 + `CacheHandlerChain` 链 list 单一真理源全收口(round 33) —— `TwoListLRU` `ReentrantReadWriteLock` false seam 整删 → 降级 `ReentrantLock`(每实例 ~50% Lock 内存 + 写路径 CAS 略短 + 接口诚实化 exclusive-only;与 `LocalBloomIFilter` 真 RWLock 用例对照;round 32 lock 域二轮清理)
-- [[0050-cachedvalue-builder-fortest-seam]] —— round 36 `/improve-codebase-architecture` F1 实施:`CachedValue.builder()` 双轨死路径(`CachedValueBuilder` 73 行内嵌类 + `builder()` 工厂)整删 → `public static forTest(@Nullable value, ttl, createdTime, version, expired)` 5 参测试 seam;3 处测试 helper 全部改 1-liner;生产 seam `of()` 零变化 + Jackson 字段布局冻结 → 序列化字节字节等价;净 -62 SLOC;后续 F2/F3/F4 候选列入 ADR-0051/0052/0053
+- [[0050-cachedvalue-builder-fortest-seam]] —— round 36 `/improve-codebase-architecture` F1 实施:`CachedValue.builder()` 双轨死路径(`CachedValueBuilder` 73 行内嵌类 + `builder()` 工厂)整删 → `public static forTest(@Nullable value, ttl, createdTime, version, expired)` 5 参测试 seam;3 处测试 helper 全部改 1-liner;生产 seam `of()` 零变化 + Jackson 字段布局冻结 → 序列化字节字节等价;净 -62 SLOC;后续 F2/F3/F4 候选经 ADR-0051 复审全部驳回(false seam / 语义正交 / ROI 不足)
+- [[0051-round37-f2-f3-f4-rejection-and-stale-javadoc-fix]] —— round 37 `/improve-codebase-architecture` 后续候选复审:F2 `getCacheStatistics`↔`metrics()` 是 SDR cacheWriter 层 vs Micrometer cache 层合理分层(非双轨,违反 ADR-0029);F3 `activate`↔`runWithSnapshot` 语义正交(违反 ADR-0035/0036 既定归位);F4 `encodeForReturn` 升级破坏 nullvalue leaf 单向依赖(`NullValuePolicy` 接口契约);**唯一落地** 2 处 metrics seam stale Javadoc 断链修复(`RedisProCacheTimers:92` + `CacheMetrics:43`),纯注释 +0/-0 SLOC
 
 ## 架构(architecture/)
 

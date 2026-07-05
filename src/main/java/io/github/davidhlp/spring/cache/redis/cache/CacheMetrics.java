@@ -40,7 +40,7 @@ public record CacheMetrics(
     /**
      * 命中率 = {@code hitCount / (hitCount + missCount)};无请求时返回 {@code 0.0}。
      *
-     * <p>原 {@link RedisProCache#getHitRate()} 的算术在本方法内集中:调用方直接
+     * <p>原 {@code RedisProCache.getHitRate()} 的算术在本方法内集中:调用方直接
      * {@code cache.metrics().hitRate()} 一行,无需做除法与零保护。
      *
      * @return 命中率,范围 [0.0, 1.0]

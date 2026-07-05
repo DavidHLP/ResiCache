@@ -89,7 +89,7 @@ final class RedisProCacheTimers {
 
     /**
      * Counter null-safe increment.{@code counter == null} 时静默 no-op(等价于
-     * {@link RedisProCache#getHitCount()} 等 getter 在无 meterRegistry 时的零返回值路径)。
+     * {@link RedisProCache#metrics()} 对 null Counter 返回 {@code 0L} 的零返回值路径)。
      *
      * @param counter 待自增 Counter,生产可为 null
      */

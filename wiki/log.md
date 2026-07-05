@@ -8,7 +8,7 @@ tags:
 related: [index, overview, README, archive-2026-q2, milestone-2026-q3]
 status: stable
 created: 2026-06-21
-updated: 2026-07-03
+updated: 2026-07-05
 ---
 
 # 操作日志
@@ -19,6 +19,12 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 > - 架构决策的完整 rationale → 对应 `adr/NNNN-*.md`(条目里已标 ADR 号)。
 > - 单 commit SHA 级细节 / 旧 autonomous-loop(round 1–42)→ [[log/archive-2026-q2]]。
 > - 里程碑状态 → [[milestone-2026-q3]]。
+
+---
+
+## 2026-07-05 (round 37)
+
+- [2026-07-05] review | ADR-0051 | round 37 `/improve-codebase-architecture` 后续候选复审 — ADR-0050 预告的 F2/F3/F4 经完整通读**全部驳回**:F2 `getCacheStatistics` ↔ `metrics()` 是 SDR cacheWriter 层 vs Micrometer cache 层的合理分层独立(非双轨),合并 = false seam + 反向依赖(writer 不持有 cache 引用),违反 ADR-0029;F3 `activate`(同步嵌套作用域)↔ `runWithSnapshot`(异步跨线程边界)语义正交,合并违反 ADR-0035/0036 既定归位;F4 `encodeForReturn` 3-string 升级 CacheContext 会破坏 nullvalue leaf 包单向依赖(`NullValuePolicy` 是接口契约,ActualCacheHandler 经多态调用)。**唯一落地**:修复 F2 真实子项 —— 2 处 metrics seam stale Javadoc 断链(`RedisProCacheTimers:92` `{@link #getHitCount()}` → `{@link #metrics()}` + `CacheMetrics:43` `{@link #getHitRate()}` → `{@code ...}`);纯注释 +0/-0 SLOC,生产语义/公开 API/序列化字节零变化 → [[0051-round37-f2-f3-f4-rejection-and-stale-javadoc-fix]]
 
 ---
 
