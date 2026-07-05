@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.protection.nullvalue;
 
-import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,19 +13,22 @@ import org.springframework.cache.support.NullValue;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * DefaultNullValuePolicy 单元测试
+ * DefaultNullValuePolicy 单元测试 — Round 35 (ADR-0048) 后:
+ * 4 个纯方法 + 1 个 {@code toReturnValue} 委派测试。
+ *
+ * <p>{@code toReturnValue} 的字节生产细节由 {@link NullValueEncoderTest} 覆盖;
+ * 本测试仅验证 {@code DefaultNullValuePolicy} 委派语义。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DefaultNullValuePolicy Tests")
 class DefaultNullValuePolicyTest {
 
     @Mock
-    private TypeSupport typeSupport;
+    private NullValueEncoder encoder;
 
     @Mock
     private RedisCacheableOperation cacheOperation;
@@ -35,7 +37,7 @@ class DefaultNullValuePolicyTest {
 
     @BeforeEach
     void setUp() {
-        policy = new DefaultNullValuePolicy(typeSupport);
+        policy = new DefaultNullValuePolicy(encoder);
     }
 
     @Nested
@@ -171,57 +173,59 @@ class DefaultNullValuePolicyTest {
     }
 
     @Nested
-    @DisplayName("toReturnValue() Tests")
+    @DisplayName("toReturnValue() Tests — Round 35:delegates to NullValueEncoder")
     class ToReturnValueTests {
 
         @Test
-        @DisplayName("returns serialized NullValue when value is null")
-        void toReturnValue_nullValue_serializesNullValue() {
+        @DisplayName("forwards null value to encoder and returns encoded bytes")
+        void toReturnValue_nullValue_delegatesToEncoder() {
             byte[] expectedBytes = new byte[]{1, 2, 3};
-            when(typeSupport.serializeToBytes(NullValue.INSTANCE)).thenReturn(expectedBytes);
+            when(encoder.encodeForReturn(eq(null), eq("test-cache"), eq("key")))
+                    .thenReturn(expectedBytes);
 
             byte[] result = policy.toReturnValue(null, "test-cache", "key");
 
             assertThat(result).isEqualTo(expectedBytes);
-            verify(typeSupport).serializeToBytes(NullValue.INSTANCE);
+            verify(encoder).encodeForReturn(null, "test-cache", "key");
         }
 
         @Test
-        @DisplayName("returns serialized NullValue when value is NullValue")
-        void toReturnValue_nullValueInstance_serializesNullValue() {
+        @DisplayName("forwards NullValue.INSTANCE to encoder and returns encoded bytes")
+        void toReturnValue_nullValueInstance_delegatesToEncoder() {
             byte[] expectedBytes = new byte[]{1, 2, 3};
-            when(typeSupport.serializeToBytes(NullValue.INSTANCE)).thenReturn(expectedBytes);
+            when(encoder.encodeForReturn(eq(NullValue.INSTANCE), eq("test-cache"), eq("key")))
+                    .thenReturn(expectedBytes);
 
             byte[] result = policy.toReturnValue(NullValue.INSTANCE, "test-cache", "key");
 
             assertThat(result).isEqualTo(expectedBytes);
-            verify(typeSupport).serializeToBytes(NullValue.INSTANCE);
+            verify(encoder).encodeForReturn(NullValue.INSTANCE, "test-cache", "key");
         }
 
         @Test
-        @DisplayName("returns serialized value when value is non-null")
-        void toReturnValue_nonNull_serializesValue() {
+        @DisplayName("forwards non-null value to encoder and returns encoded bytes")
+        void toReturnValue_nonNull_delegatesToEncoder() {
             Object value = "test-value";
             byte[] expectedBytes = new byte[]{4, 5, 6};
-            when(typeSupport.serializeToBytes(value)).thenReturn(expectedBytes);
+            when(encoder.encodeForReturn(eq(value), eq("test-cache"), eq("key")))
+                    .thenReturn(expectedBytes);
 
             byte[] result = policy.toReturnValue(value, "test-cache", "key");
 
             assertThat(result).isEqualTo(expectedBytes);
-            verify(typeSupport).serializeToBytes(value);
-            verify(typeSupport, never()).serializeToBytes(NullValue.INSTANCE);
+            verify(encoder).encodeForReturn(value, "test-cache", "key");
         }
 
         @Test
-        @DisplayName("returns serialized NullValue when value is null regardless of cacheOperation")
-        void toReturnValue_nullValueAndNullCacheOperation_serializesNullValue() {
-            byte[] expectedBytes = new byte[]{1, 2, 3};
-            when(typeSupport.serializeToBytes(NullValue.INSTANCE)).thenReturn(expectedBytes);
+        @DisplayName("forwards arbitrary values to encoder with all three args")
+        void toReturnValue_arbitraryValue_delegatesToEncoder() {
+            byte[] expectedBytes = new byte[]{9, 9, 9};
+            when(encoder.encodeForReturn(any(), any(), any())).thenReturn(expectedBytes);
 
-            byte[] result = policy.toReturnValue(null, "test-cache", "key");
+            byte[] result = policy.toReturnValue("x", "test-cache", "key");
 
             assertThat(result).isEqualTo(expectedBytes);
-            verify(typeSupport).serializeToBytes(NullValue.INSTANCE);
+            verify(encoder).encodeForReturn("x", "test-cache", "key");
         }
     }
 }

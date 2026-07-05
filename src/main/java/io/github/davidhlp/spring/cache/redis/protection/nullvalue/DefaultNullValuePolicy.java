@@ -1,22 +1,28 @@
 package io.github.davidhlp.spring.cache.redis.protection.nullvalue;
 
-import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.support.NullValue;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 /**
- * 默认策略，遵循 Spring 缓存对 null 值处理的预期。
+ * 默认空值策略 — 4 个纯决策 / 恒等变换方法,外加 {@code toReturnValue} 委派给
+ * {@link NullValueEncoder} 完成 null-aware 字节编码。
+ *
+ * <p><b>Round 35 拆分动机(ADR-0047 C6 / ADR-0048)</b>:此前 5 方法中
+ * {@code toReturnValue} 是唯一耦合 {@code TypeSupport} 的方法,混入字节编码职责。
+ * 抽 seam 后本类不再 {@code import TypeSupport},全部类型支持职责经
+ * {@code NullValueEncoder} 转交;类瘦身 ~42 SLOC,单一职责清晰。
+ *
+ * <p>遵循 Spring 缓存对 null 值的预期处理语义。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class DefaultNullValuePolicy implements NullValuePolicy {
 
-    private final TypeSupport typeSupport;
+    private final NullValueEncoder encoder;
 
     /**
      * 判断是否应该缓存null值
@@ -46,7 +52,7 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
     }
 
     /**
-     * 从存储值转换回原始值
+     * 从存储值转换回原始值（恒等）
      *
      * @param storeValue 存储的值
      * @return 转换后的原始值
@@ -57,7 +63,7 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
     }
 
     /**
-     * 判断值是否为null值
+     * 判断值是否为null值（{@code value == null}）
      *
      * @param value 待判断的值
      * @return 如果是null值则返回true，否则返回false
@@ -67,26 +73,18 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
     }
 
     /**
-     * 将值转换为返回值的字节数组形式
+     * 将值转换为返回字节 — 委派 {@link NullValueEncoder#encodeForReturn}。
+     *
+     * <p>本方法已成 1 行委派,null-aware 字节编码职责完全交给 seam 类。
      *
      * @param value 待转换的值
-     * @param cacheName 缓存名称
-     * @param key 缓存键
+     * @param cacheName 缓存名称（用于 debug 日志定位）
+     * @param key 缓存键（用于 debug 日志定位）
      * @return 转换后的字节数组
      */
     @Nullable
-    public byte[] toReturnValue(@Nullable Object value, String cacheName, String key) {
-        if (isNullValue(value)) {
-            byte[] result = typeSupport.serializeToBytes(NullValue.INSTANCE);
-            log.debug(
-                    "Returning null value in standard format: cacheName={}, key={}",
-                    cacheName,
-                    key);
-            return result;
-        }
-        if (value != null) {
-            return typeSupport.serializeToBytes(value);
-        }
-        return null;
+    public byte[] toReturnValue(
+            @Nullable Object value, String cacheName, String key) {
+        return encoder.encodeForReturn(value, cacheName, key);
     }
 }
