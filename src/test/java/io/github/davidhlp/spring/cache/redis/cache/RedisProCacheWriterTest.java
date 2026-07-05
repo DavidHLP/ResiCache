@@ -2,10 +2,10 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
-import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.DefaultMethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.ScopedActivation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
@@ -62,12 +62,18 @@ class RedisProCacheWriterTest {
     private CacheHandlerChain chain;
 
     private RedisProCacheWriter writer;
+    private DefaultMethodMetadataResolver resolver;
     private Method dummyMethod;
+    private ScopedActivation activation;
 
     @BeforeEach
     void setUp() throws NoSuchMethodException {
         when(chainFactory.createChain()).thenReturn(chain);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        // ADR-0047:C3 收敛 — 测试改走 instance activate() 路径,不再直接调
+        // DefaultMethodMetadataResolver.activateStatic/clearStatic(可见性收紧至 private 后不可见)。
+        // 测试 fixture 持有 activation 引用,@AfterEach 通过 close() 恢复到调用前状态。
+        resolver = new DefaultMethodMetadataResolver();
         writer = new RedisProCacheWriter(
                 redisTemplate,
                 valueOperations,
@@ -75,15 +81,17 @@ class RedisProCacheWriterTest {
                 redisCacheRegister,
                 typeSupport,
                 chainFactory,
-                new DefaultMethodMetadataResolver());
+                resolver);
 
         dummyMethod = RedisProCacheWriterTest.class.getMethod("toString");
-        DefaultMethodMetadataResolver.activateStatic(dummyMethod, RedisProCacheWriterTest.class);
+        activation = resolver.activate(dummyMethod, RedisProCacheWriterTest.class);
     }
 
     @AfterEach
     void tearDown() {
-        DefaultMethodMetadataResolver.clearStatic();
+        if (activation != null) {
+            activation.close();
+        }
     }
 
     @Nested

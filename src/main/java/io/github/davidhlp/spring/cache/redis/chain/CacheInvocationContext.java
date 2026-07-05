@@ -82,16 +82,21 @@ public record CacheInvocationContext(
      * <p>Step 2 仅声明 API,实际调用待 Step 6 接入 {@code RedisProCacheWriter.retrieve()/store()}
      * 时实现。Step 2 临时回退到静态 {@code CacheOperationMetadataHolder} 以保证 Step 0 契约不退。
      *
+     * <p><b>ADR-0047 / C3 收敛</b>:本方法改走 {@link DefaultMethodMetadataResolver#restoreKey}
+     * (instance,package-private)而<strong>不再</strong>调静态
+     * {@code DefaultMethodMetadataResolver.activateStatic}(该 API 可见性已收紧至
+     * {@code private static},仅本类内部使用)。ThreadLocal 双写路径消除。
+     *
      * @param resolver 目标解析器(为 {@code null} 时回退到静态 holder)
      */
     public void restore(MethodMetadataResolver resolver) {
         if (method == null || targetClass == null) {
             return;
         }
-        // Step 7 落地:ThreadLocal 所有权已迁到 DefaultMethodMetadataResolver,
-        // 静态 holder 已删除。所有写入走 DefaultMethodMetadataResolver.activateStatic。
-        if (resolver instanceof DefaultMethodMetadataResolver) {
-            DefaultMethodMetadataResolver.activateStatic(method, targetClass);
+        // Step 8 / ADR-0047:ThreadLocal 所有权已在 resolver 内,restore 走 instance
+        // restoreKey(同包可见),不再跨类静态调用。
+        if (resolver instanceof DefaultMethodMetadataResolver dmrmr) {
+            dmrmr.restoreKey(method, targetClass);
         } else if (resolver != null) {
             // Fallback:其他 resolver 实现需自己实现写入路径
             log.warn("Resolver {} is not DefaultMethodMetadataResolver — restore skipped", resolver.getClass().getName());
