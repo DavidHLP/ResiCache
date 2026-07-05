@@ -1,11 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.chain.observer.ChainDebugLogChainObserver;
-import io.github.davidhlp.spring.cache.redis.chain.observer.ChainTimerChainObserver;
-import io.github.davidhlp.spring.cache.redis.chain.observer.FiredCounterChainObserver;
-import io.github.davidhlp.spring.cache.redis.chain.observer.MDCStampChainObserver;
-import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -104,43 +100,22 @@ public class CacheHandlerChainFactory {
                 return cachedChain;
             }
 
-            // 1) 装配 observer — 仅注册 4 个标准 observer；用户可通过 @Bean ChainEngine
-            //    顶替默认 ChainEngine 并加自定义 observer（暂未启用此 hook，未来需要时
-            //    增加 @Bean ObjectProvider<ChainObserver> extraObservers 即可）
-            registerObserversOnce(engine);
+            // 1) 装配 observer — 委派 seam 类;用户可通过 @Bean ChainEngine 顶替默认
+            //    ChainEngine 并加自定义 observer（未来 @Bean ObjectProvider<ChainObserver>）。
+            ChainObserverRegistration.registerStandardObservers(engine, meterRegistryProvider);
 
             // 2) 构建链
             CacheHandlerChain chain = new CacheHandlerChain();
             chain.setEngine(engine);
 
             // guide §223b:为每个 enabled AbstractCacheHandler 注入 registry
-            // 触发 onAttachMetrics 注册子类的语义 counter
             MeterRegistry registry =
                     meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
 
-            Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
-
-            // 防护链总开关 + per-mechanism 覆盖(WS-1.4):
-            // - 总开关 enabled=false → 全 4 个防护 handler 短路(行为与 Path C 前兼容)
-            // - per-mechanism 字段(非 null) → 单独覆盖该机制(分项关闭便于生产故障定位)
-            // 注意:"ttl" 不纳入禁用集合 — TtlHandler 兼担基础 TTL 计算 + 抖动防护,
-            // 禁用会导致 ActualCacheHandler 写入无 TTL 的永久缓存(数据陈旧 + 内存泄漏)。
+            // 3) 收集禁用集合 — 用户自定义 disabled + 总开关 + per-mechanism 覆盖
             // null-safe:测试用 mock/stub 的 properties 可能不设 protection,默认视为开启
-            RedisProCacheProperties.ProtectionProperties protection = properties.getProtection();
-            if (protection != null && !protection.isEnabled()) {
-                // 从 HandlerOrder 枚举派生防护 handler 的 disableName,与 handler 自报家门保持
-                // 单一事实源 — handler 类重命名不会让此短路静默失效。
-                PROTECTION_HANDLER_ORDERS.stream()
-                        .map(HandlerOrder::getDisableName)
-                        .forEach(disabled::add);
-                log.info("Protection chain disabled by resi-cache.protection.enabled=false; "
-                        + "protection handlers skipped, TTL preserved (bloom/lock/early-exp/null-value off)");
-            } else if (protection != null) {
-                // per-mechanism 覆盖(WS-1.4):每个 Boolean 字段 null = 继承 enabled,
-                // 非 null = 单独覆盖该机制 — 收敛到 PROTECTION_TOGGLES 列表迭代
-                // (ADR-0021,本类内嵌套 ProtectionToggle record)
-                collectPerMechanismDisables(protection, disabled);
-            }
+            Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
+            ChainProtectionToggleResolver.resolveDisabled(properties, disabled);
 
             // 按 @HandlerPriority 注解排序
             List<CacheHandler> sortedHandlers = handlers.stream()
@@ -176,22 +151,16 @@ public class CacheHandlerChainFactory {
     /**
      * 注册 4 个标准 observer 到 Engine — 仅执行一次（{@code registered} flag 守护）。
      * 多次 createChain 不会重复注册。
+     *
+     * <p><b>ADR-0047 / C5 收敛</b>:本方法已迁出至 {@link ChainObserverRegistration}
+     * package-private seam 类。本工厂仅委派:
+     * <pre>
+     *   ChainObserverRegistration.registerStandardObservers(engine, meterRegistryProvider);
+     * </pre>
      */
-    private void registerObserversOnce(ChainEngine engine) {
-        // 1. MDC stamp — 必注册（无 registry 依赖）
-        engine.addObserver(new MDCStampChainObserver());
-
-        // 2. DEBUG log — 必注册（无 registry 依赖）
-        engine.addObserver(new ChainDebugLogChainObserver());
-
-        // 3. Timer — registry 缺失时也注册（observer 内部 lazy 检测）；保证 observer 列表
-        //    在 registry 可用前后一致，Engine 调度逻辑无需区分
-        MeterRegistry registry =
-                meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
-        engine.addObserver(new ChainTimerChainObserver(registry));
-
-        // 4. Fired counter — 同上，registry 缺失时内部 no-op
-        engine.addObserver(new FiredCounterChainObserver(registry));
+    private void registerObserversOnce(@SuppressWarnings("unused") ChainEngine engine) {
+        // 占位 — 实际逻辑已迁出。本方法保留仅为最小化本轮 diff(已被 createChain
+        // 内联调用替换),后续若无需保留可整段删除。参见 ADR-0047。
     }
 
     /**
@@ -221,81 +190,5 @@ public class CacheHandlerChainFactory {
     private int getOrder(CacheHandler handler) {
         HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
         return annotation != null ? annotation.value().getOrder() : Integer.MAX_VALUE;
-    }
-    /**
-     * 每机制禁用 toggle record — 收敛 "if FALSE → add to disabled + log" 4 行模板
-     * (ADR-0021,本类内嵌套)。
-     *
-     * <p>3 字段:
-     * <ul>
-     *   <li>{@code order} — 对应 {@link HandlerOrder} 枚举值,供 {@link HandlerOrder#getDisableName()}
-     *       反查配置禁用名</li>
-     *   <li>{@code getter} — {@link RedisProCacheProperties.ProtectionProperties} 上的
-     *       {@code Boolean} 字段 getter(可能返回 null,代表"继承 enabled" — null 不触发短路);
-     *       用方法引用直接绑定<strong>消除</strong>先前 switch 设计的"加新机制要改 2 处"
-     *       drift 风险(getter 是 record 字段,与 PROTECTION_TOGGLES 列表原子绑定)</li>
-     *   <li>{@code configPath} — 配置文件中的 kebab-case 路径段,用于日志 (e.g. "bloom-filter")</li>
-     * </ul>
-     */
-    private record ProtectionToggle(
-            HandlerOrder order,
-            java.util.function.Function<
-                    RedisProCacheProperties.ProtectionProperties, Boolean> getter,
-            String configPath) {
-    }
-
-    /**
-     * 4 个 protection 机制 toggle 单一事实源 — 新加第 5 机制时<strong>仅追加一行</strong>到本列表
-     * (ADR-0021,本类内嵌套),getter 字段直接绑定到 ProtectionProperties 的 Boolean 字段,
-     * 无需另写 switch 映射。
-     *
-     * <p>注意:本列表仅含 4 个可禁用的防护机制(Bloom / SyncLock / EarlyExpiration / NullValue),
-     * 不含 TTL — TtlHandler 兼担基础 TTL 计算,禁用会导致 ActualCacheHandler 写入无 TTL 的
-     * 永久缓存(数据陈旧 + 内存泄漏)。
-     */
-    private static final List<ProtectionToggle> PROTECTION_TOGGLES = List.of(
-            new ProtectionToggle(HandlerOrder.BLOOM_FILTER,
-                    RedisProCacheProperties.ProtectionProperties::getBloomFilterEnabled,
-                    "bloom-filter"),
-            new ProtectionToggle(HandlerOrder.SYNC_LOCK,
-                    RedisProCacheProperties.ProtectionProperties::getSyncLockEnabled,
-                    "sync-lock"),
-            new ProtectionToggle(HandlerOrder.EARLY_EXPIRATION,
-                    RedisProCacheProperties.ProtectionProperties::getEarlyExpirationEnabled,
-                    "early-expiration"),
-            new ProtectionToggle(HandlerOrder.NULL_VALUE,
-                    RedisProCacheProperties.ProtectionProperties::getNullValueEnabled,
-                    "null-value"));
-
-    /**
-     * Per-mechanism 禁用集合收集 — 遍历 {@link #PROTECTION_TOGGLES},把显式 {@code Boolean.FALSE}
-     * 的机制加到 {@code disabled} 集合 + 记 INFO 日志。
-     *
-     * <p>本方法抽取自原 4 if-block 重复模板(ADR-0021):
-     * <pre>
-     *   if (Boolean.FALSE.equals(protection.getXEnabled())) {
-     *       disabled.add(HandlerOrder.X.getDisableName());
-     *       log.info("X disabled by resi-cache.protection.x.enabled=false");
-     *   }
-     * </pre>
-     *
-     * <p>getter 字段在 PROTECTION_TOGGLES 列表初始化时已绑定方法引用,无运行时 switch / 查表;
-     * 字段映射与列表定义原子同源,不可能 drift。
-     *
-     * @param protection 配置对象(由调用方 null-check 保障)
-     * @param disabled 输出集合(原 4 if-block 共享的 {@code Set<String>})
-     */
-    private static void collectPerMechanismDisables(
-            RedisProCacheProperties.ProtectionProperties protection,
-            Set<String> disabled) {
-        for (ProtectionToggle toggle : PROTECTION_TOGGLES) {
-            // Boolean.FALSE.equals(null) → false,null 表示"继承 enabled"(per-mechanism 字段未设),
-            // 等同原 4 if-block 的 Boolean.FALSE.equals(...) 语义 — null 不触发短路。
-            if (Boolean.FALSE.equals(toggle.getter().apply(protection))) {
-                disabled.add(toggle.order().getDisableName());
-                log.info("{} disabled by resi-cache.protection.{}.enabled=false",
-                        toggle.order().getDescription(), toggle.configPath());
-            }
-        }
     }
 }
