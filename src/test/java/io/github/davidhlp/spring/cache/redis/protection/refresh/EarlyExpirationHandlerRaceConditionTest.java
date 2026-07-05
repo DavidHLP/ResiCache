@@ -86,14 +86,7 @@ class EarlyExpirationHandlerRaceConditionTest {
     }
 
     private CachedValue createCachedValue(long ttlSeconds, long createdTime, long version) {
-        return CachedValue.builder()
-                .value("test-value")
-                .type(String.class)
-                .ttl(ttlSeconds)
-                .createdTime(createdTime)
-                .startNanoTime(System.nanoTime())
-                .version(version)
-                .build();
+        return CachedValue.forTest("test-value", ttlSeconds, createdTime, version, false);
     }
 
     @Test

@@ -3,6 +3,8 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
+import org.springframework.lang.Nullable;
+
 /**
  * 缓存值包装类
  *
@@ -66,78 +68,33 @@ public final class CachedValue {
                 nowNano);
     }
 
-    public static CachedValueBuilder builder() {
-        return new CachedValueBuilder();
-    }
-
-    public static class CachedValueBuilder {
-        private Object value;
-        private Class<?> type;
-        private long ttl = 60;
-        private long createdTime = System.currentTimeMillis();
-        private long startNanoTime = 0L;
-        private long lastAccessTime = System.currentTimeMillis();
-        private long visitTimes = 0L;
-        private boolean expired = false;
-        private long version = 1L;
-
-        public CachedValueBuilder value(Object value) {
-            this.value = value;
-            return this;
-        }
-
-        public CachedValueBuilder type(Class<?> type) {
-            this.type = type;
-            return this;
-        }
-
-        public CachedValueBuilder ttl(long ttl) {
-            this.ttl = ttl;
-            return this;
-        }
-
-        public CachedValueBuilder createdTime(long createdTime) {
-            this.createdTime = createdTime;
-            return this;
-        }
-
-        public CachedValueBuilder startNanoTime(long startNanoTime) {
-            this.startNanoTime = startNanoTime;
-            return this;
-        }
-
-        public CachedValueBuilder version(long version) {
-            this.version = version;
-            return this;
-        }
-
-        public CachedValueBuilder expired(boolean expired) {
-            this.expired = expired;
-            return this;
-        }
-
-        public CachedValueBuilder lastAccessTime(long lastAccessTime) {
-            this.lastAccessTime = lastAccessTime;
-            return this;
-        }
-
-        public CachedValueBuilder visitTimes(long visitTimes) {
-            this.visitTimes = visitTimes;
-            return this;
-        }
-
-        public CachedValue build() {
-            return new CachedValue(
-                    value,
-                    type != null ? type : (value != null ? value.getClass() : Object.class),
-                    ttl,
-                    createdTime,
-                    startNanoTime,
-                    lastAccessTime,
-                    visitTimes,
-                    expired,
-                    version);
-        }
+    /**
+     * 仅供测试使用：用指定 {@code createdTime} / {@code version} / {@code expired}
+     * 三维覆盖构造 {@link CachedValue}（{@code type} / {@code startNanoTime} 仍按
+     * {@link #of(Object, long)} 默认自动派生，避免与生产 seam 行为漂移）。
+     *
+     * <p>替换被删除的 {@code CachedValueBuilder}（75 行死代码路径：唯一生产 seam
+     * 是 {@link #of(Object, long)}，builder 仅剩 3 处测试 helper 在用）。
+     *
+     * <p><b>Visible for testing</b>：因测试类分布在不同包（{@code chain}、
+     * {@code protection.refresh}、{@code serialization}），使用 {@code public}
+     * 以便跨包访问；调用契约由 Javadoc 与单元测试约束，<b>生产代码严禁引用</b>，
+     * 唯一生产 seam 仍是 {@link #of(Object, long)}。
+     */
+    public static CachedValue forTest(@Nullable Object value, long ttl,
+                                      long createdTime, long version, boolean expired) {
+        long nowNano = System.nanoTime();
+        // lastAccessTime 维持与 of() 一致：createdTime 时刻即最后访问。
+        return new CachedValue(
+                value,
+                value != null ? value.getClass() : Object.class,
+                ttl,
+                createdTime,
+                nowNano,
+                createdTime,
+                0L,
+                expired,
+                version);
     }
 
     public Object getValue() {

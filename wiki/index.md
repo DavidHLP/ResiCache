@@ -86,6 +86,7 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[0044-annotationchainobserver-yagni-dead-channel-removal]] —— `AnnotationChainObserver` 死 observer 通道删除(0 生产实现;Engine 退化为单职责;round 33)
 - [[0045-postprocesshandler-cachehandler-merge-and-parasitic-keys-attribution]] —— `PostProcessHandler` 折回 `CacheHandler` default no-op + 寄生属性键归位(Bloom POST_PROCESS_KEY / SyncLock LOCK_ACQUIRED_KEY;seam type check 消灭;round 33)
 - [[0046-chainengine-snapshot-threadlocal-ownership-realignment]] —— `ChainEngine.chainSnapshotRef` 删除 + ThreadLocal 快照 + `CacheHandlerChain` 链 list 单一真理源全收口(round 33) —— `TwoListLRU` `ReentrantReadWriteLock` false seam 整删 → 降级 `ReentrantLock`(每实例 ~50% Lock 内存 + 写路径 CAS 略短 + 接口诚实化 exclusive-only;与 `LocalBloomIFilter` 真 RWLock 用例对照;round 32 lock 域二轮清理)
+- [[0050-cachedvalue-builder-fortest-seam]] —— round 36 `/improve-codebase-architecture` F1 实施:`CachedValue.builder()` 双轨死路径(`CachedValueBuilder` 73 行内嵌类 + `builder()` 工厂)整删 → `public static forTest(@Nullable value, ttl, createdTime, version, expired)` 5 参测试 seam;3 处测试 helper 全部改 1-liner;生产 seam `of()` 零变化 + Jackson 字段布局冻结 → 序列化字节字节等价;净 -62 SLOC;后续 F2/F3/F4 候选列入 ADR-0051/0052/0053
 
 ## 架构(architecture/)
 

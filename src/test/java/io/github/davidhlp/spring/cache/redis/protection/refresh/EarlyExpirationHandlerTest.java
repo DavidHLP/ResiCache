@@ -79,14 +79,7 @@ class EarlyExpirationHandlerTest {
     }
 
     private CachedValue createCachedValue(long ttlSeconds, long createdTime) {
-        return CachedValue.builder()
-                .value("test-value")
-                .type(String.class)
-                .ttl(ttlSeconds)
-                .createdTime(createdTime)
-                .startNanoTime(System.nanoTime())
-                .version(1L)
-                .build();
+        return CachedValue.forTest("test-value", ttlSeconds, createdTime, 1L, false);
     }
 
     @Nested
@@ -159,15 +152,12 @@ class EarlyExpirationHandlerTest {
         void doHandle_cacheValueExpired_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = CachedValue.builder()
-                    .value("test-value")
-                    .type(String.class)
-                    .ttl(60)
-                    .createdTime(System.currentTimeMillis() - 120000)
-                    .startNanoTime(System.nanoTime())
-                    .version(1L)
-                    .expired(true)
-                    .build();
+            CachedValue cachedValue = CachedValue.forTest(
+                    "test-value",
+                    60,
+                    System.currentTimeMillis() - 120000,
+                    1L,
+                    true);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
 
             HandlerResult result = handler.doHandle(context);

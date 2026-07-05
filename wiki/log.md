@@ -22,6 +22,13 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ---
 
+## 2026-07-05 (round 36 + JDK 21)
+
+- [2026-07-05] refactor | ADR-0050 | round 36 `/improve-codebase-architecture` F1 实施 — `CachedValue.builder()` 双轨死路径(`CachedValueBuilder` 73 行内嵌类 + `builder()` 工厂)整删;新增 `public static forTest(@Nullable value, ttl, createdTime, version, expired)` 测试专用 seam(原 9-setter 链式收敛为 5 参 1-liner 委派);3 处测试 helper(`EarlyExpirationHandlerTest` ×2 + `EarlyExpirationHandlerRaceConditionTest` ×1)全部改写;**生产 seam `of()` 签名/语义零变化** + Jackson 字段布局冻结 → **wire 字节字节等价**;后续 F2/`getCacheStatistics` ↔ `metrics()` 双轨 + 残留 stale 文档 = ADR-0051 候选;净 -62 SLOC;744 tests / 0 fail / 0 err / 17 skipped Docker ✓
+- [2026-07-05] improve | JDK 21 完整 runtime 安装 — `vfox install java@21+35`(原损坏 tarball 直连重下被 vfox 绕过,改走 vfox plugin 完整链路)→ `~/.vfox/cache/java/v-21+35/java-21+35/`(`java -version` = "openjdk version 21");**真 release=21 编译通过**;Fedora 44 WSL 上后续 `mvn test` 不再需要 `-Djava.version=17` 兜底 override
+
+---
+
 ## 2026-07-04 (continued, round 33)
 
 - [2026-07-04] improve | ADR-0044/0045/0046(round 33) | `/improve-codebase-architecture` 三连深化:(C1) `AnnotationChainObserver` 死 observer 通道删除(0 生产实现 + 6 测试删除,Engine 净 -44 SLOC);(C3+C4) `PostProcessHandler` 折回 `CacheHandler` default no-op + `BloomFilterHandler.POST_PROCESS_KEY` / `SyncLockHandler.LOCK_ACQUIRED_KEY` 死 seam 删除(seam type check 消灭 + 净 -49 SLOC);(C5) `ChainEngine.chainSnapshotRef` 删除 + ThreadLocal 快照 + `CacheHandlerChain` 全收口(链 list 单一真理源收敛);**注意:HTML 报告 C2(AttributeKey 嵌套类)在 context check 中判定为误诊,源码不存在,扼杀**;742 tests / 0 failures / 0 errors / 17 skipped(byte-equivalent 全绿)
