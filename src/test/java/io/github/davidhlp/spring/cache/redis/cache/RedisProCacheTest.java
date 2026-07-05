@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.github.davidhlp.spring.cache.redis.cache.CacheMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -153,9 +154,10 @@ class RedisProCacheTest {
     class HitRateTests {
 
         @Test
-        @DisplayName("getHitRate returns 0 when no requests")
-        void getHitRate_withNoRequests_returnsZero() {
-            assertThat(cache.getHitRate()).isEqualTo(0.0);
+        @DisplayName("metrics.hitRate returns 0 when no requests")
+        void metricsHitRate_withNoRequests_returnsZero() {
+            // ADR-0047 / C2:hitRate 算术收敛到 CacheMetrics record,测试断言单一方法。
+            assertThat(cache.metrics().hitRate()).isEqualTo(0.0);
         }
     }
 
@@ -175,28 +177,17 @@ class RedisProCacheTest {
             assertThat(putTimer).isNotNull();
             assertThat(evictTimer).isNotNull();
         }
-    }
-
-    @Nested
-    @DisplayName("Counter Tests")
-    class CounterTests {
 
         @Test
-        @DisplayName("initial hit count is zero")
-        void initialHitCount_isZero() {
-            assertThat(cache.getHitCount()).isEqualTo(0);
-        }
-
-        @Test
-        @DisplayName("initial miss count is zero")
-        void initialMissCount_isZero() {
-            assertThat(cache.getMissCount()).isEqualTo(0);
-        }
-
-        @Test
-        @DisplayName("initial put count is zero")
-        void initialPutCount_isZero() {
-            assertThat(cache.getPutCount()).isEqualTo(0);
+        @DisplayName("metrics() returns zero snapshot on fresh cache")
+        void metrics_returnsZeroSnapshot_onFreshCache() {
+            // ADR-0047 / C2:5 个 getter 合并到单一 metrics() seam,测试断言整个值对象。
+            CacheMetrics snapshot = cache.metrics();
+            assertThat(snapshot.hitCount()).isEqualTo(0);
+            assertThat(snapshot.missCount()).isEqualTo(0);
+            assertThat(snapshot.putCount()).isEqualTo(0);
+            assertThat(snapshot.evictCount()).isEqualTo(0);
+            assertThat(snapshot.hitRate()).isEqualTo(0.0);
         }
     }
 }

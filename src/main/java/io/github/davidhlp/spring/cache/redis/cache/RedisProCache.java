@@ -240,25 +240,27 @@ public class RedisProCache extends RedisCache {
         RedisProCacheTimers.timed(evictTimer, super::clear);
     }
 
-    public long getHitCount() {
-        return hitCounter != null ? (long) hitCounter.count() : 0L;
-    }
-
-    public long getMissCount() {
-        return missCounter != null ? (long) missCounter.count() : 0L;
-    }
-
-    public long getPutCount() {
-        return putCounter != null ? (long) putCounter.count() : 0L;
-    }
-
-    public long getEvictCount() {
-        return evictCounter != null ? (long) evictCounter.count() : 0L;
-    }
-
-    public double getHitRate() {
-        long hits = getHitCount();
-        long total = hits + getMissCount();
-        return total > 0 ? (double) hits / total : 0.0;
+    /**
+     * 当前缓存实例的指标快照 — ADR-0047 / C2 收敛.
+     *
+     * <p>本方法替代原 5 个 {@code getXCount()} 委托 + {@code getHitRate()} 派生方法,
+     * 用 1 个 deep 方法返回不可变 {@link CacheMetrics} 值对象:
+     * <ul>
+     *   <li>4 个 Counter 字段(hit/miss/put/evict)在 factory 内一次性 null-safe 读取
+     *       —— 等价于原 getter 的 {@code field != null ? count : 0L} 语义</li>
+     *   <li>派生指标 {@code hitRate} 在 record 内集中计算,调用方不再做除法</li>
+     * </ul>
+     *
+     * <p>Spring Boot Actuator 与 Micrometer Timer/Counter 注册维持原状
+     * (本方法只读,不重置),外部观测不破坏。
+     *
+     * @return 当前缓存实例的指标快照(不可变)
+     */
+    public CacheMetrics metrics() {
+        long hits = hitCounter != null ? (long) hitCounter.count() : 0L;
+        long misses = missCounter != null ? (long) missCounter.count() : 0L;
+        long puts = putCounter != null ? (long) putCounter.count() : 0L;
+        long evicts = evictCounter != null ? (long) evictCounter.count() : 0L;
+        return new CacheMetrics(hits, misses, puts, evicts);
     }
 }
