@@ -22,6 +22,12 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ---
 
+## 2026-07-06 (archive)
+
+- [2026-07-06] archive | wiki/adr → wiki/archive/adr | 归档全部 52 篇 ADR(A 类定位型 0001-0008 + B 类深化型 0009-0052)+ INDEX + rounds/CHRONICLE)移出常规阅读路径——历史决策过度约束 agent 发散思维;同步修复 7 个外部引用(`CLAUDE.md` / `README.md` / `README.zh-CN.md` / `docs/comparison.md` / `STABILITY.md` / `wiki/index.md` / `wiki/modules/observability.md`)+ CHRONICLE 内部 `../../log` 跨目录链接深度 +1(2 处);本文件 2026-07-05 历史 append-only lint 条目保留原文不改(改历史=篡改事实);新增 `wiki/archive/README.md` 归档区指引 → [[archive/README]]
+
+---
+
 ## 2026-07-06 (round 38)
 
 - [2026-07-06] improve | ADR-0052 | round 38 `/improve-codebase-architecture` 兑现 ADR-0051 遗嘱「扫新域」—— 扫 **chain 写路径**(前 37 轮未触及 `ActualCacheHandler.handlePut/handlePutIfAbsent` 内部):发现 ADR-0033 安装的 `TtlDecision` / `NullDecision` 在消费侧有 **2 处近镜像样板**(13 行 TTL 分支 × 2 + 5 行 storeValue 解析 × 2 = 36 行),过 ADR-0029 single-adapter real-seam 门槛(2 site);落实为 `ActualCacheHandler` 私有 `StoreIntent(CachedValue, @Nullable Duration)` 深模块 + `applyPut` / `applyPutIfAbsent`(收口 `set`/`setIfAbsent` 重载选择 + `-1` 永久缓存哨兵 + `Duration.ofSeconds` 映射)+ 私有 `resolveStoreValue` / `resolveStoreIntent` helper;handlePut/handlePutIfAbsent 核心写路径各塌缩到 2 行。**备选路径 W(全 5 handle 套大模板)/ Y(推到 TtlDecision/NullDecision record)/ Z(推到 CacheContext)经红蓝博弈全数驳回**;净 +52 SLOC 全为 Javadoc,代码行(不含 Javadoc)约 -7;**公开 API / 序列化字节 / Redis 重载选择 / `Duration.ofSeconds(finalTtl)` 全 byte-equivalent**;744 tests / 0 fail / 0 err / 17 skipped ✓ → [[0052-actualcachehandler-storeintent-deep-module]]

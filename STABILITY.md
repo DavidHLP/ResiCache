@@ -20,7 +20,7 @@ a documented migration path (⚠️ BREAKING entry in
 |---------|-------------|-------|
 | **Enhancement annotation signatures** | `@RedisCacheable`, `@RedisCachePut`, `@RedisCacheEvict`, `@RedisCaching` | Attribute names, types, and semantics. Adding new attributes is non-breaking. |
 | **Configuration property keys** | `resi-cache.*` namespace under `application.yml` / `application.properties` | Property names and types. Adding new properties is non-breaking. |
-| **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Per [`ADR-0003`](./wiki/adr/0003-serialization-envelope.md). Envelope is the serialization contract — kept, not loosened. |
+| **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Per [`ADR-0003`](./wiki/archive/adr/0003-serialization-envelope.md). Envelope is the serialization contract — kept, not loosened. |
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.
@@ -81,9 +81,9 @@ those areas open for tuning.
 
 - [`CHANGELOG.md`](./CHANGELOG.md) — per-version changelog including
   ⚠️ BREAKING markers.
-- [`ADR-0003`](./wiki/adr/0003-serialization-envelope.md) — serialization
+- [`ADR-0003`](./wiki/archive/adr/0003-serialization-envelope.md) — serialization
   envelope decision (kept `{version, payload}`).
-- [`ADR-0005`](./wiki/adr/0005-kernel-extraction-hedge.md) — kernel
+- [`ADR-0005`](./wiki/archive/adr/0005-kernel-extraction-hedge.md) — kernel
   extraction hedge (Spring AOP limits on interceptor inheritance depth).
 - [`COMPETITIVENESS_GUIDE.md`](./COMPETITIVENESS_GUIDE.md) §3 pillar A
   and §6 Week 9-10 — the strategic context that motivated this contract.

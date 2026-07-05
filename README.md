@@ -260,7 +260,7 @@ ResiCache is one of four common options for caching on top of Redis: JetCache,
 Caffeine, raw Redisson, and ResiCache. The detailed feature matrix, honest
 trade-offs, and "when to pick which" guidance live in
 [`docs/comparison.md`](docs/comparison.md) — including the line the project
-ships under (see also [ADR-0006](wiki/adr/0006-redisson-companion-positioning.md):
+ships under (see also [ADR-0006](wiki/archive/adr/0006-redisson-companion-positioning.md):
 "ResiCache for Redisson — the declarative cache protection chain Redisson
 forgot to ship").
 

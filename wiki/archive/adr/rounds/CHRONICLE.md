@@ -5,7 +5,7 @@ tags:
   - meta
   - adr
   - chronicle
-related: [../INDEX, ../../log/archive-2026-q3]
+related: [../INDEX, ../../../log/archive-2026-q3]
 status: stable
 created: 2026-07-05
 updated: 2026-07-06
@@ -13,7 +13,7 @@ updated: 2026-07-06
 
 # ADR 深化型 round 编年(B 类:0009-0052)
 
-> 43 篇深化型 ADR 的 round delta 一表收口。详细决策见各 ADR 卡片;过程实施日志(逐 commit)由 git history 与 [[../../log/archive-2026-q3]] 保留,此处不重复。
+> 43 篇深化型 ADR 的 round delta 一表收口。详细决策见各 ADR 卡片;过程实施日志(逐 commit)由 git history 与 [[../../../log/archive-2026-q3]] 保留,此处不重复。
 
 ### 阶段 1 · Chain Engine 抽出 + seam 化
 

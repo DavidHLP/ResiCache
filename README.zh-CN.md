@@ -265,7 +265,7 @@ TTL 随机化避免大量缓存同时过期：
 在 Redis 之上做缓存,常见有四个选项:JetCache、Caffeine、裸 Redisson、
 ResiCache。详细功能矩阵、诚实优缺点对比、选型指引见
 [`docs/comparison.md`](docs/comparison.md)(也参考
-[ADR-0006](wiki/adr/0006-redisson-companion-positioning.md):**ResiCache for
+[ADR-0006](wiki/archive/adr/0006-redisson-companion-positioning.md):**ResiCache for
 Redisson — Redisson 忘了做的那条可声明缓存防护链**)。
 
 一句话结论:**JetCache 缺的那 3 项防护,以 Redisson-native 责任链补齐** —

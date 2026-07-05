@@ -60,7 +60,7 @@ ResiCache 走 Spring Boot actuator 既有体系,不发明独立指标框架。
 
 ## 责任链执行可观测性
 
-责任链执行提供三层 runtime 信号(装配由 `CacheHandlerChainFactory` + `ChainObserver` 统一收口,见 [[adr/rounds/0009-chain-engine-extraction]] / [[adr/rounds/0018-semantic-counter-template-method]]):
+责任链执行提供三层 runtime 信号(装配由 `CacheHandlerChainFactory` + `ChainObserver` 统一收口,见 [[archive/adr/rounds/0009-chain-engine-extraction]] / [[archive/adr/rounds/0018-semantic-counter-template-method]]):
 
 | 信号 | 类型 | 说明 |
 |---|---|---|
