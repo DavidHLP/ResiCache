@@ -8,10 +8,10 @@ tags:
 related: [../INDEX, ../../log/archive-2026-q3]
 status: stable
 created: 2026-07-05
-updated: 2026-07-05
+updated: 2026-07-06
 ---
 
-# ADR 深化型 round 编年(B 类:0009-0051)
+# ADR 深化型 round 编年(B 类:0009-0052)
 
 > 43 篇深化型 ADR 的 round delta 一表收口。详细决策见各 ADR 卡片;过程实施日志(逐 commit)由 git history 与 [[../../log/archive-2026-q3]] 保留,此处不重复。
 
@@ -84,3 +84,4 @@ updated: 2026-07-05
 - [[0049-c6-nullvalueencoder-implementation]] — C6 NullValueEncoder 实现
 - [[0050-cachedvalue-builder-fortest-seam]] — `CachedValue.builder` 双轨死路径删 → `forTest` seam
 - [[0051-round37-f2-f3-f4-rejection-and-stale-javadoc-fix]] — Round 37 F2/F3/F4 驳回 + stale Javadoc 修
+- [[0052-actualcachehandler-storeintent-deep-module]] — ActualCacheHandler 写路径 TTL/storeValue 样板收敛 → StoreIntent 私有深模块

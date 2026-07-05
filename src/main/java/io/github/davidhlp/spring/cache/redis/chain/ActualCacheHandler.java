@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.*;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
@@ -149,41 +150,27 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
     /**
      * 处理 PUT 操作
-     * 
+     *
      * 注意：锁逻辑已由 SyncLockHandler 处理
      */
     private CacheResult handlePut(CacheContext context) {
         Assert.hasText(context.getCacheName(), "Cache name must not be empty");
         Assert.hasText(context.getRedisKey(), "Redis key must not be empty");
 
+        TtlDecision ttl = context.getTtlDecision();
         log.debug("Cache PUT: cacheName={}, key={}, shouldApplyTtl={}, finalTtl={}",
                   context.getCacheName(), context.getRedisKey(),
-                  context.getTtlDecision() != null && context.getTtlDecision().shouldApplyTtl(),
-                  context.getTtlDecision() != null ? context.getTtlDecision().finalTtl() : -1L);
+                  ttl != null && ttl.shouldApplyTtl(),
+                  ttl != null ? ttl.finalTtl() : -1L);
 
         try {
             // 取消可能的异步提前过期任务
             earlyExpirationExecutor.cancel(context.getRedisKey());
 
-            // 获取存储值（ADR-0033:NullValueHandler 写入 NullDecision；null 表示沿用 input.deserializedValue）
-            Object storeValue = context.getNullDecision() != null
-                    ? context.getNullDecision().storeValue()
-                    : null;
-            if (storeValue == null) {
-                storeValue = context.getDeserializedValue();
-            }
-
-            // 创建 CachedValue 并存储（ADR-0033:从 TtlDecision 读取）
-            CachedValue cachedValue;
-            if (context.getTtlDecision() != null && context.getTtlDecision().shouldApplyTtl()) {
-                long ttl = context.getTtlDecision().finalTtl();
-                cachedValue = CachedValue.of(storeValue, ttl);
-                valueOperations.set(context.getRedisKey(), cachedValue, Duration.ofSeconds(ttl));
-            } else {
-                cachedValue = CachedValue.of(storeValue, -1);
-                valueOperations.set(context.getRedisKey(), cachedValue);
-            }
-
+            // 解析存储意图（NullDecision 的 storeValue + TtlDecision 的 finalTtl → CachedValue + 可选 TTL，
+            // 重载选择 / -1 哨兵 / Duration 映射全部收口在 StoreIntent 内）
+            StoreIntent intent = resolveStoreIntent(context, resolveStoreValue(context));
+            intent.applyPut(valueOperations, context.getRedisKey());
 
             log.debug("Cache PUT success: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
@@ -208,28 +195,10 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         log.debug("Cache PUT_IF_ABSENT: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
         try {
-            // 获取存储值（ADR-0033:NullDecision 优先,否则沿用 input.deserializedValue）
-            Object storeValue = context.getNullDecision() != null
-                    ? context.getNullDecision().storeValue()
-                    : null;
-            if (storeValue == null) {
-                storeValue = context.getDeserializedValue();
-            }
-
-            // 原子条件写入：SETNX 保证不存在时才写入，消除 TOCTOU 竞态
-            CachedValue cachedValue;
-            Boolean success;
-
-            if (context.getTtlDecision() != null && context.getTtlDecision().shouldApplyTtl()) {
-                long ttl = context.getTtlDecision().finalTtl();
-                cachedValue = CachedValue.of(storeValue, ttl);
-                success = valueOperations.setIfAbsent(context.getRedisKey(), cachedValue, Duration.ofSeconds(ttl));
-            } else {
-                cachedValue = CachedValue.of(storeValue, -1);
-                success = valueOperations.setIfAbsent(context.getRedisKey(), cachedValue);
-            }
-
-            if (Boolean.TRUE.equals(success)) {
+            // 解析存储意图 + 原子条件写入（SETNX 保证不存在时才写入，消除 TOCTOU 竞态；
+            // 重载选择 / -1 哨兵 / Duration 映射全部收口在 StoreIntent 内）
+            StoreIntent intent = resolveStoreIntent(context, resolveStoreValue(context));
+            if (intent.applyPutIfAbsent(valueOperations, context.getRedisKey())) {
                 log.debug("Cache PUT_IF_ABSENT success: cacheName={}, key={}",
                           context.getCacheName(), context.getRedisKey());
                 return CacheResult.success();
@@ -353,5 +322,88 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         }
         Long deleted = connection.keyCommands().del(keys);
         return deleted != null ? deleted : 0L;
+    }
+
+    // ==================== 存储意图解析（PUT / PUT_IF_ABSENT 共享） ====================
+
+    /**
+     * 存储意图 — 把 chain 的 {@link NullDecision} + {@link TtlDecision} 解析为一个不可变的
+     * "写什么 + 写多久"决议物，是 PUT / PUT_IF_ABSENT 两个写路径共享的深模块。
+     *
+     * <p>封装三件原本散落在 handlePut / handlePutIfAbsent 各 13 行近镜像样板中的复杂度：
+     * <ol>
+     *   <li>Spring Data Redis 的 {@code set} / {@code setIfAbsent} 各有「带 Duration」与
+     *       「不带 Duration」两条重载；{@code ttl == null}（永久缓存）走无 Duration 重载、
+     *       {@code ttl != null} 走三参重载。重载选择在本记录内部收口，调用方只看到
+     *       {@link #applyPut} / {@link #applyPutIfAbsent} 两个语义方法。</li>
+     *   <li>{@link CachedValue#of(Object, long)} 的 {@code -1} 永久缓存哨兵仅本记录产生
+     *       （skipped / TtlDecision 缺席分支），避免 {@code -1} 字面量散落到两个 handle 方法。</li>
+     *   <li>{@code Duration.ofSeconds(finalTtl)} 的单位映射仅本记录产生。</li>
+     * </ol>
+     *
+     * <p><b>deepening 理由（vs 内联）</b>：handlePut 与 handlePutIfAbsent 原各持一段 13 行
+     * 近镜像的 TTL 分支 + CachedValue 构造 + 重载选择样板。本记录 + 两个 {@code resolve}
+     * helper 把这段复杂度从两处搬家到一处<b>浓缩</b>（deletion test：删掉后内联回去 =
+     * 重复回归，复杂度上升而非下降 → 真 seam）。同时让「存储意图」这个隐含概念获得命名
+     * 与 locality，未来新增写路径可直接复用。
+     *
+     * <p>本记录为 ActualCacheHandler 私有：当前仅 PUT / PUT_IF_ABSENT 两个消费者，
+     * 未达提升为顶层类型的必要性（YAGNI）。
+     *
+     * @param cachedValue 已封装好的存储值（含 finalTtl / -1 哨兵）
+     * @param ttl         应用 TTL 时的 {@link Duration}；{@code null} 表示永久缓存（走无 Duration 重载）
+     */
+    private record StoreIntent(CachedValue cachedValue, @Nullable Duration ttl) {
+
+        /** PUT 路径：据 ttl 选 {@code ValueOperations.set} 重载（无返回值）。 */
+        void applyPut(ValueOperations<String, Object> ops, String key) {
+            if (ttl != null) {
+                ops.set(key, cachedValue, ttl);
+            } else {
+                ops.set(key, cachedValue);
+            }
+        }
+
+        /** PUT_IF_ABSENT 路径：据 ttl 选 {@code ValueOperations.setIfAbsent} 重载；返回是否写入成功。 */
+        boolean applyPutIfAbsent(ValueOperations<String, Object> ops, String key) {
+            Boolean success = (ttl != null)
+                    ? ops.setIfAbsent(key, cachedValue, ttl)
+                    : ops.setIfAbsent(key, cachedValue);
+            return Boolean.TRUE.equals(success);
+        }
+    }
+
+    /**
+     * 解析存储值 — {@link NullDecision} 在场且 {@link NullDecision#storeValue()} 非 null 时
+     * 用决策值；否则（NullDecision 缺席，或显式 {@link NullDecision#of(Object) of(null)}
+     * 表示「无需转换」）沿用 {@link CacheContext#getDeserializedValue() deserializedValue}。
+     *
+     * <p>提取理由：handlePut 与 handlePutIfAbsent 原各持一段相同的 5 行 null-fallback 样板。
+     */
+    private Object resolveStoreValue(CacheContext context) {
+        NullDecision nullDecision = context.getNullDecision();
+        if (nullDecision != null && nullDecision.storeValue() != null) {
+            return nullDecision.storeValue();
+        }
+        return context.getDeserializedValue();
+    }
+
+    /**
+     * 解析存储意图 — {@link TtlDecision} 在场且 {@link TtlDecision#shouldApplyTtl()} 为真时
+     * 物化为带 TTL 的 {@link StoreIntent}（CachedValue 携 finalTtl、Duration 为 ofSeconds(finalTtl)）；
+     * 否则（TtlDecision 缺席，或 {@link TtlDecision#skipped() skipped}）物化为永久缓存
+     * （CachedValue 携 -1、Duration 为 null → 调用方走无 TTL 重载）。
+     *
+     * <p>提取理由：handlePut 与 handlePutIfAbsent 原各持一段相同的 13 行 TTL 分支 +
+     * CachedValue 构造样板；本方法 + {@link StoreIntent} 把「TTL 决策如何物化为存储意图」
+     * 浓缩为单点，调用方仅剩"调 applyPut / applyPutIfAbsent"的 1-liner。
+     */
+    private StoreIntent resolveStoreIntent(CacheContext context, Object storeValue) {
+        TtlDecision ttl = context.getTtlDecision();
+        if (ttl != null && ttl.shouldApplyTtl()) {
+            return new StoreIntent(CachedValue.of(storeValue, ttl.finalTtl()),
+                                   Duration.ofSeconds(ttl.finalTtl()));
+        }
+        return new StoreIntent(CachedValue.of(storeValue, -1L), null);
     }
 }

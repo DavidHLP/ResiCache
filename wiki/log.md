@@ -8,7 +8,7 @@ tags:
 related: [index, overview, README, archive-2026-q2, milestone-2026-q3]
 status: stable
 created: 2026-06-21
-updated: 2026-07-05
+updated: 2026-07-06
 ---
 
 # 操作日志
@@ -19,6 +19,12 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 > - 架构决策的完整 rationale → 对应 `adr/NNNN-*.md`(条目里已标 ADR 号)。
 > - 单 commit SHA 级细节 / 旧 autonomous-loop(round 1–42)→ [[log/archive-2026-q2]]。
 > - 里程碑状态 → [[milestone-2026-q3]]。
+
+---
+
+## 2026-07-06 (round 38)
+
+- [2026-07-06] improve | ADR-0052 | round 38 `/improve-codebase-architecture` 兑现 ADR-0051 遗嘱「扫新域」—— 扫 **chain 写路径**(前 37 轮未触及 `ActualCacheHandler.handlePut/handlePutIfAbsent` 内部):发现 ADR-0033 安装的 `TtlDecision` / `NullDecision` 在消费侧有 **2 处近镜像样板**(13 行 TTL 分支 × 2 + 5 行 storeValue 解析 × 2 = 36 行),过 ADR-0029 single-adapter real-seam 门槛(2 site);落实为 `ActualCacheHandler` 私有 `StoreIntent(CachedValue, @Nullable Duration)` 深模块 + `applyPut` / `applyPutIfAbsent`(收口 `set`/`setIfAbsent` 重载选择 + `-1` 永久缓存哨兵 + `Duration.ofSeconds` 映射)+ 私有 `resolveStoreValue` / `resolveStoreIntent` helper;handlePut/handlePutIfAbsent 核心写路径各塌缩到 2 行。**备选路径 W(全 5 handle 套大模板)/ Y(推到 TtlDecision/NullDecision record)/ Z(推到 CacheContext)经红蓝博弈全数驳回**;净 +52 SLOC 全为 Javadoc,代码行(不含 Javadoc)约 -7;**公开 API / 序列化字节 / Redis 重载选择 / `Duration.ofSeconds(finalTtl)` 全 byte-equivalent**;744 tests / 0 fail / 0 err / 17 skipped ✓ → [[0052-actualcachehandler-storeintent-deep-module]]
 
 ---
 
