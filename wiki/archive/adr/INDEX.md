@@ -13,7 +13,7 @@ updated: 2026-07-06
 
 # ADR 索引(二分类)
 
-> ADR 分两类:**A 类**定位型架构决策(本目录,0001-0008)/ **B 类**深化型 round 决策(下沉 `rounds/`,0009-0052)。
+> ADR 分两类:**A 类**定位型架构决策(本目录,0001-0008)/ **B 类**深化型 round 决策(下沉 `rounds/`,0009-0053)。
 > B 类按 round 编年查阅 [[rounds/CHRONICLE]];过程实施日志由 git history 保留,不再赘述于卡片。
 
 ## A 类:定位型架构决策(0001-0008)
@@ -29,9 +29,9 @@ updated: 2026-07-06
 - [[0007-fire-single-buildline-abandonment]] — 统一单构建 Boot 4.0
 - [[0008-observation-spans-attribution]] — Observation spans 归属
 
-## B 类:深化型 round 决策(0009-0052)
+## B 类:深化型 round 决策(0009-0053)
 
-refactor round 的决策卡片,下沉 rounds/(44 篇)。每张卡片只留**决策与后果**,实施 delta 见 [[rounds/CHRONICLE]]。
+refactor round 的决策卡片,下沉 rounds/(45 篇)。每张卡片只留**决策与后果**,实施 delta 见 [[rounds/CHRONICLE]]。
 
 按阶段速查:
 
@@ -45,4 +45,4 @@ refactor round 的决策卡片,下沉 rounds/(44 篇)。每张卡片只留**决�
 | 6 | 0030-0033 | Writer / Metadata / Typed decisions | 21-24 |
 | 7 | 0034-0036 | Writer context 归位 + Prefetch / Lua | 25-26 |
 | 8 | 0037-0041 | 死代码扫尾系列 | 27-31 |
-| 9 | 0042-0052 | 深度收尾(lock / observer / snapshot / nullvalue / 写路径) | 32-38 |
+| 9 | 0042-0053 | 深度收尾(lock / observer / snapshot / nullvalue / 写路径 / timeout-retry helper) | 32-39 |

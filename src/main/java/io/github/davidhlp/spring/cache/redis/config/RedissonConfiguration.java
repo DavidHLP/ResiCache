@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import org.redisson.config.BaseConfig;
 import org.redisson.config.BaseMasterSlaveServersConfig;
 import org.redisson.config.ClusterServersConfig;
 import org.redisson.config.Config;
@@ -152,12 +153,9 @@ public class RedissonConfiguration {
                 .setAddress(address)
                 .setDatabase(database)
                 .setConnectionPoolSize(pool.getConnectionPoolSize())
-                .setConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize())
-                .setIdleConnectionTimeout(pool.getIdleConnectionTimeout())
-                .setConnectTimeout(pool.getConnectTimeout())
-                .setTimeout(pool.getTimeout())
-                .setRetryAttempts(pool.getRetryAttempts())
-                .setRetryInterval(pool.getRetryInterval());
+                .setConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize());
+        // timeout/retry 5 setter 与 cluster/sentinel 共享 BaseConfig 基类,抽离收敛 2-site 样板(ADR-0053)
+        applyTimeoutAndRetrySettings(singleConfig, pool);
 
         // Apply password from ResiCache properties, fallback to Spring's RedisProperties
         String password = redis.getPassword() != null && !redis.getPassword().isEmpty()
@@ -184,12 +182,9 @@ public class RedissonConfiguration {
                 .setMasterConnectionPoolSize(pool.getConnectionPoolSize())
                 .setSlaveConnectionPoolSize(pool.getConnectionPoolSize())
                 .setMasterConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize())
-                .setSlaveConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize())
-                .setIdleConnectionTimeout(pool.getIdleConnectionTimeout())
-                .setConnectTimeout(pool.getConnectTimeout())
-                .setTimeout(pool.getTimeout())
-                .setRetryAttempts(pool.getRetryAttempts())
-                .setRetryInterval(pool.getRetryInterval());
+                .setSlaveConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize());
+        // timeout/retry 5 setter 与 single 模式共享 BaseConfig 基类,抽离收敛 2-site 样板(ADR-0053)
+        applyTimeoutAndRetrySettings(serverConfig, pool);
 
         // Username/password for ACL (Redis 6+)
         if (redis.getPassword() != null && !redis.getPassword().isEmpty()) {
@@ -198,5 +193,36 @@ public class RedissonConfiguration {
         if (redis.getUsername() != null && !redis.getUsername().isEmpty()) {
             serverConfig.setUsername(redis.getUsername());
         }
+    }
+
+    /**
+     * 应用 5 个跨部署模式共享的 timeout/retry 设置到任意 Redisson 服务器配置。
+     *
+     * <p>这 5 个 setter —— {@code setIdleConnectionTimeout} / {@code setConnectTimeout} /
+     * {@code setTimeout} / {@code setRetryAttempts} / {@code setRetryInterval} —— 定义在
+     * {@link BaseConfig} 上,被 {@link SingleServerConfig} 与
+     * {@link BaseMasterSlaveServersConfig} 共同继承。抽离消除了 {@code configureSingle}
+     * 与 {@code applyCommonSettings} 各写一遍的 2-site 样板(ADR-0029 real-seam 门槛,
+     * ADR-0053 落地)。
+     *
+     * <p><b>不在本 helper 内</b>:pool size / database / address —— 它们的 setter 名在
+     * SingleServer({@code setConnectionPoolSize})与 MasterSlave
+     * ({@code setMasterConnectionPoolSize}/{@code setSlaveConnectionPoolSize})上不同,
+     * 是各自子类 API 独有,无法跨 {@link BaseConfig} 基类收敛;password / username 在
+     * {@code configureSingle} 内有 ResiCache → Spring {@code RedisProperties} fallback 链,
+     * 与 {@code applyCommonSettings} 的直取语义不同,亦不合并。
+     *
+     * <p><b>字节等价</b>:5 个 setter 之间无顺序依赖,helper 内调用顺序与原两处逐字一致。
+     *
+     * @param config 任意 Redisson {@link BaseConfig} 子类(Single / Cluster / Sentinel)
+     * @param pool   ResiCache Redisson 连接池/超时属性
+     */
+    private static void applyTimeoutAndRetrySettings(
+            BaseConfig<?> config, RedisProCacheProperties.RedissonProperties pool) {
+        config.setIdleConnectionTimeout(pool.getIdleConnectionTimeout());
+        config.setConnectTimeout(pool.getConnectTimeout());
+        config.setTimeout(pool.getTimeout());
+        config.setRetryAttempts(pool.getRetryAttempts());
+        config.setRetryInterval(pool.getRetryInterval());
     }
 }

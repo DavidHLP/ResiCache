@@ -98,6 +98,25 @@ class RedissonConfigurationTest {
 
             assertThat(config.useSingleServer().getUsername()).isEqualTo("admin");
         }
+
+        @Test
+        @DisplayName("应用 timeout/retry 设置(跨模式共享 BaseConfig helper,ADR-0053)")
+        void singleMode_appliesTimeoutSettings() {
+            properties.getRedisson().setIdleConnectionTimeout(15000);
+            properties.getRedisson().setConnectTimeout(20000);
+            properties.getRedisson().setTimeout(30000);
+            properties.getRedisson().setRetryAttempts(5);
+            properties.getRedisson().setRetryInterval(2500);
+
+            Config config = configuration.buildConfig(redisProperties, properties);
+
+            org.redisson.config.SingleServerConfig single = config.useSingleServer();
+            assertThat(single.getIdleConnectionTimeout()).isEqualTo(15000);
+            assertThat(single.getConnectTimeout()).isEqualTo(20000);
+            assertThat(single.getTimeout()).isEqualTo(30000);
+            assertThat(single.getRetryAttempts()).isEqualTo(5);
+            assertThat(single.getRetryInterval()).isEqualTo(2500);
+        }
     }
 
     @Nested
@@ -140,6 +159,21 @@ class RedissonConfigurationTest {
             Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useClusterServers().getPassword()).isEqualTo("cluster-secret");
+        }
+
+        @Test
+        @DisplayName("集群模式应用 timeout/retry(验证 BaseMasterSlaveServersConfig 共享基类 helper 路径)")
+        void clusterMode_appliesTimeoutSettings() {
+            properties.getRedis().setMode("cluster");
+            properties.getRedis().setClusterNodes(List.of("node1:6379"));
+            properties.getRedisson().setTimeout(30000);
+            properties.getRedisson().setRetryAttempts(5);
+
+            Config config = configuration.buildConfig(redisProperties, properties);
+
+            org.redisson.config.ClusterServersConfig cluster = config.useClusterServers();
+            assertThat(cluster.getTimeout()).isEqualTo(30000);
+            assertThat(cluster.getRetryAttempts()).isEqualTo(5);
         }
     }
 

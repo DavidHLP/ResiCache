@@ -22,6 +22,12 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ---
 
+## 2026-07-06 (round 39)
+
+- [2026-07-06] improve | ADR-0053 | round 39 `/improve-codebase-architecture` 兑现 ADR-0051/0052 遗嘱「扫新域」—— 扫 **cache/config/注解/eviction/serialization/observability 全域**(前 38 轮几乎未碰的接合部 + 装配域):3 候选红蓝博弈 **2 驳 1 立**。候选 1(`RedisProCacheProperties` 属性袋 → ConfigResolver Strategy)**驳回**:嵌套静态类是 Spring Boot `@ConfigurationProperties` 官方惯用模式,deletion test 反向(摊平才造真属性袋),抽 Strategy = false seam 违反 ADR-0029;候选 2(`CacheableAnnotationHandler` 双路径 → AnnotationProcessingContext)**驳回**:两路径已收敛到 `registerOne` 单一模板(ADR-0015),`@Cacheable` 兼容回退是 ADR-0001 产品特性非样板,再抽 Context = interface≈implementation 浅模块;**唯一落地**候选 3 —— `RedissonConfiguration` 跨模式 timeout/retry **5-setter 2-site 样板**(javap Redisson `BaseConfig` 确认 `setIdleConnectionTimeout`/`setConnectTimeout`/`setTimeout`/`setRetryAttempts`/`setRetryInterval` 在基类被 `SingleServerConfig` 与 `BaseMasterSlaveServersConfig` 共同继承)→ 私有静态 `applyTimeoutAndRetrySettings(BaseConfig<?>, RedissonProperties)`;**范围限定**:pool size(Single `setConnectionPoolSize` vs MasterSlave `setMasterConnectionPoolSize`/`setSlaveConnectionPoolSize` 不同名)/ password·username(single 有 ResiCache→Spring RedisProperties fallback 链,MasterSlave 直取)/ database·address(SingleServer 独有)不合并,路径 W(全 setter 强合并)/ Y(推到 RedissonProperties 自应用)/ Z(宣告零候选)全数驳回;补 2 测试填补既有盲区(原 RedissonConfigurationTest 零 timeout/retry 断言);公开 API / Redisson 配置字节 / 5 setter 调用顺序全 byte-equivalent;746 tests / 0 fail / 0 err / 17 skipped ✓(较 round 38 的 744 增 2)→ [[0053-redissonconfiguration-timeout-retry-helper]]
+
+---
+
 ## 2026-07-06 (archive)
 
 - [2026-07-06] archive | wiki/adr → wiki/archive/adr | 归档全部 52 篇 ADR(A 类定位型 0001-0008 + B 类深化型 0009-0052)+ INDEX + rounds/CHRONICLE)移出常规阅读路径——历史决策过度约束 agent 发散思维;同步修复 7 个外部引用(`CLAUDE.md` / `README.md` / `README.zh-CN.md` / `docs/comparison.md` / `STABILITY.md` / `wiki/index.md` / `wiki/modules/observability.md`)+ CHRONICLE 内部 `../../log` 跨目录链接深度 +1(2 处);本文件 2026-07-05 历史 append-only lint 条目保留原文不改(改历史=篡改事实);新增 `wiki/archive/README.md` 归档区指引 → [[archive/README]]

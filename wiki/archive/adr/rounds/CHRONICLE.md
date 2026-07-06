@@ -11,9 +11,9 @@ created: 2026-07-05
 updated: 2026-07-06
 ---
 
-# ADR 深化型 round 编年(B 类:0009-0052)
+# ADR 深化型 round 编年(B 类:0009-0053)
 
-> 43 篇深化型 ADR 的 round delta 一表收口。详细决策见各 ADR 卡片;过程实施日志(逐 commit)由 git history 与 [[../../../log/archive-2026-q3]] 保留,此处不重复。
+> 44 篇深化型 ADR 的 round delta 一表收口。详细决策见各 ADR 卡片;过程实施日志(逐 commit)由 git history 与 [[../../../log/archive-2026-q3]] 保留,此处不重复。
 
 ### 阶段 1 · Chain Engine 抽出 + seam 化
 
@@ -72,7 +72,7 @@ updated: 2026-07-06
 - [[0040-lockcontext-nulldecision-dead-factory-removal]] — LockContext / NullDecision 死工厂删
 - [[0041-cache-manager-objectmapper-dead-param-removal]] — cacheManager ObjectMapper 死参删
 
-### 阶段 9 · 深度收尾(round 32-37)
+### 阶段 9 · 深度收尾(round 32-39)
 
 - [[0042-syncsupport-singleflight-future-and-chain-readlock-removal]] — SyncSupport singleflight Future + chain readlock 删
 - [[0043-twolistlru-reentrantreadwritelock-false-seam-removal]] — TwoListLRU ReentrantReadWriteLock false seam 删
@@ -85,3 +85,4 @@ updated: 2026-07-06
 - [[0050-cachedvalue-builder-fortest-seam]] — `CachedValue.builder` 双轨死路径删 → `forTest` seam
 - [[0051-round37-f2-f3-f4-rejection-and-stale-javadoc-fix]] — Round 37 F2/F3/F4 驳回 + stale Javadoc 修
 - [[0052-actualcachehandler-storeintent-deep-module]] — ActualCacheHandler 写路径 TTL/storeValue 样板收敛 → StoreIntent 私有深模块
+- [[0053-redissonconfiguration-timeout-retry-helper]] — RedissonConfiguration 跨模式 timeout/retry setter 2-site 样板收敛 → applyTimeoutAndRetrySettings 私有 helper
