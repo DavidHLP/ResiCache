@@ -9,7 +9,6 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.Cache;
-import org.springframework.context.expression.AnnotatedElementKey;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
@@ -130,32 +129,15 @@ public class RedisProCache extends RedisCache {
     public <T> T get(Object key, Callable<T> loader) {
         // body 抛异常 → 本 timedGet 的 finally 仍按原 try-finally 语义记录计时;
         // 外层 try-catch 翻译异常 + 自增 miss,保持与原 4-层结构字节级等价。
+        // ADR-0057 / C3 收敛:bloom 短路 + sync-vs-default 决策已抽为 {@link #isBloomShortCircuited}
+        // + {@link #loadValue},本方法主体收窄到「lookup → bloom 守门 → 委派 loadValue」3 步。
         try {
             return RedisProCacheTimers.timedGet(getTimer, () -> {
                 RedisCacheableOperation operation = lookupOperation();
-
-                // Bloom Filter 短路检查(仅 sync 路径;Spring 仅对 sync=true 调 get(key,loader)):
-                // 在调用 loader 之前拦截,防止缓存穿透真正到达数据源。属 C4 裁定的有意双层防御
-                // (本处防 loader/数据源;链层 BloomFilterHandler 防 Redis GET),ADR-0011 不移除。
-                // 键一致性(ADR-0011):必须用 actualKey(CacheKeys.bloomKey,与链层 add 同源),
-                // 不可用 createCacheKey 的带前缀 redisKey —— 否则查的 key 永不在过滤器里(键漂移缺陷)。
-                if (operation != null && operation.isUseBloomFilter()
-                        && bloomSupport != null) {
-                    String bloomKey = CacheKeys.fromRedisKey(getName(), createCacheKey(key)).bloomKey();
-                    if (!bloomSupport.mightContain(getName(), bloomKey)) {
-                        log.debug("Bloom filter rejected loader invocation: cacheName={}, key={}", getName(), bloomKey);
-                        RedisProCacheTimers.safeIncrement(missCounter);
-                        return null;
-                    }
+                if (isBloomShortCircuited(operation, key)) {
+                    return null;
                 }
-
-                if (operation != null && operation.isSync() && syncSupport != null) {
-                    // 分布式同步模式:使用 SyncSupport 确保跨 JVM 单飞加载
-                    return executeSyncLoad(key, loader, operation);
-                } else {
-                    // 默认模式:Spring 本地锁(JVM 内单飞)
-                    return super.get(key, loader);
-                }
+                return loadValue(key, loader, operation);
             });
         } catch (Exception e) {
             RedisProCacheTimers.safeIncrement(missCounter);
@@ -164,6 +146,78 @@ public class RedisProCache extends RedisCache {
             }
             throw new RuntimeException("Failed to load cache value for key: " + key, e);
         }
+    }
+
+    /**
+     * "loader 路径"双层防御之 bloom 短路检查 — ADR-0057 / C3 抽出的 deep seam.
+     *
+     * <p>职责(从原 {@code get(key, loader)} 内联 9 行平移,逐字保留原行为):
+     * <ol>
+     *   <li>任一前置条件缺失(operation 为 null / 未启用 bloom / bloomSupport 为 null) →
+     *       return false(不短路,走默认路径)</li>
+     *   <li>用 {@link CacheKeys#fromRedisKey} 派生 bloomKey(与链层 {@code BloomFilterHandler.add}
+     *       同源,杜绝 actualKey/redisKey 漂移缺陷,ADR-0011)</li>
+     *   <li>{@code bloomSupport.mightContain} 返回 false → 记 debug 日志 + 自增 miss +
+     *       return true(调用方应 return null 跳过 loader)</li>
+     *   <li>mightContain 返回 true → return false(不短路,继续走 sync/默认路径)</li>
+     * </ol>
+     *
+     * <p><b>设计纪律 — 副作用</b>:本方法在 return true 分支有副作用(自增 missCounter)。
+     * 这不是单纯 predicate;而是「检 + 副作用 + 短路信号」的原子单元。
+     * 拆分为「纯 check + 独立 recordBloomRejection」会破坏 locality(2 调用方要记得配对),
+     * 故保持单 seam。
+     *
+     * <p><b>package-private</b> 供单测覆盖 3 分支:
+     * <ul>
+     *   <li>前置条件缺失(operation null / isUseBloomFilter=false / bloomSupport=null) → false</li>
+     *   <li>mightContain=false → true + miss 自增 + 日志</li>
+     *   <li>mightContain=true → false</li>
+     * </ul>
+     *
+     * <p><b>deletion test</b>:把本方法删掉、内联回 {@code get(key, loader)} → 9 行 + 3 嵌套 if
+     * 重新出现,代码量相同但失去 seam 名 + 单测入口 — 复杂度上升。
+     */
+    boolean isBloomShortCircuited(RedisCacheableOperation operation, Object key) {
+        if (operation == null || !operation.isUseBloomFilter() || bloomSupport == null) {
+            return false;
+        }
+        // 键一致性(ADR-0011):必须用 actualKey(CacheKeys.bloomKey,与链层 add 同源),
+        // 不可用 createCacheKey 的带前缀 redisKey —— 否则查的 key 永不在过滤器里(键漂移缺陷)。
+        String bloomKey = CacheKeys.fromRedisKey(getName(), createCacheKey(key)).bloomKey();
+        if (!bloomSupport.mightContain(getName(), bloomKey)) {
+            log.debug("Bloom filter rejected loader invocation: cacheName={}, key={}", getName(), bloomKey);
+            RedisProCacheTimers.safeIncrement(missCounter);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * "loader 路径"sync vs default 决策 — ADR-0057 / C3 抽出的 deep seam.
+     *
+     * <p>职责(从原 {@code get(key, loader)} 内联 5 行平移,逐字保留原行为):
+     * <ol>
+     *   <li>operation 启用 sync 且 syncSupport 可用 → 走 {@link #executeSyncLoad}
+     *       (分布式锁 + single-flight,跨 JVM 防击穿)</li>
+     *   <li>否则 → 走 {@code super.get(key, loader)}(Spring 默认本地锁,JVM 内单飞)</li>
+     * </ol>
+     *
+     * <p><b>package-private</b> 供单测覆盖 2 分支:
+     * <ul>
+     *   <li>sync 路径(配 mock syncSupport)→ 委派 executeSyncLoad</li>
+     *   <li>默认路径(syncSupport null 或 operation 关闭 sync)→ 委派 super.get</li>
+     * </ul>
+     *
+     * <p><b>deletion test</b>:把本方法删掉、内联回 {@code get(key, loader)} → 5 行
+     * 重新出现,代码量相同但失去 seam 名 + 单测入口 — 复杂度上升。
+     */
+    <T> T loadValue(Object key, Callable<T> loader, RedisCacheableOperation operation) {
+        if (operation != null && operation.isSync() && syncSupport != null) {
+            // 分布式同步模式:使用 SyncSupport 确保跨 JVM 单飞加载
+            return executeSyncLoad(key, loader, operation);
+        }
+        // 默认模式:Spring 本地锁(JVM 内单飞)
+        return super.get(key, loader);
     }
 
     /**
@@ -178,40 +232,88 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * 使用分布式锁执行单飞加载
+     * 使用分布式锁执行单飞加载 — ADR-0057 收敛后的委派 seam.
      *
-     * <p>逻辑：在分布式锁内双重检查缓存 → 加载 → 写入 → 返回。
-     * 确保同一 key 在分布式环境下只有一个 JVM 会调用 loader。
+     * <p>仅做 3 件无状态事:解析 lockKey + 解析 timeout(annotation < 0 → 默认 10s)
+     * + 委派 {@link #performLockedLoad(Object, Callable)} 给 {@code syncSupport}。
+     * 原 12 行内联 lambda(双重检查 + load + put + 异常翻译)已迁出,
+     * 本方法退化为 thin orchestrator;单飞契约从匿名 lambda 提升为命名 seam,
+     * 3 决策分支(existing-value / null-value / loader-throws)可单测。
      */
-    @SuppressWarnings("unchecked")
     private <T> T executeSyncLoad(Object key, Callable<T> loader, RedisCacheableOperation operation) {
         String lockKey = createCacheKey(key);
+        long timeout = resolveSyncTimeout(operation);
+
+        return syncSupport.executeSync(lockKey, () -> performLockedLoad(key, loader), timeout);
+    }
+
+    /**
+     * 解析 sync 超时时间(秒) — annotation &lt; 0 → 退到 10s 默认值。
+     * 抽离自 executeSyncLoad,保持该方法主体薄到 1 委派。
+     */
+    private long resolveSyncTimeout(RedisCacheableOperation operation) {
         long timeout = operation.getSyncTimeout();
-        if (timeout <= 0) {
-            timeout = 10;
+        return timeout > 0 ? timeout : 10L;
+    }
+
+    /**
+     * 持锁后单飞加载契约 — ADR-0057 抽出的 deep seam.
+     *
+     * <p>职责(从 executeSyncLoad 内联 lambda 平移,逐字保留原行为):
+     * <ol>
+     *   <li><b>double-check</b>:{@code super.get(key)} 已存在 → 直接 return 其值
+     *       (走 {@code super.get} 而非 {@code lookup} 因 {@code super.get} 经
+     *       {@code fromStoreValue} 将 {@code NullValue} 转回 null,完整保留
+     *       null-value round-trip 语义)</li>
+     *   <li><b>load + put + return</b>:cache miss → 调 {@code loader.call()},无论
+     *       返回 null 与否都 {@code put} 进缓存(由 RedisCache 配置处理空值缓存),
+     *       return loaded</li>
+     *   <li><b>异常翻译</b>:loader 抛 checked exception → 翻译为
+     *       {@link Cache.ValueRetrievalException}(Spring 抽象层契约)</li>
+     * </ol>
+     *
+     * <p>设计纪律:
+     * <ul>
+     *   <li><b>package-private 而非 private</b>:直接单测入口 —
+     *       {@code RedisProCacheTest} 可绕过 {@code syncSupport} 直接调,
+     *       验证 3 决策分支(existing-value fast-path / null-value 缓存 / loader 异常翻译),
+     *       而无需制造并发竞态。{@code executeSyncLoad} 保持 {@code private}
+     *       因其单测入口已由本方法 + {@code RedisProCache} 集成测试覆盖。</li>
+     *   <li><b>不返回 future / 不持状态</b>:单次执行,无 mainResult 概念 —
+     *       3 决策分支各自有明确路径(return 值 / throw),无 split-knowledge 风险。</li>
+     *   <li><b>super.get 而非 lookup</b>:原 lambda 注释已说明 NullValue round-trip;
+     *       平移保留该决策,不擅自替换为 lookup。</li>
+     * </ul>
+     *
+     * <p><b>deletion test</b>:把本方法删掉、内联回 {@code syncSupport.executeSync} lambda
+     * → 12 行 + 3 决策 + 0 测试,代码量相同但失去 seam 名 + 单测入口 + 分支命名 — 复杂度上升。
+     *
+     * @param key    缓存键
+     * @param loader 数据加载器(leader 在分布式锁内执行;NullValue 缓存走原路)
+     * @param <T>    返回值类型
+     * @return leader loader 的结果(follower 共享同一份 — 通过 {@code syncSupport} 协调)
+     * @throws Cache.ValueRetrievalException 当 loader 抛 checked exception 时翻译
+     */
+    @SuppressWarnings("unchecked")
+    <T> T performLockedLoad(Object key, Callable<T> loader) {
+        // 双重检查：可能在等待锁期间其他线程已加载。
+        // 使用 super.get() 而非 lookup()，因为 lookup() 返回的原始值包含 NullValue.INSTANCE，
+        // 而 super.get() 会通过 fromStoreValue 将 NullValue 转换为 null 并正确返回缓存值。
+        ValueWrapper existingValue = super.get(key);
+        if (existingValue != null) {
+            T result = (T) existingValue.get();
+            return result;
         }
 
-        return syncSupport.executeSync(lockKey, () -> {
-            // 双重检查：可能在等待锁期间其他线程已加载。
-            // 使用 super.get() 而非 lookup()，因为 lookup() 返回的原始值包含 NullValue.INSTANCE，
-            // 而 super.get() 会通过 fromStoreValue 将 NullValue 转换为 null 并正确返回缓存值。
-            ValueWrapper existingValue = super.get(key);
-            if (existingValue != null) {
-                @SuppressWarnings("unchecked")
-                T result = (T) existingValue.get();
-                return result;
-            }
-
-            // 执行加载
-            try {
-                T loaded = loader.call();
-                // 无论 loaded 是否为 null，都执行 put，由 RedisCache 根据配置处理空值缓存
-                put(key, loaded);
-                return loaded;
-            } catch (Exception ex) {
-                throw new Cache.ValueRetrievalException(key, loader, ex);
-            }
-        }, timeout);
+        // 执行加载
+        try {
+            T loaded = loader.call();
+            // 无论 loaded 是否为 null，都执行 put，由 RedisCache 根据配置处理空值缓存
+            put(key, loaded);
+            return loaded;
+        } catch (Exception ex) {
+            throw new Cache.ValueRetrievalException(key, loader, ex);
+        }
     }
 
     @Override

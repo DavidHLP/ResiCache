@@ -331,4 +331,102 @@ class EarlyExpirationHandlerTest {
             assertThat(decision.needsRefresh()).isTrue();
         }
     }
+
+    /**
+     * ADR-0057 抽出的 performAsyncRefresh 单测 — 覆盖原 22 行内联 lambda 的 3 决策分支
+     * + 异常翻译。直接调方法,绕过 executor 调度,验证纯逻辑。
+     */
+    @Nested
+    @DisplayName("performAsyncRefresh tests — ADR-0057 async task seam")
+    class PerformAsyncRefreshTests {
+
+        private static final String REDIS_KEY = "test:key";
+        private static final String CACHE_NAME = "test-cache";
+
+        @Test
+        @DisplayName("returns early when live value is null (key already missing)")
+        void performAsyncRefresh_liveValueNull_returnsEarly() {
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
+            when(valueOperations.get(REDIS_KEY)).thenReturn(null);
+
+            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+
+            // 不应触发 Lua CAS 路径(否则会调 redisTemplate.execute)
+            verify(redisTemplate, never()).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+        }
+
+        @Test
+        @DisplayName("returns early when remainingTtl is below grace period")
+        void performAsyncRefresh_belowGracePeriod_returnsEarly() {
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
+            // remainingTtl = 2s,小于 REFRESH_GRACE_PERIOD_SECONDS = 5
+            CachedValue live = CachedValue.forTest("v", 2L, System.currentTimeMillis(), 1L, false);
+            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
+
+            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+
+            // 仍在宽限期内 → 不调 Lua CAS
+            verify(redisTemplate, never()).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+        }
+
+        @Test
+        @DisplayName("calls Lua CAS when remainingTtl >= grace period and CAS succeeds")
+        void performAsyncRefresh_casSucceeds_callsShorten() {
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
+            // remainingTtl = 60s,大于 GRACE
+            CachedValue live = createCachedValue(60, System.currentTimeMillis());
+            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
+            when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
+                    .thenReturn(Boolean.TRUE);
+
+            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+
+            // 触发 CAS
+            verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+        }
+
+        @Test
+        @DisplayName("calls Lua CAS when remainingTtl >= grace period and CAS returns false (value changed)")
+        void performAsyncRefresh_casReturnsFalse_valueChangedPath() {
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
+            CachedValue live = createCachedValue(60, System.currentTimeMillis());
+            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
+            // CAS 返回 false 表示 value 已被并发修改
+            when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
+                    .thenReturn(Boolean.FALSE);
+
+            // 不应抛异常 — value-changed 是正常分支
+            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+
+            verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+        }
+
+        @Test
+        @DisplayName("exception during value fetch is caught and logged, not propagated")
+        void performAsyncRefresh_valueFetchThrows_catchesAndLogs() {
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
+            when(valueOperations.get(REDIS_KEY)).thenThrow(new RuntimeException("Redis down"));
+
+            // 不应向上抛 — 异常已被方法体 try/catch 吞咽
+            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+
+            // Lua CAS 不应被调用(因为 value fetch 阶段就抛了)
+            verify(redisTemplate, never()).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+        }
+
+        @Test
+        @DisplayName("exception during Lua CAS is caught and logged, not propagated")
+        void performAsyncRefresh_casThrows_catchesAndLogs() {
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
+            CachedValue live = createCachedValue(60, System.currentTimeMillis());
+            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
+            when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
+                    .thenThrow(new RuntimeException("Lua eval failed"));
+
+            // 不应向上抛
+            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+
+            verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+        }
+    }
 }

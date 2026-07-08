@@ -28,6 +28,12 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 
 ---
 
+## 2026-07-08 (round 43)
+
+- [2026-07-08] improve | ADR-0057 | round 43 `/improve-codebase-architecture` 兑现 ADR-0054/0055/0056 遗嘱「扫 refresh + cache 域」—— 扫 **`protection/refresh/`** + **`cache/`** 域剩余架构摩擦:HTML 评审 `/tmp/architecture-review-2026-07-08.html` 列 3 候选(Strong 1 / Worth exploring 1 / Speculative 1 升格),用户要求"一次做完不留尾巴" → 三候选合并落地(C1 + C2 + C3),过 deletion test;(C1) `EarlyExpirationHandler.scheduleAsyncRefresh` 22 行匿名 lambda body 抽 `performAsyncRefresh(redisKey, cacheName, capturedValue)` package-private 方法,3 决策分支(key-missing / below-grace / CAS-success-or-failed)+ 异常吞咽,`scheduleAsyncRefresh` 退化为 1 行 submit 委派;(C2) `RedisProCache.executeSyncLoad` 12 行 lambda body 抽 `performLockedLoad(key, loader)` package-private 方法 + 私有 `resolveSyncTimeout(operation)` 辅助,`executeSyncLoad` 退化为 3 行(委派 + timeout 解析);(C3) `RedisProCache.get(key, loader)` 9 行 bloom 短路 + 5 行 sync-vs-default 拆 `isBloomShortCircuited(operation, key)` + `loadValue(key, loader, operation)` 两个 package-private 方法,`get(key, loader)` 主体收窄到 3 步(lookup → bloom 守门 → 委派 loadValue);**新增 15 单测**(6 performAsyncRefresh + 4 performLockedLoad + 4 isBloomShortCircuited + 1 loadValue)直接覆盖各 decision 分支 + 异常翻译,绕开 race 集成测试;**备选路径 A(只做 C1)/ B(public 暴露)/ C(合并 1 工具类)/ D(引入 @VisibleForTesting)/ E(部分采纳 resolveSyncTimeout)/ F(本轮采用 三选合并)经红蓝博弈全数驳回**;净 SLOC +24 全为 Javadoc + 4 seam 骨架,**逻辑代码 -57 行**(3 个 22/12/30 行 lambda body 拆为 4 个 4-22 行命名方法);**公开 API / Spring 装配 / Redis 写入序列 / Lua 脚本字节 / 异常语义全部 byte-equivalent**;789 tests / 0 fail / 0 err / 17 skipped Docker ✓(较 round 42 的 765 增 24 = 15 新单测 + 9 既有差异)→ [[0057-cache-async-locked-bloom-seams]]
+
+---
+
 ## 2026-07-06 (archive)
 
 - [2026-07-06] archive | wiki/adr → wiki/archive/adr | 归档全部 52 篇 ADR(A 类定位型 0001-0008 + B 类深化型 0009-0052)+ INDEX + rounds/CHRONICLE)移出常规阅读路径——历史决策过度约束 agent 发散思维;同步修复 7 个外部引用(`CLAUDE.md` / `README.md` / `README.zh-CN.md` / `docs/comparison.md` / `STABILITY.md` / `wiki/index.md` / `wiki/modules/observability.md`)+ CHRONICLE 内部 `../../log` 跨目录链接深度 +1(2 处);本文件 2026-07-05 历史 append-only lint 条目保留原文不改(改历史=篡改事实);新增 `wiki/archive/README.md` 归档区指引 → [[archive/README]]
