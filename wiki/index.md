@@ -5,7 +5,7 @@ tags:
   - meta
   - 索引
   - 导航
-related: [overview, log, README, archive/adr/INDEX]
+related: [overview, log, README, archive/adr/ARCHIVE-README]
 status: stable
 created: 2026-06-21
 updated: 2026-07-05
@@ -37,9 +37,9 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[log]] — 操作日志 · [[archive-2026-q2]] · [[archive-2026-q3]]
 - [[milestone-2026-q3]] — Active 里程碑
 
-## 架构决策(ADR)— 已归档
+## 架构决策(ADR)— 已收口
 
-52 篇 ADR(A 类 0001-0008 定位型 + B 类 0009-0052 深化型)已整体归档至 `wiki/archive/adr/`,**不再纳入常规阅读路径**——历史决策过度约束了后续架构探索的发散思维。归档≠废弃:需查证某条历史决策时再下钻 [[archive/adr/INDEX]] / [[archive/adr/rounds/CHRONICLE]]。
+2026-07-08 起,49 篇 ADR 卡片(0001-0057)从 wiki 撤销 prose 形式存在;完整 rationale 由 [[log]] + `git log` 承载。归档区仅留 [[archive/adr/ARCHIVE-README]] 作为收口说明。历史决策**不再**作为阅读路径上的内容——它们只是 commit history 的镜像。
 
 ## 架构(architecture/)
 

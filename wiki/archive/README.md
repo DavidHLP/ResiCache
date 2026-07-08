@@ -4,7 +4,7 @@ type: meta
 tags:
   - meta
   - archive
-related: [index, log, archive/adr/INDEX]
+related: [index, log, archive/adr/ARCHIVE-README]
 status: stable
 created: 2026-07-06
 updated: 2026-07-06
@@ -29,15 +29,15 @@ updated: 2026-07-06
 
 | 归档项 | 位置 | 归档时间 | 说明 |
 |---|---|---|---|
-| ADR(52 篇) | [[archive/adr/INDEX]] | 2026-07-06 | A 类定位型 0001-0008 + B 类深化型 0009-0052,原 `wiki/adr/` 整体迁入 `wiki/archive/adr/` |
+| ADR(原 49 篇) | [[archive/adr/ARCHIVE-README]] | 2026-07-08 | 2026-07-06 整体归档入 `wiki/archive/adr/`;2026-07-08 进一步收缩为单指针,卡片散文由 git history + [[log]] 承载 |
 
 ## 如何查证归档内容
 
 需要追溯某条历史架构决策时:
 
-1. 先查 [[archive/adr/INDEX]](A 类 + B 类总索引)或 [[archive/adr/rounds/CHRONICLE]](B 类 round 编年)定位。
+1. 先查 [[archive/adr/ARCHIVE-README]] 了解收口策略与替代检索方式(`git log` / [[log]])。
 2. 阅读具体 ADR 卡片时,把它当作**历史参考**而非**当前硬约束**——决策的 rationale 仍有效,但前提可能已变。
 
 ## 相关
 
-[[index]] · [[log]] · [[archive/adr/INDEX]]
+[[index]] · [[log]] · [[archive/adr/ARCHIVE-README]]

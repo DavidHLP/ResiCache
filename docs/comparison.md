@@ -1,7 +1,7 @@
 # ResiCache vs JetCache vs Caffeine vs raw Redisson
 
 > 诚实是 solo 库的通货。本页**明确 owns ResiCache 输在哪、赢在哪**。
-> 定位参见 [ADR-0006](../wiki/archive/adr/0006-redisson-companion-positioning.md):**ResiCache for Redisson —— Redisson 忘了做的那条可声明缓存防护链**。
+> 定位:**ResiCache for Redisson —— Redisson 忘了做的那条可声明缓存防护链**。
 
 ## 一句话各自定位
 
@@ -61,7 +61,6 @@
 [#269](https://github.com/alibaba/jetcache/issues/269)(TTL jitter / expiry
 randomization)状态为 **closed unimplemented**——维护者收到该特性请求,
 判定不予实现。所以本表此处 JetCache 列为 ❌(不是 ✅),原表中符号错误,
-正确覆盖关系参见[ADR-0006 第 1 段 + Amendment 2026-06-29](../wiki/archive/adr/0006-redisson-companion-positioning.md#amendment-2026-06-29--jetcache-覆盖数修正):
 JetCache 实际覆盖 ResiCache 链中 **3/5** 机制(`@CacheRefresh`≈EarlyExpiration、
 `@CachePenetrationProtect`≈SyncLock、null-value),TTL jitter **不**在其中。
 本脚注是事实错误修复,见 `CHANGELOG.md` v0.0.3 [Unreleased] Documentation

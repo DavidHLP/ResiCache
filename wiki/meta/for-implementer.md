@@ -45,4 +45,4 @@ updated: 2026-07-05
 
 - 想加观测 → [[observability]](`ChainObserver` 钩子,handler 0 修改即可加观测)
 - 想懂装配 → [[auto-configuration]]
-- 想看历史架构决策 → [[archive/adr/INDEX]](52 篇 ADR 已归档,仅作历史参考)
+- 想看历史架构决策 → [[archive/adr/ARCHIVE-README]](原 49 篇 ADR 卡片已收缩,commit history + [[log]] 是审计源)

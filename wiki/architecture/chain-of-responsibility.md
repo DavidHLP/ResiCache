@@ -95,12 +95,12 @@ CacheHandlerChain (thin facade)
   - `beforeNode(handler, ctx)` / `afterNode(handler, ctx, result)` —— perNode(DEBUG / fired counter)
   - 5 个标准实现见 `chain/observer/` 子包。
 - **WS-1.4 OTel/Span 升级路径**:`SpanObserver implements ChainObserver`(~50 SLOC)→ Engine 0 修改 +
-  4 内置 observer 0 修改 + 5+ handler 子类 0 修改。详见 [[observability]] 与 [[0009-chain-engine-extraction]]。
+  4 内置 observer 0 修改 + 5+ handler 子类 0 修改。详见 [[observability]]。
 
 > **可观测性(ADR-0009 后由 `ChainObserver` 收口)**:DEBUG 日志 + fired counter + MDC stamp + Timer
 > 全部迁出到 `chain/observer/` 子包的 5 个 observer 实现。`ChainEngine` 在每个节点循环
 > 调 `beforeNode` / `afterNode`,在链入口/出口调 `onChainStart` / `onChainEnd`。
-> 详见 [[observability]] 与 [[0009-chain-engine-extraction]]。
+> 详见 [[observability]]。
 
 ## 链的装配:CacheHandlerChainFactory
 

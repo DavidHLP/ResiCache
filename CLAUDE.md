@@ -12,7 +12,7 @@
 | Build | Maven | 3.x |
 | Testing | JUnit 5 + Testcontainers + AssertJ + Awaitility | - |
 
-> Tech Stack 表为单构建口径(见 `wiki/archive/adr/0007-fire-single-buildline-abandonment.md`)。`a5ab55b` 重构后已无 `wrapper/`/`spi/`/`event/`/`evaluator/`/`CacheMetricsRecorder`,目录树见下方 Project Structure + 已移除 callout。
+> Tech Stack 表为单构建口径(Boot 4.0 / Java 21 / Redisson 3.50.0 单构建线)。`a5ab55b` 重构后已无 `wrapper/`/`spi/`/`event/`/`evaluator/`/`CacheMetricsRecorder`,目录树见下方 Project Structure + 已移除 callout。
 
 ## Code Style
 

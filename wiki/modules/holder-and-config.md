@@ -25,7 +25,7 @@ updated: 2026-06-29
 
 两个散落但重要的辅助:`chain` 包的 `MethodMetadataResolver` 持有"当前 AOP 拦截方法"的元数据;`config` 包除 `RedisProCacheProperties`/`SecureJackson`/`RedisProCacheConfiguration` 外的几个装配类。
 
-> **Path C(WS-1.3)重构**:本页原描述的 `holder/CacheOperationMetadataHolder`(静态 ThreadLocal 工具类)已于 Path C Step 7 删除,方法元数据的持有与访问职责迁到 Spring 托管的 `MethodMetadataResolver` Bean。决策演进见 [[0002-keep-interceptor]]。
+> **Path C(WS-1.3)重构**:本页原描述的 `holder/CacheOperationMetadataHolder`(静态 ThreadLocal 工具类)已于 Path C Step 7 删除,方法元数据的持有与访问职责迁到 Spring 托管的 `MethodMetadataResolver` Bean。
 
 ## MethodMetadataResolver
 
@@ -74,5 +74,5 @@ updated: 2026-06-29
 - [[operations]] —— `RedisCacheRegister` 与 Resolver 的分工
 - [[auto-configuration]] —— 这些类的总装配入口
 - [[annotations]] —— Resolver 激活的元数据来自注解解析
-- [[0002-keep-interceptor]] —— Path C "经 MethodMetadataResolver 解决"的决策
+- [[archive/adr/ARCHIVE-README]] —— 历史架构决策的审计入口(Path C 7 步序列等)
 - [[serialization]] —— `JacksonConfig` 提供的 `ObjectMapper`
