@@ -17,6 +17,7 @@ import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.serializer.RedisSerializer;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 提前过期处理器，防止缓存雪崩
@@ -42,6 +43,21 @@ import java.nio.charset.StandardCharsets;
 public class EarlyExpirationHandler extends AbstractCacheHandler {
 
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
+
+    /**
+     * P1 (Round 47) fast-path TTL 阈值:当 Redis 报告的剩余 TTL 仍大于此值时,
+     * 跳过本 handler 的全部逻辑(包括 value GET),让 ActualCacheHandler 走原生
+     * 一次 GET 完成 hit 处理 — 把热路径从"early handler GET + actual GET"
+     * 两次 RTT 降为"actual GET"一次 RTT。
+     *
+     * <p>选 60s 是因为典型缓存 TTL 是 30s~10min,refresh window 通常在剩余最后
+     * 5-30%(<3min);绝对阈值 60s 落在"不会立即需要刷新"的合理边界。比百分比策略
+     * 更简单也更便宜 —— 不需要先 GET CachedValue 拿 totalTtl。
+     *
+     * <p>边界:剩余 TTL <= 60s 时仍走原 GET + policy check(行为字节等价),
+     * 行为对调用方无变化。
+     */
+    static final long FAST_PATH_TTL_SECONDS = 60L;
 
     private final EarlyExpirationPolicy earlyExpirationPolicy;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
@@ -82,7 +98,25 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
 
     @Override
     protected HandlerResult doHandle(CacheContext context) {
-        // 先尝试获取缓存值
+        // P1 (Round 47) fast-path:对剩余 TTL 仍较大的"新鲜"缓存项,跳过本 handler
+        // 全部逻辑(不 GET value、不判定 policy),让 ActualCacheHandler 走原生
+        // GET 完成 hit 处理。把热路径从"early handler GET + actual GET"两次
+        // RTT 降为"actual GET"一次 RTT。
+        Long remainingTtl = redisTemplate.getExpire(context.getRedisKey(), TimeUnit.SECONDS);
+        // getExpire 返回值约定:
+        //   -2 = key 不存在(没必要 GET,ActualCacheHandler 会自己处理)
+        //   -1 = key 存在但无过期(永不过期 → 不需要早刷新)
+        //   null = Redis 命令失败(防御性:走原 GET 路径,行为字节等价)
+        //   >= 0 = 剩余秒数
+        if (remainingTtl != null && remainingTtl > FAST_PATH_TTL_SECONDS) {
+            return HandlerResult.continueChain();
+        }
+        if (remainingTtl != null && remainingTtl < 0) {
+            // -1 或 -2 都不需要本 handler 工作
+            return HandlerResult.continueChain();
+        }
+
+        // 剩余 TTL 已落入刷新窗口(<=60s) 或 getExpire 失败(走 defensive GET)
         CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
 
         if (cachedValue == null || cachedValue.checkExpired()) {
@@ -237,18 +271,19 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     private boolean atomicShortenTtlIfValueUnchanged(String redisKey, CachedValue expectedValue) {
         return Boolean.TRUE.equals(redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Boolean>) connection -> {
             RedisSerializer<String> keySerializer = redisTemplate.getStringSerializer();
-            @SuppressWarnings("unchecked")
-            RedisSerializer<Object> valueSerializer = (RedisSerializer<Object>) redisTemplate.getValueSerializer();
 
             byte[] keyBytes = keySerializer.serialize(redisKey);
-            byte[] expectedValueBytes = valueSerializer.serialize(expectedValue);
+            // P3 (Round 47):仅传 expectedValue 的 version 字段(8 字节)而非整个
+            // serialized value(O(N×payload_size)字节)—— 脚本 cjson 解析后比较。
+            byte[] versionBytes = String.valueOf(expectedValue.getVersion())
+                    .getBytes(StandardCharsets.UTF_8);
             byte[] ttlBytes = String.valueOf(REFRESH_GRACE_PERIOD_SECONDS).getBytes(StandardCharsets.UTF_8);
 
             Long result = connection.eval(
                 EarlyExpirationScripts.ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
                 ReturnType.INTEGER,
                 1,
-                keyBytes, expectedValueBytes, ttlBytes
+                keyBytes, versionBytes, ttlBytes
             );
             return result != null && result == 1;
         }));

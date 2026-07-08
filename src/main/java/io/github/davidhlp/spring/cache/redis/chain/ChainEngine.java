@@ -236,21 +236,31 @@ public class ChainEngine {
                     // 与原 executeChainInternal 行为一致："返回的 HandlerResult.result() 为 null
                     // 时退化为 CacheResult.success()"）
                     if (idx == snapshot.size() - 1) {
-                        return result.result() != null ? result.result() : CacheResult.success();
+                        return materialize(result);
                     }
                     // 非链尾：idx++ 推进到下一 handler
                     break;
                 case SKIP_ALL:
                     context.markSkipRemaining();
-                    return result.result() != null ? result.result() : CacheResult.success();
+                    return materialize(result);
                 case TERMINATE:
-                    return result.result() != null ? result.result() : CacheResult.success();
+                    return materialize(result);
                 default:
                     throw new IllegalStateException("Unknown ChainDecision: " + result.decision());
             }
         }
         // 空快照（理论由 execute 前置拦截，防御）
         return CacheResult.success();
+    }
+
+    /**
+     * 把 {@link HandlerResult} 物化为 {@link CacheResult} —— null 退化为 success
+     * 的单一权威 helper。原 driveChain 在三个 decision 分支各写一份
+     * {@code result != null ? result : success()},加新 decision 时易漏；本 helper
+     * 收敛后三处走同一行委派,deletion test 保护语义。
+     */
+    private static CacheResult materialize(HandlerResult result) {
+        return result.result() != null ? result.result() : CacheResult.success();
     }
 
     /**

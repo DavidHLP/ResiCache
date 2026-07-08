@@ -17,10 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>本测试覆盖三个 Operation 的静态 {@code fromAttributes} 方法,验证:
  * <ul>
  *   <li>字段映射完整(21 字段全量 / Evict 17 字段子集)</li>
- *   <li>边界裁剪正确(Cacheable 的 long→int 窄化)</li>
  *   <li>空入参 / 默认值路径</li>
  *   <li>跨 Operation 字段集差异(Cacheable/Put 全集 vs Evict 子集)</li>
  * </ul>
+ *
+ * <p>S1 (Round 47):@RedisCacheable.expectedInsertions 从 int 提升为 long 后,
+ * 本类不再有"边界裁剪到 int"测试 — 直传无窄化。
  *
  * <p>本测试是 ADR-0017 Factory 1-liner 委派的<strong>唯一</strong>契约钉子 —
  * 三个具体 factory 不再持有 Builder 填充逻辑,行为由本测试+Operation 类静态方法
@@ -114,27 +116,16 @@ class OperationFromAttributesTest {
         }
 
         @Test
-        @DisplayName("expectedInsertions 超 Integer.MAX_VALUE 裁剪到 int 边界")
-        void fromAttributes_clampsExpectedInsertionsToInt() throws Exception {
+        @DisplayName("expectedInsertions 直传无窄化(S1 后 long→long)")
+        void fromAttributes_passesExpectedInsertionsThrough() throws Exception {
+            // S1 (Round 47):Cacheable Builder 槽位是 long,直传无窄化。
             RedisCacheAttributes a = emptyExcept(RedisCacheAttributes.builder()
                     .cacheNames(new String[]{"c"})
                     .expectedInsertions(Long.MAX_VALUE));
 
             RedisCacheableOperation op = RedisCacheableOperation.fromAttributes(testMethod(), "k", a);
 
-            assertThat(op.getExpectedInsertions()).isEqualTo(Integer.MAX_VALUE);
-        }
-
-        @Test
-        @DisplayName("expectedInsertions 负值裁剪到 0")
-        void fromAttributes_clampsNegativeExpectedInsertionsToZero() throws Exception {
-            RedisCacheAttributes a = emptyExcept(RedisCacheAttributes.builder()
-                    .cacheNames(new String[]{"c"})
-                    .expectedInsertions(-100L));
-
-            RedisCacheableOperation op = RedisCacheableOperation.fromAttributes(testMethod(), "k", a);
-
-            assertThat(op.getExpectedInsertions()).isEqualTo(0);
+            assertThat(op.getExpectedInsertions()).isEqualTo(Long.MAX_VALUE);
         }
 
         @Test
@@ -351,7 +342,7 @@ class OperationFromAttributesTest {
                 @Override public Class<?> type() { return Object.class; }
                 @Override public boolean cacheNullValues() { return false; }
                 @Override public boolean useBloomFilter() { return false; }
-                @Override public int expectedInsertions() { return 100000; }
+                @Override public long expectedInsertions() { return 100000L; }
                 @Override public double falseProbability() { return 0.01; }
                 @Override public boolean randomTtl() { return false; }
                 @Override public float variance() { return 0.2F; }

@@ -243,30 +243,22 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("ADR-0019 已知 type-drift (STABILITY.md §1 不静默修复)")
+    @DisplayName("ADR-0019 已知 type-drift (S1 Round 47 已修复)")
     class Adr0019TypeDriftSentinel {
 
         @Test
-        @DisplayName("Put/Evict 的 expectedInsertions 是 long, 可承载 > Integer.MAX_VALUE 的值")
-        void putEvict_expectedInsertions_isLong_acceptsLargeValues() {
+        @DisplayName("Put/Evict/Cacheable 的 expectedInsertions 都是 long, 可承载 > Integer.MAX_VALUE 的值")
+        void allThree_expectedInsertions_areLong_acceptsLargeValues() {
+            // S1 (Round 47):@RedisCacheable.expectedInsertions 从 int 提升为 long,
+            // 与 Put/Evict 对齐;不再有 narrowToInt 死代码 + DoS 风险。
             long largeValue = 5_000_000_000L; // 5B > Integer.MAX_VALUE (~2.147B)
             RedisCachePut p = stubPut(pp -> pp.expectedInsertions = largeValue);
             RedisCacheEvict e = stubEvict(ee -> ee.expectedInsertions = largeValue);
+            RedisCacheable c = stubCacheable(s -> s.expectedInsertions = largeValue);
 
             assertThat(projector.from(p).getExpectedInsertions()).isEqualTo(largeValue);
             assertThat(projector.from(e).getExpectedInsertions()).isEqualTo(largeValue);
-        }
-
-        @Test
-        @DisplayName("Cacheable 的 expectedInsertions 是 int (类型漂移), 经隐式拓宽到 long 容器 — 不修,留待 1.0 毕业")
-        void cacheable_expectedInsertions_isInt_widensToLong() {
-            // @RedisCacheable.expectedInsertions() 是 int, 上限 Integer.MAX_VALUE
-            // 这里能设置的"安全大值"是 Integer.MAX_VALUE 本身
-            int maxInt = Integer.MAX_VALUE;
-            RedisCacheable c = stubCacheable(s -> s.expectedInsertions = maxInt);
-
-            // 隐式 int→long 拓宽: 投影到 long 容器 OK
-            assertThat(projector.from(c).getExpectedInsertions()).isEqualTo((long) maxInt);
+            assertThat(projector.from(c).getExpectedInsertions()).isEqualTo(largeValue);
         }
     }
 
@@ -332,7 +324,7 @@ class RedisCacheAttributesProjectorTest {
         Class<?> type = Object.class;
         boolean cacheNullValues = false;
         boolean useBloomFilter = false;
-        int expectedInsertions = 100_000;
+        long expectedInsertions = 100_000L;
         double falseProbability = 0.01;
         boolean randomTtl = false;
         float variance = 0.2F;
@@ -356,7 +348,7 @@ class RedisCacheAttributesProjectorTest {
         @Override public Class<?> type() { return type; }
         @Override public boolean cacheNullValues() { return cacheNullValues; }
         @Override public boolean useBloomFilter() { return useBloomFilter; }
-        @Override public int expectedInsertions() { return expectedInsertions; }
+        @Override public long expectedInsertions() { return expectedInsertions; }
         @Override public double falseProbability() { return falseProbability; }
         @Override public boolean randomTtl() { return randomTtl; }
         @Override public float variance() { return variance; }

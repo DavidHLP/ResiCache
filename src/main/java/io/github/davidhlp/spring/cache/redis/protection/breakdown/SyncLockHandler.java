@@ -100,50 +100,39 @@ public class SyncLockHandler extends AbstractCacheHandler {
 
     @Override
     protected HandlerResult doHandle(CacheContext context) {
-        LockContext lockContext = createLockContext(context);
+        // D5 (Round 47):原 LockContext builder 已在 doHandle 入口一次性构造,无论
+        // 后续是否需要锁都付出 builder 分配代价。改为 check-first → resolve-on-demand
+        // 三步走,check 失败直接 continueChain,无 builder 分配。LockContext 记录
+        // 因单一消费者 + 唯一调用方被 inline 消除,deletion test 通过。
+        RedisCacheableOperation operation = context.getCacheOperation();
+        Assert.notNull(operation, "Cache operation must not be null");
+        String lockKey = context.getRedisKey();
+        Assert.hasText(lockKey, "Lock key must not be empty");
 
-        // 判断是否需要锁
-        if (!lockContext.requiresLock()) {
+        if (!operation.isSync()) {
             log.debug("Sync enabled but lock not required, continuing chain: cacheName={}, key={}",
                       context.getCacheName(), context.getRedisKey());
             return HandlerResult.continueChain();
         }
 
+        long timeout = resolveTimeout(operation);
+
         log.debug("Executing with sync lock: cacheName={}, key={}, timeout={}s",
-                  context.getCacheName(), lockContext.lockKey(), lockContext.timeoutSeconds());
+                  context.getCacheName(), lockKey, timeout);
 
         // WS-1.4 per-handler tag:分布式锁成功获取事件计数
         safeIncrementSemantic();
 
-        // 在锁内执行后续 Handler — 委派给 Engine 统一推进（perNode 观测照常，
-        // aroundChain 观测由外层 execute 唯一负责，锁内不重复打点）
+        // 在锁内执行后续 Handler — 委派给 Engine 统一推进(perNode 观测照常,
+        // aroundChain 观测由外层 execute 唯一负责,锁内不重复打点)
         CacheResult result = syncSupport.executeSync(
-            lockContext.lockKey(),
+            lockKey,
             () -> engine.executeChainFragment(context, this),
-            lockContext.timeoutSeconds()
+            timeout
         );
 
-        // 锁内执行完成，终止链
+        // 锁内执行完成,终止链
         return HandlerResult.terminate(result);
-    }
-
-    /**
-     * 创建锁上下文
-     */
-    private LockContext createLockContext(CacheContext context) {
-        RedisCacheableOperation operation = context.getCacheOperation();
-        Assert.notNull(operation, "Cache operation must not be null");
-
-        String lockKey = context.getRedisKey();
-        Assert.hasText(lockKey, "Lock key must not be empty");
-
-        long timeout = resolveTimeout(operation);
-
-        return LockContext.builder()
-                .syncLock(operation.isSync())
-                .lockKey(lockKey)
-                .timeoutSeconds(timeout)
-                .build();
     }
 
     /**

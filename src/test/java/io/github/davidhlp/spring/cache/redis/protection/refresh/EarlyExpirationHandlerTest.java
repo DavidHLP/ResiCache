@@ -135,16 +135,47 @@ class EarlyExpirationHandlerTest {
     class DoHandleCacheMissTests {
 
         @Test
-        @DisplayName("continues chain when cache value is null")
+        @DisplayName("continues chain when remaining TTL is in fast-path window (no GET, no policy)")
         void doHandle_cacheValueNull_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
+            // P1 (Round 47):fast-path TTL=30s(<=60 阈值),落到完整 GET + policy 路径。
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(null);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
             assertThat(result.result()).isNull();
+        }
+
+        @Test
+        @DisplayName("continues chain when remaining TTL > fast-path threshold (skips GET entirely)")
+        void doHandle_fastPath_skipsGet() {
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            // P1 (Round 47):fast-path TTL=120s(>60 阈值),handler 直接 return,连 GET 都不做。
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(120L);
+
+            HandlerResult result = handler.doHandle(context);
+
+            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            // 关键不变量:fast-path 下 valueOperations.get 不应被调用
+            verify(valueOperations, never()).get(anyString());
+        }
+
+        @Test
+        @DisplayName("continues chain when remaining TTL is missing (key not exist) — fast-path short-circuits")
+        void doHandle_fastPath_ttlMissing_continuesChain() {
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            // Redis getExpire 返回 -2 表示 key 不存在; fast-path 直接 continue
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(-2L);
+
+            HandlerResult result = handler.doHandle(context);
+
+            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            verify(valueOperations, never()).get(anyString());
         }
 
         @Test
@@ -158,6 +189,7 @@ class EarlyExpirationHandlerTest {
                     System.currentTimeMillis() - 120000,
                     1L,
                     true);
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
 
             HandlerResult result = handler.doHandle(context);
@@ -176,6 +208,7 @@ class EarlyExpirationHandlerTest {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(false);
 
@@ -197,6 +230,7 @@ class EarlyExpirationHandlerTest {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
@@ -219,6 +253,7 @@ class EarlyExpirationHandlerTest {
                     .build();
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
@@ -239,6 +274,7 @@ class EarlyExpirationHandlerTest {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
@@ -254,6 +290,7 @@ class EarlyExpirationHandlerTest {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
@@ -321,6 +358,7 @@ class EarlyExpirationHandlerTest {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
+            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(cachedValue);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 

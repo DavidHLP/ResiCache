@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.lang.annotation.*;
 
@@ -85,7 +86,8 @@ public @interface RedisCachePut {
     /**
      * 布隆过滤器预期插入数量.
      */
-    long expectedInsertions() default 100000;
+    @PositiveOrZero
+    long expectedInsertions() default 100000L;
 
     /**
      * 布隆过滤器误判率.

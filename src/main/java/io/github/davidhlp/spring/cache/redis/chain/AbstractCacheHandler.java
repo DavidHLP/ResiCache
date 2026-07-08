@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -55,7 +54,6 @@ import lombok.extern.slf4j.Slf4j;
  * 链推进完全交给 Engine 的纪律。
  */
 @Getter
-@Setter
 @Slf4j
 public abstract class AbstractCacheHandler implements CacheHandler {
 
@@ -101,8 +99,20 @@ public abstract class AbstractCacheHandler implements CacheHandler {
         }
         CounterMetadata metadata = semanticCounter();
         if (metadata != null) {
-            this.semanticCounter = registerCounter(registry, metadata.name(), metadata.description());
+            bindSemanticCounter(registerCounter(registry, metadata.name(), metadata.description()));
         }
+    }
+
+    /**
+     * Package-private writer for the {@link #semanticCounter} field — only
+     * {@link #attachMeterRegistry} may rebind it. Replaces the previous
+     * class-level Lombok {@code @Setter} which leaked the field as a public
+     * setter, allowing any caller to silently rebind the counter owned by
+     * the base class (breaking the ADR-0018 "metric field is owned by the
+     * base class" contract).
+     */
+    void bindSemanticCounter(Counter counter) {
+        this.semanticCounter = counter;
     }
 
     /**

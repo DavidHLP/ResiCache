@@ -98,6 +98,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         AtomicBoolean exceptionThrown = new AtomicBoolean(false);
 
         // Stub both valueOperations.get and shouldRefresh
+        when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
         when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
         doAnswer(invocation -> {
@@ -143,6 +144,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         CountDownLatch refreshStarted = new CountDownLatch(1);
         CountDownLatch testComplete = new CountDownLatch(1);
 
+        lenient().when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
         lenient().when(valueOperations.get("test:key")).thenAnswer(invocation -> {
             capturedValue.set(invocation.getMock());
             return originalValue;
@@ -196,6 +198,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         CountDownLatch allRefreshesSubmitted = new CountDownLatch(3);
         AtomicReference<String> capturedKey = new AtomicReference<>();
 
+        lenient().when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
         lenient().when(valueOperations.get("test:key")).thenReturn(cachedValue1);
         lenient().when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
@@ -225,6 +228,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         CacheContext context = createContext(CacheOperation.GET, operation);
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
 
+        when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
         when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
@@ -246,6 +250,7 @@ class EarlyExpirationHandlerRaceConditionTest {
         CacheContext context = createContext(CacheOperation.GET, operation);
         CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
 
+        when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
         when(valueOperations.get("test:key")).thenReturn(cachedValue);
         when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 

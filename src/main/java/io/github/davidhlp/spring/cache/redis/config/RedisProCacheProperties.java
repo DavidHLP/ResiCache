@@ -152,6 +152,12 @@ public class RedisProCacheProperties {
         private int database = 0;
         /** 是否启用 TLS */
         private boolean tlsEnabled = false;
+        /**
+         * S2 (Round 47):强制 TLS —— 当为 {@code true} 时,启动期会校验
+         * {@link #tlsEnabled} 必须为 {@code true},否则抛 {@link IllegalStateException}
+         * fail-fast。生产推荐设为 {@code true}。
+         */
+        private boolean tlsRequired = false;
         /** 集群节点地址列表 */
         private List<String> clusterNodes = new ArrayList<>();
         /** Sentinel 主节点名称 */

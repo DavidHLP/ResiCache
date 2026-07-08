@@ -19,7 +19,7 @@ public class RedisCacheableOperation extends CacheableOperation {
     private final Class<?> type;
     private final boolean cacheNullValues;
     private final boolean useBloomFilter;
-    private final int expectedInsertions;
+    private final long expectedInsertions;
     private final double falseProbability;
     private final boolean randomTtl;
     private final float variance;
@@ -82,8 +82,8 @@ public class RedisCacheableOperation extends CacheableOperation {
         private Class<?> type = Object.class;
         private boolean cacheNullValues;
         private boolean useBloomFilter;
-        private int expectedInsertions = 10000;
-        private double falseProbability = 0.03;
+        private long expectedInsertions = 100000L;
+        private double falseProbability = 0.01;
         private boolean randomTtl;
         private float variance = 0.2F;
         private boolean enableEarlyExpiration;
@@ -161,7 +161,7 @@ public class RedisCacheableOperation extends CacheableOperation {
             return this;
         }
 
-        public Builder expectedInsertions(int expectedInsertions) {
+        public Builder expectedInsertions(long expectedInsertions) {
             this.expectedInsertions = expectedInsertions;
             return this;
         }

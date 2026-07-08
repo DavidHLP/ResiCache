@@ -99,9 +99,9 @@ public class RedisCacheAttributes {
      * <p>本方法<strong>唯一拥有</strong>"22 字段 → Builder" 的映射知识(ADR-0021);
      * 三个 Operation.fromAttributes 退化为单行委派,新加字段触点 6 → 3。
      *
-     * <p>{@code expectedInsertions} 在 Cacheable Builder 是 {@code int} 槽位 — 用
-     * {@link #narrowToInt(long)} 窄化(同 RedisCacheableOperation 原有逻辑),防御性裁剪到
-     * {@code [0, Integer.MAX_VALUE]}。
+     * <p><b>S1 (Round 47)</b>:{@code expectedInsertions} 现在 Cacheable Builder 是
+     * {@code long} 槽位(与 Put/Evict 对齐),直传无窄化。原 {@code narrowToInt}
+     * 死代码删除。
      *
      * @param b 已有 {@code name} / {@code key} 设值的 builder(由 fromAttributes 传入)
      * @return 同一 builder(支持链式)
@@ -118,7 +118,7 @@ public class RedisCacheAttributes {
                 .type(type)
                 .cacheNullValues(cacheNullValues)
                 .useBloomFilter(useBloomFilter)
-                .expectedInsertions(narrowToInt(expectedInsertions))
+                .expectedInsertions(expectedInsertions)
                 .falseProbability(falseProbability)
                 .randomTtl(randomTtl)
                 .variance(variance)
@@ -132,9 +132,8 @@ public class RedisCacheAttributes {
     /**
      * 把本 POJO 全部 22 字段映射到 {@link RedisCachePutOperation.Builder}。
      *
-     * <p>与 {@link #applyTo(RedisCacheableOperation.Builder)} 在 21/22 字段上完全一致
-     * (语义相同),仅 {@code expectedInsertions} 走 {@code long} 直传(无窄化) — Put Builder
-     * 槽位是 {@code long},这是 Cacheable 与 Put 唯一字段类型差异。
+     * <p>S1 (Round 47) 后 Cacheable/Put 字段类型完全一致 — both builders 现在都用
+     * {@code long} 槽位承载 {@code expectedInsertions},直传无窄化。
      *
      * @param b 已有 {@code name} / {@code key} 设值的 builder
      * @return 同一 builder(支持链式)
@@ -194,17 +193,5 @@ public class RedisCacheAttributes {
                 .enableEarlyExpiration(enableEarlyExpiration)
                 .earlyExpirationThreshold(earlyExpirationThreshold)
                 .earlyExpirationMode(earlyExpirationMode);
-    }
-
-    /**
-     * long → int 窄化(防御性裁剪到 {@code [0, Integer.MAX_VALUE]})。
-     *
-     * <p>与原 {@code RedisCacheableOperation.fromAttributes} 的窄化表达式
-     * {@code (int) Math.min(Integer.MAX_VALUE, Math.max(0L, a.getExpectedInsertions()))}
-     * <em>byte-for-byte</em> 保留(契约不变,OperationFromAttributesTest 现有断言覆盖)。
-     * Put/Evict Builder 的 {@code expectedInsertions} 是 {@code long},不走本 helper。
-     */
-    private static int narrowToInt(long v) {
-        return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, v));
     }
 }

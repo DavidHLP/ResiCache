@@ -226,8 +226,8 @@ class CacheableOperationFactoryTest {
         }
 
         @Override
-        public int expectedInsertions() {
-            return 100_000;
+        public long expectedInsertions() {
+            return 100_000L;
         }
 
         @Override
