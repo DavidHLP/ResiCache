@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,9 @@ import java.util.List;
  * <p>注册样板（for-loop + null-check + ArrayList 装配）已收敛到
  * {@link AbstractAnnotationHandler#registerAll}。本类只负责获取注解数组 + 提供
  * key 提取器（{@code RedisCacheEvict::key}） + 委派。
+ *
+ * <p><b>ADR-0059</b>:register 调用改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
+ * 工厂 lambda,kind = {@link OperationKind#CACHE_EVICT}。
  */
 @Slf4j
 @Component
@@ -44,6 +48,6 @@ public class EvictAnnotationHandler extends AbstractAnnotationHandler {
     protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCacheEvict[] evicts = method.getAnnotationsByType(RedisCacheEvict.class);
         return registerAll(method, target, args, evicts, RedisCacheEvict::key,
-                evictOperationFactory, redisCacheRegister::registerCacheEvictOperation, "cache evict");
+                evictOperationFactory, registerActionFor(OperationKind.CACHE_EVICT), "cache evict");
     }
 }

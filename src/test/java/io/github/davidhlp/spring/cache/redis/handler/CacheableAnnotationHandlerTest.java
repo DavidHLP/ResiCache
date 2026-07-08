@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 
 import java.lang.reflect.Method;
@@ -21,7 +23,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for CacheableAnnotationHandler.
+ * Unit tests for CacheableAnnotationHandler —— ADR-0059 收敛后形态。
+ *
+ * <p>register 调用已从 {@code redisCacheRegister::registerCacheableOperation} 方法引用
+ * 改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)} 工厂 lambda,
+ * 测试断言改为 {@code redisCacheRegister.register(..., OperationKind.CACHEABLE)}。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CacheableAnnotationHandler Tests")
@@ -113,7 +119,9 @@ class CacheableAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister).registerCacheableOperation(any(Method.class), any(Class.class), eq(operation));
+            // ADR-0059:register 调用经 registerActionFor lambda → OperationKind.CACHEABLE
+            verify(redisCacheRegister).register(
+                    any(Method.class), any(Class.class), eq(operation), eq(OperationKind.CACHEABLE));
         }
 
         @Test
@@ -165,7 +173,7 @@ class CacheableAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
         }
 
         @Test
@@ -181,7 +189,7 @@ class CacheableAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
         }
     }
 }

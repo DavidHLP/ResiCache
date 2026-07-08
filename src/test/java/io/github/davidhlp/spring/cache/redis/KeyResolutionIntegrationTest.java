@@ -67,7 +67,8 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
 
             Method method = TestService.class.getMethod("getById", Long.class);
             AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
-            RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation("users", elementKey);
+            RedisCacheableOperation operation = redisCacheRegister.get("users", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
             assertThat(operation).isNotNull();
             assertThat(operation.getKey()).isEqualTo("#id");
@@ -81,7 +82,8 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
 
             Method method = TestService.class.getMethod("getByIdComposite", Long.class);
             AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
-            RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation("items", elementKey);
+            RedisCacheableOperation operation = redisCacheRegister.get("items", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
             assertThat(operation).isNotNull();
             assertThat(operation.getKey()).isEqualTo("#root.methodName + ':' + #id");
@@ -99,7 +101,8 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
 
             Method method = TestService.class.getMethod("getWithCustomKey", String.class, String.class);
             AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
-            RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation("custom", elementKey);
+            RedisCacheableOperation operation = redisCacheRegister.get("custom", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
             assertThat(operation).isNotNull();
             assertThat(operation.getKeyGenerator()).isEqualTo("customKeyGenerator");
@@ -117,7 +120,8 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
 
             Method method = ClassLevelService.class.getMethod("classLevelMethod", String.class);
             AnnotatedElementKey elementKey = new AnnotatedElementKey(method, ClassLevelService.class);
-            RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation("class-cache", elementKey);
+            RedisCacheableOperation operation = redisCacheRegister.get("class-cache", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
             assertThat(operation).isNotNull();
             assertThat(operation.getKey()).isEqualTo("#key");
@@ -136,8 +140,10 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             Method method = TestService.class.getMethod("getMultiCache", String.class);
             AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
 
-            RedisCacheableOperation op1 = redisCacheRegister.getCacheableOperation("cache-a", elementKey);
-            RedisCacheableOperation op2 = redisCacheRegister.getCacheableOperation("cache-b", elementKey);
+            RedisCacheableOperation op1 = redisCacheRegister.get("cache-a", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
+            RedisCacheableOperation op2 = redisCacheRegister.get("cache-b", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
             assertThat(op1).isNotNull();
             assertThat(op2).isNotNull();
@@ -157,7 +163,8 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
 
             Method method = TestService.class.getMethod("getWithComposedAnnotation", String.class);
             AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
-            RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation("composed-cache", elementKey);
+            RedisCacheableOperation operation = redisCacheRegister.get("composed-cache", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
             assertThat(operation).isNotNull();
             assertThat(operation.getKey()).isEqualTo("#name");
@@ -176,7 +183,8 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
 
             Method method = TestService.class.getMethod("getWithSpringCacheable", String.class);
             AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
-            RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation("spring-cache", elementKey);
+            RedisCacheableOperation operation = redisCacheRegister.get("spring-cache", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
             assertThat(operation).isNotNull();
             assertThat(operation.getKey()).isEqualTo("#name");

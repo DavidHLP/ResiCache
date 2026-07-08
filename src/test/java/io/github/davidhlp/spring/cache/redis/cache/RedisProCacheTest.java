@@ -46,9 +46,8 @@ class RedisProCacheTest {
                 cacheConfiguration,
                 meterRegistry,
                 null,   // bloomSupport disabled
-                null,   // redisCacheRegister disabled
-                null,   // syncSupport disabled
-                null);  // methodMetadataResolver disabled
+                null,   // operationResolver disabled (ADR-0057 seam; nullable → no metadata lookup)
+                null);  // syncSupport disabled
     }
 
     private Callable<String> createLoader(String value) {

@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.factory.OperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,12 @@ import java.util.function.Function;
  *       {@code registerOne} 内部 try/catch 保证</li>
  * </ol>
  *
+ * <p><b>ADR-0059 收敛</b>:原 {@link RegisterAction} 函数式接口签名
+ * {@code (Method, Class<?>, O) -> void} 已扩展为 {@code (Method, Class<?>, O, OperationKind) -> void}
+ * —— 新增第 4 参数传入 {@link OperationKind} 让 {@link RedisCacheRegister#register} 单一 seam
+ * 区分命名空间。4 个具体 handler 调用点改为 lambda(本 seam 内嵌),丢失方法引用的
+ * "语法糖",换来 register API 6 方法 → 2 方法的 seam 收敛与新增操作种类的零漂移。
+ *
  * <p><b>下游契约</b>：4 个具体 handler（{@code Cacheable} / {@code CachePut} /
  * {@code Evict} / {@code Caching}）的 {@code doHandle} 方法现在只负责"获取注解
  * 数组 + 委派 registerAll"，不再重复 for-loop / null-check / ArrayList 样板。
@@ -57,10 +64,35 @@ public abstract class AbstractAnnotationHandler extends AnnotationHandler {
         return String.valueOf(key);
     }
 
-    /** 注册动作的函数式接口，对齐 {@code RedisCacheRegister::registerXxxOperation(Method, Class, O)} 签名 */
+    /**
+     * 注册动作的函数式接口 —— ADR-0059 扩展后增加 {@link OperationKind} 参数,
+     * 对齐 {@link RedisCacheRegister#register(Method, Class, CacheOperation, OperationKind)}
+     * 的 4 参 seam 签名。
+     *
+     * <p>调用方在 4 个具体 handler 中以 lambda 形式提供(如
+     * {@code (m, c, op) -> register.register(m, c, op, OperationKind.CACHEABLE)}),
+     * kind 在编译期固定,运行期无漂移风险。
+     */
     @FunctionalInterface
     protected interface RegisterAction<O> {
-        void register(Method method, Class<?> targetClass, O operation);
+        void register(Method method, Class<?> targetClass, O operation, OperationKind kind);
+    }
+
+    /**
+     * 便捷工厂:从 {@link RedisCacheRegister} + 固定 {@link OperationKind} 生成
+     * {@link RegisterAction} lambda —— 调用方无需在循环里重复传 kind。
+     *
+     * <p>典型用法:
+     * <pre>
+     * RegisterAction&lt;RedisCacheableOperation&gt; action = registerActionFor(OperationKind.CACHEABLE);
+     * registerAll(method, target, args, cacheables, RedisCacheable::key, factory, action, "cacheable");
+     * </pre>
+     *
+     * <p>消除每个具体 handler 各自的 lambda boilerplate,统一收敛到基类工厂。
+     */
+    protected <O extends CacheOperation> RegisterAction<O> registerActionFor(OperationKind kind) {
+        return (method, targetClass, operation, k) ->
+                redisCacheRegister.register(method, targetClass, operation, kind);
     }
 
     /**
@@ -78,7 +110,7 @@ public abstract class AbstractAnnotationHandler extends AnnotationHandler {
             String key = generateKey(target, method, args, keyExpression);
             O operation = factory.create(method, annotation, key);
             Class<?> targetClass = target != null ? target.getClass() : null;
-            registerAction.register(method, targetClass, operation);
+            registerAction.register(method, targetClass, operation, null);
             log.debug("Registered {} operation: {} with key: {} for caches: {}",
                     logTag, method.getName(), key, String.join(",", operation.getCacheNames()));
             return operation;
@@ -112,7 +144,7 @@ public abstract class AbstractAnnotationHandler extends AnnotationHandler {
      * <pre>
      * RedisCacheEvict[] evicts = method.getAnnotationsByType(RedisCacheEvict.class);
      * return registerAll(method, target, args, evicts, RedisCacheEvict::key,
-     *         evictOperationFactory, redisCacheRegister::registerCacheEvictOperation, "cache evict");
+     *         evictOperationFactory, registerActionFor(OperationKind.CACHE_EVICT), "cache evict");
      * </pre>
      *
      * @param keyExtractor 从每个注解对象提取 key 表达式（SpEL / 字面量）的函数；

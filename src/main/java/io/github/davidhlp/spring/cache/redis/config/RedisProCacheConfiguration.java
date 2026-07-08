@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
+import io.github.davidhlp.spring.cache.redis.cache.CacheOperationResolver;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
-import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.ThreadPoolEarlyExpirationExecutor;
@@ -10,7 +10,6 @@ import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -40,19 +39,17 @@ public class RedisProCacheConfiguration {
     @ConditionalOnMissingBean
     public RedisProCacheWriter redisProCacheWriter(
             RedisTemplate<String, Object> redisCacheTemplate,
-            RedisCacheRegister redisCacheRegister,
             TypeSupport typeSupport,
             CacheHandlerChainFactory chainFactory,
             CacheStatisticsCollector cacheStatisticsCollector,
-            MethodMetadataResolver methodMetadataResolver) {
+            CacheOperationResolver operationResolver) {
         RedisProCacheWriter writer = new RedisProCacheWriter(
                 redisCacheTemplate,
                 redisCacheTemplate.opsForValue(),
                 cacheStatisticsCollector,
-                redisCacheRegister,
                 typeSupport,
                 chainFactory,
-                methodMetadataResolver);
+                operationResolver);
         log.info("Created RedisProCacheWriter with handler chain pattern");
         return writer;
     }
@@ -89,9 +86,8 @@ public class RedisProCacheConfiguration {
             RedisCacheConfiguration defaultRedisCacheConfiguration,
             ObjectProvider<MeterRegistry> meterRegistryProvider,
             BloomSupport bloomSupport,
-            RedisCacheRegister redisCacheRegister,
+            CacheOperationResolver operationResolver,
             SyncSupport syncSupport,
-            MethodMetadataResolver methodMetadataResolver,
             RedisProCacheProperties properties) {
         // 构建 per-cache 配置映射
         Map<String, RedisCacheConfiguration> initialCacheConfigurations = buildInitialCacheConfigurations(
@@ -107,9 +103,8 @@ public class RedisProCacheConfiguration {
                 defaultRedisCacheConfiguration,
                 meterRegistry,
                 bloomSupport,
-                redisCacheRegister,
+                operationResolver,
                 syncSupport,
-                methodMetadataResolver,
                 initialCacheConfigurations,
                 properties.isTransactionAware());
         log.debug("Created RedisProCacheManager with {} initial cache configurations, transactionAware={}",

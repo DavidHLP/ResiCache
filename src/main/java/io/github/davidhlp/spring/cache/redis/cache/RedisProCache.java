@@ -1,9 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -29,23 +27,28 @@ public class RedisProCache extends RedisCache {
     private final Counter putCounter;
     private final Counter evictCounter;
     private final BloomSupport bloomSupport;
-    private final RedisCacheRegister redisCacheRegister;
+    private final CacheOperationResolver operationResolver;
     private final SyncSupport syncSupport;
-    private final MethodMetadataResolver methodMetadataResolver;
 
     /**
      * 构造 ResiCache 实例 — Round 5 / ADR-0014 收敛后的唯一构造入口.
      *
      * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点,
-     * 全部 8 个依赖以命名参数显式传入,无任何构造重载。调用方需传递 {@code null}
+     * 全部 7 个依赖以命名参数显式传入,无任何构造重载。调用方需传递 {@code null}
      * 表示"该特性未启用"(对应运行时 null-safe 路径,行为与原 4-重载 null 委派一致)。
+     *
+     * <p><b>ADR-0057 (Round 43) 收敛</b>:原 8 参构造的 {@code redisCacheRegister} +
+     * {@code methodMetadataResolver} 已合并为单一 {@link CacheOperationResolver} seam —— 消除
+     * {@link #lookupOperation()} 中"读 ThreadLocal key → 查 register"的 4 行镜像协议
+     * 与 {@code RedisProCacheWriter#resolveOperation} 漂移风险。本类持有 1 个 deep 依赖
+     * (而非 2 个浅依赖),构造参数 -1,内部 {@code lookupOperation} 退化为 1 行委派。
      *
      * <p><b>为什么不做"便利重载"</b>:
      * <ul>
      *   <li>4 个构造重载 = 4 套参数子集 = 调用方必须记住"哪个用哪个" = 接口与实现等宽
      *       (浅模块)</li>
      *   <li>测试用 {@code null} 显式禁用不使用的特性,反而比"猜重载"更清晰</li>
-     *   <li>Spring 装配路径已稳定,生产仅 1 个 8 参构造,4-参重载从未被生产代码使用
+     *   <li>Spring 装配路径已稳定,生产仅 1 个 7 参构造,4-参重载从未被生产代码使用
      *       (仅 2 个测试使用,见 ADR-0014)</li>
      * </ul>
      *
@@ -57,11 +60,10 @@ public class RedisProCache extends RedisCache {
      *       {@link RedisProCacheTimers#safeIncrement} /
      *       {@link RedisProCacheTimers#timed} 静默 no-op,见 ADR-0031)</li>
      *   <li>{@code bloomSupport} —— 可为 null(关闭缓存穿透防护,GET 路径跳过 bloom 短路)</li>
-     *   <li>{@code redisCacheRegister} —— 可为 null(关闭方法级 metadata 查找,
-     *       {@link #lookupOperation()} 返回 null)</li>
+     *   <li>{@code operationResolver} —— 可为 null(关闭方法级 metadata 查找,
+     *       {@link #lookupOperation()} 返回 null;等价原 {@code redisCacheRegister=null} 或
+     *       {@code methodMetadataResolver=null} 任一为 null 的行为)</li>
      *   <li>{@code syncSupport} —— 可为 null(关闭分布式锁,GET 走 Spring 默认本地锁)</li>
-     *   <li>{@code methodMetadataResolver} —— 可为 null(关闭 ThreadLocal 路径,
-     *       与 {@code redisCacheRegister} 协同)</li>
      * </ul>
      *
      * <p><b>Round 22 收敛</b>(ADR-0031):timing & counter 注册与 null-safe 调用已迁移至
@@ -76,9 +78,8 @@ public class RedisProCache extends RedisCache {
             RedisCacheConfiguration cacheConfiguration,
             MeterRegistry meterRegistry,
             BloomSupport bloomSupport,
-            RedisCacheRegister redisCacheRegister,
-            SyncSupport syncSupport,
-            MethodMetadataResolver methodMetadataResolver) {
+            CacheOperationResolver operationResolver,
+            SyncSupport syncSupport) {
         super(name, cacheWriter, cacheConfiguration);
         this.getTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.get",
                 "Time spent getting cache entries", name);
@@ -95,9 +96,8 @@ public class RedisProCache extends RedisCache {
         this.evictCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.evict.count",
                 "Cache evict count", name);
         this.bloomSupport = bloomSupport;
-        this.redisCacheRegister = redisCacheRegister;
+        this.operationResolver = operationResolver;
         this.syncSupport = syncSupport;
-        this.methodMetadataResolver = methodMetadataResolver;
     }
 
     @Override
@@ -167,19 +167,14 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * 查找当前方法的缓存操作元数据
+     * 查找当前方法的缓存操作元数据 —— ADR-0057 收敛后的 1 行委派。
+     *
+     * <p>原 4 行镜像协议(ThreadLocal key null-check + register 查询 + 缺日志)已迁至
+     * {@link CacheOperationResolver#resolve(String)};本方法退化委派。{@code operationResolver}
+     * 为 null 时直接返回 null(测试场景关闭元数据查找,行为与原 {@code redisCacheRegister=null} 等价)。
      */
     private RedisCacheableOperation lookupOperation() {
-        if (redisCacheRegister == null) {
-            return null;
-        }
-        // Path C Step 1: 从 MethodMetadataResolver 读取,不再直接访问静态 holder
-        AnnotatedElementKey elementKey = methodMetadataResolver == null
-                ? null : methodMetadataResolver.currentKey();
-        if (elementKey == null) {
-            return null;
-        }
-        return redisCacheRegister.getCacheableOperation(getName(), elementKey);
+        return operationResolver == null ? null : operationResolver.resolve(getName());
     }
 
     /**

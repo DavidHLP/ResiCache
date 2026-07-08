@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 
 import java.lang.reflect.Method;
@@ -21,7 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for EvictAnnotationHandler.
+ * Unit tests for EvictAnnotationHandler —— ADR-0059 收敛后形态。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("EvictAnnotationHandler Tests")
@@ -109,7 +111,8 @@ class EvictAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister).registerCacheEvictOperation(any(Method.class), any(Class.class), eq(operation));
+            verify(redisCacheRegister).register(
+                    any(Method.class), any(Class.class), eq(operation), eq(OperationKind.CACHE_EVICT));
         }
 
         @Test
@@ -153,7 +156,6 @@ class EvictAnnotationHandlerTest {
         @Test
         @DisplayName("doHandle processes multiple annotations on different methods")
         void doHandle_withMultipleAnnotationsOnDifferentMethods_registersAll() throws Exception {
-            // Test that different methods with @RedisCacheEvict each get processed
             Method method1 = getMethod("evictMethod");
             Method method2 = getMethod("evictAllMethod");
             Object target = new TestClass();
@@ -166,7 +168,9 @@ class EvictAnnotationHandlerTest {
             handler.doHandle(method1, target, args);
             handler.doHandle(method2, target, args);
 
-            verify(redisCacheRegister, times(2)).registerCacheEvictOperation(any(Method.class), any(Class.class), any(RedisCacheEvictOperation.class));
+            verify(redisCacheRegister, times(2)).register(
+                    any(Method.class), any(Class.class),
+                    any(RedisCacheEvictOperation.class), eq(OperationKind.CACHE_EVICT));
         }
     }
 
@@ -185,7 +189,7 @@ class EvictAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
         }
 
         @Test
@@ -201,7 +205,7 @@ class EvictAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
         }
     }
 }

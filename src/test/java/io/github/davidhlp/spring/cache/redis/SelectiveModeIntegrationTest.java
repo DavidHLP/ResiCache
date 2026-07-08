@@ -96,7 +96,10 @@ class SelectiveModeIntegrationTest extends AbstractRedisIntegrationTest {
         // → RedisCacheInterceptor 不触发 → RedisCacheRegister 无对应操作注册
         Method method = SelectiveService.class.getMethod("getPlain", String.class);
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, SelectiveService.class);
-        assertThat(redisCacheRegister.getCacheableOperation("plain-cache", elementKey))
+        io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation op =
+                redisCacheRegister.get("plain-cache", elementKey,
+                io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
+        assertThat((Object) op)
                 .as("纯 @Cacheable 在 SELECTIVE 模式下不应被 ResiCache 注册")
                 .isNull();
     }

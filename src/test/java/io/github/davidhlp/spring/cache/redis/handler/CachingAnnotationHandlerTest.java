@@ -6,6 +6,7 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
 import io.github.davidhlp.spring.cache.redis.factory.CachePutOperationFactory;
 import io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory;
 import io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 
 import java.lang.reflect.Method;
@@ -26,7 +28,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for CachingAnnotationHandler.
+ * Unit tests for CachingAnnotationHandler —— ADR-0059 收敛后形态。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CachingAnnotationHandler Tests")
@@ -120,7 +122,7 @@ class CachingAnnotationHandlerTest {
     class DoHandleCombinedTests {
 
         @Test
-        @DisplayName("doHandle registers both cacheable and evict operations")
+        @DisplayName("doHandle registers both cacheable and evict operations with correct kinds")
         void doHandle_withCombinedAnnotations_registersBoth() throws Exception {
             Method method = getMethod("combinedMethod");
             Object target = new TestClass();
@@ -134,8 +136,13 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister).registerCacheableOperation(any(Method.class), any(Class.class), any(RedisCacheableOperation.class));
-            verify(redisCacheRegister).registerCacheEvictOperation(any(Method.class), any(Class.class), any(RedisCacheEvictOperation.class));
+            // ADR-0059:register 调用改为带 kind 的 seam,2 个 kind 各自调用 1 次
+            verify(redisCacheRegister).register(
+                    any(Method.class), any(Class.class),
+                    any(RedisCacheableOperation.class), eq(OperationKind.CACHEABLE));
+            verify(redisCacheRegister).register(
+                    any(Method.class), any(Class.class),
+                    any(RedisCacheEvictOperation.class), eq(OperationKind.CACHE_EVICT));
         }
 
         @Test
@@ -192,7 +199,9 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, times(2)).registerCacheableOperation(any(Method.class), any(Class.class), any(RedisCacheableOperation.class));
+            verify(redisCacheRegister, times(2)).register(
+                    any(Method.class), any(Class.class),
+                    any(RedisCacheableOperation.class), eq(OperationKind.CACHEABLE));
         }
 
         @Test
@@ -208,7 +217,9 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, times(2)).registerCacheEvictOperation(any(Method.class), any(Class.class), any(RedisCacheEvictOperation.class));
+            verify(redisCacheRegister, times(2)).register(
+                    any(Method.class), any(Class.class),
+                    any(RedisCacheEvictOperation.class), eq(OperationKind.CACHE_EVICT));
         }
     }
 
@@ -227,14 +238,12 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
         }
 
         @Test
         @DisplayName("doHandle handles cacheable factory exception gracefully")
         void doHandle_withCacheableFactoryException_doesNotThrow() throws Exception {
-            // Use multipleCacheableMethod which only has cacheable annotations
             Method method = getMethod("multipleCacheableMethod");
             Object target = new TestClass();
             Object[] args = new Object[0];
@@ -245,14 +254,12 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheableOperation(any(), any(), any());
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
         }
 
         @Test
         @DisplayName("doHandle handles evict factory exception gracefully")
         void doHandle_withEvictFactoryException_doesNotThrow() throws Exception {
-            // Use multipleEvictMethod which only has evict annotations
             Method method = getMethod("multipleEvictMethod");
             Object target = new TestClass();
             Object[] args = new Object[0];
@@ -263,7 +270,7 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            verify(redisCacheRegister, never()).registerCacheEvictOperation(any(), any(), any());
+            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), eq(OperationKind.CACHE_EVICT));
         }
     }
 }

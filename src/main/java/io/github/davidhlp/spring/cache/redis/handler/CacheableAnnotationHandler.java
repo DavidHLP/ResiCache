@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.handler;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory;
 import io.github.davidhlp.spring.cache.redis.factory.SpringCacheableAdapterFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
@@ -29,8 +30,11 @@ import java.util.List;
  *       （<strong>Candidate C</strong>：原本内联的 47 行 if-Builder 模板已抽出到该 factory）。</li>
  * </ul>
  *
- * <p>两条路径都通过同一 {@code redisCacheRegister::registerCacheableOperation} 方法引用
- * 注册，对调用方完全等价。
+ * <p><b>ADR-0059 收敛</b>:两条路径都通过
+ * {@link AbstractAnnotationHandler#registerActionFor(OperationKind)} 工厂返回的 lambda
+ * 注册到 {@link OperationKind#CACHEABLE} 命名空间,取代原
+ * {@code redisCacheRegister::registerCacheableOperation} 方法引用 —— register API
+ * 已从 6 方法收敛到 2 方法,kind 编译期固定。
  */
 @Slf4j
 @Component
@@ -64,7 +68,7 @@ public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
         if (cacheable != null) {
             RedisCacheableOperation operation = registerOne(
                     method, target, args, cacheable, cacheable.key(),
-                    cacheableOperationFactory, redisCacheRegister::registerCacheableOperation,
+                    cacheableOperationFactory, registerActionFor(OperationKind.CACHEABLE),
                     "cacheable");
             if (operation != null) {
                 operations.add(operation);
@@ -77,7 +81,7 @@ public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
         if (springCacheable != null) {
             RedisCacheableOperation operation = registerOne(
                     method, target, args, springCacheable, springCacheable.key(),
-                    springCacheableAdapterFactory, redisCacheRegister::registerCacheableOperation,
+                    springCacheableAdapterFactory, registerActionFor(OperationKind.CACHEABLE),
                     "spring cacheable");
             if (operation != null) {
                 operations.add(operation);

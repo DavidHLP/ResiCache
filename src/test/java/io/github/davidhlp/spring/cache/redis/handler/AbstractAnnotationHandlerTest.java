@@ -56,7 +56,7 @@ class AbstractAnnotationHandlerTest {
 
     /** Local RegisterAction — avoids depending on a real RedisCacheRegister method shape. */
     private final AbstractAnnotationHandler.RegisterAction<CacheOperation> recorder =
-            (m, t, op) -> capturedOps.add(op);
+            (m, t, op, kind) -> capturedOps.add(op);
 
     private TestableHandler handler;
     private TestSubject target;

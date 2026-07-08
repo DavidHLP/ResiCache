@@ -12,10 +12,14 @@ import java.lang.reflect.Method;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * RedisCacheRegister 单元测试
+ * RedisCacheRegister 单元测试 —— ADR-0059 / Round 45 收敛后形态。
  *
- * <p>注册/查询以 {@link AnnotatedElementKey}（方法 + 目标类）为查找键；
- * operation 自身的 key 字段不参与 register lookup（那是运行时缓存键的来源）。
+ * <p>原 3 对 register/get 公开方法(registerCacheableOperation / registerCacheEvictOperation /
+ * registerCachePutOperation + 对应 get)已收敛为单一 {@link RedisCacheRegister#register} +
+ * {@link RedisCacheRegister#get} 方法对,通过 {@link OperationKind} 枚举区分命名空间。
+ *
+ * <p>注册/查询以 {@link AnnotatedElementKey}(方法 + 目标类)为查找键;
+ * operation 自身的 key 字段不参与 register lookup(那是运行时缓存键的来源)。
  * 测试用 {@link #fixtureMethod()} 与 {@link #otherFixtureMethod()} 作为 elementKey 的方法维度。
  */
 @DisplayName("RedisCacheRegister Tests")
@@ -70,8 +74,8 @@ class RedisCacheRegisterTest {
     }
 
     @Nested
-    @DisplayName("registerCacheableOperation Tests")
-    class RegisterCacheableOperationTests {
+    @DisplayName("register(CACHEABLE) Tests")
+    class RegisterCacheableTests {
 
         @BeforeEach
         void setUp() {
@@ -79,34 +83,33 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("registerCacheableOperation stores operation for single cache name")
-        void registerCacheableOperation_singleCacheName_storesOperation() {
+        @DisplayName("register stores operation for single cache name")
+        void register_singleCacheName_storesOperation() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("testOperation")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHEABLE);
 
-            RedisCacheableOperation result = register.getCacheableOperation("cache1", ELEMENT_KEY);
+            RedisCacheableOperation result = register.get("cache1", ELEMENT_KEY, OperationKind.CACHEABLE);
             assertThat(result).isNotNull();
             assertThat(result.getName()).isEqualTo("testOperation");
         }
 
         @Test
-        @DisplayName("registerCacheableOperation stores operation for multiple cache names")
-        void registerCacheableOperation_multipleCacheNames_storesOperations() {
+        @DisplayName("register stores operation for multiple cache names")
+        void register_multipleCacheNames_storesOperations() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("testOperation")
                     .cacheNames("cache1", "cache2")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHEABLE);
 
-            RedisCacheableOperation result1 = register.getCacheableOperation("cache1", ELEMENT_KEY);
-            RedisCacheableOperation result2 = register.getCacheableOperation("cache2", ELEMENT_KEY);
+            RedisCacheableOperation result1 = register.get("cache1", ELEMENT_KEY, OperationKind.CACHEABLE);
+            RedisCacheableOperation result2 = register.get("cache2", ELEMENT_KEY, OperationKind.CACHEABLE);
 
-            // 验证两个 cache name 都存了同一个 operation(而非仅非空)
             assertThat(result1).isNotNull();
             assertThat(result1.getName()).isEqualTo("testOperation");
             assertThat(result2).isNotNull();
@@ -114,8 +117,8 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("registerCacheableOperation updates existing operation")
-        void registerCacheableOperation_existingKey_updatesOperation() {
+        @DisplayName("register updates existing operation")
+        void register_existingKey_updatesOperation() {
             RedisCacheableOperation operation1 = RedisCacheableOperation.builder()
                     .name("operation1")
                     .cacheNames("cache1")
@@ -126,17 +129,17 @@ class RedisCacheRegisterTest {
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, operation1);
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, operation2);
+            register.register(METHOD, TARGET_CLASS, operation1, OperationKind.CACHEABLE);
+            register.register(METHOD, TARGET_CLASS, operation2, OperationKind.CACHEABLE);
 
-            RedisCacheableOperation result = register.getCacheableOperation("cache1", ELEMENT_KEY);
+            RedisCacheableOperation result = register.get("cache1", ELEMENT_KEY, OperationKind.CACHEABLE);
             assertThat(result.getName()).isEqualTo("operation2");
         }
     }
 
     @Nested
-    @DisplayName("registerCacheEvictOperation Tests")
-    class RegisterCacheEvictOperationTests {
+    @DisplayName("register(CACHE_EVICT) Tests")
+    class RegisterCacheEvictTests {
 
         @BeforeEach
         void setUp() {
@@ -144,34 +147,33 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("registerCacheEvictOperation stores operation for single cache name")
-        void registerCacheEvictOperation_singleCacheName_storesOperation() {
+        @DisplayName("register stores operation for single cache name")
+        void register_singleCacheName_storesOperation() {
             RedisCacheEvictOperation operation = RedisCacheEvictOperation.builder()
                     .name("evictOperation")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHE_EVICT);
 
-            RedisCacheEvictOperation result = register.getCacheEvictOperation("cache1", ELEMENT_KEY);
+            RedisCacheEvictOperation result = register.get("cache1", ELEMENT_KEY, OperationKind.CACHE_EVICT);
             assertThat(result).isNotNull();
             assertThat(result.getName()).isEqualTo("evictOperation");
         }
 
         @Test
-        @DisplayName("registerCacheEvictOperation stores operation for multiple cache names")
-        void registerCacheEvictOperation_multipleCacheNames_storesOperations() {
+        @DisplayName("register stores operation for multiple cache names")
+        void register_multipleCacheNames_storesOperations() {
             RedisCacheEvictOperation operation = RedisCacheEvictOperation.builder()
                     .name("evictOperation")
                     .cacheNames("cache1", "cache2")
                     .build();
 
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHE_EVICT);
 
-            RedisCacheEvictOperation result1 = register.getCacheEvictOperation("cache1", ELEMENT_KEY);
-            RedisCacheEvictOperation result2 = register.getCacheEvictOperation("cache2", ELEMENT_KEY);
+            RedisCacheEvictOperation result1 = register.get("cache1", ELEMENT_KEY, OperationKind.CACHE_EVICT);
+            RedisCacheEvictOperation result2 = register.get("cache2", ELEMENT_KEY, OperationKind.CACHE_EVICT);
 
-            // 验证两个 cache name 都存了同一个 evict operation(而非仅非空)
             assertThat(result1).isNotNull();
             assertThat(result1.getName()).isEqualTo("evictOperation");
             assertThat(result2).isNotNull();
@@ -179,8 +181,8 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("registerCacheEvictOperation updates existing operation")
-        void registerCacheEvictOperation_existingKey_updatesOperation() {
+        @DisplayName("register updates existing operation")
+        void register_existingKey_updatesOperation() {
             RedisCacheEvictOperation operation1 = RedisCacheEvictOperation.builder()
                     .name("evictOperation1")
                     .cacheNames("cache1")
@@ -191,17 +193,17 @@ class RedisCacheRegisterTest {
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, operation1);
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, operation2);
+            register.register(METHOD, TARGET_CLASS, operation1, OperationKind.CACHE_EVICT);
+            register.register(METHOD, TARGET_CLASS, operation2, OperationKind.CACHE_EVICT);
 
-            RedisCacheEvictOperation result = register.getCacheEvictOperation("cache1", ELEMENT_KEY);
+            RedisCacheEvictOperation result = register.get("cache1", ELEMENT_KEY, OperationKind.CACHE_EVICT);
             assertThat(result.getName()).isEqualTo("evictOperation2");
         }
     }
 
     @Nested
-    @DisplayName("getCacheableOperation Tests")
-    class GetCacheableOperationTests {
+    @DisplayName("get(CACHEABLE) Tests")
+    class GetCacheableTests {
 
         @BeforeEach
         void setUp() {
@@ -209,47 +211,47 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("getCacheableOperation returns null when operation not found")
-        void getCacheableOperation_notFound_returnsNull() {
-            RedisCacheableOperation result = register.getCacheableOperation("nonexistent", ELEMENT_KEY);
+        @DisplayName("get returns null when operation not found")
+        void get_notFound_returnsNull() {
+            RedisCacheableOperation result = register.get("nonexistent", ELEMENT_KEY, OperationKind.CACHEABLE);
 
             assertThat(result).isNull();
         }
 
         @Test
-        @DisplayName("getCacheableOperation returns null for non-matching element key")
-        void getCacheableOperation_wrongElementKey_returnsNull() {
+        @DisplayName("get returns null for non-matching element key")
+        void get_wrongElementKey_returnsNull() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("testOperation")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHEABLE);
 
-            RedisCacheableOperation result = register.getCacheableOperation("cache1", OTHER_ELEMENT_KEY);
+            RedisCacheableOperation result = register.get("cache1", OTHER_ELEMENT_KEY, OperationKind.CACHEABLE);
 
             assertThat(result).isNull();
         }
 
         @Test
-        @DisplayName("getCacheableOperation returns null for wrong cache name")
-        void getCacheableOperation_wrongCacheName_returnsNull() {
+        @DisplayName("get returns null for wrong cache name")
+        void get_wrongCacheName_returnsNull() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("testOperation")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHEABLE);
 
-            RedisCacheableOperation result = register.getCacheableOperation("cache2", ELEMENT_KEY);
+            RedisCacheableOperation result = register.get("cache2", ELEMENT_KEY, OperationKind.CACHEABLE);
 
             assertThat(result).isNull();
         }
     }
 
     @Nested
-    @DisplayName("getCacheEvictOperation Tests")
-    class GetCacheEvictOperationTests {
+    @DisplayName("get(CACHE_EVICT) Tests")
+    class GetCacheEvictTests {
 
         @BeforeEach
         void setUp() {
@@ -257,47 +259,47 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("getCacheEvictOperation returns null when operation not found")
-        void getCacheEvictOperation_notFound_returnsNull() {
-            RedisCacheEvictOperation result = register.getCacheEvictOperation("nonexistent", ELEMENT_KEY);
+        @DisplayName("get returns null when operation not found")
+        void get_notFound_returnsNull() {
+            RedisCacheEvictOperation result = register.get("nonexistent", ELEMENT_KEY, OperationKind.CACHE_EVICT);
 
             assertThat(result).isNull();
         }
 
         @Test
-        @DisplayName("getCacheEvictOperation returns null for non-matching element key")
-        void getCacheEvictOperation_wrongElementKey_returnsNull() {
+        @DisplayName("get returns null for non-matching element key")
+        void get_wrongElementKey_returnsNull() {
             RedisCacheEvictOperation operation = RedisCacheEvictOperation.builder()
                     .name("evictOperation")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHE_EVICT);
 
-            RedisCacheEvictOperation result = register.getCacheEvictOperation("cache1", OTHER_ELEMENT_KEY);
+            RedisCacheEvictOperation result = register.get("cache1", OTHER_ELEMENT_KEY, OperationKind.CACHE_EVICT);
 
             assertThat(result).isNull();
         }
 
         @Test
-        @DisplayName("getCacheEvictOperation returns null for wrong cache name")
-        void getCacheEvictOperation_wrongCacheName_returnsNull() {
+        @DisplayName("get returns null for wrong cache name")
+        void get_wrongCacheName_returnsNull() {
             RedisCacheEvictOperation operation = RedisCacheEvictOperation.builder()
                     .name("evictOperation")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHE_EVICT);
 
-            RedisCacheEvictOperation result = register.getCacheEvictOperation("cache2", ELEMENT_KEY);
+            RedisCacheEvictOperation result = register.get("cache2", ELEMENT_KEY, OperationKind.CACHE_EVICT);
 
             assertThat(result).isNull();
         }
     }
 
     @Nested
-    @DisplayName("getCachePutOperation Tests")
-    class GetCachePutOperationTests {
+    @DisplayName("get(CACHE_PUT) Tests")
+    class GetCachePutTests {
 
         @BeforeEach
         void setUp() {
@@ -305,32 +307,32 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("getCachePutOperation stores and retrieves put operation")
-        void getCachePutOperation_storesAndRetrieves() {
+        @DisplayName("get stores and retrieves put operation")
+        void get_storesAndRetrieves() {
             RedisCachePutOperation operation = RedisCachePutOperation.builder()
                     .name("putOperation")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCachePutOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHE_PUT);
 
-            RedisCachePutOperation result = register.getCachePutOperation("cache1", ELEMENT_KEY);
+            RedisCachePutOperation result = register.get("cache1", ELEMENT_KEY, OperationKind.CACHE_PUT);
             assertThat(result).isNotNull();
             assertThat(result.getName()).isEqualTo("putOperation");
         }
 
         @Test
-        @DisplayName("getCachePutOperation returns null when not found")
-        void getCachePutOperation_notFound_returnsNull() {
-            RedisCachePutOperation result = register.getCachePutOperation("nonexistent", ELEMENT_KEY);
+        @DisplayName("get returns null when not found")
+        void get_notFound_returnsNull() {
+            RedisCachePutOperation result = register.get("nonexistent", ELEMENT_KEY, OperationKind.CACHE_PUT);
 
             assertThat(result).isNull();
         }
     }
 
     @Nested
-    @DisplayName("Cacheable and Evict Operation Isolation Tests")
-    class OperationIsolationTests {
+    @DisplayName("Operation Kind Isolation Tests")
+    class OperationKindIsolationTests {
 
         @BeforeEach
         void setUp() {
@@ -338,8 +340,8 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("cacheable and evict operations are stored separately")
-        void cacheableAndEvict_storedSeparately() {
+        @DisplayName("cacheable and evict operations are stored separately by kind")
+        void cacheableAndEvict_storedSeparatelyByKind() {
             RedisCacheableOperation cacheableOp = RedisCacheableOperation.builder()
                     .name("cacheableOperation")
                     .cacheNames("cache1")
@@ -350,11 +352,11 @@ class RedisCacheRegisterTest {
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, cacheableOp);
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, evictOp);
+            register.register(METHOD, TARGET_CLASS, cacheableOp, OperationKind.CACHEABLE);
+            register.register(METHOD, TARGET_CLASS, evictOp, OperationKind.CACHE_EVICT);
 
-            RedisCacheableOperation cacheableResult = register.getCacheableOperation("cache1", ELEMENT_KEY);
-            RedisCacheEvictOperation evictResult = register.getCacheEvictOperation("cache1", ELEMENT_KEY);
+            RedisCacheableOperation cacheableResult = register.get("cache1", ELEMENT_KEY, OperationKind.CACHEABLE);
+            RedisCacheEvictOperation evictResult = register.get("cache1", ELEMENT_KEY, OperationKind.CACHE_EVICT);
 
             assertThat(cacheableResult).isNotNull();
             assertThat(cacheableResult.getName()).isEqualTo("cacheableOperation");
@@ -363,8 +365,8 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("same cache name and element key but different types are independent")
-        void sameNameKeyDifferentType_areIndependent() {
+        @DisplayName("same cache name and element key but different kinds are independent")
+        void sameNameKeyDifferentKind_areIndependent() {
             RedisCacheableOperation cacheableOp = RedisCacheableOperation.builder()
                     .name("cacheable")
                     .cacheNames("myCache")
@@ -375,23 +377,38 @@ class RedisCacheRegisterTest {
                     .cacheNames("myCache")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, cacheableOp);
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, evictOp);
+            register.register(METHOD, TARGET_CLASS, cacheableOp, OperationKind.CACHEABLE);
+            register.register(METHOD, TARGET_CLASS, evictOp, OperationKind.CACHE_EVICT);
 
-            RedisCacheableOperation cacheableResult = register.getCacheableOperation("myCache", ELEMENT_KEY);
-            RedisCacheEvictOperation evictResult = register.getCacheEvictOperation("myCache", ELEMENT_KEY);
+            RedisCacheableOperation cacheableResult = register.get("myCache", ELEMENT_KEY, OperationKind.CACHEABLE);
+            RedisCacheEvictOperation evictResult = register.get("myCache", ELEMENT_KEY, OperationKind.CACHE_EVICT);
 
-            // 验证同 cacheName + elementKey 下,两种类型各自独立存储(而非互相覆盖)
             assertThat(cacheableResult).isNotNull();
             assertThat(cacheableResult.getName()).isEqualTo("cacheable");
             assertThat(evictResult).isNotNull();
             assertThat(evictResult.getName()).isEqualTo("evict");
         }
+
+        @Test
+        @DisplayName("get with wrong kind on populated slot returns null")
+        void get_kindMismatchOnPopulatedSlot_returnsNull() {
+            RedisCacheEvictOperation evictOp = RedisCacheEvictOperation.builder()
+                    .name("evictOperation")
+                    .cacheNames("cache1")
+                    .build();
+
+            register.register(METHOD, TARGET_CLASS, evictOp, OperationKind.CACHE_EVICT);
+
+            // 槽位被 EVICT 占用,但用 CACHEABLE 查询:kind 不匹配应返回 null
+            RedisCacheableOperation result = register.get("cache1", ELEMENT_KEY, OperationKind.CACHEABLE);
+
+            assertThat(result).isNull();
+        }
     }
 
     @Nested
-    @DisplayName("Type Isolation Tests")
-    class TypeIsolationTests {
+    @DisplayName("Type Guard Tests (ADR-0059)")
+    class TypeGuardTests {
 
         @BeforeEach
         void setUp() {
@@ -399,18 +416,18 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("getCacheableOperation returns null when slot holds a different operation type")
-        void getCacheableOperation_typeMismatch_returnsNull() {
-            // 同一 cacheName + elementKey 注册 evict，再用 cacheable 查询：类型不匹配应返回 null
-            RedisCacheEvictOperation evictOp = RedisCacheEvictOperation.builder()
-                    .name("evictOperation")
+        @DisplayName("register rejects operation whose class doesn't match kind (defensive)")
+        void register_kindMismatch_skipsAndLogsError() {
+            // 把 evict operation 投到 CACHEABLE 命名空间 —— kind.operationType 校验失败,
+            // 防御性跳过;对应 get 也应返回 null(无写入)。
+            RedisCacheEvictOperation wrongKindOp = RedisCacheEvictOperation.builder()
+                    .name("wrong")
                     .cacheNames("cache1")
                     .build();
 
-            register.registerCacheEvictOperation(METHOD, TARGET_CLASS, evictOp);
+            register.register(METHOD, TARGET_CLASS, wrongKindOp, OperationKind.CACHEABLE);
 
-            RedisCacheableOperation result = register.getCacheableOperation("cache1", ELEMENT_KEY);
-
+            RedisCacheableOperation result = register.get("cache1", ELEMENT_KEY, OperationKind.CACHEABLE);
             assertThat(result).isNull();
         }
     }
@@ -429,16 +446,16 @@ class RedisCacheRegisterTest {
                     .cacheNames("cache:with:colons")
                     .build();
 
-            register.registerCacheableOperation(METHOD, TARGET_CLASS, operation);
+            register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHEABLE);
 
             RedisCacheableOperation result =
-                    register.getCacheableOperation("cache:with:colons", ELEMENT_KEY);
+                    register.get("cache:with:colons", ELEMENT_KEY, OperationKind.CACHEABLE);
             assertThat(result).isNotNull();
             assertThat(result.getName()).isEqualTo("testOperation");
         }
 
         @Test
-        @DisplayName("multiple registrations of same operation increments internal size")
+        @DisplayName("multiple registrations of different operations increments internal size")
         void multipleRegistrations_incrementsSize() {
             register = new RedisCacheRegister(100, 50);
 
@@ -447,12 +464,11 @@ class RedisCacheRegisterTest {
                         .name("operation" + i)
                         .cacheNames("cache" + i)
                         .build();
-                register.registerCacheableOperation(METHOD, TARGET_CLASS, operation);
+                register.register(METHOD, TARGET_CLASS, operation, OperationKind.CACHEABLE);
             }
 
-            // 验证多个注册都独立存入:取 cache0 与 cache5,断言各自 name(而非仅非空)
-            RedisCacheableOperation result5 = register.getCacheableOperation("cache5", ELEMENT_KEY);
-            RedisCacheableOperation result0 = register.getCacheableOperation("cache0", ELEMENT_KEY);
+            RedisCacheableOperation result5 = register.get("cache5", ELEMENT_KEY, OperationKind.CACHEABLE);
+            RedisCacheableOperation result0 = register.get("cache0", ELEMENT_KEY, OperationKind.CACHEABLE);
             assertThat(result5).isNotNull();
             assertThat(result5.getName()).isEqualTo("operation5");
             assertThat(result0).isNotNull();

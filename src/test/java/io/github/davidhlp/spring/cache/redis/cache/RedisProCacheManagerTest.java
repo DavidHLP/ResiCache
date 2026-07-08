@@ -49,9 +49,8 @@ class RedisProCacheManagerTest {
                 defaultConfiguration,
                 meterRegistry,
                 null,   // bloomSupport disabled
-                null,   // redisCacheRegister disabled
+                null,   // operationResolver disabled (ADR-0057 seam; nullable → no metadata lookup)
                 null,   // syncSupport disabled
-                null,   // methodMetadataResolver disabled
                 Collections.emptyMap(),
                 false);  // transactionAware
     }

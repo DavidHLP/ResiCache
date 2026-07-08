@@ -70,10 +70,10 @@ class SyncSingleFlightIntegrationTest extends AbstractRedisIntegrationTest {
         Method method = LoadService.class.getMethod("loadExpensiveData", String.class);
         org.springframework.context.expression.AnnotatedElementKey elementKey =
                 new org.springframework.context.expression.AnnotatedElementKey(method, LoadService.class);
-        var operation = redisCacheRegister.getCacheableOperation("test", elementKey);
+        var operation = redisCacheRegister.get("test", elementKey, io.github.davidhlp.spring.cache.redis.operation.OperationKind.CACHEABLE);
 
         assertThat(operation).isNotNull();
-        assertThat(operation.isSync()).isTrue();
+        assertThat(((io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation) operation).isSync()).isTrue();
     }
 
     @Test

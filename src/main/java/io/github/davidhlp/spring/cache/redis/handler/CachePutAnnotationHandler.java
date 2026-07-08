@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.factory.CachePutOperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
 
@@ -24,8 +25,11 @@ import java.util.List;
  *
  * <pre>
  *   return registerAll(method, target, args, puts, RedisCachePut::key,
- *           cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put");
+ *           cachePutOperationFactory, registerActionFor(OperationKind.CACHE_PUT), "cache put");
  * </pre>
+ *
+ * <p><b>ADR-0059</b>:原 {@code redisCacheRegister::registerCachePutOperation} 方法引用
+ * 改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)} 工厂 lambda。
  */
 @Slf4j
 @Component
@@ -50,6 +54,6 @@ public class CachePutAnnotationHandler extends AbstractAnnotationHandler {
     protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCachePut[] puts = method.getAnnotationsByType(RedisCachePut.class);
         return registerAll(method, target, args, puts, RedisCachePut::key,
-                cachePutOperationFactory, redisCacheRegister::registerCachePutOperation, "cache put");
+                cachePutOperationFactory, registerActionFor(OperationKind.CACHE_PUT), "cache put");
     }
 }

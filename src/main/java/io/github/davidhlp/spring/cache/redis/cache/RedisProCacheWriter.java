@@ -4,13 +4,10 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
-import org.springframework.context.expression.AnnotatedElementKey;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,15 +30,21 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>责任链顺序： BloomFilterHandler → SyncLockHandler → TtlHandler → NullValueHandler →
  * ActualCacheHandler
+ *
+ * <p><b>ADR-0057 (Round 43) 收敛</b>:原构造参数的 {@link
+ * io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister} + {@link MethodMetadataResolver}
+ * 已合并为单一 {@link CacheOperationResolver} seam —— 消除本类
+ * {@link #resolveOperation(String)} 与 {@link RedisProCache#lookupOperation()}
+ * 中"读 ThreadLocal key → 查 register"的 4 行镜像协议漂移风险。本类持有 1 个 deep 依赖
+ * (而非 2 个浅依赖);{@code resolveOperation} 退化为 1 行委派。
  */
 @Slf4j
 public class RedisProCacheWriter implements RedisCacheWriter {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
-    private final MethodMetadataResolver methodMetadataResolver;
+    private final CacheOperationResolver operationResolver;
     private final CacheStatisticsCollector statistics;
-    private final RedisCacheRegister redisCacheRegister;
     private final TypeSupport typeSupport;
     private final CacheHandlerChainFactory chainFactory;
 
@@ -54,17 +57,15 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     public RedisProCacheWriter(RedisTemplate<String, Object> redisTemplate,
                                ValueOperations<String, Object> valueOperations,
                                CacheStatisticsCollector statistics,
-                               RedisCacheRegister redisCacheRegister,
                                TypeSupport typeSupport,
                                CacheHandlerChainFactory chainFactory,
-                               MethodMetadataResolver methodMetadataResolver) {
+                               CacheOperationResolver operationResolver) {
         this.redisTemplate = redisTemplate;
         this.valueOperations = valueOperations;
         this.statistics = statistics;
-        this.redisCacheRegister = redisCacheRegister;
         this.typeSupport = typeSupport;
         this.chainFactory = chainFactory;
-        this.methodMetadataResolver = methodMetadataResolver;
+        this.operationResolver = operationResolver;
         log.debug("Initializing handler chain for RedisProCacheWriter");
         this.cachedChain = chainFactory.createChain();
     }
@@ -99,10 +100,12 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @NonNull
     public CompletableFuture<byte[]> retrieve(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        // Path C Step 6 / ADR-0035:resolver.runWithSnapshot 在 commonPool 异步线程内
-        // snapshot/restore 方法元数据 + MDC,保证链处理器读到正确 context。
+        // Path C Step 6 / ADR-0035 + ADR-0057:resolver.runWithSnapshot 在 commonPool 异步
+        // 线程内 snapshot/restore 方法元数据 + MDC,保证链处理器读到正确 context。
+        // 本类不再直接持 MethodMetadataResolver,经 CacheOperationResolver.runWithSnapshot
+        // 委派(原 resolver 协议收口到单一 seam,消除 lookup 与 snapshot 两协议并行)。
         return CompletableFuture.supplyAsync(
-                () -> methodMetadataResolver.runWithSnapshot(() -> get(name, key, ttl)));
+                () -> operationResolver.runWithSnapshot(() -> get(name, key, ttl)));
     }
 
     /**
@@ -151,9 +154,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        // Path C Step 6 / ADR-0035:同 retrieve(),resolver.runWithSnapshot 透传 context。
+        // Path C Step 6 / ADR-0035 + ADR-0057:同 retrieve(),经 operationResolver.runWithSnapshot 透传。
         return CompletableFuture.runAsync(
-                () -> methodMetadataResolver.runWithSnapshot(() -> {
+                () -> operationResolver.runWithSnapshot(() -> {
                     put(name, key, value, ttl);
                     return null;
                 }));
@@ -216,10 +219,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 redisTemplate,
                 valueOperations,
                 cacheStatisticsCollector,
-                redisCacheRegister,
                 typeSupport,
                 chainFactory,
-                methodMetadataResolver);
+                operationResolver);
     }
 
     @Override
@@ -229,24 +231,18 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 解析方法级 operation 配置(布隆/同步锁/TTL/空值等)—— 通过 AnnotatedElementKey 查 register,
-     * 匹配 Spring 的方法级元数据语义。Path C Step 1:从 MethodMetadataResolver 读 currentKey,
-     * 不再直接访问静态 holder。
+     * 解析方法级 operation 配置(布隆/同步锁/TTL/空值等)—— ADR-0057 收敛后的 1 行委派。
+     *
+     * <p>原 6 行 ThreadLocal key 协议 + register 查询 + 缺日志已迁至
+     * {@link CacheOperationResolver#resolve(String)};{@code operationResolver} 为 null
+     * 时直接返回 null(测试场景关闭元数据查找)。
      *
      * @param cacheName 缓存名称
      * @return 命中的 operation;无元数据或未命中返回 null
      */
     @Nullable
     private RedisCacheableOperation resolveOperation(@NonNull String cacheName) {
-        AnnotatedElementKey elementKey = methodMetadataResolver.currentKey();
-        if (elementKey == null) {
-            return null;
-        }
-        RedisCacheableOperation operation = redisCacheRegister.getCacheableOperation(cacheName, elementKey);
-        if (operation == null) {
-            log.debug("No metadata found via AnnotatedElementKey for cacheName={}, falling back to actualKey", cacheName);
-        }
-        return operation;
+        return operationResolver == null ? null : operationResolver.resolve(cacheName);
     }
 
     /**
