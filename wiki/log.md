@@ -8,7 +8,7 @@ tags:
 related: [index, overview, README, archive-2026-q2, milestone-2026-q3]
 status: stable
 created: 2026-06-21
-updated: 2026-07-06
+updated: 2026-07-09
 ---
 
 # 操作日志
@@ -25,6 +25,12 @@ wiki 演化的时间线,倒序排列。**每条一行:`- [YYYY-MM-DD] <op> | <�
 ## 2026-07-08 (ADR collapse)
 
 - [2026-07-08] archive | ADR 卡片收口:删除 49 篇 ADR `.md`(0001-0057)+ `INDEX.md` + `rounds/CHRONICLE.md`,约 600KB 散文;保留 `wiki/archive/adr/ARCHIVE-README.md` 作为收口说明(指向 [[log]] + `git log` 作为审计源);同步剥除 7 处外部 wikilink 引用(`wiki/modules/observability.md` / `wiki/modules/holder-and-config.md` ×2 / `wiki/architecture/chain-of-responsibility.md` ×2 / `wiki/mechanisms/breakdown-lock.md` / `wiki/meta/for-implementer.md` / `wiki/index.md`)+ 6 处外部 markdown 引用(`STABILITY.md` ×2 / `docs/comparison.md` ×2 / `CLAUDE.md` / `README.md` / `README.zh-CN.md`)+ 本 log.md 30+ 处 `→ [[00XX-...]]` 后缀;**git history 永久可追**,`git show <commit>` 恢复任意卡片原文;**不再新增独立 ADR 卡片** —— 决策承载方式:commit message body(SOURCE OF TRUTH)+ [[log]] 单行 append + wiki 主文档内联陈述。理由:三处同步(commit + log + 卡片)= 卡片沦为 git 的冗余镜像 + 49 篇卡片形成上下文陷阱挤压后续 session 发散空间
+
+---
+
+## 2026-07-09 (round 47)
+
+- [2026-07-09] improve | Round 47 | 兑现 `/tmp/resicache-review/architecture-review-2026-07-08.html` 的 10 候选**一次做完不留尾巴**:D1 `AbstractCacheHandler` 移除 class-level `@Setter`(mutability leak)+ 新增 `bindSemanticCounter` package-private seam;D2/D3 `SecureJacksonRedisSerializer` + `VersionEnvelope` 字段级 `@JsonTypeInfo` 与 ObjectMapper 全局 `setDefaultTyping` 双路径语义文档化(硬编码查 `@class`);D4 `ChainEngine.driveChain` 抽 `materialize(HandlerResult)` 静态 helper;D5 `SyncLockHandler` 内联 `LockContext` 构造 + 删 `chain/model/LockContext.java`;P1 `EarlyExpirationHandler.doHandle` TTL-first fast-path(getExpire >60s 或 <0 直接 continueChain 省 1 RTT);P2 `SecureJacksonRedisSerializer.deserialize` 单遍流式 `JsonParser` 走 `validateTypeIdsStreaming` 取代 `readTree + treeToValue` 双遍(消除大 payload 中间 JsonNode 树);P3 `EarlyExpirationScripts.atomicShortenTtlIfValueUnchanged` 改 version-CAS(`cjson.decode(current).version`)取代 value-byte CAS(降 Lua 复杂度 + 版本号本来就是真语义);S1 `@RedisCacheable.expectedInsertions` `int→long` + `@PositiveOrZero`(堵 type drift 静默截断)+ `RedisCacheAttributes.narrowToInt` helper 删除;S2 新增 `TlsConfigurationValidator` 启动监听器(WARN 密码/用户名无 TLS / fail-fast `tls-required=true` 但 `tls-enabled=false`)+ `RedisDeploymentProperties.tlsRequired` boolean。备选路径 A(分多轮)/ B(留 ADR 卡片)/ C(只做 design 子集)/ D(只做 perf 子集)/ E(S2 拆为独立 ticket)/ F(走 wiki 同步多文件)经红蓝博弈全数驳回。**公开 API / 序列化字节(除 P3 的 Lua)/ Redis 写入序列 / Spring 装配 / 注解默认值全 byte-equivalent**。787 tests / 0 fail / 0 err / 10 skipped(integration requiring Testcontainers)✓;checkstyle clean;JaCoCo 70%/40% gate met;`maven-javadoc-plugin` 在 main 上对 `@Builder` 生成 inner class 的解析错误为 pre-existing(unrelated,2026-07-09 之前 main 已存在,本 commit 未触碰 `RedisCacheAttributesProjector.java`)
 
 ---
 
