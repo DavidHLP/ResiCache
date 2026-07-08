@@ -5,17 +5,12 @@ import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 /**
@@ -41,6 +36,20 @@ import java.util.function.Supplier;
  *       这更符合击穿保护精神(避免 N 个 follower 在 leader 失败后继续打 DB);
  *       调用方可自行重试。详见 ADR-0042。</li>
  * </ul>
+ *
+ * <p><b>ADR-0055 (Round 41) 进一步收敛</b>:把 single-flight 选举产出的 3 个运行时角色
+ * (Reentrant / Leader / Follower)抽到 {@link SyncRole} sealed interface,本类只剩
+ * <b>选举函数 + orchestrator</b>职责,角色行为(state + cleanup)由角色自承。具体语义、
+ * state 字段、try/catch 翻译规则全部内聚到对应角色 ——
+ * 「读 follower 怎么 join 未来」不再需要在 SyncSupport 与 Follower 之间跳转,改为
+ * 读 {@link SyncRole.Follower#run} 单一文件。
+ *
+ * <p><b>本类剩余职责</b>:
+ * <ol>
+ *   <li>启动期 {@link #warnIfNoDistributedBackend()} —— 仅 warn,不 fail-fast</li>
+ *   <li>健康查询 {@link #isDegraded()} —— 供 health indicator 消费</li>
+ *   <li>{@link #executeSync} 选举 + 委派</li>
+ * </ol>
  *
  * <p><b>永不静默降级 (WS-1.2a)</b>:当无分布式锁后端(无 RedissonClient → 无 LockManager bean)
  * 时,任何 {@code sync=true} 操作<b>绝不</b>静默退化为单 JVM synchronized(多实例下击穿照旧,
@@ -78,8 +87,8 @@ public class SyncSupport {
     /**
      * 构造函数.
      *
-     * @param lockManagers 锁管理器列表（可能为空，表示无分布式锁后端）
-     * @param properties   ResiCache 配置（读取 {@code sync-lock.local-only} 降级开关）
+     * @param lockManagers 锁管理器列表(可能为空,表示无分布式锁后端)
+     * @param properties   ResiCache 配置(读取 {@code sync-lock.local-only} 降级开关)
      */
     public SyncSupport(final List<LockManager> lockManagers, final RedisProCacheProperties properties) {
         // 按 getOrder() 降序排序(数值越小优先级越高),构造不可变快照。
@@ -95,9 +104,9 @@ public class SyncSupport {
     }
 
     /**
-     * 启动期检测：无分布式锁后端且未显式 local-only 时，发出显眼告警.
+     * 启动期检测:无分布式锁后端且未显式 local-only 时,发出显眼告警.
      *
-     * <p>此时仍允许启动（用户可能不用 sync）；真正的 fail-fast 在运行期
+     * <p>此时仍允许启动(用户可能不用 sync);真正的 fail-fast 在运行期
      * {@link #executeSync(String, Supplier, long)}。
      */
     private void warnIfNoDistributedBackend() {
@@ -136,206 +145,46 @@ public class SyncSupport {
      * (零重复持锁/零重复回源)。
      * 同线程同 key 重入:fast-path 直接跑 loader(等价 {@code synchronized} 可重入)。
      *
+     * <p><b>ADR-0055 收敛</b>:本方法在 Round 41 之后只剩「选举 + 委派」两步 —
+     * 选哪个角色(role 的 state + cleanup)、跑什么,全部由角色自承。原 50+ SLOC 的
+     * leader/follower/reentrant 三路分支(每路 30+ 行)已迁出至
+     * {@link SyncRole.Reentrant} / {@link SyncRole.Leader} / {@link SyncRole.Follower}。
+     *
      * @param key            缓存键
      * @param loader         数据加载器(leader 在分布式锁内执行)
-     * @param timeoutSeconds 超时时间（秒）—— leader 透传给 {@link LockManager#tryAcquire};
+     * @param timeoutSeconds 超时时间(秒)—— leader 透传给 {@link LockManager#tryAcquire};
      *                       follower 用作 {@code future.get} 等待上限
      * @param <T>            返回值类型
      * @return leader loader 的结果(follower 共享同一份)
      */
-    @SuppressWarnings("unchecked")
     public <T> T executeSync(final String key, final Supplier<T> loader, final long timeoutSeconds) {
+        return electRole(key, loader, timeoutSeconds).run();
+    }
+
+    /**
+     * 选举:基于 reentrantKeys + inFlight CAS 决定走哪个角色.
+     *
+     * <p>本方法不持锁(CAS 无锁);race 条件下多个线程可能各自走 leader 路径(无 distributedManagers
+     * 时为 local-only 路径),但 inFlight CAS 严格保证「同一 key 同一时间只有一个 leader 发布
+     * future,其他全是 follower join」—— 这是 single-flight 协议的核心不变式。
+     *
+     * @param key            缓存键
+     * @param loader         加载器,透传给 Reentrant / Leader 角色(Follower 不需要)
+     * @param timeoutSeconds 透传给角色
+     * @return 选出的角色(Reentrant / Leader / Follower 之一)
+     */
+    private <T> SyncRole<T> electRole(String key, Supplier<T> loader, long timeoutSeconds) {
         // 重入 fast-path:当前线程已是此 key 的 leader(chain 内 SyncLockHandler 嵌套重入场景)。
-        // future 不可重入(否则 leader join 自己 → 死锁);synchronized 原模型天然可重入,此处等价。
         if (reentrantKeys.get().contains(key)) {
-            return loader.get();
+            return new SyncRole.Reentrant<>(loader);
         }
-
         // single-flight 选举:putIfAbsent CAS,首个线程成为 leader。
-        // 后续线程拿到 leader 已发布的 future,走 follower 路径 join。
-        final CompletableFuture<Object> mine = new CompletableFuture<>();
-        final CompletableFuture<Object> existing = inFlight.putIfAbsent(key, mine);
-
+        CompletableFuture<Object> mine = new CompletableFuture<>();
+        CompletableFuture<Object> existing = inFlight.putIfAbsent(key, mine);
         if (existing == null) {
-            return runAsLeader(key, loader, timeoutSeconds, mine);
+            return new SyncRole.Leader<>(key, timeoutSeconds, loader, mine,
+                    distributedManagers, properties, inFlight, reentrantKeys);
         }
-        return runAsFollower(key, existing, timeoutSeconds);
-    }
-
-    /**
-     * Leader 路径:标记重入 → 持锁跑 loader → complete future.
-     *
-     * <p>无论成功/失败,leader 都在 finally 中 {@code complete/completeExceptionally} future
-     * (避免 follower 永久阻塞)并清理 reentrant / inFlight。
-     */
-    private <T> T runAsLeader(final String key, final Supplier<T> loader,
-                              final long timeoutSeconds, final CompletableFuture<Object> mine) {
-        reentrantKeys.get().add(key);
-        T value = null;
-        RuntimeException failure = null;
-        boolean success = false;
-        try {
-            value = doLeaderWork(key, loader, timeoutSeconds);
-            success = true;
-        } catch (final RuntimeException e) {
-            failure = e;
-        } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
-            failure = new IllegalStateException(
-                    "Thread interrupted while acquiring distributed lock for key: " + key, e);
-        } finally {
-            if (success) {
-                mine.complete(value);
-            } else {
-                mine.completeExceptionally(failure);
-            }
-            reentrantKeys.get().remove(key);
-            // 只移除自己发布的 future,避免误删后一个 leader
-            inFlight.remove(key, mine);
-        }
-        if (success) {
-            return value;
-        }
-        throw failure;
-    }
-
-    /**
-     * Leader 实际工作:无后端时走 fail-fast/local-only,有后端时持锁跑 loader.
-     *
-     * @throws InterruptedException 当 {@link LockManager#tryAcquire} 被中断时
-     */
-    private <T> T doLeaderWork(final String key, final Supplier<T> loader, final long timeoutSeconds)
-            throws InterruptedException {
-        if (distributedManagers.isEmpty()) {
-            // 无分布式锁后端:WS-1.2a fail-fast 或 local-only 显式降级(均不进 LockStack)
-            return executeWithoutDistributedBackend(key, loader);
-        }
-
-        // 有分布式锁后端:持锁跑 loader
-        try (LockStack lockStack = new LockStack()) {
-            for (LockManager manager : distributedManagers) {
-                manager.tryAcquire(key, timeoutSeconds).ifPresentOrElse(lockStack::push, () -> {
-                    log.warn("Lock manager {} failed to acquire distributed lock for key: {}",
-                            manager.getClass().getSimpleName(), key);
-                    throw new RuntimeException("Failed to acquire distributed lock");
-                });
-            }
-
-            log.debug("Acquired distributed lock(s) for cache key: {} (count={})", key, lockStack.size());
-            return loader.get();
-        }
-    }
-
-    /**
-     * Follower 路径:join leader 的 future,共享其结果(零重复持锁/零重复回源).
-     *
-     * <p>失败传播(ADR-0042):leader 异常经 {@code completeExceptionally} 透传给 follower,
-     * follower 收到的是 leader 的原始异常(RuntimeException 原样抛;checked 包成 RuntimeException)。
-     *
-     * <p>超时:{@code timeoutSeconds > 0} 时,follower 最多等待该秒数;{@code <= 0} 且 leader 未完成,
-     * 立即失败(对齐原模型 {@code Redisson tryLock(0)} 立即返回语义,follower 不无限等待)。
-     */
-    @SuppressWarnings("unchecked")
-    private <T> T runAsFollower(final String key, final CompletableFuture<Object> leader,
-                                final long timeoutSeconds) {
-        try {
-            if (timeoutSeconds <= 0 && !leader.isDone()) {
-                throw new IllegalStateException(
-                        "In-flight single-flight loader still running; waitTimeoutSeconds=" + timeoutSeconds
-                                + " <= 0 — follower refuses to wait (key=" + key + ")");
-            }
-            final Object value = (timeoutSeconds > 0)
-                    ? leader.get(timeoutSeconds, TimeUnit.SECONDS)
-                    : leader.get();
-            return (T) value;
-        } catch (final TimeoutException e) {
-            throw new IllegalStateException(
-                    "Timed out after " + timeoutSeconds
-                            + "s waiting for in-flight single-flight loader (key=" + key + ")", e);
-        } catch (final ExecutionException e) {
-            // leader 的原始异常:RuntimeException 原样抛(保留调用方既有 catch 语义)
-            final Throwable cause = (e.getCause() != null) ? e.getCause() : e;
-            if (cause instanceof RuntimeException re) {
-                throw re;
-            }
-            if (cause instanceof Error err) {
-                throw err;
-            }
-            throw new RuntimeException("In-flight single-flight loader failed (key=" + key + ")", cause);
-        } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(
-                    "Thread interrupted while waiting for in-flight loader (key=" + key + ")", e);
-        }
-    }
-
-    /**
-     * 无分布式锁后端时的处理：fail-fast 或显式 local-only 降级.
-     *
-     * <p>leader 调用此方法时已在 single-flight 选举中胜出,follower 由其 future 兜底,
-     * 故 local-only 降级路径直接执行 loader 即享有"leader 串行、follower 共享"的单 JVM 串行语义。
-     *
-     * @param key    缓存键（用于错误/告警定位）
-     * @param loader 数据加载器
-     * @param <T>    返回值类型
-     * @return local-only 降级时 loader 的结果
-     * @throws IllegalStateException 当未声明 local-only 且无分布式锁后端时（fail-fast）
-     */
-    private <T> T executeWithoutDistributedBackend(final String key, final Supplier<T> loader) {
-        if (properties.getSyncLock().isLocalOnly()) {
-            // 显式合法降级：单 JVM single-flight(leader 串行跑 loader,follower join future)。
-            // WS-1.4 将此告警升级为链级 Observation 事件 protection.degraded=local-only。
-            log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
-                    + "已按 local-only=true 降级为单 JVM 同步 (key={})", key);
-            return loader.get();
-        }
-        // fail-fast：绝不静默退化为单 JVM。多实例下单 JVM synchronized 无法防击穿，
-        // 标榜分布式却单机是最坏失败模式 —— 必须让用户立刻看见。
-        throw new IllegalStateException(
-                "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
-                        + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
-                        + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
-                        + " [key=" + key + "]");
-    }
-
-    /**
-     * 锁堆栈类，用于管理多个锁的自动关闭.
-     */
-    private static final class LockStack implements AutoCloseable {
-
-        private final Deque<LockManager.LockHandle> handles = new ConcurrentLinkedDeque<>();
-
-        /**
-         * 将锁句柄压入堆栈.
-         *
-         * @param handle 锁句柄
-         */
-        void push(final LockManager.LockHandle handle) {
-            handles.push(handle);
-        }
-
-        /**
-         * 获取堆栈中锁的数量.
-         *
-         * @return 锁数量
-         */
-        int size() {
-            return handles.size();
-        }
-
-        /**
-         * 关闭所有锁句柄.
-         */
-        @Override
-        public void close() {
-            while (!handles.isEmpty()) {
-                LockManager.LockHandle handle = handles.pop();
-                try {
-                    handle.close();
-                } catch (Exception e) {
-                    log.error("Failed to release distributed lock", e);
-                }
-            }
-        }
+        return new SyncRole.Follower<>(key, existing, timeoutSeconds);
     }
 }
