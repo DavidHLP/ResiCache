@@ -7,7 +7,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,9 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -151,23 +148,41 @@ class ChainEngineTest {
         @Test
         @DisplayName("aroundChain:onChainStart → beforeNode → afterNode → onChainEnd 顺序执行")
         void aroundChain_andPerNode_calledInOrder() {
-            ChainObserver observer = mock(ChainObserver.class);
+            // ADR-0061:用真实 observer 录制 4 个钩子的调用顺序(替代 mock —— onChainStart
+            // 返回 Object 后,mock-based 验证语义不再适用,真实 observer 录制更鲁棒)
+            RecordingObserver observer = new RecordingObserver();
             engine.addObserver(observer);
             installChain(new RecordingHandler("h1", HandlerResult.continueWith(CacheResult.success())));
 
             engine.execute(snapshot, newCtx());
 
-            InOrder inOrder = inOrder(observer);
-            inOrder.verify(observer).onChainStart(any());
-            inOrder.verify(observer).beforeNode(any(), any());
-            inOrder.verify(observer).afterNode(any(), any(), any());
-            inOrder.verify(observer).onChainEnd(any(), any());
+            // 顺序:onChainStart → beforeNode → afterNode → onChainEnd
+            assertThat(observer.events).containsExactly(
+                    "onChainStart", "beforeNode", "afterNode", "onChainEnd");
+        }
+
+        @Test
+        @DisplayName("onChainStart 返回的 scope token 配对回传到 onChainEnd(per-observer 隔离)")
+        void scopeToken_pairedFromStartToEnd() {
+            // ADR-0061:Engine 按 observer index 配对 scope token,scopeToken 与 onChainStart
+            // 返回的引用完全相同
+            TokenRecordingObserver observer = new TokenRecordingObserver();
+            engine.addObserver(observer);
+            installChain(new RecordingHandler("h1", HandlerResult.continueWith(CacheResult.success())));
+
+            engine.execute(snapshot, newCtx());
+
+            // 1) onChainStart 被调一次
+            assertThat(observer.startCount).isEqualTo(1);
+            // 2) onChainEnd 被调一次,token == onChainStart 返回的引用
+            assertThat(observer.endCount).isEqualTo(1);
+            assertThat(observer.endToken).isSameAs(observer.lastStartToken);
         }
 
         @Test
         @DisplayName("executeChainFragment:不调 aroundChain 钩子,只调 perNode(推进 from 之后)")
         void executeFragment_skipsAroundChain() {
-            ChainObserver observer = mock(ChainObserver.class);
+            RecordingObserver observer = new RecordingObserver();
             engine.addObserver(observer);
             // ADR-0022: executeChainFragment 语义为「推进 from 之后的剩余链」(不再含 from 本身)
             // h0 作 fragment 发起者(模拟 SyncLockHandler 锁内传 this),h1/h2 是其后继
@@ -184,11 +199,7 @@ class ChainEngineTest {
 
                 assertThat(result.isSuccess()).isTrue();
                 // aroundChain 未触发(fragment 不应 stamp MDC / record Timer)
-                verify(observer, times(0)).onChainStart(any());
-                verify(observer, times(0)).onChainEnd(any(), any());
-                // perNode 对 from(h0)之后的 h1/h2 各调一次 → 共 2 次
-                verify(observer, times(2)).beforeNode(any(), any());
-                verify(observer, times(2)).afterNode(any(), any(), any());
+                assertThat(observer.events).containsExactly("beforeNode", "afterNode", "beforeNode", "afterNode");
             } finally {
                 engine.clearCurrentSnapshotForTest();
             }
@@ -211,6 +222,27 @@ class ChainEngineTest {
             engine.execute(snapshot, newCtx());
 
             assertThat(captured[0]).isSameAs(expected);
+        }
+
+        @Test
+        @DisplayName("observer 抛异常被吞掉(ADR-0026),主链结果不受影响")
+        void observerThrows_swallowed_mainChainUnaffected() {
+            ChainObserver throwing = new ChainObserver() {
+                @Override public Object onChainStart(CacheContext context) { throw new RuntimeException("start boom"); }
+                @Override public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
+                    throw new RuntimeException("end boom");
+                }
+                @Override public void beforeNode(CacheHandler h, CacheContext context) { throw new RuntimeException("before boom"); }
+                @Override public void afterNode(CacheHandler h, CacheContext context, HandlerResult r) { throw new RuntimeException("after boom"); }
+            };
+            engine.addObserver(throwing);
+            installChain(new RecordingHandler("h1", HandlerResult.continueWith(CacheResult.success())));
+
+            // 不应抛异常
+            CacheResult result = engine.execute(snapshot, newCtx());
+
+            // main handler 仍返回 success,observer 异常不污染主链
+            assertThat(result.isSuccess()).isTrue();
         }
     }
 
@@ -308,13 +340,15 @@ class ChainEngineTest {
         @Test
         @DisplayName("executeChainFragment(from=null) → 返回 success,不调任何 observer")
         void executeFragment_fromNull_returnsSuccess() {
-            ChainObserver observer = mock(ChainObserver.class);
+            // ADR-0061:用真实 observer 录制替代 mock —— onChainStart 返回 Object 后
+            // mock + times(0) 验证语义混乱(详见 ObserverTests 注释)
+            RecordingObserver observer = new RecordingObserver();
             engine.addObserver(observer);
 
             CacheResult result = engine.executeChainFragment(newCtx(), null);
 
             assertThat(result.isSuccess()).isTrue();
-            verify(observer, times(0)).beforeNode(any(), any());
+            assertThat(observer.events).isEmpty();  // 任何钩子都不应被调
         }
     }
 
@@ -394,6 +428,67 @@ class ChainEngineTest {
         @Override
         public boolean requiresPostProcess(CacheContext context) {
             return true;
+        }
+    }
+
+    // ==================== 测试用 observer(ADR-0061 替换 mock) ====================
+
+    /**
+     * 录制 4 个钩子调用顺序的 ChainObserver — ADR-0061 替换原 Mockito mock 验证。
+     *
+     * <p>为什么用真实 observer 而非 mock:onChainStart 从 void 改为返回 Object 后,
+     * {@code inOrder.verify(observer).onChainStart(any())} 这种 mock-based 验证
+     * 语义失效(mock 返回 Object + 链式 verify 互相干扰),用真实 observer 录制更
+     * 鲁棒且意图清晰。
+     */
+    static class RecordingObserver implements ChainObserver {
+        final List<String> events = new ArrayList<>();
+
+        @Override
+        public Object onChainStart(CacheContext context) {
+            events.add("onChainStart");
+            return null;  // 无状态 observer
+        }
+
+        @Override
+        public void beforeNode(CacheHandler handler, CacheContext context) {
+            events.add("beforeNode");
+        }
+
+        @Override
+        public void afterNode(CacheHandler handler, CacheContext context, HandlerResult result) {
+            events.add("afterNode");
+        }
+
+        @Override
+        public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
+            events.add("onChainEnd");
+        }
+    }
+
+    /**
+     * 专门验证 scope token 配对的 observer — ADR-0061 scope token 机制契约测试。
+     *
+     * <p>onChainStart 返回唯一标识 token,onChainEnd 校验传入的 token 与 start 时的
+     * 引用相同(Engine 按 index 配对,跨 observer 不混淆)。无 state map 累积干扰。
+     */
+    static class TokenRecordingObserver implements ChainObserver {
+        int startCount = 0;
+        int endCount = 0;
+        Object lastStartToken;
+        Object endToken;
+
+        @Override
+        public Object onChainStart(CacheContext context) {
+            startCount++;
+            lastStartToken = new Object();  // 每个 start 一个唯一标识
+            return lastStartToken;
+        }
+
+        @Override
+        public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
+            endCount++;
+            endToken = scopeToken;
         }
     }
 }

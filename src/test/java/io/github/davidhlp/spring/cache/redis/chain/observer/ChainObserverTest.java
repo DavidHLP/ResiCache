@@ -60,11 +60,13 @@ class ChainObserverTest {
 
             MDC.put(CacheHandlerChain.MDC_REQUEST_ID_KEY, "caller-id");
             try {
-                observer.onChainStart(ctx);
+                // ADR-0061:onChainStart 返回 scope token(MdcScope record),Engine 配对回传到
+                // onChainEnd。test 直接持有 token 模拟 Engine 协议
+                Object scopeToken = observer.onChainStart(ctx);
                 String stamped = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);
                 assertThat(stamped).isNotNull().isNotEqualTo("caller-id");
 
-                observer.onChainEnd(ctx, CacheResult.success());
+                observer.onChainEnd(ctx, scopeToken, CacheResult.success());
                 // 恢复调用方原值
                 assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isEqualTo("caller-id");
             } finally {
@@ -78,10 +80,10 @@ class ChainObserverTest {
             ChainObserver observer = new MDCStampChainObserver();
             assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNull();
 
-            observer.onChainStart(ctx);
+            Object scopeToken = observer.onChainStart(ctx);
             assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNotNull();
 
-            observer.onChainEnd(ctx, CacheResult.success());
+            observer.onChainEnd(ctx, scopeToken, CacheResult.success());
             assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNull();
         }
 
@@ -90,12 +92,12 @@ class ChainObserverTest {
         void multipleStartEnd_generateDifferentIds() {
             ChainObserver observer = new MDCStampChainObserver();
             String first, second;
-            observer.onChainStart(ctx);
+            Object token1 = observer.onChainStart(ctx);
             first = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);
-            observer.onChainEnd(ctx, CacheResult.success());
-            observer.onChainStart(ctx);
+            observer.onChainEnd(ctx, token1, CacheResult.success());
+            Object token2 = observer.onChainStart(ctx);
             second = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);
-            observer.onChainEnd(ctx, CacheResult.success());
+            observer.onChainEnd(ctx, token2, CacheResult.success());
 
             assertThat(first).isNotEqualTo(second);
         }
@@ -106,24 +108,26 @@ class ChainObserverTest {
     class TimerTests {
 
         @Test
-        @DisplayName("registry 缺失 → 全 no-op,不抛异常")
+        @DisplayName("registry 缺失 → onChainStart 返回 null,onChainEnd 接收 null token 全 no-op")
         void nullRegistry_noOp() {
             ChainObserver observer = new ChainTimerChainObserver(null);
-            observer.onChainStart(ctx);
-            observer.onChainEnd(ctx, CacheResult.success());
-            // 不抛异常 + context 没被污染
-            org.assertj.core.api.Assertions.assertThat(
-                    (Object) ctx.getAttribute(ChainTimerChainObserver.START_NANOS_ATTR)).isNull();
+            Object scopeToken = observer.onChainStart(ctx);
+            // ADR-0061:registry 缺失时 onChainStart 返回 null token,onChainEnd 接收 null
+            assertThat(scopeToken).isNull();
+            observer.onChainEnd(ctx, scopeToken, CacheResult.success());
+            // 不抛异常 + context 不再被 attributes map 污染(ADR-0061:attributes 已删除)
         }
 
         @Test
-        @DisplayName("registry 存在 → onChainStart/onChainEnd 配对记录 Timer 一次")
+        @DisplayName("registry 存在 → onChainStart 返回 TimerScope token,onChainEnd 接收并 record Timer 一次")
         void withRegistry_recordsTimer() {
             MeterRegistry registry = new SimpleMeterRegistry();
             ChainObserver observer = new ChainTimerChainObserver(registry);
 
-            observer.onChainStart(ctx);
-            observer.onChainEnd(ctx, CacheResult.success());
+            // ADR-0061:onChainStart 返回 TimerScope token,onChainEnd 接收并计算 elapsed
+            Object scopeToken = observer.onChainStart(ctx);
+            assertThat(scopeToken).isNotNull();
+            observer.onChainEnd(ctx, scopeToken, CacheResult.success());
 
             Timer timer = registry.find("resicache.chain.execute").timer();
             assertThat(timer).isNotNull();
@@ -137,8 +141,8 @@ class ChainObserverTest {
             ChainObserver observer = new ChainTimerChainObserver(registry);
 
             for (int i = 0; i < 5; i++) {
-                observer.onChainStart(ctx);
-                observer.onChainEnd(ctx, CacheResult.success());
+                Object scopeToken = observer.onChainStart(ctx);
+                observer.onChainEnd(ctx, scopeToken, CacheResult.success());
             }
 
             Timer timer = registry.find("resicache.chain.execute").timer();

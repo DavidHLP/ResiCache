@@ -289,6 +289,11 @@ public class ChainEngine {
      *       + post-process</li>
      * </ol>
      *
+     * <p><b>ADR-0061 scope token 配对</b>(Round 46):onChainStart 收集每个 observer
+     * 返回的 scope token,onChainEnd 按相同 observer 顺序回传(逐个 observer 配对,
+     * 跨 observer 不混淆)。Engine 不感知 token 内部协议 —— observer 状态机完全
+     * 自承,CacheContext 不再承担 stringly-typed 通用 attributes 袋。
+     *
      * <p><b>设计纪律</b>:
      * <ul>
      *   <li>private final 嵌套类(非 static)— 不暴露给外部(只服务 ChainEngine.execute
@@ -326,9 +331,27 @@ public class ChainEngine {
          *
          * <p>driveChain 抛出的异常继续向上冒泡(与原 execute 行为一致);
          * onChainEnd 由 finally 守护保证触发。
+         *
+         * <p><b>ADR-0061 scope token 收集</b>:around-start 阶段逐个调 observer
+         * 的 {@code onChainStart},把每个 observer 返回的 scope token 写入
+         * {@code scopeTokens} 数组(下标 = observer 在 registry 快照中的 index);
+         * around-end 阶段按相同 index 逐个调 {@code onChainEnd(ctx, token, result)}。
+         * 配对规则:onChainStart 抛异常的 observer(token 未被收集)在 onChainEnd 时
+         * 传 null(token 槽位保持初始 null),保证配对循环不越界。
          */
         CacheResult run() {
-            observers.forEachSafe(o -> o.onChainStart(context));
+            List<ChainObserver> observerList = observers.snapshot();
+            Object[] scopeTokens = new Object[observerList.size()];
+            for (int i = 0; i < observerList.size(); i++) {
+                ChainObserver o = observerList.get(i);
+                try {
+                    scopeTokens[i] = o.onChainStart(context);
+                } catch (Exception ex) {
+                    log.error("Observer {} onChainStart failed: {}",
+                            o.getClass().getSimpleName(), ex.toString(), ex);
+                    // token 留 null,onChainEnd 仍按 index 配对 — 失败 observer 收 null
+                }
+            }
             CacheResult mainResult = CacheResult.success();
             try {
                 if (snapshot != null && !snapshot.isEmpty()) {
@@ -339,7 +362,15 @@ public class ChainEngine {
                 // ADR-0056 保留:onChainEnd 仍传 hardcoded CacheResult.success() 而非 mainResult。
                 // 原行为如此(commit 现状),observer 当前不读 result 字段,observably 字节等价。
                 // 若未来 observer 需要 mainResult,需独立 round 决定。
-                observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
+                for (int i = 0; i < observerList.size(); i++) {
+                    ChainObserver o = observerList.get(i);
+                    try {
+                        o.onChainEnd(context, scopeTokens[i], CacheResult.success());
+                    } catch (Exception ex) {
+                        log.error("Observer {} onChainEnd failed: {}",
+                                o.getClass().getSimpleName(), ex.toString(), ex);
+                    }
+                }
             }
             return mainResult;
         }

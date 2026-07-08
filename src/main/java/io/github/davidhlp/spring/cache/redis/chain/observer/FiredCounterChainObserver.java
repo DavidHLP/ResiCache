@@ -44,9 +44,12 @@ public final class FiredCounterChainObserver implements ChainObserver {
     }
 
     @Override
-    public void onChainStart(CacheContext context) {
+    public Object onChainStart(CacheContext context) {
         // Counter 延迟到 afterNode 首次见到 handler 类时再注册（lazy），不在 start 时预热
         // —— onChainStart 拿不到 handler 列表（Engine 设计上不让 observer 接触 handlers 列表）
+        // 本 observer 无 per-call 状态(per-handler counter 走 firedCounters map),
+        // 返回 null token,onChainEnd 也走默认 no-op。
+        return null;
     }
 
     @Override

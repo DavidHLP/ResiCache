@@ -6,8 +6,6 @@ import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import lombok.Getter;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 缓存操作上下文 — 组合输入 + 类型化 handler 间消息 + 引擎控制流标记.
@@ -24,9 +22,15 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li><b>控制流标记</b> — {@link #skipRemaining} 由 {@code ChainEngine} 在
  *       SKIP_ALL 决策时单点置位、{@code BloomFilterHandler.afterChainExecution}
  *       读取以决定是否执行后置回填</li>
- *   <li><b>attributes</b> — 通用字符串键临时数据;业务信号全部类型化后(ADR-0033 + ADR-0036),
- *       仅保留 observer/bloom/lock 各模块自管的临时键(计时、MDC 回滚、post-process、lock 标记)</li>
  * </ul>
+ *
+ * <p><b>ADR-0061 (Round 46) — attributes 袋彻底删除</b>:原
+ * <em>通用字符串键 attributes Map</em> (5 个 helper 方法: {@code setAttribute}/
+ * {@code getAttribute}/{@code getAttribute-with-default}/{@code removeAttribute}/
+ * {@code hasAttribute})被彻底删除。曾经的"临时键"用途(observer MDC/Timer 跨 start/end
+ * 状态共享)由 observer scope token 机制承担 —— Engine 在 {@code onChainStart} 收集每个
+ * observer 返回的 token,按 index 配对回传 {@code onChainEnd}。observer 状态机完全自承,
+ * 无需通过 context.attributes 中转,字符串键漂移风险归零。
  *
  * <p><b>使用方式</b>:
  * <ul>
@@ -36,21 +40,17 @@ import java.util.concurrent.ConcurrentHashMap;
  *       {@code context.getNullDecision().storeValue()}</li>
  *   <li>读取 keyPattern(CLEAN):{@code context.getKeyPattern()}</li>
  *   <li>检查控制流：{@code context.isSkipRemaining()}</li>
- *   <li>属性传递：{@code context.setAttribute(key, value)}, {@code context.getAttribute(key)}</li>
  * </ul>
+ *
+ * <p><b>删除测试</b>(历史) —— Round 24 删除 CacheOutput, Round 26 删除 PrefetchDecision 的
+ * 3 个 magic-string key, Round 46 删除整个 attributes 袋:
+ * 任何 observer 临时数据通信需求,改为各自返回 scope token record,跨 observer 不共享协议。
  */
 public class CacheContext {
 
     /** 输入参数（不可变）。 */
     @Getter
     private final CacheInput input;
-
-    /**
-     * 临时属性（用于 Handler 间传递数据和后置处理标记）
-     * 使用 ConcurrentHashMap 支持并发访问
-     */
-    @Getter
-    private final Map<String, Object> attributes = new ConcurrentHashMap<>();
 
     /**
      * TTL 决策 — 由 {@code TtlHandler.doHandle} 写入、
@@ -148,68 +148,6 @@ public class CacheContext {
     /** 物化跳过标记 — 仅 ChainEngine.driveChain 在 SKIP_ALL 分支调用。 */
     public void markSkipRemaining() {
         this.skipRemaining = true;
-    }
-
-    // ==================== 属性访问（用于 Handler 间传递数据） ====================
-
-    /**
-     * 设置属性
-     *
-     * @param key 属性键
-     * @param value 属性值
-     * @param <T> 值类型
-     */
-    public <T> void setAttribute(String key, T value) {
-        if (value != null) {
-            attributes.put(key, value);
-        } else {
-            attributes.remove(key);
-        }
-    }
-
-    /**
-     * 获取属性
-     *
-     * @param key 属性键
-     * @param <T> 值类型
-     * @return 属性值，不存在返回 null
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T getAttribute(String key) {
-        return (T) attributes.get(key);
-    }
-
-    /**
-     * 获取属性（带默认值）
-     *
-     * @param key 属性键
-     * @param defaultValue 默认值
-     * @param <T> 值类型
-     * @return 属性值，不存在返回默认值
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T getAttribute(String key, T defaultValue) {
-        Object value = attributes.get(key);
-        return value != null ? (T) value : defaultValue;
-    }
-
-    /**
-     * 移除属性
-     *
-     * @param key 属性键
-     */
-    public void removeAttribute(String key) {
-        attributes.remove(key);
-    }
-
-    /**
-     * 检查属性是否存在
-     *
-     * @param key 属性键
-     * @return 是否存在
-     */
-    public boolean hasAttribute(String key) {
-        return attributes.containsKey(key);
     }
 
     // ==================== 静态工厂方法 ====================
