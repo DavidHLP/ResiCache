@@ -5,7 +5,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
-import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.ChainEngine;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -95,10 +94,8 @@ public class SyncLockHandler extends AbstractCacheHandler {
         if (context.getCacheOperation() == null || !context.getCacheOperation().isSync()) {
             return false;
         }
-        CacheOperation operation = context.getOperation();
-        return operation == CacheOperation.GET
-                || operation == CacheOperation.PUT_IF_ABSENT
-                || operation == CacheOperation.PUT;
+        // ADR-0054:sync-lock 子集谓词(GET + PUT + PUT_IF_ABSENT),操作枚举承担单一真理源
+        return context.getOperation().requiresSyncLock();
     }
 
     @Override

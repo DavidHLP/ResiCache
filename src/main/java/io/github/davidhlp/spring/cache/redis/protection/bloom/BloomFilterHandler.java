@@ -94,22 +94,16 @@ public class BloomFilterHandler extends AbstractCacheHandler {
 
     /**
      * 判断是否需要执行后置处理 — ADR-0045 替代原 POST_PROCESS_KEY stringly-typed
-     * 标记,从 {@link CacheContext#getOperation()} 直接派生:
-     * <ul>
-     *   <li>PUT / PUT_IF_ABSENT — 回填布隆</li>
-     *   <li>CLEAN — 清空布隆</li>
-     *   <li>GET 等其他操作 — 无需后置</li>
-     * </ul>
+     * 标记,从 {@link CacheContext#getOperation()} 直接派生。ADR-0054 进一步把
+     * 谓词「PUT / PUT_IF_ABSENT / CLEAN」提到 {@link CacheOperation#requiresBloomPostProcess()},
+     * 本方法只调一行。
      *
      * <p>locality-first:post-process 判定走类型化的 operation enum,不再跨 seam
      * 通过 {@code context.setAttribute} 写 stringly-typed 标记。
      */
     @Override
     public boolean requiresPostProcess(CacheContext context) {
-        CacheOperation op = context.getOperation();
-        return op == CacheOperation.PUT
-                || op == CacheOperation.PUT_IF_ABSENT
-                || op == CacheOperation.CLEAN;
+        return context.getOperation().requiresBloomPostProcess();
     }
 
     /**

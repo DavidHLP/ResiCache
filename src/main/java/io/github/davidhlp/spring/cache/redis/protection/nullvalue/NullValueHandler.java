@@ -4,7 +4,6 @@ import io.github.davidhlp.spring.cache.redis.chain.*;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
-import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -52,8 +51,8 @@ public class NullValueHandler extends AbstractCacheHandler {
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
-        return context.getOperation() == CacheOperation.PUT
-                || context.getOperation() == CacheOperation.PUT_IF_ABSENT;
+        // ADR-0054:写路径子集谓词,与 TtlHandler 共享同一权威源
+        return context.getOperation().isWrite();
     }
 
     @Override
