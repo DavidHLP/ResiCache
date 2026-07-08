@@ -128,60 +128,40 @@ public class ChainEngine {
     }
 
     /**
-     * 执行责任链 — 整条 chain 全生命周期（head handle + post-process + 观测）。
+     * 执行责任链 — 整条 chain 全生命周期(head handle + post-process + 观测)。
      *
      * <p><b>ADR-0046</b>:接收 {@code snapshot} 作为参数(由 {@link CacheHandlerChain}
      * 在 synchronized 块内拍出),Engine 不再持有 list 状态;ThreadLocal 在 entry
      * 处 set,finally 块 remove,供 {@code executeChainFragment} 隐式读。
      *
+     * <p><b>ADR-0056 收敛</b>(Round 42):本方法在 Round 42 之后只剩「ThreadLocal + 空链
+     * 告警 + 委派」3 步。around-hook 配对 + post-process + 异常守护已迁出至
+     * {@link ChainLifecycle} 私有内嵌 seam,Engine 自身的 try/finally 减少 1 层,
+     * 不再内联 onChainStart / onChainEnd / post-process 循环的 4 个 observers.forEachSafe
+     * 调用点。
+     *
      * <p>执行流程：
      * <ol>
-     *   <li>快照当前 handler 链；空链返回 success 并打 WARN</li>
-     *   <li>所有 observer.onChainStart</li>
-     *   <li>节点循环：beforeNode → handler.handle → afterNode → decision switch</li>
-     *   <li>所有 observer.onChainEnd（即使主路径异常也调用）</li>
-     *   <li>post-process 遍历</li>
+     *   <li>快照当前 handler 链；空链打 WARN(由 ChainLifecycle 仍跑 around-hook 配对)</li>
+     *   <li>所有 observer.onChainStart — ChainLifecycle 入口</li>
+     *   <li>节点循环:beforeNode → handler.handle → afterNode → decision switch — driveChain</li>
+     *   <li>post-process 遍历 — ChainLifecycle 内部</li>
+     *   <li>所有 observer.onChainEnd(即使主路径异常也调用) — ChainLifecycle finally 守护</li>
      * </ol>
      *
-     * @param snapshot handler 链快照（{@link CacheHandlerChain} 一次性 {@code List.copyOf} 产出）
+     * @param snapshot handler 链快照({@link CacheHandlerChain} 一次性 {@code List.copyOf} 产出)
      * @param context  缓存上下文
-     * @return 链执行最终结果（post-process 已执行）
+     * @return 链执行最终结果(post-process 已执行)
      */
     public CacheResult execute(List<CacheHandler> snapshot, CacheContext context) {
         CURRENT_SNAPSHOT.set(snapshot);
         try {
             if (snapshot == null || snapshot.isEmpty()) {
                 log.warn("Handler chain is empty!");
-                // 仍然走 onChainStart/onChainEnd 配对 — observer 可能在 start 注册
-                // thread-local 资源（如 Timer.Sample），不配对会泄漏
-                observers.forEachSafe(o -> o.onChainStart(context));
-                try {
-                    return CacheResult.success();
-                } finally {
-                    observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
-                }
             }
-
             log.debug("Executing handler chain for operation: {}, cacheName: {}, key: {}",
                     context.getOperation(), context.getCacheName(), context.getRedisKey());
-
-            // aroundChain 观测：start
-            observers.forEachSafe(o -> o.onChainStart(context));
-
-            CacheResult finalResult;
-            try {
-                // 节点推进主循环
-                finalResult = driveChain(snapshot, context);
-
-                // post-process 遍历（在 onChainEnd 之前，与原 CacheHandlerChain.execute 顺序一致 —
-                // 任何 observer 依赖"链已完全结束"语义时应看到 post-process 副作用）
-                executePostProcess(snapshot, context, finalResult);
-            } finally {
-                // aroundChain 观测：end（即使主路径异常也调用，保证 observer 资源配对）
-                observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
-            }
-
-            return finalResult;
+            return new ChainLifecycle(observers, snapshot, context).run();
         } finally {
             CURRENT_SNAPSHOT.remove();
         }
@@ -290,27 +270,98 @@ public class ChainEngine {
         return result;
     }
 
+    // ==================== ChainLifecycle (ADR-0056 / Round 42 seam) ====================
+
     /**
-     * Post-process 遍历 — 替换原 {@code CacheHandlerChain.executePostProcess}。
-     * 失败 try/catch 不污染主链（与原行为一致），打 ERROR 日志。
+     * 责任链全生命周期守护 — ADR-0056 / Round 42 抽出的私有 seam.
      *
-     * <p><b>ADR-0045</b>：原 {@code handler instanceof PostProcessHandler} 分支删除,
-     * 改走 {@link CacheHandler#requiresPostProcess(CacheContext)} 类型化 hook —
-     * handler 通过 override 该方法 opt-in,默认 false 不参与。
+     * <p>封装 ChainEngine.execute 此前 4 件交织的关注点(ADR-0056 report 候选 2):
+     * <ol>
+     *   <li><b>around-hook 配对</b>:onChainStart → driveChain + post-process → onChainEnd
+     *       (即使主路径异常也调用 onChainEnd,保证 observer 资源配对 — 防止 MDC / Timer
+     *       跨 execute 调用的资源泄漏)</li>
+     *   <li><b>post-process 遍历</b>:对所有 {@code requiresPostProcess} opt-in 的
+     *       handler 调用 {@code afterChainExecution},失败 try/catch 隔离不污染主链</li>
+     *   <li><b>异常守护</b>:driveChain 抛出的异常继续向上冒泡(与原行为一致),
+     *       onChainEnd 仍由 finally 触发</li>
+     *   <li><b>空链短路</b>:snapshot 为空时仍配对 around-hook(observer 可能在 start
+     *       注册 thread-local 资源如 Timer.Sample,不配对会泄漏),但跳过 driveChain
+     *       + post-process</li>
+     * </ol>
+     *
+     * <p><b>设计纪律</b>:
+     * <ul>
+     *   <li>private final 嵌套类(非 static)— 不暴露给外部(只服务 ChainEngine.execute
+     *       一处);非 static 因需调外部 instance method {@code driveChain},持 outer
+     *       reference 是 locality 提升而非泄漏</li>
+     *   <li>不动 onChainEnd 传入 {@code CacheResult.success()} 硬编码(原行为,见 ADR-0056
+     *       「设计纪律」一节解释)</li>
+     *   <li>run() 无参(不返回 mainResult 后再由 caller 收 mainResult),避免与 caller
+     *       形成 split-knowledge</li>
+     * </ul>
+     *
+     * <p><b>deletion test</b>:把 ChainLifecycle 删掉、内联回 execute → 47 SLOC
+     * execute 回归 + 3 层 try/finally 嵌套恢复 + around-end 在 2 处独立写 2 遍,
+     * 复杂度上升。本 seam 浓缩。
      */
-    private void executePostProcess(List<CacheHandler> handlers, CacheContext context, CacheResult result) {
-        for (CacheHandler handler : handlers) {
-            if (handler.requiresPostProcess(context)) {
-                try {
-                    handler.afterChainExecution(context, result);
-                    log.debug("Post-processing executed for: {}",
-                            handler.getClass().getSimpleName());
-                } catch (Exception e) {
-                    log.error("Post-processing failed for: {}, operation: {}, key: {}",
-                            handler.getClass().getSimpleName(),
-                            context.getOperation(),
-                            context.getRedisKey(), e);
-                    // 后置处理失败不影响主链结果
+    private final class ChainLifecycle {
+
+        private final ObserverRegistry<ChainObserver> observers;
+        private final List<CacheHandler> snapshot;
+        private final CacheContext context;
+
+        ChainLifecycle(ObserverRegistry<ChainObserver> observers,
+                       List<CacheHandler> snapshot,
+                       CacheContext context) {
+            this.observers = observers;
+            this.snapshot = snapshot;
+            this.context = context;
+        }
+
+        /**
+         * 执行全生命周期:around-start → driveChain + post-process → around-end.
+         *
+         * <p>空链(snapshot == null || isEmpty())时仍配对 around-hook,但跳过
+         * driveChain + post-process,直接返回 {@link CacheResult#success()}。
+         *
+         * <p>driveChain 抛出的异常继续向上冒泡(与原 execute 行为一致);
+         * onChainEnd 由 finally 守护保证触发。
+         */
+        CacheResult run() {
+            observers.forEachSafe(o -> o.onChainStart(context));
+            CacheResult mainResult = CacheResult.success();
+            try {
+                if (snapshot != null && !snapshot.isEmpty()) {
+                    mainResult = driveChain(snapshot, context);
+                    runPostProcess(mainResult);
+                }
+            } finally {
+                // ADR-0056 保留:onChainEnd 仍传 hardcoded CacheResult.success() 而非 mainResult。
+                // 原行为如此(commit 现状),observer 当前不读 result 字段,observably 字节等价。
+                // 若未来 observer 需要 mainResult,需独立 round 决定。
+                observers.forEachSafe(o -> o.onChainEnd(context, CacheResult.success()));
+            }
+            return mainResult;
+        }
+
+        /**
+         * post-process 遍历 — 替换原 ChainEngine.executePostProcess 私有方法.
+         *
+         * <p>失败 try/catch 不污染主链(与原行为一致),打 ERROR 日志。
+         */
+        private void runPostProcess(CacheResult mainResult) {
+            for (CacheHandler handler : snapshot) {
+                if (handler.requiresPostProcess(context)) {
+                    try {
+                        handler.afterChainExecution(context, mainResult);
+                        log.debug("Post-processing executed for: {}",
+                                handler.getClass().getSimpleName());
+                    } catch (Exception e) {
+                        log.error("Post-processing failed for: {}, operation: {}, key: {}",
+                                handler.getClass().getSimpleName(),
+                                context.getOperation(),
+                                context.getRedisKey(), e);
+                    }
                 }
             }
         }
