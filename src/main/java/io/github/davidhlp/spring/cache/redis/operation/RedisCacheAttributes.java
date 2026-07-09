@@ -5,6 +5,8 @@ import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationM
 import lombok.Builder;
 import lombok.Value;
 
+import java.util.List;
+
 /**
  * Redis 缓存注解的<strong>内部投影层</strong>：把三个公开注解（{@code @RedisCacheable} /
  * {@code @RedisCachePut} / {@code @RedisCacheEvict}）和 Spring 的 {@code @Cacheable}
@@ -43,6 +45,14 @@ import lombok.Value;
  * 收敛为 1 + 3 个 builder-only extras。Evict 缺 {@code unless/type/cacheNullValues/randomTtl/variance}
  * 5 字段,Cacheable/Put 缺 {@code allEntries/beforeInvocation} 2 字段,差异部分保留在各
  * {@code applyTo} 重载内,共享部分单源真相。
+ *
+ * <p><strong>Round 51 / 架构评审候选 A 收敛</strong>: 14 共享字段的填充形状(getter +
+ * builder-setter 二元组列表)由 {@link AttributePopulator#populate} 统一承载 —— 本类三个
+ * {@code applyTo} 重载中"14 共享字段"那一段退化为单行委派;差异字段(builder-only 性质,
+ * 无法跨 builder 共享 setter)仍由各重载末尾链式 setter 管理。本类保留<em>字段映射源</em>
+ * 单源真相(共享字段列表在本类),委派给 {@link AttributePopulator} 仅做迭代编排,
+ * 与 round 50 的 {@code BuilderPopulator} 形成 "annotation→Spring builder" 与
+ * "attributes→Operation builder" 两道平行的 seam。
  *
  * @see RedisCacheAttributesProjector
  * @see RedisCacheableOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
@@ -100,36 +110,6 @@ public class RedisCacheAttributes {
     // ============================ ADR-0021 applyTo(B) seam ============================
 
     /**
-     * 14 共享字段列表 — 单一事实源(Round 48 收口点)。
-     *
-     * <p>三个 Operation Builder 的 setter 链中,以下 14 字段在语义、类型、调用方式上完全一致:
-     * <pre>
-     *   cacheNames / keyGenerator / cacheManager / cacheResolver / condition
-     *   sync / syncTimeout
-     *   ttl
-     *   useBloomFilter / expectedInsertions / falseProbability
-     *   enableEarlyExpiration / earlyExpirationThreshold / earlyExpirationMode
-     * </pre>
-     *
-     * <p>差异字段(由各 {@code applyTo} 重载独自管理):
-     * <ul>
-     *   <li>Cacheable/Put 独有:{@code unless / type / cacheNullValues / randomTtl / variance}(5 项)</li>
-     *   <li>Evict 独有:{@code allEntries / beforeInvocation}(2 项)</li>
-     * </ul>
-     *
-     * <p>注:Java 强类型 builder 接口下,14 共享字段的 setter 链无法被多 builder 类型复用
-     * (builder 类型不同、setter 链绑定到具体类型)。本 Javadoc 充当"共享列表"的<em>文字</em>
-     * 单一来源 — 新增 14 共享字段时,改本注释 + 三个 {@code applyTo} 重载;
-     * 新增 1 个 builder-only 字段(差异部分),只动 1 个重载。
-     */
-    private static final String[] COMMON_FIELD_NAMES = new String[]{
-            "cacheNames", "keyGenerator", "cacheManager", "cacheResolver", "condition",
-            "sync", "syncTimeout", "ttl",
-            "useBloomFilter", "expectedInsertions", "falseProbability",
-            "enableEarlyExpiration", "earlyExpirationThreshold", "earlyExpirationMode"
-    };
-
-    /**
      * 把本 POJO 全部 22 字段映射到 {@link RedisCacheableOperation.Builder}。
      *
      * <p>本方法<strong>唯一拥有</strong>"22 字段 → Builder" 的映射知识(ADR-0021);
@@ -139,31 +119,51 @@ public class RedisCacheAttributes {
      * {@code long} 槽位(与 Put/Evict 对齐),直传无窄化。原 {@code narrowToInt}
      * 死代码删除。
      *
-     * <p><b>Round 48</b>:14 共享字段列表见 {@link #COMMON_FIELD_NAMES},本方法与其他两个
-     * {@code applyTo} 重载保持此 14 项的 setter 链一致;差异字段(unless/type/cacheNullValues/
-     * randomTtl/variance 5 项)写在 14 共享字段链之后。
+     * <p><b>Round 51 / 架构评审候选 A 收敛</b>:14 共享字段填充已统一委派到
+     * {@link AttributePopulator#populate populate} —— 字段填充形状(getter + builder-setter
+     * 二元组列表)收口到 deep seam,新加 14 共享字段触点 = 1 个 sink spec 行,不再三份
+     * 独立 setter 链实现。差异字段(unless/type/cacheNullValues/randomTtl/variance 5 项)
+     * 因 builder-only 性质保留在本方法末尾链式 setter 中。
      *
      * @param b 已有 {@code name} / {@code key} 设值的 builder(由 fromAttributes 传入)
      * @return 同一 builder(支持链式)
      */
     public RedisCacheableOperation.Builder applyTo(RedisCacheableOperation.Builder b) {
-        // 14 共享字段(顺序与 COMMON_FIELD_NAMES 对齐,setter 链 = 三处共用源):
+        // 14 共享字段填充委派到 AttributePopulator(单源真相)—— sink 列表本地构造,
+        // setter 闭包强转 Object → 目标类型后调 builder 链式 setter;强转运行期安全
+        // (类型与字段定义对齐),cast 异常是 caller-side 错配,运行期立即暴露。
+        AttributePopulator.populate(b, this, List.of(
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheNames,
+                        (builder, v) -> builder.cacheNames((String[]) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getKeyGenerator,
+                        (builder, v) -> builder.keyGenerator((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheManager,
+                        (builder, v) -> builder.cacheManager((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheResolver,
+                        (builder, v) -> builder.cacheResolver((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCondition,
+                        (builder, v) -> builder.condition((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isSync,
+                        (builder, v) -> builder.sync((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getSyncTimeout,
+                        (builder, v) -> builder.syncTimeout((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getTtl,
+                        (builder, v) -> builder.ttl((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isUseBloomFilter,
+                        (builder, v) -> builder.useBloomFilter((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getExpectedInsertions,
+                        (builder, v) -> builder.expectedInsertions((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getFalseProbability,
+                        (builder, v) -> builder.falseProbability((double) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isEnableEarlyExpiration,
+                        (builder, v) -> builder.enableEarlyExpiration((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getEarlyExpirationThreshold,
+                        (builder, v) -> builder.earlyExpirationThreshold((double) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getEarlyExpirationMode,
+                        (builder, v) -> builder.earlyExpirationMode((EarlyExpirationMode) v))
+        ));
+        // Cacheable-only 5 字段:builder-only,不出现在其他两个 applyTo 重载
         return b
-                .cacheNames(cacheNames)
-                .keyGenerator(keyGenerator)
-                .cacheManager(cacheManager)
-                .cacheResolver(cacheResolver)
-                .condition(condition)
-                .sync(sync)
-                .syncTimeout(syncTimeout)
-                .ttl(ttl)
-                .useBloomFilter(useBloomFilter)
-                .expectedInsertions(expectedInsertions)
-                .falseProbability(falseProbability)
-                .enableEarlyExpiration(enableEarlyExpiration)
-                .earlyExpirationThreshold(earlyExpirationThreshold)
-                .earlyExpirationMode(earlyExpirationMode)
-                // Cacheable-only 5 字段:
                 .unless(unless)
                 .type(type)
                 .cacheNullValues(cacheNullValues)
@@ -177,31 +177,48 @@ public class RedisCacheAttributes {
      * <p>S1 (Round 47) 后 Cacheable/Put 字段类型完全一致 — both builders 现在都用
      * {@code long} 槽位承载 {@code expectedInsertions},直传无窄化。
      *
-     * <p>Round 48:14 共享字段列表见 {@link #COMMON_FIELD_NAMES} — 14 共享字段 setter 链
-     * 与 Cacheable.applyTo 保持一致(同源);差异字段(unless/type/cacheNullValues/randomTtl/
-     * variance 5 项)写在 14 共享字段链之后。
+     * <p>Round 51:14 共享字段列表由 {@link AttributePopulator} 单一 seam 承载 —— 本方法
+     * 与 {@link #applyTo(RedisCacheableOperation.Builder)} 共享同一填充协议;差异字段
+     * (unless/type/cacheNullValues/randomTtl/variance 5 项,与 Cacheable 同集)保留在
+     * 本方法末尾链式 setter 中。
      *
      * @param b 已有 {@code name} / {@code key} 设值的 builder
      * @return 同一 builder(支持链式)
      */
     public RedisCachePutOperation.Builder applyTo(RedisCachePutOperation.Builder b) {
-        // 14 共享字段(同 Cacheable.applyTo,顺序与 COMMON_FIELD_NAMES 对齐):
+        // 14 共享字段填充委派到 AttributePopulator —— 与 Cacheable.applyTo 共享同一填充协议
+        AttributePopulator.populate(b, this, List.of(
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheNames,
+                        (builder, v) -> builder.cacheNames((String[]) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getKeyGenerator,
+                        (builder, v) -> builder.keyGenerator((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheManager,
+                        (builder, v) -> builder.cacheManager((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheResolver,
+                        (builder, v) -> builder.cacheResolver((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCondition,
+                        (builder, v) -> builder.condition((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isSync,
+                        (builder, v) -> builder.sync((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getSyncTimeout,
+                        (builder, v) -> builder.syncTimeout((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getTtl,
+                        (builder, v) -> builder.ttl((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isUseBloomFilter,
+                        (builder, v) -> builder.useBloomFilter((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getExpectedInsertions,
+                        (builder, v) -> builder.expectedInsertions((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getFalseProbability,
+                        (builder, v) -> builder.falseProbability((double) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isEnableEarlyExpiration,
+                        (builder, v) -> builder.enableEarlyExpiration((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getEarlyExpirationThreshold,
+                        (builder, v) -> builder.earlyExpirationThreshold((double) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getEarlyExpirationMode,
+                        (builder, v) -> builder.earlyExpirationMode((EarlyExpirationMode) v))
+        ));
+        // Put-only 5 字段(与 Cacheable 同集):
         return b
-                .cacheNames(cacheNames)
-                .keyGenerator(keyGenerator)
-                .cacheManager(cacheManager)
-                .cacheResolver(cacheResolver)
-                .condition(condition)
-                .sync(sync)
-                .syncTimeout(syncTimeout)
-                .ttl(ttl)
-                .useBloomFilter(useBloomFilter)
-                .expectedInsertions(expectedInsertions)
-                .falseProbability(falseProbability)
-                .enableEarlyExpiration(enableEarlyExpiration)
-                .earlyExpirationThreshold(earlyExpirationThreshold)
-                .earlyExpirationMode(earlyExpirationMode)
-                // Put-only 5 字段(与 Cacheable 同集):
                 .unless(unless)
                 .type(type)
                 .cacheNullValues(cacheNullValues)
@@ -220,31 +237,48 @@ public class RedisCacheAttributes {
      *   <li><strong>Evict-only</strong> 直传:{@code allEntries} / {@code beforeInvocation}</li>
      * </ul>
      *
-     * <p>Round 48:14 共享字段列表见 {@link #COMMON_FIELD_NAMES} — 14 共享字段 setter 链
-     * 与 Cacheable.applyTo 保持一致(同源);差异字段(allEntries / beforeInvocation 2 项)
-     * 写在 14 共享字段链之后。
+     * <p>Round 51:14 共享字段列表由 {@link AttributePopulator} 单一 seam 承载 —— 本方法
+     * 与其他两个 applyTo 重载共享同一填充协议;差异字段(allEntries / beforeInvocation 2 项)
+     * 保留在本方法末尾链式 setter 中(注:Evict Builder 的 {@code allEntries} setter 内部委托
+     * 给 Spring 父类的 {@code setCacheWide},与 v0.0.3 行为字节等价)。
      *
      * @param b 已有 {@code name} / {@code key} 设值的 builder
      * @return 同一 builder(支持链式)
      */
     public RedisCacheEvictOperation.Builder applyTo(RedisCacheEvictOperation.Builder b) {
-        // 14 共享字段(同 Cacheable.applyTo,顺序与 COMMON_FIELD_NAMES 对齐):
+        // 14 共享字段填充委派到 AttributePopulator —— 与 Cacheable/Put.applyTo 共享同一填充协议
+        AttributePopulator.populate(b, this, List.of(
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheNames,
+                        (builder, v) -> builder.cacheNames((String[]) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getKeyGenerator,
+                        (builder, v) -> builder.keyGenerator((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheManager,
+                        (builder, v) -> builder.cacheManager((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCacheResolver,
+                        (builder, v) -> builder.cacheResolver((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getCondition,
+                        (builder, v) -> builder.condition((String) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isSync,
+                        (builder, v) -> builder.sync((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getSyncTimeout,
+                        (builder, v) -> builder.syncTimeout((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getTtl,
+                        (builder, v) -> builder.ttl((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isUseBloomFilter,
+                        (builder, v) -> builder.useBloomFilter((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getExpectedInsertions,
+                        (builder, v) -> builder.expectedInsertions((long) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getFalseProbability,
+                        (builder, v) -> builder.falseProbability((double) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::isEnableEarlyExpiration,
+                        (builder, v) -> builder.enableEarlyExpiration((boolean) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getEarlyExpirationThreshold,
+                        (builder, v) -> builder.earlyExpirationThreshold((double) v)),
+                AttributePopulator.FieldSink.fieldSink(RedisCacheAttributes::getEarlyExpirationMode,
+                        (builder, v) -> builder.earlyExpirationMode((EarlyExpirationMode) v))
+        ));
+        // Evict-only 2 字段(委托给父类 setCacheWide / setBeforeInvocation,行为字节等价 v0.0.3)
         return b
-                .cacheNames(cacheNames)
-                .keyGenerator(keyGenerator)
-                .cacheManager(cacheManager)
-                .cacheResolver(cacheResolver)
-                .condition(condition)
-                .sync(sync)
-                .syncTimeout(syncTimeout)
-                .ttl(ttl)
-                .useBloomFilter(useBloomFilter)
-                .expectedInsertions(expectedInsertions)
-                .falseProbability(falseProbability)
-                .enableEarlyExpiration(enableEarlyExpiration)
-                .earlyExpirationThreshold(earlyExpirationThreshold)
-                .earlyExpirationMode(earlyExpirationMode)
-                // Evict-only 2 字段:
                 .allEntries(allEntries)
                 .beforeInvocation(beforeInvocation);
     }
