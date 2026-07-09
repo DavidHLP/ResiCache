@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import com.example.round5.CustomDomainValue;
-import io.github.davidhlp.spring.cache.redis.AbstractRedisIntegrationTest;
-import io.github.davidhlp.spring.cache.redis.TestApplication;
+import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
+import io.github.davidhlp.spring.cache.redis.integration.TestApplication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

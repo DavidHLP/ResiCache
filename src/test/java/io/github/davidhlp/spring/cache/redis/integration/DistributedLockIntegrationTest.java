@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis;
+package io.github.davidhlp.spring.cache.redis.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis;
+package io.github.davidhlp.spring.cache.redis.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;

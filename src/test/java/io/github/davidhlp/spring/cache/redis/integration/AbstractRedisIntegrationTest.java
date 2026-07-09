@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis;
+package io.github.davidhlp.spring.cache.redis.integration;
 
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.boot.test.context.SpringBootTest;

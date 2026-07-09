@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis;
+package io.github.davidhlp.spring.cache.redis.integration;
 
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;

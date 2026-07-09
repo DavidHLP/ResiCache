@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis;
+package io.github.davidhlp.spring.cache.redis.integration;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;

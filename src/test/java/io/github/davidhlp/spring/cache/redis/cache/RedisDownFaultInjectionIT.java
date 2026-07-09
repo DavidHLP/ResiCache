@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.AbstractRedisIntegrationTest;
-import io.github.davidhlp.spring.cache.redis.TestApplication;
-import io.github.davidhlp.spring.cache.redis.TestRedisConfiguration;
+import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
+import io.github.davidhlp.spring.cache.redis.integration.TestApplication;
+import io.github.davidhlp.spring.cache.redis.integration.TestRedisConfiguration;
 import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
