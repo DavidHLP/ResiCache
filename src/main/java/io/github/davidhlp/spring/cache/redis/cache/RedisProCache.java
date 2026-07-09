@@ -3,9 +3,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.Cache;
@@ -15,16 +12,50 @@ import org.springframework.data.redis.cache.RedisCacheWriter;
 
 import java.util.concurrent.Callable;
 
+/**
+ * 缓存实例增强 — ResiCache 与 Spring {@code RedisCache} 的扩展点.
+ *
+ * <p>本类在 Spring {@link RedisCache} 基础上注入:
+ * <ol>
+ *   <li><b>Micrometer 指标</b> — 委派 {@link RedisProCacheMetricsRegistry} 统一注册 3 Timer + 4 Counter
+ *       并在 override 中按业务语义记录(timing + 命中/未命中/写/淘汰计数)。{@code MeterRegistry} 缺失时
+ *       全 no-op,与 Spring 默认行为一致。</li>
+ *   <li><b>Loader 路径编排</b> — 委派 {@link LoaderOrchestrator} 统一处理 bloom 短路 / sync 锁 /
+ *       default load 三分支(Round 49 / ADR-0062)。本类仅做 callback capture(4 个 closure) +
+ *       outcome switch 翻译。</li>
+ *   <li><b>方法级 operation 解析</b> — 委派 {@link CacheOperationResolver} 提供 method → operation 元数据
+ *       查找(ADR-0057)。</li>
+ * </ol>
+ *
+ * <p><b>历史 seam 收敛(本类已下沉) — deletion test 通过的收敛</b>:
+ * <ul>
+ *   <li>Round 5 / ADR-0014 — 可选特性收口到 {@link ResiCacheFeatures} 值对象(单一契约点)</li>
+ *   <li>Round 22 / ADR-0031 — 6 个 metric 字段 + null-safe 样板迁移到 {@code RedisProCacheTimers}</li>
+ *   <li>Round 43 / ADR-0057 — {@code RedisCacheRegister} + {@code MethodMetadataResolver} 合并为
+ *       {@link CacheOperationResolver},消除 4 行镜像协议漂移</li>
+ *   <li>Round 49 / ADR-0062 — loader 路径编排 + 3 个 protection 协作 bean 下沉到 {@link LoaderOrchestrator},
+ *       本类不再持 {@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout} 字段</li>
+ *   <li><b>当前 (Round 50 / 提案 ADR-0065)</b> — 6 个 metric 字段 + 12 行注册样板 + 5 处分散自增
+ *       收口到 {@link RedisProCacheMetricsRegistry},与 {@link CacheMetrics}(读侧快照)形成
+ *       "写侧注册+记录" vs "读侧快照" 的对称边界。本类主体退化为 cache 业务行为协调,指标
+ *       关注点 100% 移出</li>
+ * </ul>
+ *
+ * <p><b>设计纪律</b>:本类不再直接 import {@code Timer} / {@code Counter} / {@code MeterRegistry} —
+ * 全部 metric 关注点由 {@link RedisProCacheMetricsRegistry} 承载。{@link ResiCacheFeatures#getMeterRegistry()}
+ * 唯一耦合点是构造期把 registry 透传给 registry seam,运行期本类对 Micrometer API 零依赖。
+ */
 @Slf4j
 public class RedisProCache extends RedisCache {
 
-    private final Timer getTimer;
-    private final Timer putTimer;
-    private final Timer evictTimer;
-    private final Counter hitCounter;
-    private final Counter missCounter;
-    private final Counter putCounter;
-    private final Counter evictCounter;
+    /**
+     * 指标写侧 seam — 6 个 metric 的注册 + null-safe 记录 + 快照读取全部收口在本字段,
+     * 替换原 7 个 Timer/Counter 字段 + 12 行注册样板 + 5 处分散自增。
+     *
+     * <p>{@code MeterRegistry} 缺失时本字段构造为空 registry(全部 6 字段为 null),
+     * 行为与原 {@code RedisProCache} 字节级等价。
+     */
+    private final RedisProCacheMetricsRegistry metricsRegistry;
 
     /** 方法级 operation 元数据解析器 — 仅 lookupOperation 使用;null 时关闭元数据查找。 */
     private final CacheOperationResolver operationResolver;
@@ -43,20 +74,19 @@ public class RedisProCache extends RedisCache {
     private final LoaderOrchestrator loaderOrchestrator;
 
     /**
-     * 构造 ResiCache 实例 — Round 5 / ADR-0014 收敛后的唯一构造入口.
+     * 构造 ResiCache 实例 — Round 5 / ADR-0014 + Round 50 收敛后的唯一构造入口.
      *
      * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点。
      * 全部可选特性收口到单一 {@link ResiCacheFeatures} 值对象(取代原 4 个位置可空参数),
      * 「null = 该特性禁用」的契约只存在于 {@link ResiCacheFeatures} 一处,不再由本构造器
      * 逐参数重述。测试用 {@link ResiCacheFeatures#none()} 或 builder 显式声明启用的特性。
      *
-     * <p><b>ADR-0057 (Round 43)</b>:{@code redisCacheRegister} + {@code methodMetadataResolver}
-     * 已合并为单一 {@link CacheOperationResolver}。
-     *
-     * <p><b>ADR-0062 (Round 49)</b>:loader 路径编排逻辑 + 3 个 protection 协作 bean
-     * ({@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout}) 全部下沉至
-     * {@link LoaderOrchestrator};本构造器只剩 metrics 装配 + operation 解析器 + orchestrator
-     * build(3 行委派)。
+     * <p>构造期委派 3 个 deep seam:
+     * <ol>
+     *   <li>{@link RedisProCacheMetricsRegistry} — 6 metric 注册(2 行委派,替换原 12 行样板)</li>
+     *   <li>{@link CacheOperationResolver} — operation 解析(1 行委派)</li>
+     *   <li>{@link LoaderOrchestrator} — loader 路径编排(1 行委派)</li>
+     * </ol>
      *
      * <p><b>参数契约</b>:
      * <ul>
@@ -64,9 +94,6 @@ public class RedisProCache extends RedisCache {
      *       {@link RedisCache#super(String, RedisCacheWriter, RedisCacheConfiguration)}</li>
      *   <li>{@code features} —— 可选特性集合(见 {@link ResiCacheFeatures};各字段 null 表示禁用)</li>
      * </ul>
-     *
-     * <p><b>Round 22 收敛</b>(ADR-0031):timing & counter 注册与 null-safe 调用已迁移至
-     * {@link RedisProCacheTimers} 工具 seam。
      */
     public RedisProCache(
             String name,
@@ -74,21 +101,7 @@ public class RedisProCache extends RedisCache {
             RedisCacheConfiguration cacheConfiguration,
             ResiCacheFeatures features) {
         super(name, cacheWriter, cacheConfiguration);
-        MeterRegistry meterRegistry = features.getMeterRegistry();
-        this.getTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.get",
-                "Time spent getting cache entries", name);
-        this.putTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.put",
-                "Time spent putting cache entries", name);
-        this.evictTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.evict",
-                "Time spent evicting cache entries", name);
-        this.hitCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.hit",
-                "Cache hit count", name);
-        this.missCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.miss",
-                "Cache miss count", name);
-        this.putCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.put.count",
-                "Cache put count", name);
-        this.evictCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.evict.count",
-                "Cache evict count", name);
+        this.metricsRegistry = new RedisProCacheMetricsRegistry(features.getMeterRegistry(), name);
         this.operationResolver = features.getOperationResolver();
         // ADR-0062:loader 路径编排器 build — 委派 bloomGate/syncSupport/syncLockTimeout + 1 putAfterLoad 闭包;
         // orchestrator 与本类解耦,通过闭包 + super 引用完成 cache-specific 操作。
@@ -100,12 +113,12 @@ public class RedisProCache extends RedisCache {
 
     @Override
     public ValueWrapper get(Object key) {
-        return RedisProCacheTimers.timedGet(getTimer, () -> {
+        return metricsRegistry.recordGet(() -> {
             ValueWrapper result = super.get(key);
             if (result != null) {
-                RedisProCacheTimers.safeIncrement(hitCounter);
+                metricsRegistry.recordHit();
             } else {
-                RedisProCacheTimers.safeIncrement(missCounter);
+                metricsRegistry.recordMiss();
             }
             return result;
         });
@@ -113,12 +126,12 @@ public class RedisProCache extends RedisCache {
 
     @Override
     public <T> T get(Object key, Class<T> type) {
-        return RedisProCacheTimers.timedGet(getTimer, () -> {
+        return metricsRegistry.recordGet(() -> {
             T result = super.get(key, type);
             if (result != null) {
-                RedisProCacheTimers.safeIncrement(hitCounter);
+                metricsRegistry.recordHit();
             } else {
-                RedisProCacheTimers.safeIncrement(missCounter);
+                metricsRegistry.recordMiss();
             }
             return result;
         });
@@ -129,7 +142,7 @@ public class RedisProCache extends RedisCache {
      * 编排逻辑(bloom 短路 / sync vs default 调度 / locked-load 主体)已全部下沉到
      * {@link LoaderOrchestrator#orchestrate},本方法主体退化为
      * <ol>
-     *   <li>timed wrap(getTimer)</li>
+     *   <li>timed wrap(getTimer)(委派 {@link RedisProCacheMetricsRegistry#recordGet})</li>
      *   <li>委派 orchestrator.orchestrate(...) 返回 {@link LoadOutcome}</li>
      *   <li>switch 翻译 3 态 → 路径返回 / miss 自增 / 异常翻译</li>
      * </ol>
@@ -147,7 +160,7 @@ public class RedisProCache extends RedisCache {
      */
     @Override
     public <T> T get(Object key, Callable<T> loader) {
-        return RedisProCacheTimers.timedGet(getTimer, () -> {
+        return metricsRegistry.recordGet(() -> {
             RedisCacheableOperation operation = lookupOperation();
             LoadOutcome<T> outcome = loaderOrchestrator.orchestrate(
                     getName(),
@@ -160,12 +173,12 @@ public class RedisProCache extends RedisCache {
                     operation);
             return switch (outcome) {
                 case LoaderOrchestrator.BloomShortCircuited<T> ignored -> {
-                    RedisProCacheTimers.safeIncrement(missCounter);
+                    metricsRegistry.recordMiss();
                     yield null;
                 }
                 case LoaderOrchestrator.Loaded<T>(T value) -> value;
                 case LoaderOrchestrator.LoadFailed<T>(Throwable cause) -> {
-                    RedisProCacheTimers.safeIncrement(missCounter);
+                    metricsRegistry.recordMiss();
                     throw translateFailure(cause, key);
                 }
             };
@@ -224,35 +237,25 @@ public class RedisProCache extends RedisCache {
 
     @Override
     public void put(Object key, Object value) {
-        RedisProCacheTimers.timed(putTimer, () -> {
-            super.put(key, value);
-            RedisProCacheTimers.safeIncrement(putCounter);
-        });
+        metricsRegistry.recordPut(() -> super.put(key, value));
     }
 
     @Override
     public void evict(Object key) {
-        RedisProCacheTimers.timed(evictTimer, () -> {
-            super.evict(key);
-            RedisProCacheTimers.safeIncrement(evictCounter);
-        });
+        metricsRegistry.recordEvict(() -> super.evict(key));
     }
 
     @Override
     public void clear() {
-        RedisProCacheTimers.timed(evictTimer, super::clear);
+        metricsRegistry.recordClear(super::clear);
     }
 
     /**
-     * 当前缓存实例的指标快照 — ADR-0047 / C2 收敛.
+     * 当前缓存实例的指标快照 — Round 50 (提案 ADR-0065) 收敛.
      *
-     * <p>本方法替代原 5 个 {@code getXCount()} 委托 + {@code getHitRate()} 派生方法,
-     * 用 1 个 deep 方法返回不可变 {@link CacheMetrics} 值对象:
-     * <ul>
-     *   <li>4 个 Counter 字段(hit/miss/put/evict)在 factory 内一次性 null-safe 读取
-     *       —— 等价于原 getter 的 {@code field != null ? count : 0L} 语义</li>
-     *   <li>派生指标 {@code hitRate} 在 record 内集中计算,调用方不再做除法</li>
-     * </ul>
+     * <p>委派 {@link RedisProCacheMetricsRegistry#metrics()} 读取,本方法仅做 1 行委派 —
+     * 全部 4 个 Counter 字段的 null-safe 读取收口在 registry seam 内。{@link CacheMetrics} 派生
+     * 指标 {@code hitRate} 仍由 record 内集中计算,调用方不再做除法。
      *
      * <p>Spring Boot Actuator 与 Micrometer Timer/Counter 注册维持原状
      * (本方法只读,不重置),外部观测不破坏。
@@ -260,10 +263,6 @@ public class RedisProCache extends RedisCache {
      * @return 当前缓存实例的指标快照(不可变)
      */
     public CacheMetrics metrics() {
-        long hits = hitCounter != null ? (long) hitCounter.count() : 0L;
-        long misses = missCounter != null ? (long) missCounter.count() : 0L;
-        long puts = putCounter != null ? (long) putCounter.count() : 0L;
-        long evicts = evictCounter != null ? (long) evictCounter.count() : 0L;
-        return new CacheMetrics(hits, misses, puts, evicts);
+        return metricsRegistry.metrics();
     }
 }

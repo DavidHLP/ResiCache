@@ -8,16 +8,18 @@ tags:
   - RedisProCacheWriter
   - RedisCacheInterceptor
   - CachedValue
+  - RedisProCacheMetricsRegistry
 related: [cache-lifecycle, auto-configuration, chain-of-responsibility, annotations, serialization]
 source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheManager.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriter.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCache.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistry.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptor.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/CachedValue.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-07-09
 ---
 
 # 缓存核心(`cache` 包)
@@ -30,14 +32,15 @@ Spring Data Redis 的 `RedisCache` / `RedisCacheManager` / `RedisCacheWriter` �
 
 ```
 RedisCacheManager (Spring)
-   └── RedisProCacheManager        ── 产出 RedisProCache
+   └── RedisProCacheManager              ── 产出 RedisProCache
 RedisCache (Spring)
-   └── RedisProCache               ── 单个缓存实例,接 bloom/register/sync
+   └── RedisProCache                     ── 单个缓存实例,接 bloom/register/sync
 RedisCacheWriter (Spring, 接口)
-   └── RedisProCacheWriter         ── 责任链入口
+   └── RedisProCacheWriter               ── 责任链入口
 CacheInterceptor (Spring)
-   └── RedisCacheInterceptor       ── AOP 拦截器子类
-CachedValue                        ── 值包装(独立 final 类)
+   └── RedisCacheInterceptor             ── AOP 拦截器子类
+CachedValue                              ── 值包装(独立 final 类)
+RedisProCacheMetricsRegistry             ── 指标写侧 seam(注册 + 记录,与 CacheMetrics 读侧配对)
 ```
 
 ## RedisProCacheManager
@@ -61,6 +64,30 @@ protected RedisCache getMissingCache(String name) {   // 懒加载未预声明�
 ```
 
 这样无论缓存是预声明(`resi-cache.caches.<name>`)还是运行时懒加载,都走 ResiCache 增强逻辑。
+
+## RedisProCacheMetricsRegistry — 指标写侧 seam
+
+`src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistry.java:1`
+
+与 `[[CacheMetrics]]` 读侧快照值对象配对的写侧 seam。`RedisProCache` 6 个 metric 字段(3 Timer + 4 Counter)+ 12 行注册样板 + 5 处分散自增全部收口到本类。`RedisProCache` 构造期一次性 build,运行期 override 全部退化为 1 行委派(`metricsRegistry.recordXxx(...)`)。
+
+业务方法:
+
+```java
+<T> T recordGet(Supplier<T> body)             // 计时 get 路径
+void   recordHit()                            // 自增 hit counter
+void   recordMiss()                           // 自增 miss counter
+void   recordPut(Runnable body)               // 计时 + 写计数
+void   recordEvict(Runnable body)             // 计时 + 淘汰计数
+void   recordClear(Runnable body)             // 计时(无 counter,batch 操作)
+CacheMetrics metrics()                        // 不可变快照
+```
+
+null-safe 语义:`MeterRegistry` 为 null 时全 6 字段为 null,所有 record 走 no-op 路径 — 与原 `RedisProCache` 行为字节级等价。`recordPut` / `recordEvict` 在 null registry 下走 fallback(body 执行 + counter 仍尝试自增,null counter no-op),与原 `RedisProCache` 字节级等价。
+
+内部委派 `RedisProCacheTimers.registerTimer` / `registerCounter` / `safeIncrement` / `timedGet` 等原语,与 `RedisProCacheTimers` 静态 helper 形成 composition seam — 删除任一层,复杂度上浮。
+
+测试覆盖:`RedisProCacheMetricsRegistryTest`(23 个用例,100% 行 / 100% 分支覆盖)独立验证 6 大契约:构造期注册、recordGet timing、recordHit / recordMiss、recordPut / recordEvict、recordClear、metrics() 快照、集成场景。
 
 ## RedisProCacheWriter —— 责任链入口
 
