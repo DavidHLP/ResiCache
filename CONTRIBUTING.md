@@ -74,8 +74,9 @@ See `wiki/how-to/add-protection-handler.md` for a worked example.
 ## Maintaining the wiki
 
 Source → wiki is a **one-way relationship**: when source changes, update the
-relevant wiki page and append an entry to `wiki/log.md`. The wiki is the
-compiled knowledge base — don't re-derive architecture from source in answers.
+relevant wiki page. The wiki is the compiled knowledge base — don't re-derive
+architecture from source in answers. Change history is carried by `git log`
+(commit body is the source of truth).
 
 ## Code of conduct
 

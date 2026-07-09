@@ -5,41 +5,17 @@ tags:
   - meta
   - 索引
   - 导航
-related: [overview, log, README, archive/adr/ARCHIVE-README]
+related: [overview, README]
 status: stable
 created: 2026-06-21
-updated: 2026-07-05
+updated: 2026-07-09
 ---
 
 # 内容索引
 
 wiki 全部页面,按类别分组。回答问题前先在这里定位。
 
-> 阅读入口:[[overview]]。维护规范:[[README]]。变更历史:[[log]]。
-
-## 🗺️ 视觉地图(画布)
-
-| 画布 | 用途 |
-|---|---|
-| ![[meta/overview.canvas]] | 架构 / 机制 / 概念 三栏总览 |
-| ![[meta/mechanisms-canvas.canvas]] | 5 机制在责任链上的交互 |
-| ![[meta/modules-canvas.canvas]] | 8 模块在数据流上的依赖 |
-
-## Meta
-
-- [[README]] — Wiki 维护规范(schema / 三大操作)
-- [[overview]] — 项目概览,阅读入口
-- [[index]] — 本页
-- [[for-onboarding]] — 角色 MOC:新人入门
-- [[for-implementer]] — 角色 MOC:扩展开发
-- [[mechanisms-moc]] — 机制拓扑 MOC
-- [[modules-moc]] — 模块依赖 MOC
-- [[log]] — 操作日志 · [[archive-2026-q2]] · [[archive-2026-q3]]
-- [[milestone-2026-q3]] — Active 里程碑
-
-## 架构决策(ADR)— 已收口
-
-2026-07-08 起,49 篇 ADR 卡片(0001-0057)从 wiki 撤销 prose 形式存在;完整 rationale 由 [[log]] + `git log` 承载。归档区仅留 [[archive/adr/ARCHIVE-README]] 作为收口说明。历史决策**不再**作为阅读路径上的内容——它们只是 commit history 的镜像。
+> 阅读入口:[[overview]]。维护规范:[[README]]。
 
 ## 架构(architecture/)
 
@@ -70,8 +46,6 @@ wiki 全部页面,按类别分组。回答问题前先在这里定位。
 - [[add-protection-handler]] — 4 步新增防护 handler
 - [[configure-behavior]] — 三层配置实操
 
-环境故障笔记(开发环境,非领域):[[env-notes/fix-docker-pull-ipv6-timeout]] · [[env-notes/fix-wsl2-testcontainers-socat-forward]]
-
 ---
 
-最后更新:2026-07-05 · 维护见 [[log]]
+最后更新:2026-07-09

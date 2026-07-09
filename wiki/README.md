@@ -6,10 +6,10 @@ tags:
   - wiki
   - schema
   - conventions
-related: [index, overview, log]
+related: [index, overview]
 status: stable
 created: 2026-06-21
-updated: 2026-07-05
+updated: 2026-07-09
 ---
 
 # ResiCache LLM Wiki
@@ -22,7 +22,7 @@ ResiCache 架构散落在 ~90 个 Java 文件里。本 wiki 把这些知识**编
 
 > 知识不是每次查询时 RAG 重算,而是增量积累成持久产物。**LLM 写并维护全部 wiki;人类提问、审核、定方向。**
 
-**铁律**:源码变了 → 更新对应 wiki 页 → 记一条 log;源码没变 → wiki 视为可信,直接引用,不重新推导。
+**铁律**:源码变了 → 更新对应 wiki 页 → 更新 [[index]];源码没变 → wiki 视为可信,直接引用,不重新推导。
 
 > wiki 目录结构与源码 Project Structure 见 `CLAUDE.md`(单一真理源)。
 
@@ -61,7 +61,7 @@ updated: 2026-06-21
 
 ### 4. 源码引用
 
-- **优先符号引用** `Class#method` —— 行号交给 codebase-memory 即时解析,规避 stale `file:line`(ADR-0051 已自承 Javadoc 断链)。
+- **优先符号引用** `Class#method` —— 行号交给 codebase-memory 即时解析,规避 stale `file:line`。
 - 代码块只贴关键片段(10–30 行),不复制整类。
 
 ### 5. 命名
@@ -73,7 +73,7 @@ updated: 2026-06-21
 
 ### Ingest(源码变更后更新)
 
-源码改动 → 读源码理解变化 → 更新受影响 wiki 页(常 2–5 页)→ 必要时建新页 → [[log]] 追加 `## [YYYY-MM-DD] ingest | 简述` → 更新 [[index]]。
+源码改动 → 读源码理解变化 → 更新受影响 wiki 页(常 2–5 页)→ 必要时建新页 → 更新 [[index]]。
 
 ### Query(回答问题)
 
@@ -81,12 +81,12 @@ updated: 2026-06-21
 
 ### Lint(健康检查)
 
-定期查:断链、孤儿页、过期声明(wiki 说 A 源码已改 B)、缺失页、缺失交叉引用。修复后记 `## [YYYY-MM-DD] lint | 简述` 到 [[log]]。
+定期查:断链、孤儿页、过期声明(wiki 说 A 源码已改 B)、缺失页、缺失交叉引用。
 
-## [[index]] 与 [[log]]
+## [[index]]
 
 - **[[index]]** —— 内容导向。全量页面按类别分组,每条一句话定位。
-- **[[log]]** —— 时间导向。append-only 事件流,`## [YYYY-MM-DD] <op> | <subject>`,可被 `grep "^## \[" log.md` 解析。
+- 变更历史由 `git log` 承载(commit body 是 SOURCE OF TRUTH),不再维护独立 log 文档。
 
 ## 给后续会话的速查
 

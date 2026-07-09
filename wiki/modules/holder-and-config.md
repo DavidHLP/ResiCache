@@ -74,5 +74,4 @@ updated: 2026-06-29
 - [[operations]] —— `RedisCacheRegister` 与 Resolver 的分工
 - [[auto-configuration]] —— 这些类的总装配入口
 - [[annotations]] —— Resolver 激活的元数据来自注解解析
-- [[archive/adr/ARCHIVE-README]] —— 历史架构决策的审计入口(Path C 7 步序列等)
 - [[serialization]] —— `JacksonConfig` 提供的 `ObjectMapper`

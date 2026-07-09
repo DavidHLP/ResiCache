@@ -42,9 +42,8 @@
 - **入口**:`wiki/overview.md` —— 一句话概览 + 技术栈 + 阅读路线
 - **目录**:`wiki/index.md` —— 全部页面(架构 / 机制 / 模块 / 概念 / 指南)
 - **规范**:`wiki/README.md` —— 如何维护(ingest / query / lint 三大操作)
-- **历史**:`wiki/log.md`
 
-**源码 → wiki 是单向关系**:源码变了 → 更新对应 wiki 页 → 记 `log.md`;源码没变 → 直接引用 wiki,不要重新推导。
+**源码 → wiki 是单向关系**:源码变了 → 更新对应 wiki 页;源码没变 → 直接引用 wiki,不要重新推导。变更历史由 `git log` 承载(commit body 是 SOURCE OF TRUTH)。
 
 回答架构 / 机制 / 模块问题先读 `index.md` 定位,再下钻;不直接 grep 源码(wiki 已编译过)。
 
@@ -72,7 +71,7 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 └── holder/              # CacheOperationMetadataHolder (method → operation cache)
 ```
 
-> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder` —— 见 `a5ab55b` 重构与 `wiki/log.md` 的 lint 记录。wiki 始终以实际源码为准。
+> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder` —— 见 `a5ab55b` 重构。wiki 始终以实际源码为准。
 
 ## Key Architecture: Chain of Responsibility
 

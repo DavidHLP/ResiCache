@@ -170,7 +170,6 @@ resi-cache:
 - **失败语义改变**:follower 继承 leader 异常(不再独立 double-check 自救),更符合击穿保护精神
 
 吞吐收益:同 key 高并发读 miss 的 follower 串行开销 `O(N×(锁+GET))` → `O(ε)`。
-详见 [[archive/adr/ARCHIVE-README]] 的 round 31 条目。
 
 ## 相关
 

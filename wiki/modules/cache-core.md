@@ -24,7 +24,7 @@ updated: 2026-06-21
 
 Spring Data Redis 的 `RedisCache` / `RedisCacheManager` / `RedisCacheWriter` 三件套的**增强子类**——在不破坏 Spring Cache 抽象的前提下,把责任链、布隆、锁、注册表接进来。这是 ResiCache 与 Spring Cache 的接合部。
 
-> ⚠️ 本页基于实际代码。`CLAUDE.md`/`README` 曾提及的 `wrapper/`、`spi/`、`CacheMetricsRecorder` 等在 `a5ab55b` 重构后已从代码移除——见 [[log]] 的 lint 记录。
+> ⚠️ 本页基于实际代码。`CLAUDE.md`/`README` 曾提及的 `wrapper/`、`spi/`、`CacheMetricsRecorder` 等在 `a5ab55b` 重构后已从代码移除。
 
 ## 五个类
 
