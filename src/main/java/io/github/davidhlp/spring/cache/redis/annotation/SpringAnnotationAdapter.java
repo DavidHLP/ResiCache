@@ -10,7 +10,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheOperation;
-import org.springframework.util.StringUtils;
+import org.springframework.cache.interceptor.CacheableOperation;
 
 import java.lang.reflect.AnnotatedElement;
 import java.util.List;
@@ -30,6 +30,12 @@ import java.util.List;
  * 6 对 {@code convertSpringXxx(Method, List)} + {@code convertSpringXxx(Class, List)}
  * 重载 + {@code addSpringNativeOperations} 内 SELECTIVE / FULL 双分支的 Method/Class
  * 二分法,共 14 个分派点全部塌缩为多态 {@link AnnotatedElement} 路径。
+ *
+ * <p><b>Round 50 / 架构评审候选 A 收敛</b>:3 个 build 方法原持有 17 处私有
+ * {@code applyText(ann.x(), builder::setX)} 调用 + 私有 {@code applyText} helper
+ * 已统一委派到 {@link BuilderPopulator#populate} —— 字段填充形状(text + special)
+ * 收口到 deep seam,与 {@link AnnotationParser} 共享同一填充协议,新增字段触点
+ * = 1 个 populate spec 行而非两份独立 applyText 实现。
  */
 @Slf4j
 final class SpringAnnotationAdapter {
@@ -153,19 +159,29 @@ final class SpringAnnotationAdapter {
         }
     }
 
-    private org.springframework.cache.interceptor.CacheableOperation buildRedisCacheableOperation(
+    private CacheableOperation buildRedisCacheableOperation(
             Cacheable ann, String name) {
-        org.springframework.cache.interceptor.CacheableOperation.Builder builder =
-                new org.springframework.cache.interceptor.CacheableOperation.Builder();
+        CacheableOperation.Builder builder = new CacheableOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
-        applyText(ann.key(), builder::setKey);
-        applyText(ann.condition(), builder::setCondition);
-        applyText(ann.unless(), builder::setUnless);
-        applyText(ann.keyGenerator(), builder::setKeyGenerator);
-        applyText(ann.cacheManager(), builder::setCacheManager);
-        applyText(ann.cacheResolver(), builder::setCacheResolver);
-        builder.setSync(ann.sync());
+
+        // Round 50:6 文本字段 + 1 special 字段(sync)委派到 BuilderPopulator.populate
+        BuilderPopulator.populate(builder, ann,
+                List.of(
+                        BuilderPopulator.TextField.textField(
+                                Cacheable::key, CacheableOperation.Builder::setKey),
+                        BuilderPopulator.TextField.textField(
+                                Cacheable::condition, CacheableOperation.Builder::setCondition),
+                        BuilderPopulator.TextField.textField(
+                                Cacheable::unless, CacheableOperation.Builder::setUnless),
+                        BuilderPopulator.TextField.textField(
+                                Cacheable::keyGenerator, CacheableOperation.Builder::setKeyGenerator),
+                        BuilderPopulator.TextField.textField(
+                                Cacheable::cacheManager, CacheableOperation.Builder::setCacheManager),
+                        BuilderPopulator.TextField.textField(
+                                Cacheable::cacheResolver, CacheableOperation.Builder::setCacheResolver)
+                ),
+                List.of((b, a) -> b.setSync(a.sync())));
         return builder.build();
     }
 
@@ -174,12 +190,24 @@ final class SpringAnnotationAdapter {
         RedisCachePutOperation.Builder builder = RedisCachePutOperation.builder();
         builder.name(name);
         builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
-        applyText(ann.key(), builder::key);
-        applyText(ann.condition(), builder::condition);
-        applyText(ann.unless(), builder::unless);
-        applyText(ann.keyGenerator(), builder::keyGenerator);
-        applyText(ann.cacheManager(), builder::cacheManager);
-        applyText(ann.cacheResolver(), builder::cacheResolver);
+
+        // Round 50:6 文本字段 + 0 special 字段委派(Lombok 链式 builder 用 x 命名 setter)
+        BuilderPopulator.populate(builder, ann,
+                List.of(
+                        BuilderPopulator.TextField.textField(
+                                CachePut::key, RedisCachePutOperation.Builder::key),
+                        BuilderPopulator.TextField.textField(
+                                CachePut::condition, RedisCachePutOperation.Builder::condition),
+                        BuilderPopulator.TextField.textField(
+                                CachePut::unless, RedisCachePutOperation.Builder::unless),
+                        BuilderPopulator.TextField.textField(
+                                CachePut::keyGenerator, RedisCachePutOperation.Builder::keyGenerator),
+                        BuilderPopulator.TextField.textField(
+                                CachePut::cacheManager, RedisCachePutOperation.Builder::cacheManager),
+                        BuilderPopulator.TextField.textField(
+                                CachePut::cacheResolver, RedisCachePutOperation.Builder::cacheResolver)
+                ),
+                List.of());
         return builder.build();
     }
 
@@ -188,27 +216,29 @@ final class SpringAnnotationAdapter {
         RedisCacheEvictOperation.Builder builder = RedisCacheEvictOperation.builder();
         builder.name(name);
         builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
-        applyText(ann.key(), builder::key);
-        applyText(ann.condition(), builder::condition);
-        applyText(ann.keyGenerator(), builder::setKeyGenerator);
-        applyText(ann.cacheManager(), builder::setCacheManager);
-        applyText(ann.cacheResolver(), builder::setCacheResolver);
-        builder.allEntries(ann.allEntries());
-        builder.beforeInvocation(ann.beforeInvocation());
-        return builder.build();
-    }
 
-    /**
-     * 仅当 value 非空时执行 setter(ADR-0029 applyText seam)。
-     *
-     * <p>抹平两类 Builder setter 风格差异:Spring 标准 Builder 用 {@code setX(String)}
-     * (如 {@code CacheableOperation.Builder.setKey}),ResiCache Lombok Builder 用 {@code x(String)}
-     * (如 {@code RedisCachePutOperation.Builder.key})。两者皆兼容 {@code Consumer<String>}
-     * (Lombok 版返回 Builder 被丢弃),收敛 3 处 build 方法共 17 个 {@code if (hasText) set} 样板。
-     */
-    private static void applyText(String value, java.util.function.Consumer<String> setter) {
-        if (StringUtils.hasText(value)) {
-            setter.accept(value);
-        }
+        // Round 50:5 文本字段 + 2 special 字段(allEntries + beforeInvocation)委派。
+        // 注:本方法返回 RedisCacheEvictOperation(ResiCache 子类)而非 Spring 标准
+        // CacheEvictOperation,与 AnnotationParser 产出 Spring 标准类的语义不同——
+        // ResiCache 自家 build 走 ResiCache 子类(持有 ResiCache 增强字段)。
+        // Evict 的 5 文本字段覆盖 key + condition + cacheResolver + keyGenerator +
+        // cacheManager(与 parseRedisCacheEvict 同结构,语义对齐)。
+        BuilderPopulator.populate(builder, ann,
+                List.of(
+                        BuilderPopulator.TextField.textField(
+                                CacheEvict::key, RedisCacheEvictOperation.Builder::key),
+                        BuilderPopulator.TextField.textField(
+                                CacheEvict::condition, RedisCacheEvictOperation.Builder::condition),
+                        BuilderPopulator.TextField.textField(
+                                CacheEvict::keyGenerator, RedisCacheEvictOperation.Builder::keyGenerator),
+                        BuilderPopulator.TextField.textField(
+                                CacheEvict::cacheManager, RedisCacheEvictOperation.Builder::cacheManager),
+                        BuilderPopulator.TextField.textField(
+                                CacheEvict::cacheResolver, RedisCacheEvictOperation.Builder::cacheResolver)
+                ),
+                List.of(
+                        (b, a) -> b.allEntries(a.allEntries()),
+                        (b, a) -> b.beforeInvocation(a.beforeInvocation())));
+        return builder.build();
     }
 }

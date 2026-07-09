@@ -2,8 +2,10 @@ package io.github.davidhlp.spring.cache.redis.annotation;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
-import org.springframework.util.StringUtils;
+import org.springframework.cache.interceptor.CachePutOperation;
+import org.springframework.cache.interceptor.CacheableOperation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +29,11 @@ import java.util.List;
  * {@link AnnotationTargets#extractTargetName}。本类签名零变化,行为零回归
  * (现有 {@code SpringAnnotationAdapterTest} + {@code RedisCacheOperationSourceSelectiveTest}
  * + 本类新增 {@code AnnotatedElementPolymorphicSeamTest} 联合钉住)。
+ *
+ * <p><b>Round 50 / 架构评审候选 A 收敛</b>:3 个 parse 方法原持有 18 处
+ * {@code if (StringUtils.hasText(...)) builder.setX(...)} 样板已统一委派给
+ * {@link BuilderPopulator#populate} —— 字段填充形状(text + special)收口到 deep seam,
+ * 新增 ResiCache 字段触点 = 1 个 populate spec 行,不再两份独立 if-守卫实现。
  */
 @Slf4j
 final class AnnotationParser {
@@ -100,39 +107,32 @@ final class AnnotationParser {
 
         // 使用 Spring 标准的 CacheableOperation.Builder，确保 getClass() 返回 CacheableOperation.class
         // 这样 CacheAspectSupport 的 CacheOperationContexts 能正确按类型索引
-        final org.springframework.cache.interceptor.CacheableOperation.Builder builder =
-                new org.springframework.cache.interceptor.CacheableOperation.Builder();
+        final CacheableOperation.Builder builder = new CacheableOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
-        if (StringUtils.hasText(ann.key())) {
-            builder.setKey(ann.key());
-        }
+        // Round 50:6 文本字段 + 1 special 字段填充委派到 BuilderPopulator.populate,
+        // 消除原 7 处 if (StringUtils.hasText(...)) 样板。setter 引用形态兼容 Spring
+        // 标准 Builder(setX 命名)与 Lombok Builder(x 命名)。
+        BuilderPopulator.populate(builder, ann,
+                List.of(
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheable::key, CacheableOperation.Builder::setKey),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheable::condition, CacheableOperation.Builder::setCondition),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheable::unless, CacheableOperation.Builder::setUnless),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheable::keyGenerator, CacheableOperation.Builder::setKeyGenerator),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheable::cacheManager, CacheableOperation.Builder::setCacheManager),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheable::cacheResolver, CacheableOperation.Builder::setCacheResolver)
+                ),
+                List.of((b, a) -> b.setSync(a.sync())));
 
-        if (StringUtils.hasText(ann.condition())) {
-            builder.setCondition(ann.condition());
-        }
-
-        if (StringUtils.hasText(ann.unless())) {
-            builder.setUnless(ann.unless());
-        }
-
-        builder.setSync(ann.sync());
-
-        if (StringUtils.hasText(ann.keyGenerator())) {
-            builder.setKeyGenerator(ann.keyGenerator());
-        }
-
-        if (StringUtils.hasText(ann.cacheManager())) {
-            builder.setCacheManager(ann.cacheManager());
-        }
-
-        if (StringUtils.hasText(ann.cacheResolver())) {
-            builder.setCacheResolver(ann.cacheResolver());
-        }
-
-        final org.springframework.cache.interceptor.CacheableOperation operation = builder.build();
+        final CacheableOperation operation = builder.build();
         log.debug("Built CacheableOperation: {}", operation);
         return operation;
     }
@@ -159,36 +159,30 @@ final class AnnotationParser {
         // buildContext 按需查询。(@RedisCacheEvict 的 sync/syncTimeout 是 ResiCache
         // 扩展,Spring 原生 CacheEvictOperation 无此概念,此处不投影——与 Spring
         // 原生 @CacheEvict 行为一致。)
-        final org.springframework.cache.interceptor.CacheEvictOperation.Builder builder =
-                new org.springframework.cache.interceptor.CacheEvictOperation.Builder();
+        final CacheEvictOperation.Builder builder = new CacheEvictOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
-        if (StringUtils.hasText(ann.key())) {
-            builder.setKey(ann.key());
-        }
+        // Round 50:5 文本字段 + 2 special 字段(cacheWide + beforeInvocation)填充委派
+        BuilderPopulator.populate(builder, ann,
+                List.of(
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheEvict::key, CacheEvictOperation.Builder::setKey),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheEvict::cacheResolver, CacheEvictOperation.Builder::setCacheResolver),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheEvict::condition, CacheEvictOperation.Builder::setCondition),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheEvict::keyGenerator, CacheEvictOperation.Builder::setKeyGenerator),
+                        BuilderPopulator.TextField.textField(
+                                RedisCacheEvict::cacheManager, CacheEvictOperation.Builder::setCacheManager)
+                ),
+                List.of(
+                        (b, a) -> b.setCacheWide(a.allEntries()),
+                        (b, a) -> b.setBeforeInvocation(a.beforeInvocation())));
 
-        if (StringUtils.hasText(ann.cacheResolver())) {
-            builder.setCacheResolver(ann.cacheResolver());
-        }
-
-        if (StringUtils.hasText(ann.condition())) {
-            builder.setCondition(ann.condition());
-        }
-
-        builder.setCacheWide(ann.allEntries());
-        builder.setBeforeInvocation(ann.beforeInvocation());
-
-        if (StringUtils.hasText(ann.keyGenerator())) {
-            builder.setKeyGenerator(ann.keyGenerator());
-        }
-
-        if (StringUtils.hasText(ann.cacheManager())) {
-            builder.setCacheManager(ann.cacheManager());
-        }
-
-        final org.springframework.cache.interceptor.CacheEvictOperation operation = builder.build();
+        final CacheEvictOperation operation = builder.build();
         log.debug("Built CacheEvictOperation: {}", operation);
         return operation;
     }
@@ -212,37 +206,31 @@ final class AnnotationParser {
         //产出 ResiCache 子类导致 Spring 分桶失败。ResiCache 增强字段(ttl/bloom/
         // nullValue/early-expiration 等)不进 Spring operation:由 AnnotationChainEngine
         // 的 handler 注册到 RedisCacheRegister,链路 buildContext 按需查询。
-        final org.springframework.cache.interceptor.CachePutOperation.Builder builder =
-                new org.springframework.cache.interceptor.CachePutOperation.Builder();
+        final CachePutOperation.Builder builder = new CachePutOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(
                 ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
-        if (StringUtils.hasText(ann.key())) {
-            builder.setKey(ann.key());
-        }
+        // Round 50:6 文本字段 + 0 special 字段委派(@RedisCachePut 不携带 Spring 标准
+        // CachePutOperation 没有的特殊字段,只是 key+condition+unless 等基础文本)
+        BuilderPopulator.populate(builder, ann,
+                List.of(
+                        BuilderPopulator.TextField.textField(
+                                RedisCachePut::key, CachePutOperation.Builder::setKey),
+                        BuilderPopulator.TextField.textField(
+                                RedisCachePut::condition, CachePutOperation.Builder::setCondition),
+                        BuilderPopulator.TextField.textField(
+                                RedisCachePut::unless, CachePutOperation.Builder::setUnless),
+                        BuilderPopulator.TextField.textField(
+                                RedisCachePut::keyGenerator, CachePutOperation.Builder::setKeyGenerator),
+                        BuilderPopulator.TextField.textField(
+                                RedisCachePut::cacheManager, CachePutOperation.Builder::setCacheManager),
+                        BuilderPopulator.TextField.textField(
+                                RedisCachePut::cacheResolver, CachePutOperation.Builder::setCacheResolver)
+                ),
+                List.of());
 
-        if (StringUtils.hasText(ann.condition())) {
-            builder.setCondition(ann.condition());
-        }
-
-        if (StringUtils.hasText(ann.unless())) {
-            builder.setUnless(ann.unless());
-        }
-
-        if (StringUtils.hasText(ann.keyGenerator())) {
-            builder.setKeyGenerator(ann.keyGenerator());
-        }
-
-        if (StringUtils.hasText(ann.cacheManager())) {
-            builder.setCacheManager(ann.cacheManager());
-        }
-
-        if (StringUtils.hasText(ann.cacheResolver())) {
-            builder.setCacheResolver(ann.cacheResolver());
-        }
-
-        final org.springframework.cache.interceptor.CachePutOperation operation = builder.build();
+        final CachePutOperation operation = builder.build();
         log.debug("Built CachePutOperation: {}", operation);
         return operation;
     }
