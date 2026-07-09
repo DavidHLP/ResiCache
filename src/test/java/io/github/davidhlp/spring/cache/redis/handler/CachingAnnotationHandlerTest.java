@@ -3,9 +3,7 @@ package io.github.davidhlp.spring.cache.redis.handler;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
-import io.github.davidhlp.spring.cache.redis.factory.CachePutOperationFactory;
-import io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory;
-import io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory;
+import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
@@ -40,21 +38,13 @@ class CachingAnnotationHandlerTest {
     @Mock
     private KeyGenerator keyGenerator;
 
-    @Mock
-    private CacheableOperationFactory cacheableOperationFactory;
-
-    @Mock
-    private EvictOperationFactory evictOperationFactory;
-
-    @Mock
-    private CachePutOperationFactory cachePutOperationFactory;
+    private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
 
     private CachingAnnotationHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new CachingAnnotationHandler(
-                redisCacheRegister, keyGenerator, cacheableOperationFactory, evictOperationFactory, cachePutOperationFactory);
+        handler = new CachingAnnotationHandler(redisCacheRegister, keyGenerator, projector);
     }
 
     private Method getMethod(String name) throws NoSuchMethodException {
@@ -129,56 +119,16 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(any(Object.class), any(Method.class), any(Object[].class))).thenReturn("key");
-            when(cacheableOperationFactory.create(any(Method.class), any(RedisCacheable.class), any(String.class)))
-                    .thenReturn(RedisCacheableOperation.builder().build());
-            when(evictOperationFactory.create(any(Method.class), any(RedisCacheEvict.class), any(String.class)))
-                    .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
-            // ADR-0059:register 调用改为带 kind 的 seam,2 个 kind 各自调用 1 次
+            // ADR-0065:operation 由真实 projector 生成;验证 2 个 kind 各调用 1 次
             verify(redisCacheRegister).register(
                     any(Method.class), any(Class.class),
                     any(RedisCacheableOperation.class), eq(OperationKind.CACHEABLE));
             verify(redisCacheRegister).register(
                     any(Method.class), any(Class.class),
                     any(RedisCacheEvictOperation.class), eq(OperationKind.CACHE_EVICT));
-        }
-
-        @Test
-        @DisplayName("doHandle registers cacheable operation with correct annotation")
-        void doHandle_correctCacheableAnnotation() throws Exception {
-            Method method = getMethod("combinedMethod");
-            Object target = new TestClass();
-            Object[] args = new Object[0];
-
-            when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(eq(method), any(RedisCacheable.class), eq("key")))
-                    .thenReturn(RedisCacheableOperation.builder().build());
-            when(evictOperationFactory.create(any(), any(), any()))
-                    .thenReturn(RedisCacheEvictOperation.builder().build());
-
-            handler.doHandle(method, target, args);
-
-            verify(cacheableOperationFactory).create(eq(method), any(RedisCacheable.class), eq("key"));
-        }
-
-        @Test
-        @DisplayName("doHandle registers evict operation with correct annotation")
-        void doHandle_correctEvictAnnotation() throws Exception {
-            Method method = getMethod("combinedMethod");
-            Object target = new TestClass();
-            Object[] args = new Object[0];
-
-            when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(any(), any(), any()))
-                    .thenReturn(RedisCacheableOperation.builder().build());
-            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq("key")))
-                    .thenReturn(RedisCacheEvictOperation.builder().build());
-
-            handler.doHandle(method, target, args);
-
-            verify(evictOperationFactory).create(eq(method), any(RedisCacheEvict.class), eq("key"));
         }
     }
 
@@ -194,8 +144,6 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(any(), any(), any()))
-                    .thenReturn(RedisCacheableOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
@@ -212,8 +160,6 @@ class CachingAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(evictOperationFactory.create(any(), any(), any()))
-                    .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
@@ -239,38 +185,6 @@ class CachingAnnotationHandlerTest {
             handler.doHandle(method, target, args);
 
             verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
-        }
-
-        @Test
-        @DisplayName("doHandle handles cacheable factory exception gracefully")
-        void doHandle_withCacheableFactoryException_doesNotThrow() throws Exception {
-            Method method = getMethod("multipleCacheableMethod");
-            Object target = new TestClass();
-            Object[] args = new Object[0];
-
-            when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(cacheableOperationFactory.create(any(), any(), any()))
-                    .thenThrow(new RuntimeException("Factory error"));
-
-            handler.doHandle(method, target, args);
-
-            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
-        }
-
-        @Test
-        @DisplayName("doHandle handles evict factory exception gracefully")
-        void doHandle_withEvictFactoryException_doesNotThrow() throws Exception {
-            Method method = getMethod("multipleEvictMethod");
-            Object target = new TestClass();
-            Object[] args = new Object[0];
-
-            when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(evictOperationFactory.create(any(), any(), any()))
-                    .thenThrow(new RuntimeException("Factory error"));
-
-            handler.doHandle(method, target, args);
-
-            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), eq(OperationKind.CACHE_EVICT));
         }
     }
 }

@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.operation;
 
-import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 
 import org.junit.jupiter.api.DisplayName;
@@ -24,9 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>S1 (Round 47):@RedisCacheable.expectedInsertions 从 int 提升为 long 后,
  * 本类不再有"边界裁剪到 int"测试 — 直传无窄化。
  *
- * <p>本测试是 ADR-0017 Factory 1-liner 委派的<strong>唯一</strong>契约钉子 —
- * 三个具体 factory 不再持有 Builder 填充逻辑,行为由本测试+Operation 类静态方法
- * 共同保证。
+ * <p>ADR-0065:原 "Factory 1-liner 委派契约" nested class 已删除 —— 3 个浅 factory
+ * @Component 被内联为 handler 中的 lambda,委派等价性不再需要独立测试钉子
+ * (factory.create === fromAttributes 现在恒真,因 factory 已不存在)。本测试聚焦
+ * {@code fromAttributes} 自身的字段映射正确性。
  */
 @DisplayName("Operation.fromAttributes seam (ADR-0017)")
 class OperationFromAttributesTest {
@@ -249,167 +249,6 @@ class OperationFromAttributesTest {
             assertThat(op.isSync()).isTrue();
             assertThat(op.getSyncTimeout()).isEqualTo(20L);
             assertThat(op.getTtl()).isEqualTo(60L);
-        }
-    }
-
-    // -----------------------------------------------------------------
-    // Factory 1-liner 委派契约 — 验证 3 个 factory.materialize 完全等价
-    // -----------------------------------------------------------------
-
-    @Nested
-    @DisplayName("Factory 1-liner 委派契约 (factory.materialize ≡ Operation.fromAttributes)")
-    class FactoryDelegateContract {
-
-        private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
-
-        @Test
-        @DisplayName("CacheableOperationFactory.materialize === RedisCacheableOperation.fromAttributes")
-        void cacheableFactoryDelegatesToFromAttributes() throws Exception {
-            io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory factory =
-                    new io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory(projector);
-            Method m = testMethod();
-
-            // 直接用 factory.create
-            io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable annotation =
-                    makeCacheable(new String[]{"c"}, 60L, true);
-            RedisCacheableOperation viaFactory = factory.create(m, annotation, "k");
-
-            // 直接用 fromAttributes
-            RedisCacheAttributes a = projector.from(annotation);
-            RedisCacheableOperation viaFromAttributes = RedisCacheableOperation.fromAttributes(m, "k", a);
-
-            // 关键字段必须一致
-            assertThat(viaFactory.getName()).isEqualTo(viaFromAttributes.getName());
-            assertThat(viaFactory.getKey()).isEqualTo(viaFromAttributes.getKey());
-            assertThat(viaFactory.getTtl()).isEqualTo(viaFromAttributes.getTtl());
-            assertThat(viaFactory.getType()).isEqualTo(viaFromAttributes.getType());
-            assertThat(viaFactory.isEnableEarlyExpiration()).isEqualTo(viaFromAttributes.isEnableEarlyExpiration());
-        }
-
-        @Test
-        @DisplayName("EvictOperationFactory.materialize === RedisCacheEvictOperation.fromAttributes")
-        void evictFactoryDelegatesToFromAttributes() throws Exception {
-            io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory factory =
-                    new io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory(projector);
-            Method m = testMethod();
-
-            io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict annotation =
-                    makeEvict(new String[]{"c"}, true, true);
-            RedisCacheEvictOperation viaFactory = factory.create(m, annotation, "k");
-
-            RedisCacheAttributes a = projector.from(annotation);
-            RedisCacheEvictOperation viaFromAttributes = RedisCacheEvictOperation.fromAttributes(m, "k", a);
-
-            assertThat(viaFactory.isCacheWide()).isEqualTo(viaFromAttributes.isCacheWide());
-            assertThat(viaFactory.isBeforeInvocation()).isEqualTo(viaFromAttributes.isBeforeInvocation());
-            assertThat(viaFactory.isSync()).isEqualTo(viaFromAttributes.isSync());
-        }
-
-        @Test
-        @DisplayName("CachePutOperationFactory.materialize === RedisCachePutOperation.fromAttributes")
-        void putFactoryDelegatesToFromAttributes() throws Exception {
-            io.github.davidhlp.spring.cache.redis.factory.CachePutOperationFactory factory =
-                    new io.github.davidhlp.spring.cache.redis.factory.CachePutOperationFactory(projector);
-            Method m = testMethod();
-
-            io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut annotation =
-                    makePut(new String[]{"c"}, 60L);
-            RedisCachePutOperation viaFactory = factory.create(m, annotation, "k");
-
-            RedisCacheAttributes a = projector.from(annotation);
-            RedisCachePutOperation viaFromAttributes = RedisCachePutOperation.fromAttributes(m, "k", a);
-
-            assertThat(viaFactory.getTtl()).isEqualTo(viaFromAttributes.getTtl());
-            assertThat(viaFactory.isSync()).isEqualTo(viaFromAttributes.isSync());
-        }
-
-        // 简易 annotation stub 工厂 — 复用现有测试基础设施
-        private io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable makeCacheable(
-                String[] cacheNames, long ttl, boolean enableEarly) {
-            return new io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable() {
-                @Override public Class<? extends java.lang.annotation.Annotation> annotationType() {
-                    return io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable.class;
-                }
-                @Override public String[] cacheNames() { return cacheNames; }
-                @Override public String[] value() { return new String[0]; }
-                @Override public String key() { return ""; }
-                @Override public String keyGenerator() { return ""; }
-                @Override public String cacheManager() { return ""; }
-                @Override public String cacheResolver() { return ""; }
-                @Override public String condition() { return ""; }
-                @Override public String unless() { return ""; }
-                @Override public long ttl() { return ttl; }
-                @Override public Class<?> type() { return Object.class; }
-                @Override public boolean cacheNullValues() { return false; }
-                @Override public boolean useBloomFilter() { return false; }
-                @Override public long expectedInsertions() { return 100000L; }
-                @Override public double falseProbability() { return 0.01; }
-                @Override public boolean randomTtl() { return false; }
-                @Override public float variance() { return 0.2F; }
-                @Override public boolean enableEarlyExpiration() { return enableEarly; }
-                @Override public double earlyExpirationThreshold() { return 0.3; }
-                @Override public EarlyExpirationMode earlyExpirationMode() { return EarlyExpirationMode.SYNC; }
-                @Override public boolean sync() { return false; }
-                @Override public long syncTimeout() { return 10L; }
-            };
-        }
-
-        private io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut makePut(
-                String[] cacheNames, long ttl) {
-            return new io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut() {
-                @Override public Class<? extends java.lang.annotation.Annotation> annotationType() {
-                    return io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut.class;
-                }
-                @Override public String[] cacheNames() { return cacheNames; }
-                @Override public String[] value() { return new String[0]; }
-                @Override public String key() { return ""; }
-                @Override public String keyGenerator() { return ""; }
-                @Override public String cacheManager() { return ""; }
-                @Override public String cacheResolver() { return ""; }
-                @Override public String condition() { return ""; }
-                @Override public String unless() { return ""; }
-                @Override public long ttl() { return ttl; }
-                @Override public Class<?> type() { return Object.class; }
-                @Override public boolean cacheNullValues() { return false; }
-                @Override public boolean useBloomFilter() { return false; }
-                @Override public long expectedInsertions() { return 100000L; }
-                @Override public double falseProbability() { return 0.01; }
-                @Override public boolean randomTtl() { return false; }
-                @Override public float variance() { return 0.2F; }
-                @Override public boolean enableEarlyExpiration() { return false; }
-                @Override public double earlyExpirationThreshold() { return 0.3; }
-                @Override public EarlyExpirationMode earlyExpirationMode() { return EarlyExpirationMode.SYNC; }
-                @Override public boolean sync() { return false; }
-                @Override public long syncTimeout() { return 10L; }
-            };
-        }
-
-        private io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict makeEvict(
-                String[] cacheNames, boolean allEntries, boolean beforeInvocation) {
-            return new io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict() {
-                @Override public Class<? extends java.lang.annotation.Annotation> annotationType() {
-                    return io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict.class;
-                }
-                @Override public String[] cacheNames() { return cacheNames; }
-                @Override public String[] value() { return new String[0]; }
-                @Override public String key() { return ""; }
-                @Override public String keyGenerator() { return ""; }
-                @Override public String cacheManager() { return ""; }
-                @Override public String cacheResolver() { return ""; }
-                @Override public String condition() { return ""; }
-                @Override public String unless() { return ""; }
-                @Override public long ttl() { return 0L; }
-                @Override public boolean useBloomFilter() { return false; }
-                @Override public long expectedInsertions() { return 100000L; }
-                @Override public double falseProbability() { return 0.01; }
-                @Override public boolean enableEarlyExpiration() { return false; }
-                @Override public double earlyExpirationThreshold() { return 0.3; }
-                @Override public EarlyExpirationMode earlyExpirationMode() { return EarlyExpirationMode.SYNC; }
-                @Override public boolean sync() { return false; }
-                @Override public long syncTimeout() { return 10L; }
-                @Override public boolean allEntries() { return allEntries; }
-                @Override public boolean beforeInvocation() { return beforeInvocation; }
-            };
         }
     }
 }

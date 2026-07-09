@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
-import io.github.davidhlp.spring.cache.redis.factory.CacheableOperationFactory;
 import io.github.davidhlp.spring.cache.redis.factory.OperationFactory;
+import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.factory.SpringCacheableAdapterFactory;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
@@ -29,7 +29,8 @@ import java.util.function.Function;
  *
  * <p>两条路径都收敛为统一的 {@link AbstractAnnotationHandler#registerOne} 模板：
  * <ul>
- *   <li>{@code @RedisCacheable} —— 走 {@link CacheableOperationFactory}；</li>
+ *   <li>{@code @RedisCacheable} —— 走内联 lambda
+ *       ({@code projector.from(a) + RedisCacheableOperation.fromAttributes});</li>
  *   <li>Spring {@code @Cacheable} —— 走 {@link SpringCacheableAdapterFactory}
  *       （<strong>Candidate C</strong>：原本内联的 47 行 if-Builder 模板已抽出到该 factory）。</li>
  * </ul>
@@ -39,6 +40,12 @@ import java.util.function.Function;
  * 注册到 {@link OperationKind#CACHEABLE} 命名空间,取代原
  * {@code redisCacheRegister::registerCacheableOperation} 方法引用 —— register API
  * 已从 6 方法收敛到 2 方法,kind 编译期固定。
+ *
+ * <p><b>ADR-0065 深化(本 seam)</b>:删除浅 {@code CacheableOperationFactory} @Component
+ * (2 行委派 + 类样板),ResiCache 路径内联为 lambda 直传 {@link RedisCacheAttributesProjector#from}
+ * + {@link RedisCacheableOperation#fromAttributes}。{@link OperationFactory} 接口保留 ——
+ * 本类的 ResiCache lambda 与 {@link SpringCacheableAdapterFactory} 在 {@code doRegister}
+ * 处仍是真多态分叉(两种 annotation 来源 → 同一种 operation)。
  *
  * <p><b>ADR-0060 doHandle 浅路径分叉收敛</b>(本次):原 {@link #doHandle(Method, Object, Object[])}
  * 持有 15 行"if @RedisCacheable 命中 → register + 早 return;else if Spring @Cacheable
@@ -58,16 +65,16 @@ import java.util.function.Function;
 @Component
 public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
 
-    private final CacheableOperationFactory cacheableOperationFactory;
+    private final RedisCacheAttributesProjector projector;
     private final SpringCacheableAdapterFactory springCacheableAdapterFactory;
 
     public CacheableAnnotationHandler(
             RedisCacheRegister redisCacheRegister,
             KeyGenerator keyGenerator,
-            CacheableOperationFactory cacheableOperationFactory,
+            RedisCacheAttributesProjector projector,
             SpringCacheableAdapterFactory springCacheableAdapterFactory) {
         super(redisCacheRegister, keyGenerator);
-        this.cacheableOperationFactory = cacheableOperationFactory;
+        this.projector = projector;
         this.springCacheableAdapterFactory = springCacheableAdapterFactory;
     }
 
@@ -152,7 +159,9 @@ public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
     private List<CacheOperation> registerFromSource(
             Annotation annotation, Method method, Object target, Object[] args) {
         if (annotation instanceof RedisCacheable resiCache) {
-            return doRegister(resiCache, cacheableOperationFactory, RedisCacheable::key, "cacheable",
+            return doRegister(resiCache,
+                    (m, a, k) -> RedisCacheableOperation.fromAttributes(m, k, projector.from(a)),
+                    RedisCacheable::key, "cacheable",
                     method, target, args);
         }
         if (annotation instanceof Cacheable springCache) {

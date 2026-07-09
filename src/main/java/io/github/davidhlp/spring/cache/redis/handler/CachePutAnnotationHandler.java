@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
-import io.github.davidhlp.spring.cache.redis.factory.CachePutOperationFactory;
+import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;
@@ -25,24 +25,30 @@ import java.util.List;
  *
  * <pre>
  *   return registerAll(method, target, args, puts, RedisCachePut::key,
- *           cachePutOperationFactory, registerActionFor(OperationKind.CACHE_PUT), "cache put");
+ *           (m, a, k) -> RedisCachePutOperation.fromAttributes(m, k, projector.from(a)),
+ *           registerActionFor(OperationKind.CACHE_PUT), "cache put");
  * </pre>
  *
  * <p><b>ADR-0059</b>:原 {@code redisCacheRegister::registerCachePutOperation} 方法引用
  * 改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)} 工厂 lambda。
+ *
+ * <p><b>ADR-0065 深化(本 seam)</b>:删除浅 {@code CachePutOperationFactory} @Component
+ * (2 行委派 + 类样板),内联为 lambda 直传 {@link RedisCacheAttributesProjector#from}
+ * + {@link RedisCachePutOperation#fromAttributes}。{@link OperationFactory} 接口保留
+ * (CacheableAnnotationHandler 的 ResiCache↔Spring 多态分叉仍承重)。
  */
 @Slf4j
 @Component
 public class CachePutAnnotationHandler extends AbstractAnnotationHandler {
 
-    private final CachePutOperationFactory cachePutOperationFactory;
+    private final RedisCacheAttributesProjector projector;
 
     public CachePutAnnotationHandler(
             RedisCacheRegister redisCacheRegister,
             KeyGenerator keyGenerator,
-            CachePutOperationFactory cachePutOperationFactory) {
+            RedisCacheAttributesProjector projector) {
         super(redisCacheRegister, keyGenerator);
-        this.cachePutOperationFactory = cachePutOperationFactory;
+        this.projector = projector;
     }
 
     @Override
@@ -54,6 +60,7 @@ public class CachePutAnnotationHandler extends AbstractAnnotationHandler {
     protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCachePut[] puts = method.getAnnotationsByType(RedisCachePut.class);
         return registerAll(method, target, args, puts, RedisCachePut::key,
-                cachePutOperationFactory, registerActionFor(OperationKind.CACHE_PUT), "cache put");
+                (m, a, k) -> RedisCachePutOperation.fromAttributes(m, k, projector.from(a)),
+                registerActionFor(OperationKind.CACHE_PUT), "cache put");
     }
 }

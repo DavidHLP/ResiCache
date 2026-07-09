@@ -1,8 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
-import io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory;
+import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 
 import lombok.extern.slf4j.Slf4j;
@@ -24,19 +25,23 @@ import java.util.List;
  *
  * <p><b>ADR-0059</b>:register 调用改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
  * 工厂 lambda,kind = {@link OperationKind#CACHE_EVICT}。
+ *
+ * <p><b>ADR-0065 深化(本 seam)</b>:删除浅 {@code EvictOperationFactory} @Component
+ * (2 行委派 + 类样板),内联为 lambda 直传 {@link RedisCacheAttributesProjector#from}
+ * + {@link RedisCacheEvictOperation#fromAttributes}。
  */
 @Slf4j
 @Component
 public class EvictAnnotationHandler extends AbstractAnnotationHandler {
 
-    private final EvictOperationFactory evictOperationFactory;
+    private final RedisCacheAttributesProjector projector;
 
     public EvictAnnotationHandler(
             RedisCacheRegister redisCacheRegister,
             KeyGenerator keyGenerator,
-            EvictOperationFactory evictOperationFactory) {
+            RedisCacheAttributesProjector projector) {
         super(redisCacheRegister, keyGenerator);
-        this.evictOperationFactory = evictOperationFactory;
+        this.projector = projector;
     }
 
     @Override
@@ -48,6 +53,7 @@ public class EvictAnnotationHandler extends AbstractAnnotationHandler {
     protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
         RedisCacheEvict[] evicts = method.getAnnotationsByType(RedisCacheEvict.class);
         return registerAll(method, target, args, evicts, RedisCacheEvict::key,
-                evictOperationFactory, registerActionFor(OperationKind.CACHE_EVICT), "cache evict");
+                (m, a, k) -> RedisCacheEvictOperation.fromAttributes(m, k, projector.from(a)),
+                registerActionFor(OperationKind.CACHE_EVICT), "cache evict");
     }
 }

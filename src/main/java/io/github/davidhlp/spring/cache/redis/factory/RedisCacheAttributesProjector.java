@@ -62,7 +62,8 @@ public class RedisCacheAttributesProjector {
     /**
      * 从 {@link RedisCacheEvict} 投影。
      * <p>{@code unless} 在 Evict 注解中存在，但 Evict 的 Builder 没有 {@code unless} 槽位——
-     * 这里保留字段（语义一致），由 {@code EvictOperationFactory} 自行决定是否应用。
+     * 这里保留字段（语义一致），由 Evict 路径调用方（{@code EvictAnnotationHandler} /
+     * {@code CachingAnnotationHandler} 的内联 lambda）自行决定是否应用。
      * <p>Evict 不持有 {@code type / cacheNullValues / randomTtl / variance} 字段（无对应
      * 业务语义），由 {@link #extractFrom(RedisCacheEvict)} 填入合理默认
      * （{@code Object.class / false / false / 0.0F}），与 v0.0.3 行为完全一致。

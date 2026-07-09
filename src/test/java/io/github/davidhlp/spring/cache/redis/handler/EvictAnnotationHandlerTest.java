@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
-import io.github.davidhlp.spring.cache.redis.factory.EvictOperationFactory;
+import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;
@@ -23,7 +23,15 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for EvictAnnotationHandler —— ADR-0059 收敛后形态。
+ * Unit tests for EvictAnnotationHandler —— ADR-0065 深化后形态。
+ *
+ * <p>ADR-0065:删除浅 {@code EvictOperationFactory} @Component 后,handler 直接持有
+ * {@link RedisCacheAttributesProjector}(真实实例,非 mock)。operation 由真实 projector
+ * + {@link RedisCacheEvictOperation#fromAttributes} 生成,测试从"mock factory 返回 canned
+ * op"升级为"真实投影路径产生真实 op"。projector + fromAttributes 各自有独立单测覆盖。
+ *
+ * <p>删除的测试:{@code usesFactoryToCreateOperation}(无工厂可验证) /
+ * {@code withFactoryException}(KeyGenerator 异常测试已覆盖 registerOne try/catch 隔离)。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("EvictAnnotationHandler Tests")
@@ -35,14 +43,13 @@ class EvictAnnotationHandlerTest {
     @Mock
     private KeyGenerator keyGenerator;
 
-    @Mock
-    private EvictOperationFactory evictOperationFactory;
+    private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
 
     private EvictAnnotationHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new EvictAnnotationHandler(redisCacheRegister, keyGenerator, evictOperationFactory);
+        handler = new EvictAnnotationHandler(redisCacheRegister, keyGenerator, projector);
     }
 
     private Method getMethod(String name) throws NoSuchMethodException {
@@ -99,20 +106,16 @@ class EvictAnnotationHandlerTest {
             Object target = new TestClass();
             Object[] args = new Object[0];
             String generatedKey = "generated-key";
-            RedisCacheEvictOperation operation = RedisCacheEvictOperation.builder()
-                    .name("evictMethod")
-                    .key(generatedKey)
-                    .cacheNames("testCache")
-                    .build();
 
             when(keyGenerator.generate(target, method, args)).thenReturn(generatedKey);
-            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq(generatedKey)))
-                    .thenReturn(operation);
 
             handler.doHandle(method, target, args);
 
+            // ADR-0065:operation 由真实 projector + fromAttributes 生成,验证 register 收到
+            // RedisCacheEvictOperation + CACHE_EVICT kind(不再用 eq(cannedOp))
             verify(redisCacheRegister).register(
-                    any(Method.class), any(Class.class), eq(operation), eq(OperationKind.CACHE_EVICT));
+                    any(Method.class), any(Class.class),
+                    any(RedisCacheEvictOperation.class), eq(OperationKind.CACHE_EVICT));
         }
 
         @Test
@@ -123,29 +126,10 @@ class EvictAnnotationHandlerTest {
             Object[] args = new Object[]{"arg1", "arg2"};
 
             when(keyGenerator.generate(target, method, args)).thenReturn("test-key");
-            when(evictOperationFactory.create(any(), any(), any()))
-                    .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method, target, args);
 
             verify(keyGenerator).generate(target, method, args);
-        }
-
-        @Test
-        @DisplayName("doHandle uses factory to create operation")
-        void doHandle_usesFactoryToCreateOperation() throws Exception {
-            Method method = getMethod("evictMethod");
-            Object target = new TestClass();
-            Object[] args = new Object[0];
-            String generatedKey = "test-key";
-
-            when(keyGenerator.generate(target, method, args)).thenReturn(generatedKey);
-            when(evictOperationFactory.create(eq(method), any(RedisCacheEvict.class), eq(generatedKey)))
-                    .thenReturn(RedisCacheEvictOperation.builder().build());
-
-            handler.doHandle(method, target, args);
-
-            verify(evictOperationFactory).create(eq(method), any(RedisCacheEvict.class), eq(generatedKey));
         }
     }
 
@@ -162,8 +146,6 @@ class EvictAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(any(Object.class), any(Method.class), any(Object[].class))).thenReturn("key");
-            when(evictOperationFactory.create(any(Method.class), any(RedisCacheEvict.class), any(String.class)))
-                    .thenReturn(RedisCacheEvictOperation.builder().build());
 
             handler.doHandle(method1, target, args);
             handler.doHandle(method2, target, args);
@@ -186,22 +168,6 @@ class EvictAnnotationHandlerTest {
             Object[] args = new Object[0];
 
             when(keyGenerator.generate(target, method, args)).thenThrow(new RuntimeException("Key generation failed"));
-
-            handler.doHandle(method, target, args);
-
-            verify(redisCacheRegister, never()).register(any(), any(), any(CacheOperation.class), any(OperationKind.class));
-        }
-
-        @Test
-        @DisplayName("doHandle handles factory exception gracefully")
-        void doHandle_withFactoryException_doesNotThrow() throws Exception {
-            Method method = getMethod("evictMethod");
-            Object target = new TestClass();
-            Object[] args = new Object[0];
-
-            when(keyGenerator.generate(target, method, args)).thenReturn("key");
-            when(evictOperationFactory.create(any(), any(), any()))
-                    .thenThrow(new RuntimeException("Factory error"));
 
             handler.doHandle(method, target, args);
 
