@@ -1,9 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
-import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncLockTimeout;
-import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
+import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -26,10 +25,22 @@ public class RedisProCache extends RedisCache {
     private final Counter missCounter;
     private final Counter putCounter;
     private final Counter evictCounter;
-    private final BloomGate bloomGate;
+
+    /** 方法级 operation 元数据解析器 — 仅 lookupOperation 使用;null 时关闭元数据查找。 */
     private final CacheOperationResolver operationResolver;
-    private final SyncSupport syncSupport;
-    private final SyncLockTimeout syncLockTimeout;
+
+    /**
+     * Loader 路径编排器 — Round 49 / ADR-0062 抽出的 deep seam。
+     *
+     * <p>本类不再持有 {@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout}
+     * 3 个 protection 协作 bean — 这些 seam 全部下沉到 {@link LoaderOrchestrator},
+     * 由本类在构造期一次性 build 后委派 {@link LoaderOrchestrator#orchestrate}。
+     *
+     * <p>设计纪律:orchestrator 不持有本类引用,委派通过回调实现 —
+     * {@link #put} 闭包(preserve metrics)+ {@code super.get}/{@code super.get(key, loader)}
+     * (via 参数 {@code this})。
+     */
+    private final LoaderOrchestrator loaderOrchestrator;
 
     /**
      * 构造 ResiCache 实例 — Round 5 / ADR-0014 收敛后的唯一构造入口.
@@ -41,6 +52,11 @@ public class RedisProCache extends RedisCache {
      *
      * <p><b>ADR-0057 (Round 43)</b>:{@code redisCacheRegister} + {@code methodMetadataResolver}
      * 已合并为单一 {@link CacheOperationResolver}。
+     *
+     * <p><b>ADR-0062 (Round 49)</b>:loader 路径编排逻辑 + 3 个 protection 协作 bean
+     * ({@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout}) 全部下沉至
+     * {@link LoaderOrchestrator};本构造器只剩 metrics 装配 + operation 解析器 + orchestrator
+     * build(3 行委派)。
      *
      * <p><b>参数契约</b>:
      * <ul>
@@ -73,10 +89,13 @@ public class RedisProCache extends RedisCache {
                 "Cache put count", name);
         this.evictCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.evict.count",
                 "Cache evict count", name);
-        this.bloomGate = features.getBloomGate();
         this.operationResolver = features.getOperationResolver();
-        this.syncSupport = features.getSyncSupport();
-        this.syncLockTimeout = features.getSyncLockTimeout();
+        // ADR-0062:loader 路径编排器 build — 委派 bloomGate/syncSupport/syncLockTimeout + 1 putAfterLoad 闭包;
+        // orchestrator 与本类解耦,通过闭包 + super 引用完成 cache-specific 操作。
+        this.loaderOrchestrator = new LoaderOrchestrator(
+                features.getBloomGate(),
+                features.getSyncSupport(),
+                features.getSyncLockTimeout());
     }
 
     @Override
@@ -105,99 +124,91 @@ public class RedisProCache extends RedisCache {
         });
     }
 
+    /**
+     * Loader 路径主入口 — Round 49 / ADR-0062 收敛后:
+     * 编排逻辑(bloom 短路 / sync vs default 调度 / locked-load 主体)已全部下沉到
+     * {@link LoaderOrchestrator#orchestrate},本方法主体退化为
+     * <ol>
+     *   <li>timed wrap(getTimer)</li>
+     *   <li>委派 orchestrator.orchestrate(...) 返回 {@link LoadOutcome}</li>
+     *   <li>switch 翻译 3 态 → 路径返回 / miss 自增 / 异常翻译</li>
+     * </ol>
+     * 行为字节等价于 Round 47 / ADR-0057 / C3 的内联 9 行版本 — miss counter 自增
+     * 次数对齐(bloom 短路 1 次 / 失败路径 1 次 / 成功路径 0 次),异常翻译规则对齐
+     * (RuntimeException 直接抛 / checked Exception 翻译为 RuntimeException)。
+     *
+     * <p>4 个 callback 一次性 capture 在此处:
+     * <ul>
+     *   <li>{@code redisKeyFn} → {@link #deriveRedisKey}(super.createCacheKey) — BloomGate/SyncSupport 用</li>
+     *   <li>{@code doubleCheckFn} → {@link #doubleCheckLookup}(super.get) — 锁内双检,绕过 override 不打 metrics</li>
+     *   <li>{@code putAfterLoad} → {@code (k, v) -> put(k, v)} — 走 override,保留 putTimer + putCounter</li>
+     *   <li>{@code defaultLoadFn} → {@link #defaultLoad}(super.get(key, loader)) — Spring local-lock</li>
+     * </ul>
+     */
     @Override
     public <T> T get(Object key, Callable<T> loader) {
-        // body 抛异常 → 本 timedGet 的 finally 仍按原 try-finally 语义记录计时;
-        // 外层 try-catch 翻译异常 + 自增 miss,保持与原 4-层结构字节级等价。
-        // ADR-0057 / C3 收敛:bloom 短路 + sync-vs-default 决策已抽为 {@link #isBloomShortCircuited}
-        // + {@link #loadValue},本方法主体收窄到「lookup → bloom 守门 → 委派 loadValue」3 步。
-        try {
-            return RedisProCacheTimers.timedGet(getTimer, () -> {
-                RedisCacheableOperation operation = lookupOperation();
-                if (isBloomShortCircuited(operation, key)) {
-                    return null;
+        return RedisProCacheTimers.timedGet(getTimer, () -> {
+            RedisCacheableOperation operation = lookupOperation();
+            LoadOutcome<T> outcome = loaderOrchestrator.orchestrate(
+                    getName(),
+                    this::deriveRedisKey,
+                    this::doubleCheckLookup,
+                    (k, v) -> put(k, v),
+                    this::defaultLoad,
+                    loader,
+                    key,
+                    operation);
+            return switch (outcome) {
+                case LoaderOrchestrator.BloomShortCircuited<T> ignored -> {
+                    RedisProCacheTimers.safeIncrement(missCounter);
+                    yield null;
                 }
-                return loadValue(key, loader, operation);
-            });
-        } catch (Exception e) {
-            RedisProCacheTimers.safeIncrement(missCounter);
-            if (e instanceof RuntimeException re) {
-                throw re;
-            }
-            throw new RuntimeException("Failed to load cache value for key: " + key, e);
-        }
+                case LoaderOrchestrator.Loaded<T>(T value) -> value;
+                case LoaderOrchestrator.LoadFailed<T>(Throwable cause) -> {
+                    RedisProCacheTimers.safeIncrement(missCounter);
+                    throw translateFailure(cause, key);
+                }
+            };
+        });
     }
 
     /**
-     * "loader 路径"双层防御之 bloom 短路检查 — ADR-0057 / C3 抽出的 deep seam.
-     *
-     * <p>职责(从原 {@code get(key, loader)} 内联 9 行平移,逐字保留原行为):
-     * <ol>
-     *   <li>任一前置条件缺失(operation 为 null / 未启用 bloom / bloomSupport 为 null) →
-     *       return false(不短路,走默认路径)</li>
-     *   <li>用 {@link CacheKeys#fromRedisKey} 派生 bloomKey(与链层 {@code BloomFilterHandler.add}
-     *       同源,杜绝 actualKey/redisKey 漂移缺陷,ADR-0011)</li>
-     *   <li>{@code bloomSupport.mightContain} 返回 false → 记 debug 日志 + 自增 miss +
-     *       return true(调用方应 return null 跳过 loader)</li>
-     *   <li>mightContain 返回 true → return false(不短路,继续走 sync/默认路径)</li>
-     * </ol>
-     *
-     * <p><b>设计纪律 — 副作用</b>:本方法在 return true 分支有副作用(自增 missCounter)。
-     * 这不是单纯 predicate;而是「检 + 副作用 + 短路信号」的原子单元。
-     * 拆分为「纯 check + 独立 recordBloomRejection」会破坏 locality(2 调用方要记得配对),
-     * 故保持单 seam。
-     *
-     * <p><b>package-private</b> 供单测覆盖 3 分支:
-     * <ul>
-     *   <li>前置条件缺失(operation null / isUseBloomFilter=false / bloomSupport=null) → false</li>
-     *   <li>mightContain=false → true + miss 自增 + 日志</li>
-     *   <li>mightContain=true → false</li>
-     * </ul>
-     *
-     * <p><b>deletion test</b>:把本方法删掉、内联回 {@code get(key, loader)} → 9 行 + 3 嵌套 if
-     * 重新出现,代码量相同但失去 seam 名 + 单测入口 — 复杂度上升。
+     * 派生 Redis key — 包私有 callback 注入 orchestrator(RedisCache.createCacheKey 是 protected,
+     * 无法从 {@code LoaderOrchestrator} 直接访问,通过本方法透传)。
      */
-    boolean isBloomShortCircuited(RedisCacheableOperation operation, Object key) {
-        if (operation == null || !operation.isUseBloomFilter() || bloomGate == null) {
-            return false;
-        }
-        // 键一致性(ADR-0011):必须用 actualKey(CacheKeys.bloomKey,与链层 add 同源),
-        // 不可用 createCacheKey 的带前缀 redisKey —— 否则查的 key 永不在过滤器里(键漂移缺陷)。
-        String bloomKey = CacheKeys.fromRedisKey(getName(), createCacheKey(key)).bloomKey();
-        // 读侧确定 miss 判定 + 统一 debug 日志收口到 BloomGate(与 BloomFilterHandler GET 路径共享)
-        if (bloomGate.definiteMiss(getName(), bloomKey)) {
-            RedisProCacheTimers.safeIncrement(missCounter);
-            return true;
-        }
-        return false;
+    private String deriveRedisKey(Object key) {
+        return super.createCacheKey(key);
     }
 
     /**
-     * "loader 路径"sync vs default 决策 — ADR-0057 / C3 抽出的 deep seam.
-     *
-     * <p>职责(从原 {@code get(key, loader)} 内联 5 行平移,逐字保留原行为):
-     * <ol>
-     *   <li>operation 启用 sync 且 syncSupport 可用 → 走 {@link #executeSyncLoad}
-     *       (分布式锁 + single-flight,跨 JVM 防击穿)</li>
-     *   <li>否则 → 走 {@code super.get(key, loader)}(Spring 默认本地锁,JVM 内单飞)</li>
-     * </ol>
-     *
-     * <p><b>package-private</b> 供单测覆盖 2 分支:
-     * <ul>
-     *   <li>sync 路径(配 mock syncSupport)→ 委派 executeSyncLoad</li>
-     *   <li>默认路径(syncSupport null 或 operation 关闭 sync)→ 委派 super.get</li>
-     * </ul>
-     *
-     * <p><b>deletion test</b>:把本方法删掉、内联回 {@code get(key, loader)} → 5 行
-     * 重新出现,代码量相同但失去 seam 名 + 单测入口 — 复杂度上升。
+     * 锁内双检的 cache 读原语 — 走 {@code super.get(key)} 绕过本类 override,避免双检误计 hit/miss。
+     * metrics 记录在外层 {@code get(key, loader)} 中唯一完成。
      */
-    <T> T loadValue(Object key, Callable<T> loader, RedisCacheableOperation operation) {
-        if (operation != null && operation.isSync() && syncSupport != null) {
-            // 分布式同步模式:使用 SyncSupport 确保跨 JVM 单飞加载
-            return executeSyncLoad(key, loader, operation);
+    private Cache.ValueWrapper doubleCheckLookup(Object key) {
+        return super.get(key);
+    }
+
+    /**
+     * Default load 原语 — 委派 Spring Cache 本地锁路径;失败异常透传给 caller 翻译。
+     */
+    @SuppressWarnings("unchecked")
+    private <T> T defaultLoad(Object key, Callable<T> loader) {
+        return (T) super.get(key, loader);
+    }
+
+    /**
+     * 失败异常翻译 — 把 orchestrator 透传的 {@link Throwable} 翻译为本方法契约的
+     * {@link RuntimeException}:RuntimeException 直接抛(保留原始栈),
+     * checked Exception 包装为 {@link RuntimeException}。
+     *
+     * <p>{@link Cache.ValueRetrievalException} 是 Spring 抽象层契约
+     * (extends NestedRuntimeException) → RuntimeException,直接抛。
+     */
+    private RuntimeException translateFailure(Throwable cause, Object key) {
+        if (cause instanceof RuntimeException re) {
+            return re;
         }
-        // 默认模式:Spring 本地锁(JVM 内单飞)
-        return super.get(key, loader);
+        return new RuntimeException("Failed to load cache value for key: " + key, cause);
     }
 
     /**
@@ -209,94 +220,6 @@ public class RedisProCache extends RedisCache {
      */
     private RedisCacheableOperation lookupOperation() {
         return operationResolver == null ? null : operationResolver.resolve(getName());
-    }
-
-    /**
-     * 使用分布式锁执行单飞加载 — ADR-0057 收敛后的委派 seam.
-     *
-     * <p>仅做 3 件无状态事:解析 lockKey + 解析 timeout(annotation < 0 → 默认 10s)
-     * + 委派 {@link #performLockedLoad(Object, Callable)} 给 {@code syncSupport}。
-     * 原 12 行内联 lambda(双重检查 + load + put + 异常翻译)已迁出,
-     * 本方法退化为 thin orchestrator;单飞契约从匿名 lambda 提升为命名 seam,
-     * 3 决策分支(existing-value / null-value / loader-throws)可单测。
-     */
-    private <T> T executeSyncLoad(Object key, Callable<T> loader, RedisCacheableOperation operation) {
-        String lockKey = createCacheKey(key);
-        long timeout = resolveSyncTimeout(operation);
-
-        return syncSupport.executeSync(lockKey, () -> performLockedLoad(key, loader), timeout);
-    }
-
-    /**
-     * 解析 sync 超时时间(秒) — 委派到 {@link SyncLockTimeout} 单一规则 seam
-     * (与 {@code SyncLockHandler} 链路共享,消除原两处分叉:此前 loader 路径
-     * 忽略全局配置 {@code resi-cache.sync-lock.timeout} 硬编码 10s)。
-     * {@code syncLockTimeout} 为 null(测试场景未装配)时回退内置默认。
-     */
-    private long resolveSyncTimeout(RedisCacheableOperation operation) {
-        return syncLockTimeout != null
-                ? syncLockTimeout.resolveSeconds(operation)
-                : SyncLockTimeout.DEFAULT_LOCK_TIMEOUT_SECONDS;
-    }
-
-    /**
-     * 持锁后单飞加载契约 — ADR-0057 抽出的 deep seam.
-     *
-     * <p>职责(从 executeSyncLoad 内联 lambda 平移,逐字保留原行为):
-     * <ol>
-     *   <li><b>double-check</b>:{@code super.get(key)} 已存在 → 直接 return 其值
-     *       (走 {@code super.get} 而非 {@code lookup} 因 {@code super.get} 经
-     *       {@code fromStoreValue} 将 {@code NullValue} 转回 null,完整保留
-     *       null-value round-trip 语义)</li>
-     *   <li><b>load + put + return</b>:cache miss → 调 {@code loader.call()},无论
-     *       返回 null 与否都 {@code put} 进缓存(由 RedisCache 配置处理空值缓存),
-     *       return loaded</li>
-     *   <li><b>异常翻译</b>:loader 抛 checked exception → 翻译为
-     *       {@link Cache.ValueRetrievalException}(Spring 抽象层契约)</li>
-     * </ol>
-     *
-     * <p>设计纪律:
-     * <ul>
-     *   <li><b>package-private 而非 private</b>:直接单测入口 —
-     *       {@code RedisProCacheTest} 可绕过 {@code syncSupport} 直接调,
-     *       验证 3 决策分支(existing-value fast-path / null-value 缓存 / loader 异常翻译),
-     *       而无需制造并发竞态。{@code executeSyncLoad} 保持 {@code private}
-     *       因其单测入口已由本方法 + {@code RedisProCache} 集成测试覆盖。</li>
-     *   <li><b>不返回 future / 不持状态</b>:单次执行,无 mainResult 概念 —
-     *       3 决策分支各自有明确路径(return 值 / throw),无 split-knowledge 风险。</li>
-     *   <li><b>super.get 而非 lookup</b>:原 lambda 注释已说明 NullValue round-trip;
-     *       平移保留该决策,不擅自替换为 lookup。</li>
-     * </ul>
-     *
-     * <p><b>deletion test</b>:把本方法删掉、内联回 {@code syncSupport.executeSync} lambda
-     * → 12 行 + 3 决策 + 0 测试,代码量相同但失去 seam 名 + 单测入口 + 分支命名 — 复杂度上升。
-     *
-     * @param key    缓存键
-     * @param loader 数据加载器(leader 在分布式锁内执行;NullValue 缓存走原路)
-     * @param <T>    返回值类型
-     * @return leader loader 的结果(follower 共享同一份 — 通过 {@code syncSupport} 协调)
-     * @throws Cache.ValueRetrievalException 当 loader 抛 checked exception 时翻译
-     */
-    @SuppressWarnings("unchecked")
-    <T> T performLockedLoad(Object key, Callable<T> loader) {
-        // 双重检查：可能在等待锁期间其他线程已加载。
-        // 使用 super.get() 而非 lookup()，因为 lookup() 返回的原始值包含 NullValue.INSTANCE，
-        // 而 super.get() 会通过 fromStoreValue 将 NullValue 转换为 null 并正确返回缓存值。
-        ValueWrapper existingValue = super.get(key);
-        if (existingValue != null) {
-            T result = (T) existingValue.get();
-            return result;
-        }
-
-        // 执行加载
-        try {
-            T loaded = loader.call();
-            // 无论 loaded 是否为 null，都执行 put，由 RedisCache 根据配置处理空值缓存
-            put(key, loaded);
-            return loaded;
-        } catch (Exception ex) {
-            throw new Cache.ValueRetrievalException(key, loader, ex);
-        }
     }
 
     @Override

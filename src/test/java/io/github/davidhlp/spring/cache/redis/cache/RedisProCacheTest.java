@@ -1,10 +1,14 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.github.davidhlp.spring.cache.redis.cache.CacheMetrics;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.github.davidhlp.spring.cache.redis.cache.CacheMetrics;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -48,7 +54,7 @@ class RedisProCacheTest {
                 cacheConfiguration,
                 ResiCacheFeatures.builder()
                         .meterRegistry(meterRegistry)
-                        .build());   // bloom/operationResolver/sync disabled
+                        .build());   // bloom/sync disabled; operationResolver null
     }
 
     private Callable<String> createLoader(String value) {
@@ -113,7 +119,6 @@ class RedisProCacheTest {
 
             cache.evict(key);
 
-            // 验证 evict 计数器自增为 1(而非仅断言 counter 存在)
             Counter counter = meterRegistry.find("resicache.cache.evict.count").counter();
             assertThat(counter).isNotNull();
             assertThat(counter.count()).isEqualTo(1.0);
@@ -156,7 +161,6 @@ class RedisProCacheTest {
         @Test
         @DisplayName("metrics.hitRate returns 0 when no requests")
         void metricsHitRate_withNoRequests_returnsZero() {
-            // ADR-0047 / C2:hitRate 算术收敛到 CacheMetrics record,测试断言单一方法。
             assertThat(cache.metrics().hitRate()).isEqualTo(0.0);
         }
     }
@@ -168,7 +172,6 @@ class RedisProCacheTest {
         @Test
         @DisplayName("cache registers meter with correct tag")
         void cache_registersMeterWithCorrectTag() {
-            // 用 tag("cache","testCache") 精确查找,验证 meter 带 correct tag(而非仅断言 meter 存在)
             Timer getTimer = meterRegistry.find("resicache.cache.get").tag("cache", "testCache").timer();
             Timer putTimer = meterRegistry.find("resicache.cache.put").tag("cache", "testCache").timer();
             Timer evictTimer = meterRegistry.find("resicache.cache.evict").tag("cache", "testCache").timer();
@@ -181,7 +184,6 @@ class RedisProCacheTest {
         @Test
         @DisplayName("metrics() returns zero snapshot on fresh cache")
         void metrics_returnsZeroSnapshot_onFreshCache() {
-            // ADR-0047 / C2:5 个 getter 合并到单一 metrics() seam,测试断言整个值对象。
             CacheMetrics snapshot = cache.metrics();
             assertThat(snapshot.hitCount()).isEqualTo(0);
             assertThat(snapshot.missCount()).isEqualTo(0);
@@ -191,214 +193,130 @@ class RedisProCacheTest {
         }
     }
 
-    /**
-     * ADR-0057 抽出的 performLockedLoad 单测 — 覆盖原 12 行内联 lambda 的 3 决策分支
-     * (existing-value fast-path / null-value 缓存 / loader 异常翻译)。
-     * 直接调方法,绕过 syncSupport.executeSync 调度,验证持锁后单飞契约。
-     */
+    // ==================== ADR-0062 / Round 49: get(key, loader) 编排集成测试 ====================
+    // 注:bloom 短路 / sync 路由 / locked-load 3 决策分支的细粒度单元测试已迁出至
+    // LoaderOrchestratorTest(orchestrator 自身即可零 RedisProCache fixture 单测);
+    // 本测试类专注于 RedisProCache 与 orchestrator 的集成:miss counter 自增 / putAfterLoad
+    // 走 override 保留 putTimer + putCounter / 异常翻译规则等 RedisProCache 侧契约。
+
     @Nested
-    @DisplayName("performLockedLoad tests — ADR-0057 single-flight seam")
-    class PerformLockedLoadTests {
-
-        @Test
-        @DisplayName("returns existing value without invoking loader when cache is hit")
-        void performLockedLoad_existingValue_returnsCachedSkipsLoader() throws Exception {
-            // 预序列化一个 String 值,模拟已存在的缓存
-            String existing = "cached-value";
-            java.nio.ByteBuffer buffer = cacheConfiguration.getValueSerializationPair()
-                    .getWriter().write(existing);
-            byte[] cachedBytes = new byte[buffer.remaining()];
-            buffer.get(cachedBytes);
-            when(cacheWriter.get(eq("testCache"), any(byte[].class))).thenReturn(cachedBytes);
-
-            Callable<String> loader = mock(Callable.class);
-            String result = cache.performLockedLoad("key1", loader);
-
-            assertThat(result).isEqualTo(existing);
-            verify(loader, never()).call();
-            // 命中已有值时不应再 put
-            verify(cacheWriter, never()).put(anyString(), any(byte[].class), any(byte[].class), any());
-        }
-
-        @Test
-        @DisplayName("invokes loader and puts result on cache miss (null-value allowed)")
-        void performLockedLoad_cacheMiss_invokesLoaderAndPuts() throws Exception {
-            // cacheWriter.get 返回 null → 走 load + put 路径
-            when(cacheWriter.get(eq("testCache"), any(byte[].class))).thenReturn(null);
-            doNothing().when(cacheWriter).put(anyString(), any(byte[].class), any(byte[].class), any());
-
-            Callable<String> loader = () -> "loaded-value";
-            String result = cache.performLockedLoad("key2", loader);
-
-            assertThat(result).isEqualTo("loaded-value");
-            // 调了 put
-            verify(cacheWriter).put(eq("testCache"), any(byte[].class), any(byte[].class), any());
-        }
-
-        @Test
-        @DisplayName("invokes loader and puts null value when loader returns null (null-value caching)")
-        void performLockedLoad_loaderReturnsNull_putsNull() throws Exception {
-            when(cacheWriter.get(eq("testCache"), any(byte[].class))).thenReturn(null);
-            doNothing().when(cacheWriter).put(anyString(), any(byte[].class), any(byte[].class), any());
-
-            Callable<String> loader = () -> null;
-            String result = cache.performLockedLoad("key3", loader);
-
-            assertThat(result).isNull();
-            // 即使 null 也 put(由 RedisCache 配置处理空值缓存)
-            verify(cacheWriter).put(eq("testCache"), any(byte[].class), any(byte[].class), any());
-        }
-
-        @Test
-        @DisplayName("translates loader's checked exception to ValueRetrievalException")
-        void performLockedLoad_loaderThrows_wrapsInValueRetrievalException() {
-            when(cacheWriter.get(eq("testCache"), any(byte[].class))).thenReturn(null);
-
-            Exception loaderException = new RuntimeException("loader failed");
-            Callable<String> loader = () -> { throw loaderException; };
-
-            assertThatThrownBy(() -> cache.performLockedLoad("key4", loader))
-                    .isInstanceOf(org.springframework.cache.Cache.ValueRetrievalException.class)
-                    .hasMessageContaining("key4");
-
-            // 异常翻译后不调 put
-            verify(cacheWriter, never()).put(anyString(), any(byte[].class), any(byte[].class), any());
-        }
-    }
-
-    /**
-     * ADR-0057 / C3 抽出的 isBloomShortCircuited 单测 — 覆盖 get(key, loader) 的 bloom 守门决策 4 分支。
-     */
-    @Nested
-    @DisplayName("C3 isBloomShortCircuited seam tests")
-    class C3IsBloomShortCircuitedTests {
+    @DisplayName("get(key, loader) Integration Tests — ADR-0062 orchestrator delegation")
+    class GetWithLoaderIntegrationTests {
 
         @Mock
-        private io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport bloomSupport;
+        private BloomSupport bloomSupport;
 
-        @Test
-        @DisplayName("returns false when operation is null")
-        void isBloomShortCircuited_nullOperation_returnsFalse() {
-            boolean result = cache.isBloomShortCircuited(null, "key1");
-            assertThat(result).isFalse();
-        }
+        @Mock
+        private CacheOperationResolver operationResolver;
 
-        @Test
-        @DisplayName("returns false when isUseBloomFilter is false on operation")
-        void isBloomShortCircuited_bloomDisabledOnOperation_returnsFalse() {
-            io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation operation =
-                    io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation.builder()
-                            .name("test-cache")
-                            .cacheNames("test-cache")
-                            .useBloomFilter(false)
-                            .build();
-
-            boolean result = cache.isBloomShortCircuited(operation, "key1");
-            assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns true and increments miss when bloom rejects key")
-        void isBloomShortCircuited_bloomRejects_returnsTrueAndIncrementsMiss() {
-            // 重新构造 cache 启用 bloomGate(默认 cache 是 null,bloom 分支会直接 short-circuit 到 false)
-            RedisProCache cacheWithBloom = new RedisProCache(
+        /**
+         * 构造启用 bloom 但 operationResolver 可控的 cache — operationResolver.resolve
+         * 返回带 useBloomFilter=true 的 operation,触发 orchestrator 走 bloom 短路检查路径。
+         */
+        private RedisProCache buildCacheWithBloomAndResolver(BloomGate bloomGate,
+                                                             RedisCacheableOperation returnedOperation) {
+            when(operationResolver.resolve(eq("testCache"))).thenReturn(returnedOperation);
+            return new RedisProCache(
                     "testCache", cacheWriter, cacheConfiguration,
                     ResiCacheFeatures.builder()
                             .meterRegistry(meterRegistry)
-                            .bloomGate(new io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate(bloomSupport))
+                            .operationResolver(operationResolver)
+                            .bloomGate(bloomGate)
+                            .build());
+        }
+
+        @Test
+        @DisplayName("bloom short-circuit → returns null, increments miss counter exactly once")
+        void bloomShortCircuit_incrementsMissOnce() {
+            RedisProCache cacheWithBloom = buildCacheWithBloomAndResolver(
+                    new BloomGate(bloomSupport),
+                    RedisCacheableOperation.builder()
+                            .name("testCache")
+                            .cacheNames("testCache")
+                            .useBloomFilter(true)
                             .build());
 
-            io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation operation =
-                    io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation.builder()
-                            .name("test-cache")
-                            .cacheNames("test-cache")
-                            .useBloomFilter(true)
-                            .build();
             when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(false);
 
-            double beforeCount = meterRegistry.find("resicache.cache.miss")
+            double beforeMiss = meterRegistry.find("resicache.cache.miss")
                     .tag("cache", "testCache").counter().count();
-            boolean result = cacheWithBloom.isBloomShortCircuited(operation, "key1");
 
-            assertThat(result).isTrue();
-            // miss counter 自增 1
-            double afterCount = meterRegistry.find("resicache.cache.miss")
+            String result = cacheWithBloom.get("key1", () -> {
+                throw new AssertionError("loader should not be invoked on bloom short-circuit");
+            });
+
+            assertThat(result).isNull();
+            double afterMiss = meterRegistry.find("resicache.cache.miss")
                     .tag("cache", "testCache").counter().count();
-            assertThat(afterCount - beforeCount).isEqualTo(1.0);
+            // bloom 短路路径:miss counter 自增恰好 1 次(在 switch 的 BloomShortCircuited case)
+            assertThat(afterMiss - beforeMiss).isEqualTo(1.0);
         }
 
         @Test
-        @DisplayName("returns false when bloom accepts key (no miss side effect)")
-        void isBloomShortCircuited_bloomAccepts_returnsFalseNoSideEffect() {
-            RedisProCache cacheWithBloom = new RedisProCache(
-                    "testCache", cacheWriter, cacheConfiguration,
-                    ResiCacheFeatures.builder()
-                            .meterRegistry(meterRegistry)
-                            .bloomGate(new io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate(bloomSupport))
-                            .build());
-
-            io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation operation =
-                    io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation.builder()
-                            .name("test-cache")
-                            .cacheNames("test-cache")
+        @DisplayName("bloom accepts → falls through to default load path")
+        void bloomAccepts_fallsThroughToDefaultPath() {
+            RedisProCache cacheWithBloom = buildCacheWithBloomAndResolver(
+                    new BloomGate(bloomSupport),
+                    RedisCacheableOperation.builder()
+                            .name("testCache")
+                            .cacheNames("testCache")
                             .useBloomFilter(true)
-                            .build();
-            when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(true);
-
-            double beforeCount = meterRegistry.find("resicache.cache.miss")
-                    .tag("cache", "testCache").counter().count();
-            boolean result = cacheWithBloom.isBloomShortCircuited(operation, "key1");
-
-            assertThat(result).isFalse();
-            // 接受路径不应自增 miss
-            double afterCount = meterRegistry.find("resicache.cache.miss")
-                    .tag("cache", "testCache").counter().count();
-            assertThat(afterCount).isEqualTo(beforeCount);
-        }
-    }
-
-    /**
-     * ADR-0057 / C3 抽出的 loadValue 单测 — 重点验证 sync 路由决策;
-     * default 分支(super.get)由 Spring RedisCache 默认行为保证,本测试不重复覆盖
-     * (PerformLockedLoadTests 已通过 performLockedLoad 间接覆盖 super.get 的 lookup 路径)。
-     */
-    @Nested
-    @DisplayName("C3 loadValue seam tests")
-    class C3LoadValueTests {
-
-        @Mock
-        private io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport syncSupport;
-
-        @Test
-        @DisplayName("sync enabled and syncSupport available → routes to executeSyncLoad (via syncSupport.executeSync)")
-        void loadValue_syncEnabledWithSyncSupport_routesToExecuteSyncLoad() {
-            // 构造启用 syncSupport 的 cache
-            RedisProCache cacheWithSync = new RedisProCache(
-                    "testCache", cacheWriter, cacheConfiguration,
-                    ResiCacheFeatures.builder()
-                            .meterRegistry(meterRegistry)
-                            .syncSupport(syncSupport)
                             .build());
-            io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation operation =
-                    io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation.builder()
-                            .name("test-cache")
-                            .cacheNames("test-cache")
-                            .sync(true)
-                            .build();
-            // syncSupport.executeSync 直接调 loader → 返回 "synced-value"
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+
+            when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(true);
+            // cache miss:2-arg variant 返回 null
+            when(cacheWriter.get(anyString(), any(byte[].class))).thenReturn(null);
+            // 5-arg variant(RedisCache.get(Object, Callable) 内部用):模拟 load 路径
+            // valueLoader.get() 会触发 loader.call() 然后序列化返回值
+            when(cacheWriter.get(anyString(), any(byte[].class), any(java.util.function.Supplier.class), any(), any(Boolean.class)))
                     .thenAnswer(inv -> {
-                        java.util.function.Supplier<String> supplier = inv.getArgument(1);
+                        java.util.function.Supplier<byte[]> supplier = inv.getArgument(2);
                         return supplier.get();
                     });
 
-            Callable<String> loader = () -> "synced-value";
+            double beforeMiss = meterRegistry.find("resicache.cache.miss")
+                    .tag("cache", "testCache").counter().count();
 
-            String result = cacheWithSync.loadValue("key3", loader, operation);
+            String result = cacheWithBloom.get("key1", () -> "loaded-value");
 
-            assertThat(result).isEqualTo("synced-value");
-            // 走 executeSyncLoad → 调了 syncSupport.executeSync
-            verify(syncSupport).executeSync(anyString(), any(java.util.function.Supplier.class), anyLong());
+            assertThat(result).isEqualTo("loaded-value");
+            // bloom 接受路径走 default load 成功,RedisProCache Loaded outcome 不触发 miss 自增
+            double afterMiss = meterRegistry.find("resicache.cache.miss")
+                    .tag("cache", "testCache").counter().count();
+            assertThat(afterMiss).isEqualTo(beforeMiss);
+            // 注:default path 的内部 put 由 Spring RedisCache.get(Object, Callable) 完成,
+            // 不走 RedisProCache.put override,因此 putCounter 不自增(与 sync 路径不同)。
+        }
+
+        @Test
+        @DisplayName("default path with loader throwing → wraps in ValueRetrievalException, increments miss counter")
+        void defaultPath_loaderThrows_incrementsMissOnce() {
+            // operationResolver 默认为 null → lookupOperation 返回 null → orchestrator 走 default path
+            RuntimeException loaderEx = new RuntimeException("loader failed");
+            // 5-arg variant:loader 抛 RuntimeException,Spring 翻译为 ValueRetrievalException
+            when(cacheWriter.get(anyString(), any(byte[].class), any(java.util.function.Supplier.class), any(), any(Boolean.class)))
+                    .thenAnswer(inv -> {
+                        java.util.function.Supplier<byte[]> supplier = inv.getArgument(2);
+                        return supplier.get();  // 调 loader + serialize,loader 抛 RuntimeException
+                    });
+            // 2-arg variant
+            when(cacheWriter.get(anyString(), any(byte[].class))).thenReturn(null);
+
+            double beforeMiss = meterRegistry.find("resicache.cache.miss")
+                    .tag("cache", "testCache").counter().count();
+
+            // Spring 把 Exception 在 super.get 内部包成 ValueRetrievalException(RedisCache.loadCacheValue 行为)
+            // RedisProCache orchestrator 收到 LoadFailed,switch 翻译为 throw ValueRetrievalException
+            assertThatThrownBy(() -> cache.get("key1", () -> {
+                throw loaderEx;
+            }))
+                    .isInstanceOf(org.springframework.cache.Cache.ValueRetrievalException.class)
+                    .hasCauseReference(loaderEx);
+
+            double afterMiss = meterRegistry.find("resicache.cache.miss")
+                    .tag("cache", "testCache").counter().count();
+            // LoadFailed 路径:RedisProCache switch LoadFailed case 自增 miss + 直接抛
+            assertThat(afterMiss - beforeMiss).isEqualTo(1.0);
         }
     }
 }
