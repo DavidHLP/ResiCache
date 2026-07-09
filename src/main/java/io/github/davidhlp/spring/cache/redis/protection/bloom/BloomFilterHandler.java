@@ -14,11 +14,10 @@ import org.springframework.stereotype.Component;
  *
  * <p>职责：
  * <ul>
- *   <li>GET: Writer 层透传，Bloom 短路检查已移至 {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter#get}
- *       前置（{@link BloomSupport#mightContain}）。本 handler 仅承担 observability
- *       与 attributes 标记职责</li>
+ *   <li>GET: 经 {@link BloomGate#definiteMiss} 判定「确定不存在」→ 短路返回 miss
+ *       (读侧穿透判定 + 统一日志收口到 BloomGate,与 {@code RedisProCache} loader 路径共享)</li>
  *   <li>PUT / PUT_IF_ABSENT / CLEAN: 标记需要后置处理，由
- *       {@link #afterChainExecution} 在责任链执行完成后回填 / 清空布隆</li>
+ *       {@link #afterChainExecution} 在责任链执行完成后经 {@link BloomSupport} 回填 / 清空布隆</li>
  * </ul>
  */
 @Slf4j
@@ -26,10 +25,14 @@ import org.springframework.stereotype.Component;
 @HandlerPriority(HandlerOrder.BLOOM_FILTER)
 public class BloomFilterHandler extends AbstractCacheHandler {
 
+    private final BloomGate bloomGate;
     private final BloomSupport bloomSupport;
     private final CacheStatisticsCollector statistics;
 
-    public BloomFilterHandler(BloomSupport bloomSupport, CacheStatisticsCollector statistics) {
+    public BloomFilterHandler(BloomGate bloomGate,
+                              BloomSupport bloomSupport,
+                              CacheStatisticsCollector statistics) {
+        this.bloomGate = bloomGate;
         this.bloomSupport = bloomSupport;
         this.statistics = statistics;
     }
@@ -71,14 +74,8 @@ public class BloomFilterHandler extends AbstractCacheHandler {
      * 会在调用 loader 前再做一次 Bloom 拦截，防止触发数据源查询。
      */
     private HandlerResult handleGet(CacheContext context) {
-        boolean mightContain =
-                bloomSupport.mightContain(context.getCacheName(), context.getActualKey());
-
-        if (!mightContain) {
-            log.debug(
-                    "Bloom filter rejected (key does not exist): cacheName={}, key={}",
-                    context.getCacheName(),
-                    context.getRedisKey());
+        // 读侧确定 miss 判定 + 统一 debug 日志收口到 BloomGate(与 RedisProCache loader 路径共享)
+        if (bloomGate.definiteMiss(context.getCacheName(), context.getActualKey())) {
             statistics.incMisses(context.getCacheName());
             // WS-1.4 per-handler tag 试点:Bloom 拒绝事件计数
             safeIncrementSemantic();

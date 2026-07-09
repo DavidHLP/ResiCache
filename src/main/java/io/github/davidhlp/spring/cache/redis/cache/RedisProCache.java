@@ -1,7 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
-import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncLockTimeout;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -25,61 +26,39 @@ public class RedisProCache extends RedisCache {
     private final Counter missCounter;
     private final Counter putCounter;
     private final Counter evictCounter;
-    private final BloomSupport bloomSupport;
+    private final BloomGate bloomGate;
     private final CacheOperationResolver operationResolver;
     private final SyncSupport syncSupport;
+    private final SyncLockTimeout syncLockTimeout;
 
     /**
      * 构造 ResiCache 实例 — Round 5 / ADR-0014 收敛后的唯一构造入口.
      *
-     * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点,
-     * 全部 7 个依赖以命名参数显式传入,无任何构造重载。调用方需传递 {@code null}
-     * 表示"该特性未启用"(对应运行时 null-safe 路径,行为与原 4-重载 null 委派一致)。
+     * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点。
+     * 全部可选特性收口到单一 {@link ResiCacheFeatures} 值对象(取代原 4 个位置可空参数),
+     * 「null = 该特性禁用」的契约只存在于 {@link ResiCacheFeatures} 一处,不再由本构造器
+     * 逐参数重述。测试用 {@link ResiCacheFeatures#none()} 或 builder 显式声明启用的特性。
      *
-     * <p><b>ADR-0057 (Round 43) 收敛</b>:原 8 参构造的 {@code redisCacheRegister} +
-     * {@code methodMetadataResolver} 已合并为单一 {@link CacheOperationResolver} seam —— 消除
-     * {@link #lookupOperation()} 中"读 ThreadLocal key → 查 register"的 4 行镜像协议
-     * 与 {@code RedisProCacheWriter#resolveOperation} 漂移风险。本类持有 1 个 deep 依赖
-     * (而非 2 个浅依赖),构造参数 -1,内部 {@code lookupOperation} 退化为 1 行委派。
-     *
-     * <p><b>为什么不做"便利重载"</b>:
-     * <ul>
-     *   <li>4 个构造重载 = 4 套参数子集 = 调用方必须记住"哪个用哪个" = 接口与实现等宽
-     *       (浅模块)</li>
-     *   <li>测试用 {@code null} 显式禁用不使用的特性,反而比"猜重载"更清晰</li>
-     *   <li>Spring 装配路径已稳定,生产仅 1 个 7 参构造,4-参重载从未被生产代码使用
-     *       (仅 2 个测试使用,见 ADR-0014)</li>
-     * </ul>
+     * <p><b>ADR-0057 (Round 43)</b>:{@code redisCacheRegister} + {@code methodMetadataResolver}
+     * 已合并为单一 {@link CacheOperationResolver}。
      *
      * <p><b>参数契约</b>:
      * <ul>
      *   <li>{@code name / cacheWriter / cacheConfiguration} —— 必传,转发给
      *       {@link RedisCache#super(String, RedisCacheWriter, RedisCacheConfiguration)}</li>
-     *   <li>{@code meterRegistry} —— 可为 null(此时所有 timer/counter 为 null,
-     *       {@link RedisProCacheTimers#safeIncrement} /
-     *       {@link RedisProCacheTimers#timed} 静默 no-op,见 ADR-0031)</li>
-     *   <li>{@code bloomSupport} —— 可为 null(关闭缓存穿透防护,GET 路径跳过 bloom 短路)</li>
-     *   <li>{@code operationResolver} —— 可为 null(关闭方法级 metadata 查找,
-     *       {@link #lookupOperation()} 返回 null;等价原 {@code redisCacheRegister=null} 或
-     *       {@code methodMetadataResolver=null} 任一为 null 的行为)</li>
-     *   <li>{@code syncSupport} —— 可为 null(关闭分布式锁,GET 走 Spring 默认本地锁)</li>
+     *   <li>{@code features} —— 可选特性集合(见 {@link ResiCacheFeatures};各字段 null 表示禁用)</li>
      * </ul>
      *
      * <p><b>Round 22 收敛</b>(ADR-0031):timing & counter 注册与 null-safe 调用已迁移至
-     * {@link RedisProCacheTimers} 工具 seam。本类不再包含任何
-     * {@code try-finally + System.nanoTime() + safeRecord} 样板;6 个公开方法通过
-     * {@link RedisProCacheTimers#timed} / {@link RedisProCacheTimers#timedGet}
-     * 调用,行为字节级等价。
+     * {@link RedisProCacheTimers} 工具 seam。
      */
     public RedisProCache(
             String name,
             RedisCacheWriter cacheWriter,
             RedisCacheConfiguration cacheConfiguration,
-            MeterRegistry meterRegistry,
-            BloomSupport bloomSupport,
-            CacheOperationResolver operationResolver,
-            SyncSupport syncSupport) {
+            ResiCacheFeatures features) {
         super(name, cacheWriter, cacheConfiguration);
+        MeterRegistry meterRegistry = features.getMeterRegistry();
         this.getTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.get",
                 "Time spent getting cache entries", name);
         this.putTimer = RedisProCacheTimers.registerTimer(meterRegistry, "resicache.cache.put",
@@ -94,9 +73,10 @@ public class RedisProCache extends RedisCache {
                 "Cache put count", name);
         this.evictCounter = RedisProCacheTimers.registerCounter(meterRegistry, "resicache.cache.evict.count",
                 "Cache evict count", name);
-        this.bloomSupport = bloomSupport;
-        this.operationResolver = operationResolver;
-        this.syncSupport = syncSupport;
+        this.bloomGate = features.getBloomGate();
+        this.operationResolver = features.getOperationResolver();
+        this.syncSupport = features.getSyncSupport();
+        this.syncLockTimeout = features.getSyncLockTimeout();
     }
 
     @Override
@@ -178,14 +158,14 @@ public class RedisProCache extends RedisCache {
      * 重新出现,代码量相同但失去 seam 名 + 单测入口 — 复杂度上升。
      */
     boolean isBloomShortCircuited(RedisCacheableOperation operation, Object key) {
-        if (operation == null || !operation.isUseBloomFilter() || bloomSupport == null) {
+        if (operation == null || !operation.isUseBloomFilter() || bloomGate == null) {
             return false;
         }
         // 键一致性(ADR-0011):必须用 actualKey(CacheKeys.bloomKey,与链层 add 同源),
         // 不可用 createCacheKey 的带前缀 redisKey —— 否则查的 key 永不在过滤器里(键漂移缺陷)。
         String bloomKey = CacheKeys.fromRedisKey(getName(), createCacheKey(key)).bloomKey();
-        if (!bloomSupport.mightContain(getName(), bloomKey)) {
-            log.debug("Bloom filter rejected loader invocation: cacheName={}, key={}", getName(), bloomKey);
+        // 读侧确定 miss 判定 + 统一 debug 日志收口到 BloomGate(与 BloomFilterHandler GET 路径共享)
+        if (bloomGate.definiteMiss(getName(), bloomKey)) {
             RedisProCacheTimers.safeIncrement(missCounter);
             return true;
         }
@@ -248,12 +228,15 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * 解析 sync 超时时间(秒) — annotation &lt; 0 → 退到 10s 默认值。
-     * 抽离自 executeSyncLoad,保持该方法主体薄到 1 委派。
+     * 解析 sync 超时时间(秒) — 委派到 {@link SyncLockTimeout} 单一规则 seam
+     * (与 {@code SyncLockHandler} 链路共享,消除原两处分叉:此前 loader 路径
+     * 忽略全局配置 {@code resi-cache.sync-lock.timeout} 硬编码 10s)。
+     * {@code syncLockTimeout} 为 null(测试场景未装配)时回退内置默认。
      */
     private long resolveSyncTimeout(RedisCacheableOperation operation) {
-        long timeout = operation.getSyncTimeout();
-        return timeout > 0 ? timeout : 10L;
+        return syncLockTimeout != null
+                ? syncLockTimeout.resolveSeconds(operation)
+                : SyncLockTimeout.DEFAULT_LOCK_TIMEOUT_SECONDS;
     }
 
     /**

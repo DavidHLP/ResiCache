@@ -46,10 +46,9 @@ class RedisProCacheTest {
                 "testCache",
                 cacheWriter,
                 cacheConfiguration,
-                meterRegistry,
-                null,   // bloomSupport disabled
-                null,   // operationResolver disabled (ADR-0057 seam; nullable → no metadata lookup)
-                null);  // syncSupport disabled
+                ResiCacheFeatures.builder()
+                        .meterRegistry(meterRegistry)
+                        .build());   // bloom/operationResolver/sync disabled
     }
 
     private Callable<String> createLoader(String value) {
@@ -301,10 +300,13 @@ class RedisProCacheTest {
         @Test
         @DisplayName("returns true and increments miss when bloom rejects key")
         void isBloomShortCircuited_bloomRejects_returnsTrueAndIncrementsMiss() {
-            // 重新构造 cache 启用 bloomSupport(默认 cache 是 null,bloom 分支会直接 short-circuit 到 false)
+            // 重新构造 cache 启用 bloomGate(默认 cache 是 null,bloom 分支会直接 short-circuit 到 false)
             RedisProCache cacheWithBloom = new RedisProCache(
-                    "testCache", cacheWriter, cacheConfiguration, meterRegistry,
-                    bloomSupport, null, null);
+                    "testCache", cacheWriter, cacheConfiguration,
+                    ResiCacheFeatures.builder()
+                            .meterRegistry(meterRegistry)
+                            .bloomGate(new io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate(bloomSupport))
+                            .build());
 
             io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation operation =
                     io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation.builder()
@@ -329,8 +331,11 @@ class RedisProCacheTest {
         @DisplayName("returns false when bloom accepts key (no miss side effect)")
         void isBloomShortCircuited_bloomAccepts_returnsFalseNoSideEffect() {
             RedisProCache cacheWithBloom = new RedisProCache(
-                    "testCache", cacheWriter, cacheConfiguration, meterRegistry,
-                    bloomSupport, null, null);
+                    "testCache", cacheWriter, cacheConfiguration,
+                    ResiCacheFeatures.builder()
+                            .meterRegistry(meterRegistry)
+                            .bloomGate(new io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate(bloomSupport))
+                            .build());
 
             io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation operation =
                     io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation.builder()
@@ -369,8 +374,11 @@ class RedisProCacheTest {
         void loadValue_syncEnabledWithSyncSupport_routesToExecuteSyncLoad() {
             // 构造启用 syncSupport 的 cache
             RedisProCache cacheWithSync = new RedisProCache(
-                    "testCache", cacheWriter, cacheConfiguration, meterRegistry,
-                    null, null, syncSupport);
+                    "testCache", cacheWriter, cacheConfiguration,
+                    ResiCacheFeatures.builder()
+                            .meterRegistry(meterRegistry)
+                            .syncSupport(syncSupport)
+                            .build());
             io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation operation =
                     io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation.builder()
                             .name("test-cache")

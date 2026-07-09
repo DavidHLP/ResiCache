@@ -4,7 +4,6 @@ import io.github.davidhlp.spring.cache.redis.chain.*;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
-import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.ChainEngine;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -44,17 +43,19 @@ import org.springframework.util.Assert;
  * 实际生产路径下,fragment 推进 ({@code engine.executeChainFragment(ctx, this)})
  * 按 ADR-0022 {@code indexOf(this) + 1} 定位后继,不会再回到 SyncLockHandler 自身,
  * 该标记属于 dead seam。删除后 locality 改善 + context 属性袋收窄。
+ *
+ * <p><b>锁超时解析收口</b>:原 {@code resolveTimeout} / {@code getGlobalTimeoutSeconds} +
+ * {@code DEFAULT_LOCK_TIMEOUT} 已迁出到 {@link SyncLockTimeout} —— 与
+ * {@code RedisProCache} loader 路径共享同一规则,消除两处分叉(loader 路径此前忽略全局配置)。
  */
 @Slf4j
 @Component
 @HandlerPriority(HandlerOrder.SYNC_LOCK)
 public class SyncLockHandler extends AbstractCacheHandler {
 
-    private static final long DEFAULT_LOCK_TIMEOUT = 10;
-
     private final SyncSupport syncSupport;
 
-    private final RedisProCacheProperties properties;
+    private final SyncLockTimeout syncLockTimeout;
 
     /** 推进引擎 — 由 Spring 注入（{@code @Autowired} 字段注入），锁内片段推进用
      * {@link ChainEngine#executeChainFragment}。测试可通过 {@link #setEngine(ChainEngine)}
@@ -73,9 +74,9 @@ public class SyncLockHandler extends AbstractCacheHandler {
     }
 
     public SyncLockHandler(SyncSupport syncSupport,
-                           RedisProCacheProperties properties) {
+                           SyncLockTimeout syncLockTimeout) {
         this.syncSupport = syncSupport;
-        this.properties = properties;
+        this.syncLockTimeout = syncLockTimeout;
     }
 
     /**
@@ -115,7 +116,7 @@ public class SyncLockHandler extends AbstractCacheHandler {
             return HandlerResult.continueChain();
         }
 
-        long timeout = resolveTimeout(operation);
+        long timeout = syncLockTimeout.resolveSeconds(operation);
 
         log.debug("Executing with sync lock: cacheName={}, key={}, timeout={}s",
                   context.getCacheName(), lockKey, timeout);
@@ -133,30 +134,5 @@ public class SyncLockHandler extends AbstractCacheHandler {
 
         // 锁内执行完成,终止链
         return HandlerResult.terminate(result);
-    }
-
-    /**
-     * 解析锁超时时间 — 保留原全局回退路径（{@code properties.getSyncLock().getTimeout()}），
-     * 未在注解上显式覆盖时退回全局配置；均无则用 {@link #DEFAULT_LOCK_TIMEOUT}。
-     */
-    private long resolveTimeout(RedisCacheableOperation operation) {
-        if (operation == null) {
-            return getGlobalTimeoutSeconds();
-        }
-        long timeout = operation.getSyncTimeout();
-        if (timeout < 0) {
-            return getGlobalTimeoutSeconds();
-        }
-        return timeout > 0 ? timeout : DEFAULT_LOCK_TIMEOUT;
-    }
-
-    /**
-     * 获取全局配置的锁超时时间（秒） — 调用方通常为 {@link #resolveTimeout} 的注解 timeout < 0 回退。
-     */
-    private long getGlobalTimeoutSeconds() {
-        long timeout = properties.getSyncLock().getTimeout();
-        java.util.concurrent.TimeUnit unit = properties.getSyncLock().getUnit();
-        long seconds = unit.toSeconds(timeout);
-        return seconds > 0 ? seconds : DEFAULT_LOCK_TIMEOUT;
     }
 }

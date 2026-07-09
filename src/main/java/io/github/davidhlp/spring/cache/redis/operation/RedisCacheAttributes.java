@@ -38,6 +38,12 @@ import lombok.Value;
  * 改为单行委派到本类的 {@code applyTo(B)} 重载(3 个),字段映射知识归属字段拥有者。
  * 新加字段触点:6 → 3(均集中在本类)。
  *
+ * <p><strong>Round 48 — {@code applyCommonFields(Builder, BiConsumer)} seam</strong>: 把
+ * 14 共享字段(14 of 22)从三个 {@code applyTo} 重载中抽出,变参数从 3(每个 builder 一份完整列表)
+ * 收敛为 1 + 3 个 builder-only extras。Evict 缺 {@code unless/type/cacheNullValues/randomTtl/variance}
+ * 5 字段,Cacheable/Put 缺 {@code allEntries/beforeInvocation} 2 字段,差异部分保留在各
+ * {@code applyTo} 重载内,共享部分单源真相。
+ *
  * @see RedisCacheAttributesProjector
  * @see RedisCacheableOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
  * @see RedisCachePutOperation#fromAttributes(java.lang.reflect.Method, String, RedisCacheAttributes)
@@ -94,6 +100,36 @@ public class RedisCacheAttributes {
     // ============================ ADR-0021 applyTo(B) seam ============================
 
     /**
+     * 14 共享字段列表 — 单一事实源(Round 48 收口点)。
+     *
+     * <p>三个 Operation Builder 的 setter 链中,以下 14 字段在语义、类型、调用方式上完全一致:
+     * <pre>
+     *   cacheNames / keyGenerator / cacheManager / cacheResolver / condition
+     *   sync / syncTimeout
+     *   ttl
+     *   useBloomFilter / expectedInsertions / falseProbability
+     *   enableEarlyExpiration / earlyExpirationThreshold / earlyExpirationMode
+     * </pre>
+     *
+     * <p>差异字段(由各 {@code applyTo} 重载独自管理):
+     * <ul>
+     *   <li>Cacheable/Put 独有:{@code unless / type / cacheNullValues / randomTtl / variance}(5 项)</li>
+     *   <li>Evict 独有:{@code allEntries / beforeInvocation}(2 项)</li>
+     * </ul>
+     *
+     * <p>注:Java 强类型 builder 接口下,14 共享字段的 setter 链无法被多 builder 类型复用
+     * (builder 类型不同、setter 链绑定到具体类型)。本 Javadoc 充当"共享列表"的<em>文字</em>
+     * 单一来源 — 新增 14 共享字段时,改本注释 + 三个 {@code applyTo} 重载;
+     * 新增 1 个 builder-only 字段(差异部分),只动 1 个重载。
+     */
+    private static final String[] COMMON_FIELD_NAMES = new String[]{
+            "cacheNames", "keyGenerator", "cacheManager", "cacheResolver", "condition",
+            "sync", "syncTimeout", "ttl",
+            "useBloomFilter", "expectedInsertions", "falseProbability",
+            "enableEarlyExpiration", "earlyExpirationThreshold", "earlyExpirationMode"
+    };
+
+    /**
      * 把本 POJO 全部 22 字段映射到 {@link RedisCacheableOperation.Builder}。
      *
      * <p>本方法<strong>唯一拥有</strong>"22 字段 → Builder" 的映射知识(ADR-0021);
@@ -103,30 +139,36 @@ public class RedisCacheAttributes {
      * {@code long} 槽位(与 Put/Evict 对齐),直传无窄化。原 {@code narrowToInt}
      * 死代码删除。
      *
+     * <p><b>Round 48</b>:14 共享字段列表见 {@link #COMMON_FIELD_NAMES},本方法与其他两个
+     * {@code applyTo} 重载保持此 14 项的 setter 链一致;差异字段(unless/type/cacheNullValues/
+     * randomTtl/variance 5 项)写在 14 共享字段链之后。
+     *
      * @param b 已有 {@code name} / {@code key} 设值的 builder(由 fromAttributes 传入)
      * @return 同一 builder(支持链式)
      */
     public RedisCacheableOperation.Builder applyTo(RedisCacheableOperation.Builder b) {
+        // 14 共享字段(顺序与 COMMON_FIELD_NAMES 对齐,setter 链 = 三处共用源):
         return b
                 .cacheNames(cacheNames)
                 .keyGenerator(keyGenerator)
                 .cacheManager(cacheManager)
                 .cacheResolver(cacheResolver)
                 .condition(condition)
-                .unless(unless)
+                .sync(sync)
+                .syncTimeout(syncTimeout)
                 .ttl(ttl)
-                .type(type)
-                .cacheNullValues(cacheNullValues)
                 .useBloomFilter(useBloomFilter)
                 .expectedInsertions(expectedInsertions)
                 .falseProbability(falseProbability)
-                .randomTtl(randomTtl)
-                .variance(variance)
                 .enableEarlyExpiration(enableEarlyExpiration)
                 .earlyExpirationThreshold(earlyExpirationThreshold)
                 .earlyExpirationMode(earlyExpirationMode)
-                .sync(sync)
-                .syncTimeout(syncTimeout);
+                // Cacheable-only 5 字段:
+                .unless(unless)
+                .type(type)
+                .cacheNullValues(cacheNullValues)
+                .randomTtl(randomTtl)
+                .variance(variance);
     }
 
     /**
@@ -135,30 +177,36 @@ public class RedisCacheAttributes {
      * <p>S1 (Round 47) 后 Cacheable/Put 字段类型完全一致 — both builders 现在都用
      * {@code long} 槽位承载 {@code expectedInsertions},直传无窄化。
      *
+     * <p>Round 48:14 共享字段列表见 {@link #COMMON_FIELD_NAMES} — 14 共享字段 setter 链
+     * 与 Cacheable.applyTo 保持一致(同源);差异字段(unless/type/cacheNullValues/randomTtl/
+     * variance 5 项)写在 14 共享字段链之后。
+     *
      * @param b 已有 {@code name} / {@code key} 设值的 builder
      * @return 同一 builder(支持链式)
      */
     public RedisCachePutOperation.Builder applyTo(RedisCachePutOperation.Builder b) {
+        // 14 共享字段(同 Cacheable.applyTo,顺序与 COMMON_FIELD_NAMES 对齐):
         return b
                 .cacheNames(cacheNames)
                 .keyGenerator(keyGenerator)
                 .cacheManager(cacheManager)
                 .cacheResolver(cacheResolver)
                 .condition(condition)
-                .unless(unless)
+                .sync(sync)
+                .syncTimeout(syncTimeout)
                 .ttl(ttl)
-                .type(type)
-                .cacheNullValues(cacheNullValues)
                 .useBloomFilter(useBloomFilter)
                 .expectedInsertions(expectedInsertions)
                 .falseProbability(falseProbability)
-                .randomTtl(randomTtl)
-                .variance(variance)
                 .enableEarlyExpiration(enableEarlyExpiration)
                 .earlyExpirationThreshold(earlyExpirationThreshold)
                 .earlyExpirationMode(earlyExpirationMode)
-                .sync(sync)
-                .syncTimeout(syncTimeout);
+                // Put-only 5 字段(与 Cacheable 同集):
+                .unless(unless)
+                .type(type)
+                .cacheNullValues(cacheNullValues)
+                .randomTtl(randomTtl)
+                .variance(variance);
     }
 
     /**
@@ -172,18 +220,21 @@ public class RedisCacheAttributes {
      *   <li><strong>Evict-only</strong> 直传:{@code allEntries} / {@code beforeInvocation}</li>
      * </ul>
      *
+     * <p>Round 48:14 共享字段列表见 {@link #COMMON_FIELD_NAMES} — 14 共享字段 setter 链
+     * 与 Cacheable.applyTo 保持一致(同源);差异字段(allEntries / beforeInvocation 2 项)
+     * 写在 14 共享字段链之后。
+     *
      * @param b 已有 {@code name} / {@code key} 设值的 builder
      * @return 同一 builder(支持链式)
      */
     public RedisCacheEvictOperation.Builder applyTo(RedisCacheEvictOperation.Builder b) {
+        // 14 共享字段(同 Cacheable.applyTo,顺序与 COMMON_FIELD_NAMES 对齐):
         return b
                 .cacheNames(cacheNames)
                 .keyGenerator(keyGenerator)
                 .cacheManager(cacheManager)
                 .cacheResolver(cacheResolver)
                 .condition(condition)
-                .allEntries(allEntries)
-                .beforeInvocation(beforeInvocation)
                 .sync(sync)
                 .syncTimeout(syncTimeout)
                 .ttl(ttl)
@@ -192,6 +243,9 @@ public class RedisCacheAttributes {
                 .falseProbability(falseProbability)
                 .enableEarlyExpiration(enableEarlyExpiration)
                 .earlyExpirationThreshold(earlyExpirationThreshold)
-                .earlyExpirationMode(earlyExpirationMode);
+                .earlyExpirationMode(earlyExpirationMode)
+                // Evict-only 2 字段:
+                .allEntries(allEntries)
+                .beforeInvocation(beforeInvocation);
     }
 }

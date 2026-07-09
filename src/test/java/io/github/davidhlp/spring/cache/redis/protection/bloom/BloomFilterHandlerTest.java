@@ -43,7 +43,7 @@ class BloomFilterHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new BloomFilterHandler(bloomSupport, statistics);
+        handler = new BloomFilterHandler(new BloomGate(bloomSupport), bloomSupport, statistics);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOp) {

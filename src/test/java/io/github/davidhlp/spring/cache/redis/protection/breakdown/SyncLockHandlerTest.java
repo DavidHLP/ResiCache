@@ -45,7 +45,7 @@ class SyncLockHandlerTest {
         lenient().when(properties.getSyncLock()).thenReturn(syncLockProperties);
         lenient().when(syncLockProperties.getTimeout()).thenReturn(3000L);
         lenient().when(syncLockProperties.getUnit()).thenReturn(java.util.concurrent.TimeUnit.MILLISECONDS);
-        handler = new SyncLockHandler(syncSupport, properties);
+        handler = new SyncLockHandler(syncSupport, new SyncLockTimeout(properties));
         // ADR-0009:锁内片段推进需要 ChainEngine —— 单元测试显式注入(避免 @Autowired 反射依赖)
         handler.setEngine(new io.github.davidhlp.spring.cache.redis.chain.ChainEngine());
     }

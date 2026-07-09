@@ -1,10 +1,12 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
 import io.github.davidhlp.spring.cache.redis.cache.CacheOperationResolver;
+import io.github.davidhlp.spring.cache.redis.cache.ResiCacheFeatures;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
-import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncLockTimeout;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.ThreadPoolEarlyExpirationExecutor;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
@@ -85,9 +87,10 @@ public class RedisProCacheConfiguration {
             RedisProCacheWriter redisProCacheWriter,
             RedisCacheConfiguration defaultRedisCacheConfiguration,
             ObjectProvider<MeterRegistry> meterRegistryProvider,
-            BloomSupport bloomSupport,
+            BloomGate bloomGate,
             CacheOperationResolver operationResolver,
             SyncSupport syncSupport,
+            SyncLockTimeout syncLockTimeout,
             RedisProCacheProperties properties) {
         // 构建 per-cache 配置映射
         Map<String, RedisCacheConfiguration> initialCacheConfigurations = buildInitialCacheConfigurations(
@@ -98,13 +101,18 @@ public class RedisProCacheConfiguration {
             log.debug("MeterRegistry not available — metrics will be disabled");
         }
 
+        ResiCacheFeatures features = ResiCacheFeatures.builder()
+                .meterRegistry(meterRegistry)
+                .bloomGate(bloomGate)
+                .operationResolver(operationResolver)
+                .syncSupport(syncSupport)
+                .syncLockTimeout(syncLockTimeout)
+                .build();
+
         RedisProCacheManager manager = new RedisProCacheManager(
                 redisProCacheWriter,
                 defaultRedisCacheConfiguration,
-                meterRegistry,
-                bloomSupport,
-                operationResolver,
-                syncSupport,
+                features,
                 initialCacheConfigurations,
                 properties.isTransactionAware());
         log.debug("Created RedisProCacheManager with {} initial cache configurations, transactionAware={}",

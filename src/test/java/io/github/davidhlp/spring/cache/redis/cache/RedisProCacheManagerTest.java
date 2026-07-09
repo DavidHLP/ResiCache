@@ -47,10 +47,9 @@ class RedisProCacheManagerTest {
         cacheManager = new RedisProCacheManager(
                 cacheWriter,
                 defaultConfiguration,
-                meterRegistry,
-                null,   // bloomSupport disabled
-                null,   // operationResolver disabled (ADR-0057 seam; nullable → no metadata lookup)
-                null,   // syncSupport disabled
+                ResiCacheFeatures.builder()
+                        .meterRegistry(meterRegistry)
+                        .build(),   // bloom/operationResolver/sync disabled
                 Collections.emptyMap(),
                 false);  // transactionAware
     }
