@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
-import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCachePutOperation;

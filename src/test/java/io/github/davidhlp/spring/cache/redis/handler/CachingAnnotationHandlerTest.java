@@ -3,7 +3,7 @@ package io.github.davidhlp.spring.cache.redis.handler;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
-import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheEvictOperation;

@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
-import io.github.davidhlp.spring.cache.redis.factory.OperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationFactory;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 
 import org.junit.jupiter.api.BeforeEach;

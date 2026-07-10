@@ -1,9 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
-import io.github.davidhlp.spring.cache.redis.factory.OperationFactory;
-import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
-import io.github.davidhlp.spring.cache.redis.factory.SpringCacheableAdapterFactory;
+import io.github.davidhlp.spring.cache.redis.operation.OperationFactory;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributesProjector;
+import io.github.davidhlp.spring.cache.redis.operation.SpringCacheableAdapterFactory;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;

@@ -1,5 +1,5 @@
 ---
-title: 操作与工厂(operation + factory)
+title: 操作(operation)
 type: modules
 tags:
   - module
@@ -13,13 +13,13 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/operation/RedisCachePutOperation.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/operation/RedisCacheEvictOperation.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/operation/RedisCacheRegister.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/factory/OperationFactory.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/operation/OperationFactory.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-07-10
 ---
 
-# 操作与工厂(operation + factory)
+# 操作(operation)
 
 注解是「声明」,运行时需要一份「配置实例」随请求流动——这就是 `Operation`。本包把注解解析成扩展了防护字段的 Operation,并按缓存名注册,供责任链各 handler 读取。
 
@@ -60,25 +60,22 @@ public class RedisCacheableOperation extends CacheableOperation {
 
 ## OperationFactory
 
-`src/main/java/io/github/davidhlp/spring/cache/redis/factory/OperationFactory.java:15`
+`src/main/java/io/github/davidhlp/spring/cache/redis/operation/OperationFactory.java`
 
-泛型接口,把注解翻译成 Operation:
+泛型接口,把注解翻译成 Operation。**ADR-0065 后原 `factory/` 包已并入本 `operation/` 包**,三类 ResiCache factory(`Cacheable/Put/Evict OperationFactory`)已 inline 为 `AnnotationHandler` 内的 lambda(浅模块收口);接口本身保留,承载 Spring 适配这一真实第二 adapter:
 
 ```java
 public interface OperationFactory<A extends Annotation, O extends CacheOperation> {
-    // 从注解 A 构造操作 O
+    O create(Method method, A annotation, String key);
 }
 ```
 
-三个具体实现:
+现存两个实现/协作类(均在本包内):
 
-- `CacheableOperationFactory` —— `@RedisCacheable` → `RedisCacheableOperation`
-- `CachePutOperationFactory` —— `@RedisCachePut` → `RedisCachePutOperation`
-- `EvictOperationFactory` —— `@RedisCacheEvict` → `RedisCacheEvictOperation`
+- `SpringCacheableAdapterFactory` —— Spring 原生 `@Cacheable`(字段名/属性集与 ResiCache 注解不同)→ `RedisCacheableOperation` 的适配器,是 ports & adapters 的真实第二 adapter(ResiCache 注解 vs Spring 注解),证明该 seam 挣得起。
+- `RedisCacheAttributesProjector` —— `@RedisCacheable/Put/Evict` 三注解 → `RedisCacheAttributes` 的字段投影 seam(ADR-0019 收敛 22 字段单一 builder 链)。
 
-`src/main/java/io/github/davidhlp/spring/cache/redis/factory/CacheableOperationFactory.java:14`
-
-工厂与 [[annotations]] 的 `AnnotationHandler` 协作:注解处理器认出注解类型,委托对应工厂产出 Operation,聚合后交给 Spring Cache 执行。
+`AnnotationHandler` 各具体处理器(`Cacheable/Put/Evict/Caching`)认出注解类型后,委托 `OperationFactory`(或 registerAll 内联 lambda)产出 Operation,聚合后交给 Spring Cache 执行。详见 [[annotations]]。
 
 ## 数据流总览
 
@@ -86,7 +83,7 @@ public interface OperationFactory<A extends Annotation, O extends CacheOperation
 @RedisCacheable(sync=true, useBloomFilter=true, ...)
         │  AnnotationHandler 责任链识别
         ▼
-CacheableOperationFactory
+AnnotationHandler(registerAll 内联 factory,ADR-0065)
         │  填充扩展字段
         ▼
 RedisCacheableOperation (sync=true, useBloomFilter=true, …)

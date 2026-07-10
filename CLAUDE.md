@@ -73,8 +73,8 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │   ├── breakdown/       #   SyncLockHandler (200) + SyncSupport/Role + DistributedLockManager + LockManager - anti-breakdown
 │   ├── nullvalue/       #   NullValueHandler (400) + NullValueEncoder + Policy/Default    - null caching
 │   └── refresh/         #   EarlyExpirationHandler (250) + Mode/Policy(+Default) + Scripts + Executor(ThreadPool) + Retry/Metrics - hot key
-├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheAttributes + AttributePopulator + RedisCacheRegister + OperationKind
-├── factory/             # OperationFactory + SpringCacheableAdapterFactory + RedisCacheAttributesProjector
+├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheAttributes + AttributePopulator + RedisCacheRegister +
+│                        #   OperationKind + OperationFactory + SpringCacheableAdapterFactory + RedisCacheAttributesProjector
 ├── handler/             # AnnotationHandler + Abstract + 4 concrete (Cacheable/Put/Evict/Caching) + AnnotationChainEngine
 ├── eviction/            # TwoListLRU + EvictionStats
 ├── serialization/       # SecureJacksonRedisSerializer + SecureJacksonSerializerFactory + VersionEnvelope +
@@ -82,14 +82,14 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 └── observability/       # RedisCacheHealthIndicator (actuator health) — note: cache metrics classes live in cache/
 ```
 
-> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`holder/` —— 见 `a5ab55b` 重构。wiki 始终以实际源码为准。
+> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`holder/`、`factory/`(已并入 `operation/`,ADR-0065 收尾) —— 见 `a5ab55b` 重构。wiki 始终以实际源码为准。
 
 ### Test Structure
 
 ```
 src/test/java/io/github/davidhlp/spring/cache/redis/
 ├── (mirror packages: annotation/, cache/, chain/{,observer/}, config/, eviction/,
-│   factory/, handler/, operation/, protection/{avalanche,bloom{,filter},breakdown,nullvalue,refresh},
+│   handler/, operation/, protection/{avalanche,bloom{,filter},breakdown,nullvalue,refresh},
 │   serialization/)              # unit tests mirroring src/main/java structure
 ├── integration/                 # ALL Testcontainers-based integration tests + shared scaffolding:
 │   ├── AbstractRedisIntegrationTest  # base class — Redis container + socat forward + @DynamicPropertySource

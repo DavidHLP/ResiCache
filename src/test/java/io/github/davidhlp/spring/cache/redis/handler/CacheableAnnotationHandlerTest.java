@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.handler;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
-import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -48,7 +48,7 @@ class CacheableAnnotationHandlerTest {
     private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
 
     @Mock
-    private io.github.davidhlp.spring.cache.redis.factory.SpringCacheableAdapterFactory springCacheableAdapterFactory;
+    private io.github.davidhlp.spring.cache.redis.operation.SpringCacheableAdapterFactory springCacheableAdapterFactory;
 
     private CacheableAnnotationHandler handler;
 

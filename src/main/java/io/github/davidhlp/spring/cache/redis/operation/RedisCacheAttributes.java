@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.operation;
 
-import io.github.davidhlp.spring.cache.redis.factory.RedisCacheAttributesProjector;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import lombok.Builder;
 import lombok.Value;

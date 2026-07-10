@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.factory;
+package io.github.davidhlp.spring.cache.redis.operation;
 
 import org.springframework.cache.interceptor.CacheOperation;
 

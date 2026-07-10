@@ -1,10 +1,9 @@
-package io.github.davidhlp.spring.cache.redis.factory;
+package io.github.davidhlp.spring.cache.redis.operation;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
