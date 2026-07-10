@@ -4,15 +4,31 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheErrorHandler 单元测试 — ADR-0039 后契约。
+ * CacheErrorHandler 单元测试 — ADR-0067 后契约。
  *
- * <p>CacheResult 收敛为 2 字段(success / resultBytes)后,本测试通过 isSuccess()
- * 验证 FAIL_FAST(失败 → success=false)/ GRACEFUL_DEGRADATION / SILENT(降级为 miss → success=true)
- * 三策略的返回语义。删除的字段读法(isFailure / isHit / getException)已随 ADR-0039 移除。
+ * <p>原设计 5 个 wrapper 方法（{@code handleGetError} / {@code handlePutError} /
+ * {@code handlePutIfAbsentError} / {@code handleRemoveError} / {@code handleCleanError}）
+ * 已收口为单 {@link CacheErrorHandler#handleError(CacheOperation, String, String, Exception)}
+ * 入口，per-operation 策略集中到 {@code STRATEGIES} 不可变 Map。本测试：
+ *
+ * <ul>
+ *   <li>保留 {@code handleException} 直策略调用测试（{@link StrategyDispatchTests}）</li>
+ *   <li>原 5 个 wrapper Nested 类替换为 1 个 parametric 测试
+ *       （{@link PerOperationStrategyTests}）— 单一事实源 + pin 全部 op→策略映射</li>
+ *   <li>保留原 {@link StrategySelectionTests} 作为策略语义总览</li>
+ * </ul>
+ *
+ * <p>删除测试：删掉 {@code STRATEGIES} Map 或 {@code handleError} 入口，本测试集无法 pin
+ * per-operation 策略 → 退化到 5 个分散 wrapper 时代。
  */
 @DisplayName("CacheErrorHandler Tests")
 class CacheErrorHandlerTest {
@@ -29,11 +45,11 @@ class CacheErrorHandlerTest {
     }
 
     @Nested
-    @DisplayName("handleException with FAIL_FAST strategy")
-    class FailFastStrategyTests {
+    @DisplayName("handleException with explicit strategy")
+    class StrategyDispatchTests {
 
         @Test
-        @DisplayName("returns failure result with FAIL_FAST strategy")
+        @DisplayName("FAIL_FAST returns failure result")
         void handleException_failFast_returnsFailure() {
             Exception e = createException("Connection refused");
 
@@ -45,7 +61,7 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("sets success to false on failure")
+        @DisplayName("FAIL_FAST sets success false on failure")
         void handleException_failFast_setsSuccessFalse() {
             Exception e = createException("Error");
 
@@ -55,14 +71,9 @@ class CacheErrorHandlerTest {
 
             assertThat(result.isSuccess()).isFalse();
         }
-    }
-
-    @Nested
-    @DisplayName("handleException with GRACEFUL_DEGRADATION strategy")
-    class GracefulDegradationStrategyTests {
 
         @Test
-        @DisplayName("returns miss result with GRACEFUL_DEGRADATION strategy")
+        @DisplayName("GRACEFUL_DEGRADATION returns miss result")
         void handleException_gracefulDegradation_returnsMiss() {
             Exception e = createException("Timeout");
 
@@ -74,24 +85,7 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("returns successful miss result")
-        void handleException_gracefulDegradation_returnsSuccessfulMiss() {
-            Exception e = createException("Error");
-
-            CacheResult result = handler.handleException(
-                    "GET", "cache", "key", e,
-                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
-
-            assertThat(result.isSuccess()).isTrue();
-        }
-    }
-
-    @Nested
-    @DisplayName("handleException with SILENT strategy")
-    class SilentStrategyTests {
-
-        @Test
-        @DisplayName("returns miss result with SILENT strategy")
+        @DisplayName("SILENT returns miss result")
         void handleException_silent_returnsMiss() {
             Exception e = createException("Silent error");
 
@@ -103,7 +97,7 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("does not throw exception with SILENT strategy")
+        @DisplayName("SILENT does not throw exception")
         void handleException_silent_doesNotThrow() {
             Exception e = createException("Silent");
 
@@ -116,195 +110,131 @@ class CacheErrorHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("handleGetError")
-    class HandleGetErrorTests {
-
-        @Test
-        @DisplayName("uses GRACEFUL_DEGRADATION strategy for GET errors")
-        void handleGetError_usesGracefulDegradation() {
-            Exception e = createException("Redis connection failed");
-
-            CacheResult result = handler.handleGetError("test-cache", "key", e);
-
-            assertThat(result.isSuccess()).isTrue();
-        }
-
-        @Test
-        @DisplayName("returns miss for GET operation failure")
-        void handleGetError_returnsMiss() {
-            Exception e = createException("Error");
-
-            CacheResult result = handler.handleGetError("cache", "key", e);
-
-            assertThat(result.isSuccess()).isTrue();
-        }
-
-        @Test
-        @DisplayName("preserves exception information")
-        void handleGetError_preservesException() {
-            Exception e = createException("Get failed");
-
-            CacheResult result = handler.handleGetError("cache", "key", e);
-
-            // GRACEFUL_DEGRADATION doesn't preserve the exception, just returns miss
-            assertThat(result.isSuccess()).isTrue();
-        }
+    /**
+     * 单一事实源 pin — 每个 operation 的策略 + 期望 success 状态。
+     * 新增 operation 时，{@link CacheOperation} 加枚举值 + {@code STRATEGIES} 加一行 + 本测试
+     * 加一行参数,3 处同步驱动。
+     */
+    static Stream<Arguments> perOperationStrategies() {
+        return Stream.of(
+                Arguments.of(CacheOperation.GET, true),
+                Arguments.of(CacheOperation.PUT, false),
+                Arguments.of(CacheOperation.PUT_IF_ABSENT, false),
+                Arguments.of(CacheOperation.REMOVE, true),
+                Arguments.of(CacheOperation.CLEAN, false));
     }
 
     @Nested
-    @DisplayName("handlePutError")
-    class HandlePutErrorTests {
+    @DisplayName("handleError per-operation strategy (ADR-0067)")
+    class PerOperationStrategyTests {
 
-        @Test
-        @DisplayName("uses FAIL_FAST strategy for PUT errors")
-        void handlePutError_usesFailFast() {
-            Exception e = createException("Write failed");
+        @ParameterizedTest(name = "{0} → success={1}")
+        @MethodSource("io.github.davidhlp.spring.cache.redis.chain.CacheErrorHandlerTest#perOperationStrategies")
+        @DisplayName("dispatches STRATEGIES map to handleException correctly")
+        void handleError_dispatchesPerOperationStrategy(CacheOperation operation, boolean expectedSuccess) {
+            Exception e = createException("Redis error for " + operation);
 
-            CacheResult result = handler.handlePutError("test-cache", "key", e);
+            CacheResult result = handler.handleError(operation, "test-cache", "key", e);
 
-            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.isSuccess()).isEqualTo(expectedSuccess);
         }
 
         @Test
-        @DisplayName("returns failure result for PUT operation")
-        void handlePutError_returnsFailure() {
-            Exception e = createException("Error");
+        @DisplayName("GET uses GRACEFUL_DEGRADATION (returns miss, success=true)")
+        void handleError_get_returnsMiss() {
+            Exception e = createException("Redis error");
 
-            CacheResult result = handler.handlePutError("cache", "key", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-
-        @Test
-        @DisplayName("sets success to false")
-        void handlePutError_setsSuccessFalse() {
-            Exception e = createException("Error");
-
-            CacheResult result = handler.handlePutError("cache", "key", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-    }
-
-    @Nested
-    @DisplayName("handlePutIfAbsentError")
-    class HandlePutIfAbsentErrorTests {
-
-        @Test
-        @DisplayName("uses FAIL_FAST strategy for PUT_IF_ABSENT errors")
-        void handlePutIfAbsentError_usesFailFast() {
-            Exception e = createException("Conditional write failed");
-
-            CacheResult result = handler.handlePutIfAbsentError("test-cache", "key", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns failure result")
-        void handlePutIfAbsentError_returnsFailure() {
-            Exception e = createException("Error");
-
-            CacheResult result = handler.handlePutIfAbsentError("cache", "key", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-    }
-
-    @Nested
-    @DisplayName("handleRemoveError")
-    class HandleRemoveErrorTests {
-
-        @Test
-        @DisplayName("uses SILENT strategy for REMOVE errors")
-        void handleRemoveError_usesSilent() {
-            Exception e = createException("Delete failed");
-
-            CacheResult result = handler.handleRemoveError("test-cache", "key", e);
+            CacheResult result = handler.handleError(CacheOperation.GET, "test-cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
         }
 
         @Test
-        @DisplayName("returns successful miss for REMOVE operation failure")
-        void handleRemoveError_returnsSuccessfulMiss() {
-            Exception e = createException("Error");
+        @DisplayName("PUT uses FAIL_FAST (returns failure, success=false)")
+        void handleError_put_returnsFailure() {
+            Exception e = createException("Redis error");
 
-            CacheResult result = handler.handleRemoveError("cache", "key", e);
+            CacheResult result = handler.handleError(CacheOperation.PUT, "test-cache", "key", e);
+
+            assertThat(result.isSuccess()).isFalse();
+        }
+
+        @Test
+        @DisplayName("PUT_IF_ABSENT uses FAIL_FAST")
+        void handleError_putIfAbsent_returnsFailure() {
+            Exception e = createException("Redis error");
+
+            CacheResult result = handler.handleError(CacheOperation.PUT_IF_ABSENT, "test-cache", "key", e);
+
+            assertThat(result.isSuccess()).isFalse();
+        }
+
+        @Test
+        @DisplayName("REMOVE uses SILENT (returns miss, success=true)")
+        void handleError_remove_returnsMiss() {
+            Exception e = createException("Redis error");
+
+            CacheResult result = handler.handleError(CacheOperation.REMOVE, "test-cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
         }
-    }
-
-    @Nested
-    @DisplayName("handleCleanError")
-    class HandleCleanErrorTests {
 
         @Test
-        @DisplayName("uses FAIL_FAST strategy for CLEAN errors")
-        void handleCleanError_usesFailFast() {
-            Exception e = createException("Clean failed");
+        @DisplayName("CLEAN uses FAIL_FAST")
+        void handleError_clean_returnsFailure() {
+            Exception e = createException("Redis error");
 
-            CacheResult result = handler.handleCleanError("test-cache", "pattern:*", e);
+            CacheResult result = handler.handleError(CacheOperation.CLEAN, "test-cache", "pattern:*", e);
 
             assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
-        @DisplayName("returns failure result for CLEAN operation")
-        void handleCleanError_returnsFailure() {
-            Exception e = createException("Error");
-
-            CacheResult result = handler.handleCleanError("cache", "pattern", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-
-        @Test
-        @DisplayName("accepts pattern parameter")
-        void handleCleanError_acceptsPattern() {
-            Exception e = createException("Error");
+        @DisplayName("CLEAN accepts pattern as key parameter")
+        void handleError_clean_acceptsPattern() {
+            Exception e = createException("Redis error");
             String pattern = "cache:keys:*";
 
-            CacheResult result = handler.handleCleanError("cache", pattern, e);
+            CacheResult result = handler.handleError(CacheOperation.CLEAN, "cache", pattern, e);
 
             assertThat(result.isSuccess()).isFalse();
         }
     }
 
     @Nested
-    @DisplayName("error strategy selection")
-    class ErrorStrategySelectionTests {
+    @DisplayName("error strategy semantics")
+    class StrategySelectionTests {
 
         @Test
-        @DisplayName("FAIL_FAST is appropriate for write operations")
+        @DisplayName("FAIL_FAST appropriate for write operations (PUT, PUT_IF_ABSENT, CLEAN)")
         void failFast_appropriateForWrites() {
             Exception e = createException("Error");
 
-            CacheResult putResult = handler.handlePutError("cache", "key", e);
-            CacheResult putIfAbsentResult = handler.handlePutIfAbsentError("cache", "key", e);
+            CacheResult putResult = handler.handleError(CacheOperation.PUT, "cache", "key", e);
+            CacheResult putIfAbsentResult = handler.handleError(CacheOperation.PUT_IF_ABSENT, "cache", "key", e);
+            CacheResult cleanResult = handler.handleError(CacheOperation.CLEAN, "cache", "pattern", e);
 
             assertThat(putResult.isSuccess()).isFalse();
             assertThat(putIfAbsentResult.isSuccess()).isFalse();
+            assertThat(cleanResult.isSuccess()).isFalse();
         }
 
         @Test
-        @DisplayName("SILENT is appropriate for remove operations")
+        @DisplayName("SILENT appropriate for REMOVE")
         void silent_appropriateForRemoves() {
             Exception e = createException("Error");
 
-            CacheResult result = handler.handleRemoveError("cache", "key", e);
+            CacheResult result = handler.handleError(CacheOperation.REMOVE, "cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
         }
 
         @Test
-        @DisplayName("GRACEFUL_DEGRADATION is appropriate for read operations")
+        @DisplayName("GRACEFUL_DEGRADATION appropriate for GET")
         void gracefulDegradation_appropriateForReads() {
             Exception e = createException("Error");
 
-            CacheResult result = handler.handleGetError("cache", "key", e);
+            CacheResult result = handler.handleError(CacheOperation.GET, "cache", "key", e);
 
             assertThat(result.isSuccess()).isTrue();
         }

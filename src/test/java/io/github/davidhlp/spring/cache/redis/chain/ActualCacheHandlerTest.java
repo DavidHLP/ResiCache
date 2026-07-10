@@ -170,7 +170,7 @@ class ActualCacheHandlerTest {
             Exception exception = new RuntimeException("Redis error");
             CacheResult errorResult = CacheResult.miss();
             when(valueOperations.get("test:key")).thenThrow(exception);
-            when(errorHandler.handleGetError(eq("test-cache"), eq("test:key"), eq(exception)))
+            when(errorHandler.handleError(eq(CacheOperation.GET), eq("test-cache"), eq("test:key"), eq(exception)))
                 .thenReturn(errorResult);
 
             HandlerResult result = handler.doHandle(context);
@@ -235,7 +235,7 @@ class ActualCacheHandlerTest {
             Exception exception = new RuntimeException("Redis error");
             CacheResult errorResult = CacheResult.failure();
             doThrow(exception).when(valueOperations).set(anyString(), any());
-            when(errorHandler.handlePutError(eq("test-cache"), eq("test:key"), eq(exception)))
+            when(errorHandler.handleError(eq(CacheOperation.PUT), eq("test-cache"), eq("test:key"), eq(exception)))
                 .thenReturn(errorResult);
 
             HandlerResult result = handler.doHandle(context);
@@ -309,7 +309,7 @@ class ActualCacheHandlerTest {
             Exception exception = new RuntimeException("Redis error");
             CacheResult errorResult = CacheResult.failure();
             when(valueOperations.get("test:key")).thenThrow(exception);
-            when(errorHandler.handlePutIfAbsentError(eq("test-cache"), eq("test:key"), eq(exception)))
+            when(errorHandler.handleError(eq(CacheOperation.PUT_IF_ABSENT), eq("test-cache"), eq("test:key"), eq(exception)))
                 .thenReturn(errorResult);
 
             HandlerResult result = handler.doHandle(context);
@@ -343,7 +343,7 @@ class ActualCacheHandlerTest {
             Exception exception = new RuntimeException("Redis error");
             CacheResult errorResult = CacheResult.failure();
             when(redisTemplate.delete("test:key")).thenThrow(exception);
-            when(errorHandler.handleRemoveError(eq("test-cache"), eq("test:key"), eq(exception)))
+            when(errorHandler.handleError(eq(CacheOperation.REMOVE), eq("test-cache"), eq("test:key"), eq(exception)))
                 .thenReturn(errorResult);
 
             HandlerResult result = handler.doHandle(context);

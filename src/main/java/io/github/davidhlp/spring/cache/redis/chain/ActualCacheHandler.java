@@ -117,7 +117,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.miss();
 
         } catch (Exception e) {
-            return errorHandler.handleGetError(context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
         }
     }
 
@@ -177,7 +177,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.success();
 
         } catch (Exception e) {
-            return errorHandler.handlePutError(context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
         }
     }
 
@@ -217,7 +217,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.success();
 
         } catch (Exception e) {
-            return errorHandler.handlePutIfAbsentError(context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
         }
     }
 
@@ -241,7 +241,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.success();
 
         } catch (Exception e) {
-            return errorHandler.handleRemoveError(context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
         }
     }
 
@@ -300,7 +300,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.success();
 
         } catch (Exception e) {
-            return errorHandler.handleCleanError(context.getCacheName(), keyPattern, e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), keyPattern, e);
         }
     }
 
