@@ -78,8 +78,15 @@ class SelectiveModeIntegrationTest extends AbstractRedisIntegrationTest {
 
         Set<String> keys = redisCacheTemplate.keys("*");
         assertThat(keys).isNotEmpty();
-        // 所有写入的 key 都应有正 TTL,不应是永久缓存(getExpire 返回 -1 表示永久)
-        for (String key : keys) {
+        // 仅检查用户可见的缓存数据 key(形如 {cacheName}::{actualKey},含 "::" 分隔符)。
+        // 内部基础设施 key (例如 bloom filter hash "bf:{cacheName}",
+        // rebuilding 标志 "resicache:bloom:rebuild:{cacheName}") 是按设计永久/有独立 TTL 策略的,
+        // 不属于 TtlHandler 契约范围,过滤掉以验证 cache 数据 TTL 契约。
+        Set<String> dataKeys = keys.stream()
+                .filter(k -> k.contains("::"))
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(dataKeys).as("at least one user-visible cache key should be written").isNotEmpty();
+        for (String key : dataKeys) {
             Long ttl = redisCacheTemplate.getExpire(key);
             assertThat(ttl)
                     .as("key %s should have a positive TTL, not be permanent", key)
