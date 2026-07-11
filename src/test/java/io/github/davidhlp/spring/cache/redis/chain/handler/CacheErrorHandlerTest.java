@@ -1,5 +1,7 @@
-package io.github.davidhlp.spring.cache.redis.chain;
+package io.github.davidhlp.spring.cache.redis.chain.handler;
 
+import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -129,7 +131,7 @@ class CacheErrorHandlerTest {
     class PerOperationStrategyTests {
 
         @ParameterizedTest(name = "{0} → success={1}")
-        @MethodSource("io.github.davidhlp.spring.cache.redis.chain.CacheErrorHandlerTest#perOperationStrategies")
+        @MethodSource("io.github.davidhlp.spring.cache.redis.chain.handler.CacheErrorHandlerTest#perOperationStrategies")
         @DisplayName("dispatches STRATEGIES map to handleException correctly")
         void handleError_dispatchesPerOperationStrategy(CacheOperation operation, boolean expectedSuccess) {
             Exception e = createException("Redis error for " + operation);

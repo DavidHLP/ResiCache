@@ -7,8 +7,6 @@ import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationM
 
 import org.springframework.stereotype.Component;
 
-import java.util.function.UnaryOperator;
-
 /**
  * 把 {@code @RedisCacheable / @RedisCachePut / @RedisCacheEvict} 三个公开注解的属性
  * 投影到统一的 {@link RedisCacheAttributes} 值对象上。
@@ -26,10 +24,9 @@ import java.util.function.UnaryOperator;
  * 无需投影层。
  *
  * <p><b>ADR-0019 seam 收敛</b>：三个 {@code from(annotation)} 公共面之下，22 个共享字段
- * 的 builder 链已下沉到单一 {@link #project(FieldSource, UnaryOperator) project} 方法
- * + 三个轻量 {@code extractFrom(annotation)} 提取器。{@code from(Cacheable)} 与
- * {@code from(Put)} 共享 {@link #NO_EVICT_DELTA}（{@code @Builder} 默认 allEntries /
- * beforeInvocation = false），{@code from(Evict)} 自带 Evict-only delta 函数。后续新增
+ * 的 builder 链已下沉到单一 {@code project(FieldSource, boolean, boolean)} 方法
+ * + 三个轻量 {@code extractFrom(annotation)} 提取器。Cacheable / Put 的 Evict-only
+ * 字段显式传 {@code false}，Evict 则传入注解值。后续新增
  * 共享字段：1 处改 {@link FieldSource} + 1 处改 {@code project()} body + 3 处改
  * {@code extractFrom()}（或部分子集），不再三处重复同一份 builder 链。
  *
@@ -48,14 +45,14 @@ public class RedisCacheAttributesProjector {
      * <p>注：{@code cacheNames} 与 {@code value} 合并——{@code cacheNames} 优先、为空则用 {@code value}。
      */
     public RedisCacheAttributes from(RedisCacheable annotation) {
-        return annotation == null ? null : project(extractFrom(annotation), NO_EVICT_DELTA);
+        return annotation == null ? null : project(extractFrom(annotation), false, false);
     }
 
     /**
      * 从 {@link RedisCachePut} 投影。
      */
     public RedisCacheAttributes from(RedisCachePut annotation) {
-        return annotation == null ? null : project(extractFrom(annotation), NO_EVICT_DELTA);
+        return annotation == null ? null : project(extractFrom(annotation), false, false);
     }
 
     /**
@@ -71,10 +68,8 @@ public class RedisCacheAttributesProjector {
         if (annotation == null) {
             return null;
         }
-        return project(
-                extractFrom(annotation),
-                b -> b.allEntries(annotation.allEntries())
-                     .beforeInvocation(annotation.beforeInvocation()));
+        return project(extractFrom(annotation),
+                annotation.allEntries(), annotation.beforeInvocation());
     }
 
     // ---------------------------------------------------------------------
@@ -86,14 +81,13 @@ public class RedisCacheAttributesProjector {
      *
      * <p>存在意义：Java 注解类型不可共享接口，无法用 {@code extends} / {@code default}
      * 方法提取公共读取路径。本 record 把 3 个注解的 22 字段统一成一个 type-safe 容器，
-     * 让 {@link #project(FieldSource, UnaryOperator)} 能以单一 builder 链消费三种
+     * 让统一投影方法能以单一 builder 链消费三种
      * 来源，避免在 3 个 {@code from(annotation)} 内重复同一份 22 字段链。
      *
      * <p>字段顺序与 {@link #project} body 内 builder 调用顺序一致，便于审计"字段→属性"
      * 映射。新增字段时同步：{@link FieldSource} 组件 + {@code project()} body +
      * {@code extractFrom(annotation)}（按字段在注解中是否真实存在决定是否需要更新）。
      *
-     * @see #project(FieldSource, UnaryOperator)
      */
     private record FieldSource(
             String[] cacheNames,
@@ -119,22 +113,16 @@ public class RedisCacheAttributesProjector {
             long syncTimeout) {}
 
     /**
-     * 共享的 Evict-only delta 函数：Cacheable / Put 不持有 {@code allEntries} /
-     * {@code beforeInvocation} 字段，{@code @Builder} 默认 false，故传 no-op 函数。
-     */
-    private static final UnaryOperator<RedisCacheAttributes.RedisCacheAttributesBuilder> NO_EVICT_DELTA = b -> b;
-
-    /**
-     * 单一 builder 链 seam：22 字段从 {@link FieldSource} 流入 {@link RedisCacheAttributes.RedisCacheAttributesBuilder}，
-     * Evict-only delta（{@code allEntries / beforeInvocation}）由调用方函数注入。
+     * 单一 builder 链 seam：22 字段从 {@link FieldSource} 流入 {@link RedisCacheAttributes}，
+     * Evict-only 字段由调用方显式传入。
      *
      * <p><b>唯一权威 builder 链</b>——3 个 {@code from(annotation)} 都收敛到此方法，
      * 任何字段读取/写入错误都会被一次修改覆盖所有来源。{@code cacheNames} 与 {@code value}
      * 在此处走 {@link #resolveCacheNames} 合并。
      */
     private static RedisCacheAttributes project(
-            FieldSource f, UnaryOperator<RedisCacheAttributes.RedisCacheAttributesBuilder> evictDelta) {
-        RedisCacheAttributes.RedisCacheAttributesBuilder b = RedisCacheAttributes.builder()
+            FieldSource f, boolean allEntries, boolean beforeInvocation) {
+        var b = RedisCacheAttributes.builder()
                 .cacheNames(resolveCacheNames(f.cacheNames(), f.value()))
                 .key(f.key())
                 .keyGenerator(f.keyGenerator())
@@ -154,8 +142,9 @@ public class RedisCacheAttributesProjector {
                 .earlyExpirationThreshold(f.earlyExpirationThreshold())
                 .earlyExpirationMode(f.earlyExpirationMode())
                 .sync(f.sync())
-                .syncTimeout(f.syncTimeout());
-        evictDelta.apply(b);
+                .syncTimeout(f.syncTimeout())
+                .allEntries(allEntries)
+                .beforeInvocation(beforeInvocation);
         return b.build();
     }
 

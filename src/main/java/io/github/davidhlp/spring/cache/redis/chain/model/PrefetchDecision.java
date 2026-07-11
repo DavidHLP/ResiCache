@@ -5,7 +5,7 @@ import org.springframework.lang.Nullable;
 
 /**
  * 预取/提前过期决策 — {@link io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationHandler}
- * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.ActualCacheHandler} 读取的
+ * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler} 读取的
  * 类型化跨 handler 消息(ADR-0036 / Round 26 C1).
  *
  * <p><b>替代 {@code CacheContext.attributes} 的 3 个业务 magic-string key</b>:

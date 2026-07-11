@@ -281,8 +281,10 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │   └── handler/         #   AnnotationHandler + 注解处理链
 ├── cache/               # RedisProCache, RedisProCacheManager, RedisProCacheWriter, RedisCacheInterceptor
 │   └── metrics/         #   CacheMetrics + Micrometer 注册与计时
-├── chain/               # 责任链：CacheHandler/Chain/Factory + AbstractCacheHandler + ActualCacheHandler
+├── chain/               # 责任链：CacheHandler/Chain/Factory + AbstractCacheHandler
+│   ├── handler/         #   ActualCacheHandler + CacheErrorHandler
 │   ├── model/           #   CacheInput(不可变) / CacheOutput(可变) / CacheContext
+│   ├── metadata/        #   方法调用元数据解析、作用域与异步快照
 │   └── observer/        #   Observer 契约、注册器与标准实现
 ├── config/              # 自动配置 + RedisProCacheProperties + SecureJackson
 ├── protection/          # 五大防护机制

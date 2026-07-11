@@ -3,7 +3,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
 import io.github.davidhlp.spring.cache.redis.integration.TestApplication;
 import io.github.davidhlp.spring.cache.redis.integration.TestRedisConfiguration;
-import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.integration.TestCacheService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

@@ -140,15 +140,12 @@ class EarlyExpirationHandlerRaceConditionTest {
         CachedValue originalValue = createCachedValue(60, System.currentTimeMillis(), 1L);
         CachedValue newValue = createCachedValue(60, System.currentTimeMillis(), 2L);
 
-        AtomicReference<Object> capturedValue = new AtomicReference<>();
         CountDownLatch refreshStarted = new CountDownLatch(1);
-        CountDownLatch testComplete = new CountDownLatch(1);
+        CountDownLatch allowRefresh = new CountDownLatch(1);
+        CountDownLatch refreshFinished = new CountDownLatch(1);
 
         lenient().when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-        lenient().when(valueOperations.get("test:key")).thenAnswer(invocation -> {
-            capturedValue.set(invocation.getMock());
-            return originalValue;
-        });
+        lenient().when(valueOperations.get("test:key")).thenReturn(originalValue);
         lenient().when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
         doAnswer(invocation -> {
@@ -156,16 +153,15 @@ class EarlyExpirationHandlerRaceConditionTest {
             executor.submit(() -> {
                 try {
                     refreshStarted.countDown();
-                    // Simulate async refresh seeing original value
-                    runnable.run();
-                } catch (Exception e) {
-                    // ignore
-                } finally {
-                    try {
-                        testComplete.await(5, TimeUnit.SECONDS);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
+                    // Hold the refresh until the concurrent user write is visible.
+                    if (!allowRefresh.await(5, TimeUnit.SECONDS)) {
+                        return;
                     }
+                    runnable.run();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    refreshFinished.countDown();
                 }
             });
             return null;
@@ -177,9 +173,10 @@ class EarlyExpirationHandlerRaceConditionTest {
         assertThat(refreshStarted.await(5, TimeUnit.SECONDS)).isTrue();
         lenient().when(valueOperations.get("test:key")).thenReturn(newValue);
 
-        testComplete.countDown();
+        allowRefresh.countDown();
+        assertThat(refreshFinished.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // Verify user's explicit put was processed
+        // The handler read the original value, then the async refresh observed the newer value.
         verify(valueOperations, atLeast(2)).get("test:key");
     }
 

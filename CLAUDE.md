@@ -58,10 +58,11 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │                        #   ResiCacheFeatures
 │   └── metrics/         #   CacheMetrics + RedisProCacheMetricsRegistry + RedisProCacheTimers
 ├── chain/               # Chain of Responsibility (22% of source — see wiki/architecture/chain-of-responsibility)
-│   ├── (root, 23 files) #   CacheHandler/Chain/Factory, AbstractCacheHandler, ChainEngine (推进引擎),
-│   │                    #   ActualCacheHandler, HandlerOrder/Priority, CacheOperation/Result/InvocationContext,
-│   │                    #   ScopedActivation, ChainProtectionToggleResolver, MethodMetadataResolver(+Default),
-│   │                    #   MetadataKeys, CacheErrorHandler
+│   ├── (root)           #   CacheHandler/Chain/Factory, AbstractCacheHandler, ChainEngine (推进引擎),
+│   │                    #   HandlerOrder/Priority, CacheOperation/Result, ChainProtectionToggleResolver
+│   ├── handler/         #   ActualCacheHandler + CacheErrorHandler (terminal Redis execution)
+│   ├── metadata/        #   MethodMetadataResolver(+Default), CacheInvocationContext,
+│   │                    #   ScopedActivation, MetadataKeys
 │   ├── model/           #   CacheInput, CacheContext + 4 *Decision (Null/Ttl/Prefetch/EarlyExpiration)
 │   └── observer/        #   ChainObserver/Registry/Registration + 4 concrete observers
 ├── config/              # RedisCacheAutoConfiguration + 4 sibling @Configurations + RedisProCacheProperties (311 LOC),

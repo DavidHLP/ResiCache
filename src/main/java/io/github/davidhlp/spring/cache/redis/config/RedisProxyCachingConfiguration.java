@@ -3,7 +3,7 @@ package io.github.davidhlp.spring.cache.redis.config;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheOperationSource;
 import io.github.davidhlp.spring.cache.redis.cache.RedisCacheInterceptor;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
-import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.annotation.handler.AnnotationChainEngine;
 
 import org.springframework.beans.factory.annotation.Qualifier;

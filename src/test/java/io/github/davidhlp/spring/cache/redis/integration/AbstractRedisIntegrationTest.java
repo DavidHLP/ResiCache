@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.integration;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
@@ -95,6 +96,17 @@ public abstract class AbstractRedisIntegrationTest {
         // deepStart 幂等:已启动的容器直接返回,未启动的启动它
         Startables.deepStart(Collections.singletonList(REDIS_CONTAINER)).join();
         startSocatForward();
+    }
+
+    /**
+     * Stop the class-scoped forward before Testcontainers reuses the inherited
+     * static container for another integration-test class. Without this hook,
+     * the next class sees a non-empty process list and keeps forwarding to the
+     * previous container IP.
+     */
+    @AfterAll
+    static void stopClassSocatForward() {
+        stopSocatForwards();
     }
 
     private static synchronized void startSocatForward() {

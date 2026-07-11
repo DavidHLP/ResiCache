@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.chain;
+package io.github.davidhlp.spring.cache.redis.chain.metadata;
 
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;

@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
-import io.github.davidhlp.spring.cache.redis.chain.ScopedActivation;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.ScopedActivation;
 import io.github.davidhlp.spring.cache.redis.annotation.handler.AnnotationChainEngine;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInvocation;

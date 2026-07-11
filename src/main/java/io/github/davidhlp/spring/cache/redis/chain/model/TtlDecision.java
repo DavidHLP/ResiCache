@@ -2,7 +2,7 @@ package io.github.davidhlp.spring.cache.redis.chain.model;
 
 /**
  * TTL 决策 — {@link io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlHandler}
- * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.ActualCacheHandler} 读取的
+ * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler} 读取的
  * 类型化跨 handler 消息。
  *
  * <p><b>ADR-0033 替代 {@code CacheOutput.shouldApplyTtl}/{@code finalTtl}/{@code ttlFromContext}

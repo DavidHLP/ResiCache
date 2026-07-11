@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.chain;
+package io.github.davidhlp.spring.cache.redis.chain.metadata;
 
 import org.springframework.context.expression.AnnotatedElementKey;
 

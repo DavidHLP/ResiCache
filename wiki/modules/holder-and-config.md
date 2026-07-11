@@ -9,8 +9,8 @@ tags:
   - CachingEnablementValidation
 related: [operations, auto-configuration, annotations, 0002-keep-interceptor]
 source-files:
-  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/MethodMetadataResolver.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/DefaultMethodMetadataResolver.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/metadata/MethodMetadataResolver.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/metadata/DefaultMethodMetadataResolver.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProxyCachingConfiguration.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisCacheRegistryConfiguration.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/CachingEnablementValidation.java
@@ -23,13 +23,13 @@ updated: 2026-06-29
 
 # 方法元数据解析与配置装配辅助
 
-两个散落但重要的辅助:`chain` 包的 `MethodMetadataResolver` 持有"当前 AOP 拦截方法"的元数据;`config` 包除 `RedisProCacheProperties`/`SecureJackson`/`RedisProCacheConfiguration` 外的几个装配类。
+两个散落但重要的辅助:`chain/metadata` 包的 `MethodMetadataResolver` 持有"当前 AOP 拦截方法"的元数据;`config` 包除 `RedisProCacheProperties`/`SecureJackson`/`RedisProCacheConfiguration` 外的几个装配类。
 
 > **Path C(WS-1.3)重构**:本页原描述的 `holder/CacheOperationMetadataHolder`(静态 ThreadLocal 工具类)已于 Path C Step 7 删除,方法元数据的持有与访问职责迁到 Spring 托管的 `MethodMetadataResolver` Bean。
 
 ## MethodMetadataResolver
 
-`src/main/java/io/github/davidhlp/spring/cache/redis/chain/MethodMetadataResolver.java`
+`src/main/java/io/github/davidhlp/spring/cache/redis/chain/metadata/MethodMetadataResolver.java`
 
 `MethodMetadataResolver` 接口 + `DefaultMethodMetadataResolver`(`@Component`)封装"当前 AOP 拦截的缓存方法元数据"的访问。拦截器 `ResiCacheMethodInterceptor`(继承 `RedisCacheInterceptor`,见 [[cache-core]])在 `invoke` 时激活当前方法的 `AnnotatedElementKey`(method + targetClass);责任链与 `RedisProCacheWriter`(`buildContext()`/`lookupOperation()`)通过注入的 resolver 读 `currentMethod()`/`currentTargetClass()`/`currentKey()`,避免每次调用重复解析注解。
 

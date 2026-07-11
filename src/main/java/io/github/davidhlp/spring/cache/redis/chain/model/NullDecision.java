@@ -4,7 +4,7 @@ import org.springframework.lang.Nullable;
 
 /**
  * Null 值处理决策 — {@link io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValueHandler}
- * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.ActualCacheHandler} 读取的
+ * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler} 读取的
  * 类型化跨 handler 消息。
  *
  * <p><b>ADR-0033 替代 {@code CacheOutput.storeValue} 单字段</b>:

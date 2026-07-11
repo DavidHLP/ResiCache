@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.chain;
+package io.github.davidhlp.spring.cache.redis.chain.metadata;
 
 /**
  * Path C (WS-1.3) — try-with-resources 句柄,封装

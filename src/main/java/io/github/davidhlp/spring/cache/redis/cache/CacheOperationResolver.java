@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
