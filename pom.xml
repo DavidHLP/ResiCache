@@ -55,6 +55,14 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <redisson.version>3.50.0</redisson.version>
+        <!--
+            WSL2 native docker: docker0 bridge state DOWN → JVM cannot connect to
+            Testcontainers' Ryuk resource-reaper container (Connection reset).
+            Disabling Ryuk lets @Testcontainers tests run; container cleanup still
+            works via Testcontainers shutdown hooks. CI can override with
+            -Dtestcontainers.ryuk.disabled=false if Ryuk is desired there.
+        -->
+        <testcontainers.ryuk.disabled>true</testcontainers.ryuk.disabled>
     </properties>
 
     <!-- Override Spring Boot parent's testcontainers-bom: parent 管理的 1.20.6 拉入
@@ -264,6 +272,26 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <environmentVariables>
+                        <TESTCONTAINERS_RYUK_DISABLED>${testcontainers.ryuk.disabled}</TESTCONTAINERS_RYUK_DISABLED>
+                    </environmentVariables>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <environmentVariables>
+                        <TESTCONTAINERS_RYUK_DISABLED>${testcontainers.ryuk.disabled}</TESTCONTAINERS_RYUK_DISABLED>
+                    </environmentVariables>
+                </configuration>
             </plugin>
 
             <plugin>
