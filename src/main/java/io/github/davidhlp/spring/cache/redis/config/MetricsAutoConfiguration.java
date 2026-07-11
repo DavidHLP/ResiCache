@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import io.github.davidhlp.spring.cache.redis.observability.RedisCacheHealthIndicator;
+import io.github.davidhlp.spring.cache.redis.health.RedisCacheHealthIndicator;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 

@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.operation;
 
-import io.github.davidhlp.spring.cache.redis.eviction.EvictionStats;
-import io.github.davidhlp.spring.cache.redis.eviction.TwoListLRU;
+import io.github.davidhlp.spring.cache.redis.operation.eviction.EvictionStats;
+import io.github.davidhlp.spring.cache.redis.operation.eviction.TwoListLRU;
 
 import lombok.extern.slf4j.Slf4j;
 

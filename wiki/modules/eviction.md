@@ -9,8 +9,8 @@ tags:
   - 淘汰
 related: [cache-core, cache-lifecycle]
 source-files:
-  - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/TwoListLRU.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/eviction/EvictionStats.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/operation/eviction/TwoListLRU.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/operation/eviction/EvictionStats.java
 status: stable
 created: 2026-06-21
 updated: 2026-07-04
@@ -22,7 +22,7 @@ updated: 2026-07-04
 
 ## TwoListLRU
 
-`src/main/java/io/github/davidhlp/spring/cache/redis/eviction/TwoListLRU.java:14`
+`src/main/java/io/github/davidhlp/spring/cache/redis/operation/eviction/TwoListLRU.java:14`
 
 泛型 `TwoListLRU<K, V>`,核心是两条链表:
 

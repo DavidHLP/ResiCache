@@ -14,7 +14,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCachePut.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCaching.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheOperationSource.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/handler/AnnotationHandler.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/annotation/handler/AnnotationHandler.java
 status: stable
 created: 2026-06-21
 updated: 2026-06-21
@@ -69,7 +69,7 @@ public User getUserById(Long id) { ... }
 
 ## 注解解析:AnnotationHandler 责任链
 
-`src/main/java/io/github/davidhlp/spring/cache/redis/handler/AnnotationHandler.java:10`
+`src/main/java/io/github/davidhlp/spring/cache/redis/annotation/handler/AnnotationHandler.java:10`
 
 **注意:这是一条独立的责任链,与防护机制那条(`CacheHandler` 链)不同。** 它负责「解析方法上的注解 → 产出 `List<CacheOperation>`」,运行于方法调用时:
 

@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
+import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.github.davidhlp.spring.cache.redis.chain.observer.MDCStampChainObserver;

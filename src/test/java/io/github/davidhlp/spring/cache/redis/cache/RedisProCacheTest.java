@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.cache.CacheMetrics;
+import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;

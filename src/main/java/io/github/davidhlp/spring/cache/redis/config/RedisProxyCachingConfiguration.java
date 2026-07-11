@@ -4,7 +4,7 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheOperationSourc
 import io.github.davidhlp.spring.cache.redis.cache.RedisCacheInterceptor;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
 import io.github.davidhlp.spring.cache.redis.chain.MethodMetadataResolver;
-import io.github.davidhlp.spring.cache.redis.handler.AnnotationChainEngine;
+import io.github.davidhlp.spring.cache.redis.annotation.handler.AnnotationChainEngine;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;

@@ -14,7 +14,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChain.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChainFactory.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainEngine.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainObserver.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/observer/ChainObserver.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/observer/
 status: stable
 created: 2026-06-21

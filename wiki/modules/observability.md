@@ -1,5 +1,5 @@
 ---
-title: 可观测性(observability)
+title: 健康检查与可观测性
 type: modules
 tags:
   - module
@@ -11,17 +11,17 @@ tags:
   - 健康检查
 related: [auto-configuration, configuration, cache-core, early-expiration, serialization, chain-of-responsibility]
 source-files:
-  - src/main/java/io/github/davidhlp/spring/cache/redis/observability/RedisCacheHealthIndicator.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/health/RedisCacheHealthIndicator.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/MetricsAutoConfiguration.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/SerializerWhitelistStartupGuard.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChain.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
 status: stable
 created: 2026-06-21
-updated: 2026-07-05
+updated: 2026-07-11
 ---
 
-# 可观测性
+# 健康检查与可观测性
 
 ResiCache 走 Spring Boot actuator 既有体系,不发明独立指标框架。
 

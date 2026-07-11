@@ -34,7 +34,7 @@
  *   <li><b>CacheHandlerChain</b>：责任链 facade —— 维护 handler 列表 + 委派
  *       {@code execute} 到 {@link io.github.davidhlp.spring.cache.redis.chain.ChainEngine}</li>
  *   <li><b>CacheHandlerChainFactory</b>：责任链工厂 —— 自动发现 + 排序 + 过滤 +
- *       装配 + 注册 4 个标准 {@link io.github.davidhlp.spring.cache.redis.chain.ChainObserver}</li>
+ *       装配 + 注册 4 个标准 {@link io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver}</li>
  *   <li><b>ChainEngine</b>：责任链推进引擎 —— 节点推进 + decision switch +
  *       观测编排 + post-process，ADR-0009 单一 seam</li>
  *   <li><b>ChainObserver</b>：观测注入点 —— aroundChain + perNode 四钩子 default no-op</li>

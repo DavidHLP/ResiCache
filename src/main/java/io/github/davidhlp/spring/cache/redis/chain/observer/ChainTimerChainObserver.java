@@ -1,7 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.chain.observer;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 
 import io.micrometer.core.instrument.MeterRegistry;

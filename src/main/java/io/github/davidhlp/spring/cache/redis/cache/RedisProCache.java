@@ -1,5 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
+import io.github.davidhlp.spring.cache.redis.cache.metrics.RedisProCacheMetricsRegistry;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 

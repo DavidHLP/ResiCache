@@ -277,9 +277,13 @@ ResiCache 是补齐这 3 项空白的 Redisson 搭档;JetCache 主打多级缓�
 ```
 src/main/java/io/github/davidhlp/spring/cache/redis/
 ├── annotation/          # @RedisCacheable, @RedisCacheEvict, @RedisCachePut, @RedisCaching
+├── annotation/          # Redis 缓存注解、解析器与适配器
+│   └── handler/         #   AnnotationHandler + 注解处理链
 ├── cache/               # RedisProCache, RedisProCacheManager, RedisProCacheWriter, RedisCacheInterceptor
+│   └── metrics/         #   CacheMetrics + Micrometer 注册与计时
 ├── chain/               # 责任链：CacheHandler/Chain/Factory + AbstractCacheHandler + ActualCacheHandler
-│   └── model/           #   CacheInput(不可变) / CacheOutput(可变) / CacheContext
+│   ├── model/           #   CacheInput(不可变) / CacheOutput(可变) / CacheContext
+│   └── observer/        #   Observer 契约、注册器与标准实现
 ├── config/              # 自动配置 + RedisProCacheProperties + SecureJackson
 ├── protection/          # 五大防护机制
 │   ├── avalanche/       #   TtlHandler (300) ── 防雪崩
@@ -287,13 +291,10 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │   ├── breakdown/       #   SyncLockHandler (200) + DistributedLockManager ── 防击穿
 │   ├── nullvalue/       #   NullValueHandler (400) ── 防穿透
 │   └── refresh/         #   EarlyExpirationHandler (250) ── 热 key 保护
-├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheRegister
-├── factory/             # OperationFactory + 具体工厂
-├── handler/             # AnnotationHandler + 注解处理器
-├── eviction/            # TwoListLRU + TwoListEvictionStrategy
+├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheRegister + 工厂
+│   └── eviction/        #   TwoListLRU + EvictionStats
 ├── serialization/       # SecureJackson / SecureNullValueDeserializer（安全反序列化）
-├── observability/       # RedisCacheHealthIndicator
-└── holder/              # CacheOperationMetadataHolder
+└── health/              # RedisCacheHealthIndicator
 ```
 
 ## ⚠️ Known Limitations / 已知限制

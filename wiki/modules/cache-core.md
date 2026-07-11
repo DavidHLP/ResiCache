@@ -14,7 +14,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheManager.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriter.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCache.java
-  - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistry.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/cache/metrics/RedisProCacheMetricsRegistry.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptor.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/cache/CachedValue.java
 status: stable
@@ -67,7 +67,7 @@ protected RedisCache getMissingCache(String name) {   // 懒加载未预声明�
 
 ## RedisProCacheMetricsRegistry — 指标写侧 seam
 
-`src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistry.java:1`
+`src/main/java/io/github/davidhlp/spring/cache/redis/cache/metrics/RedisProCacheMetricsRegistry.java:1`
 
 与 `[[CacheMetrics]]` 读侧快照值对象配对的写侧 seam。`RedisProCache` 6 个 metric 字段(3 Timer + 4 Counter)+ 12 行注册样板 + 5 处分散自增全部收口到本类。`RedisProCache` 构造期一次性 build,运行期 override 全部退化为 1 行委派(`metricsRegistry.recordXxx(...)`)。
 

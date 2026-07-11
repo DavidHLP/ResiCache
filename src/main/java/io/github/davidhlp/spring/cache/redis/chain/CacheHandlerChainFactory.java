@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
+import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserverRegistration;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 

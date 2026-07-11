@@ -4,7 +4,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.ChainObserver;
+import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;

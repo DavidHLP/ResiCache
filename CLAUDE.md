@@ -52,16 +52,18 @@
 ```
 src/main/java/io/github/davidhlp/spring/cache/redis/
 ├── annotation/          # @RedisCacheable/Put/Evict/Caching + AnnotationParser/Adapter + OperationSource
+│   └── handler/         #   AnnotationHandler + Abstract + 4 concrete handlers + AnnotationChainEngine
 ├── cache/               # Spring integration core: RedisProCache(Manager/Writer), RedisCacheInterceptor,
 │                        #   LoaderOrchestrator, CacheOperationResolver, CacheKeys, CachedValue,
-│                        #   ResiCacheFeatures + CacheMetrics/RedisProCacheMetricsRegistry/RedisProCacheTimers
+│                        #   ResiCacheFeatures
+│   └── metrics/         #   CacheMetrics + RedisProCacheMetricsRegistry + RedisProCacheTimers
 ├── chain/               # Chain of Responsibility (22% of source — see wiki/architecture/chain-of-responsibility)
 │   ├── (root, 23 files) #   CacheHandler/Chain/Factory, AbstractCacheHandler, ChainEngine (推进引擎),
 │   │                    #   ActualCacheHandler, HandlerOrder/Priority, CacheOperation/Result/InvocationContext,
 │   │                    #   ScopedActivation, ChainProtectionToggleResolver, MethodMetadataResolver(+Default),
 │   │                    #   MetadataKeys, CacheErrorHandler
 │   ├── model/           #   CacheInput, CacheContext + 4 *Decision (Null/Ttl/Prefetch/EarlyExpiration)
-│   └── observer/        #   ChainObserver + 4 concrete (Timer/FiredCounter/DebugLog/MDCStamp)
+│   └── observer/        #   ChainObserver/Registry/Registration + 4 concrete observers
 ├── config/              # RedisCacheAutoConfiguration + 4 sibling @Configurations + RedisProCacheProperties (311 LOC),
 │                        #   RedisConnectionConfiguration + RedissonConfiguration + TlsConfigurationValidator,
 │                        #   SerializerWhitelistStartupGuard + SerializationPreFlightProbe + JacksonConfig,
@@ -75,11 +77,10 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │   └── refresh/         #   EarlyExpirationHandler (250) + Mode/Policy(+Default) + Scripts + Executor(ThreadPool) + Retry/Metrics - hot key
 ├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheAttributes + AttributePopulator + RedisCacheRegister +
 │                        #   OperationKind + OperationFactory + SpringCacheableAdapterFactory + RedisCacheAttributesProjector
-├── handler/             # AnnotationHandler + Abstract + 4 concrete (Cacheable/Put/Evict/Caching) + AnnotationChainEngine
-├── eviction/            # TwoListLRU + EvictionStats
+│   └── eviction/        #   TwoListLRU + EvictionStats (RedisCacheRegister's bounded metadata store)
 ├── serialization/       # SecureJacksonRedisSerializer + SecureJacksonSerializerFactory + VersionEnvelope +
 │                        #   WhitelistPolicy + SecureNullValueDeserializer + TypeSupport + SerializationException
-└── observability/       # RedisCacheHealthIndicator (actuator health) — note: cache metrics classes live in cache/
+└── health/              # RedisCacheHealthIndicator (actuator health)
 ```
 
 > 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`holder/`、`factory/`(已并入 `operation/`,ADR-0065 收尾) —— 见 `a5ab55b` 重构。wiki 始终以实际源码为准。
@@ -88,8 +89,8 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 
 ```
 src/test/java/io/github/davidhlp/spring/cache/redis/
-├── (mirror packages: annotation/, cache/, chain/{,observer/}, config/, eviction/,
-│   handler/, operation/, protection/{avalanche,bloom{,filter},breakdown,nullvalue,refresh},
+├── (mirror packages: annotation/{,handler/}, cache/{,metrics/}, chain/{,observer/}, config/,
+│   operation/{,eviction/}, protection/{avalanche,bloom{,filter},breakdown,nullvalue,refresh},
 │   serialization/)              # unit tests mirroring src/main/java structure
 ├── integration/                 # ALL Testcontainers-based integration tests + shared scaffolding:
 │   ├── AbstractRedisIntegrationTest  # base class — Redis container + socat forward + @DynamicPropertySource
@@ -130,7 +131,7 @@ Each handler implements `CacheHandler` interface with `handle()` method.
 | Understand the chain / a mechanism | `wiki/architecture/` and `wiki/mechanisms/` |
 | Understand a module | `wiki/modules/<name>.md` |
 | Add a new cache protection handler | `protection/<mechanism>/` + implement `CacheHandler`, annotate `@HandlerPriority(HandlerOrder.X)` |
-| Modify annotation processing | `handler/` + `AnnotationHandler` interface |
+| Modify annotation processing | `annotation/handler/` + `AnnotationHandler` interface |
 | Change Redis connection config | `config/RedisConnectionConfiguration.java` |
 | Configure behavior | `wiki/modules/configuration.md` + `config/RedisProCacheProperties.java` |
 | Add integration tests | `AbstractRedisIntegrationTest.java` + Testcontainers |
