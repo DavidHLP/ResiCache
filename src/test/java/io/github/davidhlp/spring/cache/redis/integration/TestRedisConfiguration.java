@@ -83,16 +83,29 @@ public class TestRedisConfiguration {
 
         RedisProCacheProperties.RedissonProperties redissonProps = properties.getRedisson();
 
-        config.useSingleServer()
-                .setAddress(address)
-                .setDatabase(0)
-                .setConnectionPoolSize(redissonProps.getConnectionPoolSize())
-                .setConnectionMinimumIdleSize(redissonProps.getConnectionMinimumIdleSize())
-                .setIdleConnectionTimeout(redissonProps.getIdleConnectionTimeout())
-                .setConnectTimeout(redissonProps.getConnectTimeout())
-                .setTimeout(redissonProps.getTimeout())
-                .setRetryAttempts(redissonProps.getRetryAttempts())
-                .setRetryInterval(redissonProps.getRetryInterval());
+        if ("cluster".equalsIgnoreCase(properties.getRedis().getMode())) {
+            config.useClusterServers()
+                    .addNodeAddress(properties.getRedis().getClusterNodes().toArray(String[]::new))
+                    .setMasterConnectionPoolSize(redissonProps.getConnectionPoolSize())
+                    .setMasterConnectionMinimumIdleSize(
+                            redissonProps.getConnectionMinimumIdleSize())
+                    .setIdleConnectionTimeout(redissonProps.getIdleConnectionTimeout())
+                    .setConnectTimeout(redissonProps.getConnectTimeout())
+                    .setTimeout(redissonProps.getTimeout())
+                    .setRetryAttempts(redissonProps.getRetryAttempts())
+                    .setRetryInterval(redissonProps.getRetryInterval());
+        } else {
+            config.useSingleServer()
+                    .setAddress(address)
+                    .setDatabase(0)
+                    .setConnectionPoolSize(redissonProps.getConnectionPoolSize())
+                    .setConnectionMinimumIdleSize(redissonProps.getConnectionMinimumIdleSize())
+                    .setIdleConnectionTimeout(redissonProps.getIdleConnectionTimeout())
+                    .setConnectTimeout(redissonProps.getConnectTimeout())
+                    .setTimeout(redissonProps.getTimeout())
+                    .setRetryAttempts(redissonProps.getRetryAttempts())
+                    .setRetryInterval(redissonProps.getRetryInterval());
+        }
 
         return Redisson.create(config);
     }

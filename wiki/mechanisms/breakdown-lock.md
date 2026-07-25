@@ -12,9 +12,10 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/SyncLockHandler.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/DistributedLockManager.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/protection/breakdown/SyncSupport.java
+  - src/test/java/io/github/davidhlp/spring/cache/redis/integration/RedisClusterSlotIntegrationTest.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-28
+updated: 2026-07-26
 ---
 
 # 分布式锁(HandlerOrder 200)
@@ -127,7 +128,11 @@ Redis Cluster 按 slot 分片。旧锁 key = `prefix + key`,可能落到与缓�
 - Cluster + key 无 hash-tag:`prefix + "{" + key + "}"`(包裹,使 slot = CRC16(key) = 缓存 key slot);
 - Cluster + key 已含 hash-tag:`prefix + key`(保留)。
 
-测试用 lettuce `SlotHash.getSlot()` 权威校验锁 key 与缓存 key 同 slot。
+单元测试用 lettuce `SlotHash.getSlot()` 校验构造语义；`RedisClusterSlotIntegrationTest`
+再启动真实三主节点 `redis:7` Cluster，经 `@RedisCacheable(sync=true)` 生产路径观察实际
+Redisson 锁 key，断言它与写入的 cache key 返回相同 `CLUSTER KEYSLOT`，并执行双 key
+`EXISTS` 证明没有 `CROSSSLOT`。测试 teardown 还检查 `cluster_state:ok`，防止容器只启动
+却未形成有效 topology。
 
 ## 自定义锁后端
 

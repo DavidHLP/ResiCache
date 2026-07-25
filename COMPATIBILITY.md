@@ -74,4 +74,7 @@ misses on cutover. See [README → Known Limitations](README.md#known-limitation
   `resi-cache.transaction-aware=true`.
 - **Redis Cluster distributed locks**: lock keys are **hash-tag pinned** to the
   same slot as the cache key (WS-1.2b), so the lock and the data it guards
-  co-locate on one node. Validated at the key-construction level.
+  co-locate on one node. Validated by `RedisClusterSlotIntegrationTest` against a
+  real three-master `redis:7` Cluster: the live Redisson lock key and cache key
+  return the same `CLUSTER KEYSLOT`, and a two-key command completes without
+  `CROSSSLOT`.
