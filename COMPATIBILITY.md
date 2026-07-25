@@ -59,9 +59,10 @@ Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backe
 
 ⚠️ ResiCache serializes values in an internal `{version, payload}` envelope via
 `SecureJackson` for safe deserialization. This is **not** wire-compatible with
-Spring's `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. Existing
-caches must be **migrated** when adopting ResiCache, otherwise the entire cache
-misses on cutover. See [README → Known Limitations](README.md#known-limitations).
+Spring's `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. Existing caches must be **migrated** when adopting ResiCache, otherwise the
+entire cache misses on cutover. Use the bounded shadow-read → dual-write →
+cutover workflow in [Serialization Migration CLI](docs/serialization-migration.md);
+it preserves TTL, supports resumable rollback, and does not require a cache flush.
 
 ## Known limitations
 

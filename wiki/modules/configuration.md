@@ -12,7 +12,7 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-29
+updated: 2026-07-26
 ---
 
 # 配置体系(`resi-cache.*`)
@@ -84,10 +84,19 @@ Redisson 客户端与 Redis 部署形态(单机/哨兵/集群)配置,由 [[auto-
     polymorphic-typing-enabled: false                # 多态类型开关(默认 false)
     probe-enabled: false                             # 启动期 pre-flight 探测(R31,默认关闭):采样 N keys 检测非 envelope 遗留值 → WARN
     probe-sample-size: 100                           # 探测采样 key 数上限(默认 100)
+    migration:
+      phase: SHADOW_READ                             # SHADOW_READ/DUAL_WRITE/CUTOVER/ROLLBACK
+      legacy-serializer: GENERIC_JACKSON             # 或 JDK
+      pattern: "*"                                   # SCAN MATCH
+      max-keys: 1000                                 # 单次运行有界上限
+      batch-size: 100                                # SCAN count hint
+      dry-run: false                                 # write phase 预演
+      shadow-suffix: ":__resicache_envelope"
+      backup-suffix: ":__resicache_legacy"
 ```
 → [[serialization]],防 Jackson 多态类型攻击。
 
-`probe-enabled`(R31 起,opt-in 默认 `false`):启动期 `SerializationPreFlightProbe`(`@EventListener(ApplicationReadyEvent)`)采样 `probe-sample-size` 个 Redis key,检测非 `{version,payload}` envelope 的遗留值(Spring 原生 / JDK 序列化),发现则发 prominent WARN 提示接入存量项目须清空旧缓存或自行迁移。诊断工具,不松 envelope(ADR-0003);默认关闭因扫描 Redis 是启动副作用。详见 [[serialization]]。
+`probe-enabled`(R31 起,opt-in 默认 `false`):启动期 `SerializationPreFlightProbe`(`@EventListener(ApplicationReadyEvent)`)采样 `probe-sample-size` 个 Redis key,检测非 `{version,payload}` envelope 的遗留值(Spring 原生 / JDK 序列化),发现则发 prominent WARN。迁移由独立 `SerializationMigrationCli` 显式运行,不会随普通应用启动自动执行。`migration.phase` 默认 `SHADOW_READ`(零写入);完整 shadow/dual-write/cutover/rollback、安全和 operator 流程见 [[serialization]] 与 `docs/serialization-migration.md`。
 
 `allowed-package-prefixes` 通配(R9 起):`com.example.*` 匹配 `com.example.Foo` 与任意深度的 `com.example.sub.bar.Qux`(`WhitelistPolicy.matchesPrefix` dot-boundary 保护);literal 前缀如 `com.example` 沿用 `String.startsWith` 语义(intentional,候选 4 dot-boundary 仍 deferred as BREAKING)。
 

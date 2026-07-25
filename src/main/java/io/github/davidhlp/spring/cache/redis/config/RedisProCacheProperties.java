@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.config;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import io.github.davidhlp.spring.cache.redis.serialization.SerializationMigrationProperties;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -130,6 +131,9 @@ public class RedisProCacheProperties {
         private boolean probeEnabled = false;
         /** pre-flight 探测的采样 key 数上限(默认 100)。 */
         private int probeSampleSize = 100;
+        /** operator CLI migration workflow settings; never auto-executed at application startup. */
+        private SerializationMigrationProperties migration =
+                new SerializationMigrationProperties();
     }
 
     /**

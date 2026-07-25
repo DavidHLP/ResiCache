@@ -17,9 +17,11 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/serialization/SecureNullValueDeserializer.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/serialization/VersionEnvelope.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/serialization/SerializationException.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/serialization/SerializationMigrationEngine.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/serialization/SerializationMigrationCli.java
 status: stable
 created: 2026-06-21
-updated: 2026-06-29
+updated: 2026-07-26
 ---
 
 # 安全序列化
@@ -97,6 +99,20 @@ public byte[] serializeToBytes(Object value) {
 ## VersionEnvelope(STABILITY §3 线格式)
 
 `{version, payload}` 包络,版本字段让 0.0.x → 0.1.x 升级时旧数据能被识别。`STABILITY.md` §3 把 `{version, payload}` 列为 **never-change** wire format——这是 contract 承诺,不是实现细节。
+
+## Legacy serialization migration CLI
+
+`SerializationMigrationCli` 提供旁路、可续跑的四阶段 operator workflow:
+
+- `SHADOW_READ`:只做安全 legacy decode + 报告,零写入;
+- `DUAL_WRITE`:legacy source 保持不变,同 TTL 写 `:__resicache_envelope` sidecar;
+- `CUTOVER`:先保存同 TTL `:__resicache_legacy` backup,再以单 key Lua CAS + `KEEPTTL` 替换 source;
+- `ROLLBACK`:仅当 source 仍等于该 backup 对应 envelope 时 CAS 恢复,拒绝覆盖 cutover 后的新写入。
+
+Generic Jackson legacy 的 `@class` 与配置 type-property 都在反序列化前过
+`WhitelistPolicy`;JDK legacy 使用 restricted `ObjectInputStream`,禁止 proxy 和白名单外类。
+每次运行受 `max-keys` 限制,重复执行幂等续跑;失败数使 CLI 非成功退出。完整 operator
+顺序、dry-run、suffix 和 rollback 窗口见 `docs/serialization-migration.md`。
 
 ## SerializationException
 

@@ -89,7 +89,7 @@ public class SerializationPreFlightProbe {
                 "[ResiCache] Serialization pre-flight probe found {}/{} sampled Redis keys whose values are NOT "
                     + "in ResiCache's {{version,payload}} envelope format (ADR-0003). These will fail to deserialize "
                     + "and miss on cutover. Migrate legacy caches before relying on them; a shadow→dual-write→cutover "
-                    + "tool is planned for v0.2.0. (sample-size={}, set resi-cache.serializer.probe-enabled=false "
+                    + "CLI is available; start with SHADOW_READ. (sample-size={}, set resi-cache.serializer.probe-enabled=false "
                     + "to silence)",
                     nonEnvelope, scanned, sampleSize);
         }
@@ -99,7 +99,7 @@ public class SerializationPreFlightProbe {
      * 检测 bytes 是否为 ResiCache envelope(JSON object 含 {@code version} + {@code payload} 字段)。
      * 非 JSON(如 JDK 序列化)或缺少这两个字段的 JSON 视为非 envelope(遗留/外来格式)。
      */
-    static boolean isEnvelope(byte[] bytes) {
+    public static boolean isEnvelope(byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
             return false;
         }
