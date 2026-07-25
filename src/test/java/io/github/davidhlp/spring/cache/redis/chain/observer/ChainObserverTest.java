@@ -108,45 +108,119 @@ class ChainObserverTest {
     class TimerTests {
 
         @Test
-        @DisplayName("registry 缺失 → onChainStart 返回 null,onChainEnd 接收 null token 全 no-op")
+        @DisplayName("registry 缺失时节点计时 no-op")
         void nullRegistry_noOp() {
             ChainObserver observer = new ChainTimerChainObserver(null);
-            Object scopeToken = observer.onChainStart(ctx);
-            // ADR-0061:registry 缺失时 onChainStart 返回 null token,onChainEnd 接收 null
+
+            Object scopeToken = observer.onNodeStart(handler, ctx);
+
             assertThat(scopeToken).isNull();
-            observer.onChainEnd(ctx, scopeToken, CacheResult.success());
-            // 不抛异常 + context 不再被 attributes map 污染(ADR-0061:attributes 已删除)
+            observer.onNodeEnd(handler, ctx, scopeToken, HandlerResult.continueChain());
         }
 
         @Test
-        @DisplayName("registry 存在 → onChainStart 返回 TimerScope token,onChainEnd 接收并 record Timer 一次")
-        void withRegistry_recordsTimer() {
+        @DisplayName("成功节点按 handler、decision、cacheName 记录一次 Timer")
+        void successfulNode_recordsBoundedTags() {
             MeterRegistry registry = new SimpleMeterRegistry();
             ChainObserver observer = new ChainTimerChainObserver(registry);
+            CacheHandler namedHandler = new ContinueHandler();
 
-            // ADR-0061:onChainStart 返回 TimerScope token,onChainEnd 接收并计算 elapsed
-            Object scopeToken = observer.onChainStart(ctx);
-            assertThat(scopeToken).isNotNull();
-            observer.onChainEnd(ctx, scopeToken, CacheResult.success());
+            Object scopeToken = observer.onNodeStart(namedHandler, ctx);
+            observer.onNodeEnd(namedHandler, ctx, scopeToken,
+                    HandlerResult.terminate(CacheResult.success()));
 
-            Timer timer = registry.find("resicache.chain.execute").timer();
+            Timer timer = registry.find(ChainTimerChainObserver.METRIC_NAME)
+                    .tag("handler", "ContinueHandler")
+                    .tag("decision", "TERMINATE")
+                    .tag("cacheName", "test-cache")
+                    .timer();
             assertThat(timer).isNotNull();
             assertThat(timer.count()).isEqualTo(1L);
+            assertThat(timer.getId().getTags())
+                    .extracting(tag -> tag.getKey())
+                    .containsExactlyInAnyOrder("handler", "decision", "cacheName");
         }
 
         @Test
-        @DisplayName("多次 start/end → Timer count 累加")
-        void multipleRecords_countAccumulates() {
+        @DisplayName("动态 redisKey 不增加 meter cardinality")
+        void changingRedisKey_doesNotCreateMeters() {
             MeterRegistry registry = new SimpleMeterRegistry();
             ChainObserver observer = new ChainTimerChainObserver(registry);
+            CacheHandler namedHandler = new ContinueHandler();
 
-            for (int i = 0; i < 5; i++) {
-                Object scopeToken = observer.onChainStart(ctx);
-                observer.onChainEnd(ctx, scopeToken, CacheResult.success());
+            for (int i = 0; i < 20; i++) {
+                CacheContext dynamicContext = context("test-cache", "user:" + i);
+                Object scopeToken = observer.onNodeStart(namedHandler, dynamicContext);
+                observer.onNodeEnd(namedHandler, dynamicContext, scopeToken,
+                        HandlerResult.continueChain());
             }
 
-            Timer timer = registry.find("resicache.chain.execute").timer();
-            assertThat(timer.count()).isEqualTo(5L);
+            assertThat(registry.find(ChainTimerChainObserver.METRIC_NAME).timers())
+                    .singleElement()
+                    .satisfies(timer -> {
+                        assertThat(timer.count()).isEqualTo(20L);
+                        assertThat(timer.getId().getTag("redisKey")).isNull();
+                    });
+        }
+
+        @Test
+        @DisplayName("三种 decision 与 cacheName 形成明确有限的 meter 组合")
+        void decisionAndCacheName_partitionMeters() {
+            MeterRegistry registry = new SimpleMeterRegistry();
+            ChainObserver observer = new ChainTimerChainObserver(registry);
+            CacheHandler namedHandler = new ContinueHandler();
+            HandlerResult[] results = {
+                    HandlerResult.continueChain(),
+                    HandlerResult.skipAll(),
+                    HandlerResult.terminate()
+            };
+
+            for (String cacheName : new String[]{"catalog", "sessions"}) {
+                for (HandlerResult result : results) {
+                    CacheContext context = context(cacheName, "same-key");
+                    Object scopeToken = observer.onNodeStart(namedHandler, context);
+                    observer.onNodeEnd(namedHandler, context, scopeToken, result);
+                }
+            }
+
+            assertThat(registry.find(ChainTimerChainObserver.METRIC_NAME).timers())
+                    .hasSize(6)
+                    .allSatisfy(timer -> {
+                        assertThat(timer.count()).isEqualTo(1L);
+                        assertThat(timer.getId().getTag("decision"))
+                                .isIn("CONTINUE", "SKIP_ALL", "TERMINATE");
+                        assertThat(timer.getId().getTag("cacheName"))
+                                .isIn("catalog", "sessions");
+                    });
+        }
+
+        @Test
+        @DisplayName("异常节点只回收 token，不记录虚假 decision")
+        void nullResult_doesNotRecordTimer() {
+            MeterRegistry registry = new SimpleMeterRegistry();
+            ChainObserver observer = new ChainTimerChainObserver(registry);
+            CacheHandler namedHandler = new ContinueHandler();
+
+            Object scopeToken = observer.onNodeStart(namedHandler, ctx);
+            observer.onNodeEnd(namedHandler, ctx, scopeToken, null);
+
+            assertThat(registry.find(ChainTimerChainObserver.METRIC_NAME).timers()).isEmpty();
+        }
+
+        private CacheContext context(String cacheName, String redisKey) {
+            return CacheContext.of(CacheInput.builder()
+                    .operation(CacheOperation.GET)
+                    .cacheName(cacheName)
+                    .redisKey(redisKey)
+                    .actualKey(redisKey)
+                    .build());
+        }
+
+        private final class ContinueHandler implements CacheHandler {
+            @Override
+            public HandlerResult handle(CacheContext context) {
+                return HandlerResult.continueChain();
+            }
         }
     }
 

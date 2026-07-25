@@ -52,7 +52,7 @@ public final class ChainObserverRegistration {
         // 2. DEBUG log — 必注册(无 registry 依赖)
         engine.addObserver(new ChainDebugLogChainObserver());
 
-        // 3. Timer — registry 缺失时也注册(observer 内部 lazy 检测);保证 observer 列表
+        // 3. Timer — registry 缺失时也注册(observer 内部 no-op);保证 observer 列表
         //    在 registry 可用前后一致,Engine 调度逻辑无需区分
         MeterRegistry registry =
                 meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();

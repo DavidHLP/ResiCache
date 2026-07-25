@@ -266,20 +266,59 @@ public class ChainEngine {
     }
 
     /**
-     * 单节点调用：beforeNode → handler.handle(ctx) → afterNode。Engine 不捕获
-     * handler 异常（异常冒泡由调用方决定 — 当前 execute 的 try/finally 只守护
-     * onChainEnd 配对，handler 异常直接冒泡给 CacheHandlerChain.execute 的
-     * 调用方，与原 AbstractCacheHandler 行为一致：异常即不计 perNode counter / log）。
+     * 单节点调用：onNodeStart → beforeNode → handler.handle(ctx) → afterNode →
+     * onNodeEnd。Engine 不捕获 handler 异常，异常仍向调用方冒泡；但 token 化的
+     * onNodeEnd 由 finally 配对，避免计时等 around-node observer 泄漏调用状态。
      *
-     * <p>结果传递：handler.handle 返回后调用 afterNode(handler, ctx, result)，
-     * 让 observer（如 ChainDebugLogChainObserver / FiredCounterChainObserver）
-     * 能拿到 result.decision() 做后续处理。
+     * <p>原 beforeNode/afterNode 契约保持不变：handler 抛异常时 afterNode 不调用，
+     * 因而 DEBUG log / fired counter 不会把失败求值计作成功结果。onNodeEnd 此时收到
+     * null result，只负责回收 token，不应伪造 decision。
      */
     private HandlerResult invokeWithObservers(CacheHandler handler, CacheContext context) {
-        observers.forEachSafe(o -> o.beforeNode(handler, context));
-        HandlerResult result = handler.handle(context);
-        observers.forEachSafe(o -> o.afterNode(handler, context, result));
-        return result;
+        List<ChainObserver> observerList = observers.snapshot();
+        Object[] scopeTokens = new Object[observerList.size()];
+        for (int i = 0; i < observerList.size(); i++) {
+            ChainObserver observer = observerList.get(i);
+            try {
+                scopeTokens[i] = observer.onNodeStart(handler, context);
+            } catch (Exception ex) {
+                log.error("Observer {} onNodeStart failed: {}",
+                        observer.getClass().getSimpleName(), ex.toString(), ex);
+            }
+        }
+
+        HandlerResult result = null;
+        try {
+            for (ChainObserver observer : observerList) {
+                try {
+                    observer.beforeNode(handler, context);
+                } catch (Exception ex) {
+                    log.error("Observer {} beforeNode failed: {}",
+                            observer.getClass().getSimpleName(), ex.toString(), ex);
+                }
+            }
+            result = handler.handle(context);
+            HandlerResult completedResult = result;
+            for (ChainObserver observer : observerList) {
+                try {
+                    observer.afterNode(handler, context, completedResult);
+                } catch (Exception ex) {
+                    log.error("Observer {} afterNode failed: {}",
+                            observer.getClass().getSimpleName(), ex.toString(), ex);
+                }
+            }
+            return result;
+        } finally {
+            for (int i = 0; i < observerList.size(); i++) {
+                ChainObserver observer = observerList.get(i);
+                try {
+                    observer.onNodeEnd(handler, context, scopeTokens[i], result);
+                } catch (Exception ex) {
+                    log.error("Observer {} onNodeEnd failed: {}",
+                            observer.getClass().getSimpleName(), ex.toString(), ex);
+                }
+            }
+        }
     }
 
     // ==================== ChainLifecycle (ADR-0056 / Round 42 seam) ====================

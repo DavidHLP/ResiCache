@@ -147,7 +147,7 @@ class ChainEngineTest {
     class ObserverTests {
 
         @Test
-        @DisplayName("aroundChain:onChainStart → beforeNode → afterNode → onChainEnd 顺序执行")
+        @DisplayName("aroundChain 与 node token hooks 按嵌套顺序执行")
         void aroundChain_andPerNode_calledInOrder() {
             // ADR-0061:用真实 observer 录制 4 个钩子的调用顺序(替代 mock —— onChainStart
             // 返回 Object 后,mock-based 验证语义不再适用,真实 observer 录制更鲁棒)
@@ -157,9 +157,9 @@ class ChainEngineTest {
 
             engine.execute(snapshot, newCtx());
 
-            // 顺序:onChainStart → beforeNode → afterNode → onChainEnd
             assertThat(observer.events).containsExactly(
-                    "onChainStart", "beforeNode", "afterNode", "onChainEnd");
+                    "onChainStart", "onNodeStart", "beforeNode", "afterNode",
+                    "onNodeEnd", "onChainEnd");
         }
 
         @Test
@@ -200,10 +200,30 @@ class ChainEngineTest {
 
                 assertThat(result.isSuccess()).isTrue();
                 // aroundChain 未触发(fragment 不应 stamp MDC / record Timer)
-                assertThat(observer.events).containsExactly("beforeNode", "afterNode", "beforeNode", "afterNode");
+                assertThat(observer.events).containsExactly(
+                        "onNodeStart", "beforeNode", "afterNode", "onNodeEnd",
+                        "onNodeStart", "beforeNode", "afterNode", "onNodeEnd");
             } finally {
                 engine.clearCurrentSnapshotForTest();
             }
+        }
+
+        @Test
+        @DisplayName("handler 异常时 onNodeEnd 仍配对且 result 为 null")
+        void handlerThrows_nodeScopeStillCloses() {
+            NodeTokenRecordingObserver observer = new NodeTokenRecordingObserver();
+            engine.addObserver(observer);
+            CacheHandler throwing = context -> { throw new IllegalStateException("handler boom"); };
+            installChain(throwing);
+
+            assertThatThrownBy(() -> engine.execute(snapshot, newCtx()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("handler boom");
+
+            assertThat(observer.startCount).isEqualTo(1);
+            assertThat(observer.endCount).isEqualTo(1);
+            assertThat(observer.endToken).isSameAs(observer.startToken);
+            assertThat(observer.endResult).isNull();
         }
 
         @Test
@@ -233,6 +253,8 @@ class ChainEngineTest {
                 @Override public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
                     throw new RuntimeException("end boom");
                 }
+                @Override public Object onNodeStart(CacheHandler h, CacheContext context) { throw new RuntimeException("node start boom"); }
+                @Override public void onNodeEnd(CacheHandler h, CacheContext context, Object token, HandlerResult r) { throw new RuntimeException("node end boom"); }
                 @Override public void beforeNode(CacheHandler h, CacheContext context) { throw new RuntimeException("before boom"); }
                 @Override public void afterNode(CacheHandler h, CacheContext context, HandlerResult r) { throw new RuntimeException("after boom"); }
             };
@@ -452,6 +474,12 @@ class ChainEngineTest {
         }
 
         @Override
+        public Object onNodeStart(CacheHandler handler, CacheContext context) {
+            events.add("onNodeStart");
+            return null;
+        }
+
+        @Override
         public void beforeNode(CacheHandler handler, CacheContext context) {
             events.add("beforeNode");
         }
@@ -459,6 +487,12 @@ class ChainEngineTest {
         @Override
         public void afterNode(CacheHandler handler, CacheContext context, HandlerResult result) {
             events.add("afterNode");
+        }
+
+        @Override
+        public void onNodeEnd(CacheHandler handler, CacheContext context,
+                              Object scopeToken, HandlerResult result) {
+            events.add("onNodeEnd");
         }
 
         @Override
@@ -473,6 +507,29 @@ class ChainEngineTest {
      * <p>onChainStart 返回唯一标识 token,onChainEnd 校验传入的 token 与 start 时的
      * 引用相同(Engine 按 index 配对,跨 observer 不混淆)。无 state map 累积干扰。
      */
+    static class NodeTokenRecordingObserver implements ChainObserver {
+        int startCount;
+        int endCount;
+        Object startToken;
+        Object endToken;
+        HandlerResult endResult;
+
+        @Override
+        public Object onNodeStart(CacheHandler handler, CacheContext context) {
+            startCount++;
+            startToken = new Object();
+            return startToken;
+        }
+
+        @Override
+        public void onNodeEnd(CacheHandler handler, CacheContext context,
+                              Object scopeToken, HandlerResult result) {
+            endCount++;
+            endToken = scopeToken;
+            endResult = result;
+        }
+    }
+
     static class TokenRecordingObserver implements ChainObserver {
         int startCount = 0;
         int endCount = 0;

@@ -15,10 +15,12 @@ source-files:
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/MetricsAutoConfiguration.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/config/SerializerWhitelistStartupGuard.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/CacheHandlerChain.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/ChainEngine.java
   - src/main/java/io/github/davidhlp/spring/cache/redis/chain/AbstractCacheHandler.java
+  - src/main/java/io/github/davidhlp/spring/cache/redis/chain/observer/ChainTimerChainObserver.java
 status: stable
 created: 2026-06-21
-updated: 2026-07-11
+updated: 2026-07-26
 ---
 
 # 健康检查与可观测性
@@ -60,14 +62,15 @@ ResiCache 走 Spring Boot actuator 既有体系,不发明独立指标框架。
 
 ## 责任链执行可观测性
 
-责任链执行提供三层 runtime 信号(装配由 `CacheHandlerChainFactory` + `ChainObserver` 统一收口,Observer 4 钩子 `onChainStart`/`beforeNode`/`afterNode`/`onChainEnd`):
+责任链执行提供三层 runtime 信号(装配由 `CacheHandlerChainFactory` + `ChainObserver` 统一收口；链级和节点级 around-hook 都以 scope token 配对，不使用共享 `ThreadLocal` 状态):
 
 | 信号 | 类型 | 说明 |
 |---|---|---|
-| `resicache.chain.execute` | Micrometer Timer | 整条链 full lifecycle(head handle + post-process) |
+| `resicache.chain.execute` | Micrometer Timer(tags `handler`,`decision`,`cacheName`) | 单个 handler 调用耗时；decision 仅 `CONTINUE` / `SKIP_ALL` / `TERMINATE` |
 | `resicache.handler.fired` | Counter(tag `handler`) | 各 handler 被引擎求值频率,cardinality bounded(~6) |
 | `[chain]` DEBUG + MDC `requestId` | 日志 | 一次 GET/PUT 内所有 handler 共享 requestId,串联决策序列 |
 
+- `resicache.chain.execute` 不使用 `redisKey`、用户 ID、异常消息等无界 tag；其 meter 数只随已安装 handler、三值 decision 和应用配置的 cacheName 组合增长。handler 抛异常时节点 token 仍由 `finally` 配对回收，但因没有 decision 不记录虚假样本。
 - DEBUG 关闭时静默 no-op;requestId 用 `ThreadLocalRandom`(热路径规避 SecureRandom 熵竞争)。
 - MDC 用 snapshot/restore,finally 恢复调用方原值,**不**用 `MDC.clear()` 误清宿主线程其它 MDC(如 `traceId`)。
 - 语义 counter(`ttl.jittered` / `null.hit` / `sync.lock.acquired` / `bloom.blocked` / `early-refresh.triggered`)由 `AbstractCacheHandler#onAttachMetrics` 钩子统一注册,disabled handler 不注册(与 `fired` 行为对齐)。

@@ -11,7 +11,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
  * 责任链推进与观测的注入点 — ADR-0009 (Chain Engine extraction) D2.
  *
  * <p>本接口把责任链 advance / per-node / around-chain 各阶段的横切关注点
- * 收口到 4 个 default no-op 钩子，让 {@link ChainEngine} 与
+ * 收口到 default no-op 钩子，让 {@link ChainEngine} 与
  * {@link AbstractCacheHandler} 不再各自承担观测逻辑。Engine 驱动推进时
  * 按下列顺序调用各 observer：
  *
@@ -20,9 +20,12 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
  *       返回 {@code scopeToken} 用于 onChainEnd 恢复(如调用方原 MDC 值、Timer start nanos)</li>
  *   <li>每节点循环：
  *     <ul>
+ *       <li>{@link #onNodeStart(CacheHandler, CacheContext)} — 节点 around-hook 起点</li>
  *       <li>{@link #beforeNode(CacheHandler, CacheContext)} — per-node 前置</li>
  *       <li>handler.handle(ctx)</li>
- *       <li>{@link #afterNode(CacheHandler, CacheContext, HandlerResult)} — per-node 后置（DEBUG log / fired counter）</li>
+ *       <li>{@link #afterNode(CacheHandler, CacheContext, HandlerResult)} — 成功返回后的 per-node 后置</li>
+ *       <li>{@link #onNodeEnd(CacheHandler, CacheContext, Object, HandlerResult)} —
+ *           finally 配对的节点 around-hook 终点</li>
  *     </ul>
  *   </li>
  *   <li>{@link #onChainEnd(CacheContext, Object, CacheResult)} — 链出口 around-hook(MDC restore / Timer record);
@@ -33,7 +36,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
  * <p><b>ADR-0061 scope token 机制</b>:onChainStart 返回 {@code Object} 类型的
  * "scope token" 替代原 {@code CacheContext.attributes} 字符串键 map —— observer
  * 可在 token 内携带本调用专属的恢复状态(MDCStamp → previousRequestId,
- * ChainTimer → startNanos),Engine 在 onChainEnd 配对回传。CacheContext 不再
+ * ChainTimer → per-node startNanos),Engine 在对应 end hook 配对回传。CacheContext 不再
  * 提供 stringly-typed 通用 attributes 袋,observer 状态机完全自承,新 observer
  * 零字符串键漂移风险,Engine 不感知 observer 内部协议。
  *
@@ -79,6 +82,33 @@ public interface ChainObserver {
      * @param result     链执行最终结果(post-process 已执行)
      */
     default void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
+        // 默认 no-op
+    }
+
+    /**
+     * 节点 around-hook 起点。Engine 将返回 token 与
+     * {@link #onNodeEnd(CacheHandler, CacheContext, Object, HandlerResult)} 在 finally 中配对。
+     * observer 不应把节点调用状态保存在共享字段或 ThreadLocal 中。
+     *
+     * @param handler 即将被求值的 handler
+     * @param context 链上下文
+     * @return 本 observer 的节点调用 scope token(可为 null)
+     */
+    default Object onNodeStart(CacheHandler handler, CacheContext context) {
+        return null;
+    }
+
+    /**
+     * 节点 around-hook 终点。handler 抛异常时仍被调用，此时 {@code result} 为 null；
+     * observer 可回收 token，但不应虚构 decision 或成功样本。
+     *
+     * @param handler    已被求值的 handler
+     * @param context    链上下文
+     * @param scopeToken 本 observer 在 onNodeStart 返回的 token(可为 null)
+     * @param result     handler 的结果；handler 抛异常时为 null
+     */
+    default void onNodeEnd(CacheHandler handler, CacheContext context,
+                           Object scopeToken, HandlerResult result) {
         // 默认 no-op
     }
 

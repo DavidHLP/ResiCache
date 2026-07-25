@@ -21,13 +21,13 @@ import java.util.*;
  * <ol>
  *   <li>{@link MDCStampChainObserver} — 无 registry 依赖，必注册</li>
  *   <li>{@link ChainDebugLogChainObserver} — 无 registry 依赖，必注册</li>
- *   <li>{@link ChainTimerChainObserver} — registry 缺失时全 no-op 计时，仍注册（懒初始化）</li>
+ *   <li>{@link ChainTimerChainObserver} — registry 缺失时全 no-op，仍注册</li>
  *   <li>{@link FiredCounterChainObserver} — registry 缺失时全 no-op，仍注册</li>
  * </ol>
  *
  * <p>observer 装配时机：首次 {@link #createChain} 调时。ChainHandlerChain
  * 自身不再持有 metric 状态，所有 per-handler / per-chain 观测收口到 Engine 的
- * observer 列表。
+ * observer 列表。Timer 在节点 around-hook 中记录 handler + decision + cacheName。
  *
  * <p>设计改进：
  * <ul>
