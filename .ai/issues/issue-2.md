@@ -50,7 +50,7 @@
 - `DistributedLockManagerTest` + Cluster IT: 26 tests, 0 failures, 0 errors, 0 skipped; `BUILD SUCCESS`.
 - Checkstyle: 0 violations; `git diff --check`: clean.
 - The unchanged standalone `DistributedLockIntegrationTest` cannot start its pre-existing WSL2 fixture because this workstation lacks `socat`; rerunning it alone reproduces the same `Cannot start socat` before test execution. The new Cluster fixture does not depend on or weaken that asset.
-- Review and commit pending.
+- Review and commit completed; full repository regression passed.
 
 ## Review findings
 
