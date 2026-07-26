@@ -25,8 +25,16 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: ./.github/actions/setup-jdk-21
+        # release.yml is the only workflow that needs Maven Central / GPG
+        # deploy inputs. It calls actions/setup-java@v5 directly so the
+        # CI/PR composite action (./.github/actions/setup-jdk-21) does not
+        # accidentally forward empty server-id into ~/.m2/settings.xml and
+        # break non-deploy jobs with `servers.server[0].id is missing`.
+        uses: actions/setup-java@v5
         with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
           server-id: central
           server-username: OSSRH_USERNAME
           server-password: OSSRH_PASSWORD

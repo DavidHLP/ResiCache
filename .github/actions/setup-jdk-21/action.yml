@@ -8,10 +8,14 @@ description: >-
   composite instead of inlining `setup-java@v5` — single source
   of truth for JDK version + distribution + cache config.
 
-  Optional inputs (server-id, server-username, server-password,
-  gpg-private-key, gpg-passphrase) are pass-through for the
-  release workflow's Maven Central deployment needs. They are
-  not configured by default — only release.yml passes them.
+  Note: This composite intentionally does NOT forward Maven
+  Central / GPG deploy inputs. `actions/setup-java@v5`
+  unconditionally writes a `<server>` block to `~/.m2/settings.xml`
+  even when `server-id` is an empty string, which produces
+  `<server><id></id>…</server>` and causes Maven 3.9+ to abort
+  with `servers.server[0].id is missing`. CI and PR-check jobs
+  must not inherit that block. The release workflow calls
+  `actions/setup-java@v5` directly with deploy inputs.
 
 inputs:
   java-version:
@@ -26,26 +30,6 @@ inputs:
     description: 'Actions dependency cache (maven, gradle, or empty)'
     required: false
     default: 'maven'
-  server-id:
-    description: 'Maven settings.xml server id (release deploy only)'
-    required: false
-    default: ''
-  server-username:
-    description: 'Maven settings.xml server username (release only)'
-    required: false
-    default: ''
-  server-password:
-    description: 'Maven settings.xml server password (release only)'
-    required: false
-    default: ''
-  gpg-private-key:
-    description: 'GPG signing private key (release deploy only)'
-    required: false
-    default: ''
-  gpg-passphrase:
-    description: 'GPG signing passphrase (release deploy only)'
-    required: false
-    default: 'GPG_PASSPHRASE'
 
 runs:
   using: composite
@@ -56,11 +40,3 @@ runs:
         java-version: ${{ inputs.java-version }}
         distribution: ${{ inputs.distribution }}
         cache: ${{ inputs.cache }}
-        # Deploy-secret optional inputs are only forwarded when
-        # non-empty so non-release callers don't accidentally
-        # reference missing secrets in env: settings.
-        server-id: ${{ inputs.server-id }}
-        server-username: ${{ inputs.server-username }}
-        server-password: ${{ inputs.server-password }}
-        gpg-private-key: ${{ inputs.gpg-private-key }}
-        gpg-passphrase: ${{ inputs.gpg-passphrase }}
