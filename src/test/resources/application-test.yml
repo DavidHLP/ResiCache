@@ -8,8 +8,6 @@ spring:
 
 resi-cache:
   default-ttl: 30m
-  bloom-filter:
-    enabled: false
   early-expiration:
     enabled: false
   sync-lock:

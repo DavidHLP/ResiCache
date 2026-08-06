@@ -27,13 +27,6 @@ class RedisProCachePropertiesTest {
         }
 
         @Test
-        @DisplayName("默认启用布隆过滤器")
-        void bloomFilter_enabledByDefault() {
-            RedisProCacheProperties properties = new RedisProCacheProperties();
-            assertThat(properties.getBloomFilter().isEnabled()).isTrue();
-        }
-
-        @Test
         @DisplayName("默认启用提前过期")
         void earlyExpiration_enabledByDefault() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
@@ -67,48 +60,18 @@ class RedisProCachePropertiesTest {
     class BloomFilterPropertiesTests {
 
         @Test
-        @DisplayName("设置布隆过滤器启用状态")
-        void setEnabled_changesValue() {
+        @DisplayName("默认重建窗口为 30 秒")
+        void defaultRebuildWindowSeconds() {
             RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            bloomFilter.setEnabled(false);
-            assertThat(bloomFilter.isEnabled()).isFalse();
+            assertThat(bloomFilter.getRebuildWindowSeconds()).isEqualTo(30L);
         }
 
         @Test
-        @DisplayName("默认预期插入数量为 100000")
-        void defaultExpectedInsertions() {
+        @DisplayName("设置重建窗口")
+        void setRebuildWindowSeconds_changesValue() {
             RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            assertThat(bloomFilter.getExpectedInsertions()).isEqualTo(100000L);
-        }
-
-        @Test
-        @DisplayName("默认期望误判率为 0.01")
-        void defaultFalseProbability() {
-            RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            assertThat(bloomFilter.getFalseProbability()).isEqualTo(0.01);
-        }
-
-        @Test
-        @DisplayName("默认哈希缓存大小为 10000")
-        void defaultHashCacheSize() {
-            RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            assertThat(bloomFilter.getHashCacheSize()).isEqualTo(10000);
-        }
-
-        @Test
-        @DisplayName("设置预期插入数量")
-        void setExpectedInsertions_changesValue() {
-            RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            bloomFilter.setExpectedInsertions(500000L);
-            assertThat(bloomFilter.getExpectedInsertions()).isEqualTo(500000L);
-        }
-
-        @Test
-        @DisplayName("设置期望误判率")
-        void setFalseProbability_changesValue() {
-            RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            bloomFilter.setFalseProbability(0.001);
-            assertThat(bloomFilter.getFalseProbability()).isEqualTo(0.001);
+            bloomFilter.setRebuildWindowSeconds(60L);
+            assertThat(bloomFilter.getRebuildWindowSeconds()).isEqualTo(60L);
         }
     }
 
@@ -239,26 +202,6 @@ class RedisProCachePropertiesTest {
     }
 
     @Nested
-    @DisplayName("Handler 配置")
-    class HandlerConfigTests {
-
-        @Test
-        @DisplayName("默认禁用处理器列表为空")
-        void defaultDisabledHandlersList() {
-            RedisProCacheProperties.HandlerConfig config = new RedisProCacheProperties.HandlerConfig();
-            assertThat(config.getDisabledHandlers()).isEmpty();
-        }
-
-        @Test
-        @DisplayName("设置禁用处理器列表")
-        void setDisabledHandlers_changesList() {
-            RedisProCacheProperties.HandlerConfig config = new RedisProCacheProperties.HandlerConfig();
-            config.setDisabledHandlers(java.util.List.of("bloom-filter", "sync-lock"));
-            assertThat(config.getDisabledHandlers()).containsExactly("bloom-filter", "sync-lock");
-        }
-    }
-
-    @Nested
     @DisplayName("顶层属性配置")
     class TopLevelPropertiesTests {
 
@@ -279,27 +222,14 @@ class RedisProCachePropertiesTest {
         }
 
         @Test
-        @DisplayName("设置 Handler 设置")
-        void setHandlerSettings_changesMap() {
-            RedisProCacheProperties properties = new RedisProCacheProperties();
-            RedisProCacheProperties.HandlerConfig config = new RedisProCacheProperties.HandlerConfig();
-            config.setDisabledHandlers(java.util.List.of("bloom-filter"));
-            properties.setHandlerSettings(java.util.Map.of("user-cache", config));
-
-            assertThat(properties.getHandlerSettings()).containsKey("user-cache");
-            assertThat(properties.getHandlerSettings().get("user-cache").getDisabledHandlers())
-                    .containsExactly("bloom-filter");
-        }
-
-        @Test
         @DisplayName("设置布隆过滤器配置")
         void setBloomFilter_changesConfig() {
             RedisProCacheProperties properties = new RedisProCacheProperties();
             RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            bloomFilter.setEnabled(false);
+            bloomFilter.setRebuildWindowSeconds(60L);
             properties.setBloomFilter(bloomFilter);
 
-            assertThat(properties.getBloomFilter().isEnabled()).isFalse();
+            assertThat(properties.getBloomFilter().getRebuildWindowSeconds()).isEqualTo(60L);
         }
 
         @Test

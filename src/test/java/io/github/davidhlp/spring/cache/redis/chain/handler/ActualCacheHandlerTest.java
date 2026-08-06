@@ -10,7 +10,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
 
 import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
-import io.github.davidhlp.spring.cache.redis.protection.refresh.ThreadPoolEarlyExpirationExecutor;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.RefreshCancellation;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,7 +46,7 @@ class ActualCacheHandlerTest {
     private DefaultNullValuePolicy nullValuePolicy;
 
     @Mock
-    private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
+    private RefreshCancellation earlyExpirationExecutor;
 
     @Mock
     private CacheErrorHandler errorHandler;

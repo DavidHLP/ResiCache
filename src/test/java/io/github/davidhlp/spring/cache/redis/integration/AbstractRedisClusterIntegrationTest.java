@@ -51,7 +51,7 @@ public abstract class AbstractRedisClusterIntegrationTest {
         registry.add("spring.data.redis.port", () -> FIRST_REDIS_PORT);
         registry.add("resi-cache.redis.mode", () -> "cluster");
         registry.add("resi-cache.redis.database", () -> 0);
-        registry.add("resi-cache.bloom-filter.enabled", () -> false);
+        registry.add("resi-cache.protection.bloom-filter-enabled", () -> false);
     }
 
     @AfterAll

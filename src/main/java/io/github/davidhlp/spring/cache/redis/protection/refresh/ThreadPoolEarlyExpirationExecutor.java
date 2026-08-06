@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>失败的任务由 {@link RefreshRetryPolicy} 自动重试，最多 {@value RefreshRetryPolicy#MAX_RETRY_COUNT} 次。
  */
 @Slf4j
-public class ThreadPoolEarlyExpirationExecutor {
+public class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
 
     private final ExecutorService executorService;
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
@@ -180,6 +180,7 @@ public class ThreadPoolEarlyExpirationExecutor {
      *
      * @param key 要取消的提前过期任务的键
      */
+    @Override
     public void cancel(String key) {
         if (key == null) {
             return;

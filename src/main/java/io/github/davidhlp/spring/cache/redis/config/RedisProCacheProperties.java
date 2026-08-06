@@ -23,15 +23,18 @@ import java.util.concurrent.TimeUnit;
  * resi-cache:
  *   default-ttl: 30m
  *   bloom-filter:
- *     enabled: true
- *     expected-insertions: 100000
- *     false-probability: 0.01
+ *     rebuild-window-seconds: 30
  *   early-expiration:
- *     enabled: true
  *     pool-size: 2
  *     max-pool-size: 10
  *     queue-capacity: 100
  * </pre>
+ *
+ * <p>注:布隆过滤器的启用/关闭由 {@code resi-cache.protection.bloom-filter-enabled} 控制
+ * (见 {@link ProtectionProperties});{@code bloom-filter.enabled / expected-insertions /
+ * false-probability / hash-cache-size} 在历史上从未被生产代码读取,已删除。布隆实际参数
+ * (bit-size / hash-functions / hash-cache-size)由 {@code resi-cache.bloom.*} 经
+ * {@link io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterConfig} 读取。
  */
 @Getter
 @Setter
@@ -73,9 +76,6 @@ public class RedisProCacheProperties {
     /** 禁用的 Handler 列表（如 bloom-filter、early-expiration、sync-lock） */
     private List<String> disabledHandlers = new ArrayList<>();
 
-    /** Handler 配置（支持按 cacheName 细粒度禁用） */
-    private Map<String, HandlerConfig> handlerSettings = new HashMap<>();
-
     /** Spring 原生注解兼容模式: FULL, NONE, SELECTIVE。默认 SELECTIVE,避免双 Advisor。 */
     private NativeAnnotationMode nativeAnnotationMode = NativeAnnotationMode.SELECTIVE;
 
@@ -106,10 +106,6 @@ public class RedisProCacheProperties {
         private Boolean cacheNullValues;
         /** 缓存键前缀 */
         private String keyPrefix;
-        /** 是否启用布隆过滤器 */
-        private Boolean enableBloomFilter;
-        /** 是否启用提前过期 */
-        private Boolean enableEarlyExpiration;
     }
 
     /**
@@ -172,29 +168,9 @@ public class RedisProCacheProperties {
         private String redissonConfigPath;
     }
 
-    /**
-     * Handler 配置类
-     * 支持按缓存名称细粒度禁用特定的 Handler
-     */
-    @Getter
-    @Setter
-    public static class HandlerConfig {
-        /** 禁用的 Handler 列表 */
-        private List<String> disabledHandlers = new ArrayList<>();
-    }
-
     @Getter
     @Setter
     public static class BloomFilterProperties {
-        /** 是否启用布隆过滤器 */
-        private boolean enabled = true;
-        /** 预期插入数量 */
-        private long expectedInsertions = 100000;
-        /** 期望的误判率 */
-        private double falseProbability = 0.01;
-        /** 本地哈希缓存最大条目数（每个缓存实例） */
-        private int hashCacheSize = 10_000;
-
         /**
          * CLEAN 后布隆过滤器的 rebuilding 窗口(秒)。默认 {@code 30};{@code 0} = 禁用。
          *
@@ -290,8 +266,10 @@ public class RedisProCacheProperties {
      * 缓存仍按 TTL 正常过期,只是失去防穿透/击穿/雪崩/热 key 能力。
      *
      * <p><b>仅启动时生效</b>:责任链单例缓存于首次构建,运行时变更此属性需重启应用。
-     * <b>Blast radius</b>:类级开关关闭整个 {@code RedisCacheAutoConfiguration},
-     * 含 SecureJackson RedisTemplate(序列化器将回退 Spring 默认)。
+     * <b>Blast radius</b>:类级开关只短路防护纵深 handler(布隆/锁/提前过期/空值,经
+     * {@link io.github.davidhlp.spring.cache.redis.chain.ChainProtectionToggleResolver} 解析),
+     * <b>不</b>关闭整个 {@code RedisCacheAutoConfiguration} —— 后者由 {@code resi-cache.enabled}
+     * 门控(见 {@link RedisCacheAutoConfiguration})。TTL handler 不在此开关管辖(兼担基础 TTL 计算)。
      */
     @Getter
     @Setter
