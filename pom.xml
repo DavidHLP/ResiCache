@@ -56,11 +56,15 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <redisson.version>3.50.0</redisson.version>
         <!--
-            WSL2 native docker: docker0 bridge state DOWN → JVM cannot connect to
-            Testcontainers' Ryuk resource-reaper container (Connection reset).
-            Disabling Ryuk lets @Testcontainers tests run; container cleanup still
-            works via Testcontainers shutdown hooks. CI can override with
-            -Dtestcontainers.ryuk.disabled=false if Ryuk is desired there.
+            Ryuk (Testcontainers' resource-reaper) disabled by default. The real
+            blocker is image availability, not docker0: in registry-restricted
+            environments Docker Hub cannot be reached to pull testcontainers/ryuk,
+            and the locally-cached ryuk tag can mismatch the version a given
+            Testcontainers build requests (e.g. cached 0.12.0 vs 1.20.6's 0.11.0).
+            Disabling Ryuk lets @Testcontainers tests run everywhere; container
+            cleanup still works reliably via Testcontainers shutdown hooks
+            (verified: no leaked containers). CI / hosts with registry access may
+            override with -Dtestcontainers.ryuk.disabled=false if Ryuk is desired.
         -->
         <testcontainers.ryuk.disabled>true</testcontainers.ryuk.disabled>
     </properties>

@@ -1,55 +1,45 @@
 package io.github.davidhlp.spring.cache.redis.protection.bloom;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
- * BloomRebuilder 单元测试。
+ * BloomRebuilder 集成测试 — 真实 Redis 验证 rebuilding 状态机。
  *
- * <p>覆盖 rebuilding 窗口状态机:
- * <ul>
- *   <li>isRebuilding:窗口禁用 / Redis 标志存在 / 本地 Caffeine 缓存 / Redis 异常降级</li>
- *   <li>markRebuilding:窗口禁用 no-op / 写 Redis 标志(带 TTL)/ 异常不抛出</li>
- * </ul>
+ * <p>故障注入测试单独使用 mock，因为真实 Redis 无法按测试要求主动抛出异常。
  */
-@ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
-@DisplayName("BloomRebuilder Tests")
-class BloomRebuilderTest {
+@DisplayName("BloomRebuilder Tests (real Redis)")
+class BloomRebuilderTest extends AbstractRedisIntegrationTest {
 
     private static final String CACHE = "cache";
     private static final String REBUILD_KEY = "resicache:bloom:rebuild:" + CACHE;
 
-    @Mock
+    @Autowired
     private RedisTemplate<String, String> redisTemplate;
-
-    @Mock
-    private ValueOperations<String, String> valueOps;
 
     private RedisProCacheProperties properties;
 
     @BeforeEach
     void setUp() {
+        redisTemplate.getConnectionFactory().getConnection().flushDb();
         properties = new RedisProCacheProperties();
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
     }
 
     @Nested
@@ -59,7 +49,7 @@ class BloomRebuilderTest {
         @Test
         @DisplayName("窗口启用 + Redis 标志存在 → true")
         void isRebuilding_flagPresent_returnsTrue() {
-            when(redisTemplate.hasKey(REBUILD_KEY)).thenReturn(true);
+            redisTemplate.opsForValue().set(REBUILD_KEY, "1", Duration.ofSeconds(30));
             BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, properties);
 
             assertThat(rebuilder.isRebuilding(CACHE)).isTrue();
@@ -68,41 +58,42 @@ class BloomRebuilderTest {
         @Test
         @DisplayName("窗口启用 + Redis 标志缺失 → false")
         void isRebuilding_flagAbsent_returnsFalse() {
-            when(redisTemplate.hasKey(REBUILD_KEY)).thenReturn(false);
             BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, properties);
 
             assertThat(rebuilder.isRebuilding(CACHE)).isFalse();
         }
 
         @Test
-        @DisplayName("窗口禁用(window=0) → 直接返回 false,不查 Redis")
+        @DisplayName("窗口禁用(window=0) → 直接返回 false")
         void isRebuilding_windowDisabled_returnsFalseWithoutRedisCheck() {
+            redisTemplate.opsForValue().set(REBUILD_KEY, "1", Duration.ofSeconds(30));
             properties.getBloomFilter().setRebuildWindowSeconds(0);
             BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, properties);
 
             assertThat(rebuilder.isRebuilding(CACHE)).isFalse();
-            verify(redisTemplate, never()).hasKey(anyString());
         }
 
         @Test
         @DisplayName("Redis 查询异常 → 降级为 false,不抛出")
         void isRebuilding_redisThrows_returnsFalse() {
-            when(redisTemplate.hasKey(anyString())).thenThrow(new RuntimeException("Redis down"));
-            BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, properties);
+            // fault injection — real Redis cannot throw on demand
+            RedisTemplate<String, String> throwingTemplate = mock(RedisTemplate.class);
+            when(throwingTemplate.hasKey(anyString())).thenThrow(new RuntimeException("Redis down"));
+            BloomRebuilder rebuilder = new BloomRebuilder(throwingTemplate, properties);
 
             assertThat(rebuilder.isRebuilding(CACHE)).isFalse();
         }
 
         @Test
-        @DisplayName("本地 Caffeine 缓存命中后,重复查询不重复打 Redis")
+        @DisplayName("本地 Caffeine 缓存命中后保留第一次 Redis 结果")
         void isRebuilding_cachedLocally_skipsRedisOnRepeat() {
-            when(redisTemplate.hasKey(REBUILD_KEY)).thenReturn(true);
+            redisTemplate.opsForValue().set(REBUILD_KEY, "1", Duration.ofSeconds(30));
             BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, properties);
 
-            rebuilder.isRebuilding(CACHE);
-            rebuilder.isRebuilding(CACHE);
+            assertThat(rebuilder.isRebuilding(CACHE)).isTrue();
+            redisTemplate.delete(REBUILD_KEY);
 
-            verify(redisTemplate, times(1)).hasKey(anyString());
+            assertThat(rebuilder.isRebuilding(CACHE)).isTrue();
         }
 
         @Test
@@ -111,7 +102,6 @@ class BloomRebuilderTest {
             BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, null);
 
             assertThat(rebuilder.isRebuilding(CACHE)).isFalse();
-            verify(redisTemplate, never()).hasKey(anyString());
         }
     }
 
@@ -120,13 +110,17 @@ class BloomRebuilderTest {
     class MarkRebuildingTests {
 
         @Test
-        @DisplayName("窗口启用 → 写 Redis 标志(带 TTL=window)")
+        @DisplayName("窗口启用 → 写真实 Redis 标志(带 TTL=window)")
         void markRebuilding_windowEnabled_writesRedisFlagWithTtl() {
             BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, properties);
 
             rebuilder.markRebuilding(CACHE);
 
-            verify(valueOps).set(eq(REBUILD_KEY), eq("1"), any(Duration.class));
+            assertThat(redisTemplate.hasKey(REBUILD_KEY)).isTrue();
+            assertThat(redisTemplate.opsForValue().get(REBUILD_KEY)).isEqualTo("1");
+            assertThat(redisTemplate.getExpire(REBUILD_KEY))
+                    .isBetween(1L, properties.getBloomFilter().getRebuildWindowSeconds());
+            assertThat(rebuilder.isRebuilding(CACHE)).isTrue();
         }
 
         @Test
@@ -137,18 +131,22 @@ class BloomRebuilderTest {
 
             rebuilder.markRebuilding(CACHE);
 
-            verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
+            assertThat(redisTemplate.hasKey(REBUILD_KEY)).isFalse();
         }
 
         @Test
         @DisplayName("写 Redis 标志失败 → 不抛出(退化为无窗口旧行为)")
         void markRebuilding_redisSetThrows_doesNotPropagate() {
+            // fault injection — real Redis cannot throw on demand
+            RedisTemplate<String, String> throwingTemplate = mock(RedisTemplate.class);
+            ValueOperations<String, String> throwingOps = mock(ValueOperations.class);
+            when(throwingTemplate.opsForValue()).thenReturn(throwingOps);
             doThrow(new RuntimeException("Redis down"))
-                    .when(valueOps).set(anyString(), anyString(), any(Duration.class));
-            BloomRebuilder rebuilder = new BloomRebuilder(redisTemplate, properties);
+                    .when(throwingOps).set(anyString(), anyString(), any(Duration.class));
+            BloomRebuilder rebuilder = new BloomRebuilder(throwingTemplate, properties);
 
-            // 不应抛出:标志失败仅记日志
-            rebuilder.markRebuilding(CACHE);
+            assertThatCode(() -> rebuilder.markRebuilding(CACHE))
+                    .doesNotThrowAnyException();
         }
     }
 

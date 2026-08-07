@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.protection.bloom.filter;
 
+import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterConfig;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomHashStrategy;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.MessageDigestBloomHashStrategy;
@@ -7,34 +8,28 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.HashOperations;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
- * RedisBloomIFilter 单元测试
+ * RedisBloomIFilter 集成测试 — 真实 Redis 验证。
+ *
+ * <p>布隆位图由 Redis hash 中的真实字段驱动。故障注入测试单独使用 mock，
+ * 因为真实 Redis 无法按测试要求主动抛出异常。
  */
-@ExtendWith(MockitoExtension.class)
-@DisplayName("RedisBloomIFilter Tests")
-class RedisBloomIFilterTest {
+@DisplayName("RedisBloomIFilter Tests (real Redis)")
+class RedisBloomIFilterTest extends AbstractRedisIntegrationTest {
 
-    @Mock
+    @Autowired
     private RedisTemplate<String, String> redisTemplate;
-
-    @Mock
-    private HashOperations<String, Object, Object> hashOperations;
 
     private BloomFilterConfig config;
     private BloomHashStrategy hashStrategy;
@@ -42,15 +37,16 @@ class RedisBloomIFilterTest {
 
     @BeforeEach
     void setUp() {
+        // RedisBloomIFilter 的 pipeline 返回原始 hash 值；使用字符串反序列化验证真实位。
+        StringRedisSerializer stringSerializer = new StringRedisSerializer();
+        redisTemplate.setValueSerializer(stringSerializer);
+        redisTemplate.setHashValueSerializer(stringSerializer);
+        redisTemplate.getConnectionFactory().getConnection().flushDb();
+
         config = new BloomFilterConfig("bf:", 1024, 3, 100);
         hashStrategy = new MessageDigestBloomHashStrategy();
         filter = new RedisBloomIFilter(redisTemplate, config, hashStrategy, null);
         filter.init();
-    }
-
-    private void resetMock() {
-        reset(redisTemplate, hashOperations);
-        when(redisTemplate.opsForHash()).thenReturn(hashOperations);
     }
 
     @Nested
@@ -58,39 +54,34 @@ class RedisBloomIFilterTest {
     class AddTests {
 
         @Test
-        @DisplayName("adds key to redis bloom filter using pipeline")
-        void add_validKey_addsWithPipeline() {
-            when(redisTemplate.executePipelined(any(RedisCallback.class))).thenReturn(List.of());
-
+        @DisplayName("adds key to real Redis bloom filter")
+        void add_validKey_isVisibleToRealRedis() {
             filter.add("test-cache", "test-key");
 
-            verify(redisTemplate).executePipelined(any(RedisCallback.class));
+            assertThat(filter.mightContain("test-cache", "test-key")).isTrue();
         }
 
         @Test
         @DisplayName("handles null cacheName gracefully")
         void add_nullCacheName_doesNotThrow() {
             filter.add(null, "key");
-            // Should not throw or call redis
-            verify(redisTemplate, never()).executePipelined(any(RedisCallback.class));
+
+            assertThat(filter.mightContain(null, "key")).isFalse();
         }
 
         @Test
         @DisplayName("handles null key gracefully")
         void add_nullKey_doesNotThrow() {
             filter.add("cache", null);
-            // Should not throw or call redis
-            verify(redisTemplate, never()).executePipelined(any(RedisCallback.class));
+
+            assertThat(filter.mightContain("cache", null)).isFalse();
         }
 
         @Test
-        @DisplayName("logs debug message on successful add")
-        void add_success_logsDebug() {
-            when(redisTemplate.executePipelined(any(RedisCallback.class))).thenReturn(List.of());
-
+        @DisplayName("real add is observable through mightContain")
+        void add_success_isObservable() {
             filter.add("test-cache", "test-key");
 
-            // Should complete without exception
             assertThat(filter.mightContain("test-cache", "test-key")).isTrue();
         }
     }
@@ -100,70 +91,55 @@ class RedisBloomIFilterTest {
     class MightContainTests {
 
         @Test
-        @DisplayName("returns true when all hash positions exist")
+        @DisplayName("returns true when all real hash positions exist")
         void mightContain_allPositionsExist_returnsTrue() {
-            // Simulate all positions existing in Redis
-            List<Object> existingPositions = List.of("1", "1", "1");
-            when(redisTemplate.executePipelined(any(RedisCallback.class))).thenReturn(existingPositions);
+            filter.add("test-cache", "test-key");
 
-            boolean result = filter.mightContain("test-cache", "test-key");
-
-            assertThat(result).isTrue();
+            assertThat(filter.mightContain("test-cache", "test-key")).isTrue();
         }
 
         @Test
-        @DisplayName("returns false when any hash position is missing")
+        @DisplayName("returns false when a real hash position is missing")
         void mightContain_anyPositionMissing_returnsFalse() {
-            // Simulate one position missing (null)
-            List<Object> positionsWithNull = new ArrayList<>();
-            positionsWithNull.add("1");
-            positionsWithNull.add(null);
-            positionsWithNull.add("1");
-            when(redisTemplate.executePipelined(any(RedisCallback.class))).thenReturn(positionsWithNull);
+            filter.add("test-cache", "test-key");
+            int missingPosition = hashStrategy.positionsFor("test-key", config)[1];
+            redisTemplate.opsForHash().delete("bf:test-cache", String.valueOf(missingPosition));
 
-            boolean result = filter.mightContain("test-cache", "test-key");
-
-            assertThat(result).isFalse();
+            assertThat(filter.mightContain("test-cache", "test-key")).isFalse();
         }
 
         @Test
         @DisplayName("handles null cacheName gracefully")
         void mightContain_nullCacheName_returnsFalse() {
-            boolean result = filter.mightContain(null, "key");
-            assertThat(result).isFalse();
+            assertThat(filter.mightContain(null, "key")).isFalse();
         }
 
         @Test
         @DisplayName("handles null key gracefully")
         void mightContain_nullKey_returnsFalse() {
-            boolean result = filter.mightContain("cache", null);
-            assertThat(result).isFalse();
+            assertThat(filter.mightContain("cache", null)).isFalse();
         }
 
         @Test
-        @DisplayName("returns true on exception to avoid false negatives")
+        @DisplayName("returns true on Redis exception to avoid false negatives")
         void mightContain_exception_returnsTrue() {
-            when(redisTemplate.executePipelined(any(RedisCallback.class)))
+            // fault injection — real Redis cannot throw on demand
+            RedisTemplate<String, String> throwingTemplate = mock(RedisTemplate.class);
+            when(throwingTemplate.executePipelined(any(RedisCallback.class)))
                     .thenThrow(new RuntimeException("Redis error"));
+            RedisBloomIFilter faultFilter =
+                    new RedisBloomIFilter(throwingTemplate, config, hashStrategy, null);
+            faultFilter.init();
 
-            boolean result = filter.mightContain("test-cache", "test-key");
-
-            // Should return true to avoid rejecting potentially valid keys
-            assertThat(result).isTrue();
+            assertThat(faultFilter.mightContain("test-cache", "test-key")).isTrue();
         }
 
         @Test
-        @DisplayName("returns false when all positions are null")
+        @DisplayName("returns false when all real positions are absent")
         void mightContain_allPositionsNull_returnsFalse() {
-            List<Object> allNull = new ArrayList<>();
-            allNull.add(null);
-            allNull.add(null);
-            allNull.add(null);
-            when(redisTemplate.executePipelined(any(RedisCallback.class))).thenReturn(allNull);
+            assertThat(redisTemplate.hasKey("bf:test-cache")).isFalse();
 
-            boolean result = filter.mightContain("test-cache", "test-key");
-
-            assertThat(result).isFalse();
+            assertThat(filter.mightContain("test-cache", "test-key")).isFalse();
         }
     }
 
@@ -172,31 +148,37 @@ class RedisBloomIFilterTest {
     class ClearTests {
 
         @Test
-        @DisplayName("deletes bloom filter key from Redis")
+        @DisplayName("deletes bloom filter key from real Redis")
         void clear_existingCache_deletesKey() {
-            when(redisTemplate.delete(anyString())).thenReturn(true);
+            filter.add("test-cache", "test-key");
+            assertThat(redisTemplate.hasKey("bf:test-cache")).isTrue();
 
             filter.clear("test-cache");
 
-            verify(redisTemplate).delete("bf:test-cache");
+            assertThat(redisTemplate.hasKey("bf:test-cache")).isFalse();
+            assertThat(filter.mightContain("test-cache", "test-key")).isFalse();
         }
 
         @Test
         @DisplayName("handles null cacheName gracefully")
         void clear_nullCacheName_doesNotThrow() {
             filter.clear(null);
-            // Should not throw or call redis
-            verify(redisTemplate, never()).delete(anyString());
+
+            assertThat(redisTemplate.hasKey("bf:null")).isFalse();
         }
 
         @Test
-        @DisplayName("handles exception during delete gracefully")
+        @DisplayName("handles Redis delete exception gracefully")
         void clear_exception_doesNotThrow() {
-            when(redisTemplate.delete(anyString())).thenThrow(new RuntimeException("Redis error"));
+            // fault injection — real Redis cannot throw on demand
+            RedisTemplate<String, String> throwingTemplate = mock(RedisTemplate.class);
+            when(throwingTemplate.delete(anyString()))
+                    .thenThrow(new RuntimeException("Redis error"));
+            RedisBloomIFilter faultFilter =
+                    new RedisBloomIFilter(throwingTemplate, config, hashStrategy, null);
+            faultFilter.init();
 
-            filter.clear("test-cache");
-
-            // Should not throw
+            faultFilter.clear("test-cache");
         }
     }
 
@@ -205,15 +187,26 @@ class RedisBloomIFilterTest {
     class FalsePositiveTests {
 
         @Test
-        @DisplayName("returns true for key that might be in filter")
-        void mightContain_keyMightExist_returnsTrue() {
-            // All positions exist - could be a real entry or false positive
-            List<Object> allExist = List.of("1", "1", "1");
-            when(redisTemplate.executePipelined(any(RedisCallback.class))).thenReturn(allExist);
+        @DisplayName("real Redis bloom filter stays within the false-positive bound")
+        void mightContain_manyAddedKeys_staysWithinFalsePositiveRate() {
+            String cacheName = "test-cache";
+            int itemCount = 100;
+            int checkCount = 500;
 
-            boolean result = filter.mightContain("test-cache", "some-key");
+            for (int i = 0; i < itemCount; i++) {
+                filter.add(cacheName, "key-" + i);
+            }
 
-            assertThat(result).isTrue();
+            int falsePositives = 0;
+            for (int i = itemCount; i < itemCount + checkCount; i++) {
+                if (filter.mightContain(cacheName, "key-" + i)) {
+                    falsePositives++;
+                }
+            }
+
+            double falsePositiveRate = (double) falsePositives / checkCount;
+            assertThat(falsePositiveRate).isLessThan(0.15);
+            assertThat(filter.mightContain(cacheName, "key-0")).isTrue();
         }
     }
 
@@ -224,13 +217,15 @@ class RedisBloomIFilterTest {
         @Test
         @DisplayName("returns true on Redis error to prevent false negatives")
         void mightContain_redisError_returnsTrue() {
-            when(redisTemplate.executePipelined(any(RedisCallback.class)))
+            // fault injection — real Redis cannot throw on demand
+            RedisTemplate<String, String> throwingTemplate = mock(RedisTemplate.class);
+            when(throwingTemplate.executePipelined(any(RedisCallback.class)))
                     .thenThrow(new RuntimeException("Connection failed"));
+            RedisBloomIFilter faultFilter =
+                    new RedisBloomIFilter(throwingTemplate, config, hashStrategy, null);
+            faultFilter.init();
 
-            boolean result = filter.mightContain("test-cache", "test-key");
-
-            // Should return true to avoid incorrectly rejecting valid keys
-            assertThat(result).isTrue();
+            assertThat(faultFilter.mightContain("test-cache", "test-key")).isTrue();
         }
     }
 }

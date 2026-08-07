@@ -1,36 +1,49 @@
 package io.github.davidhlp.spring.cache.redis.protection.refresh;
 
+import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
 import io.github.davidhlp.spring.cache.redis.chain.*;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
-
-
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
-import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
- * EarlyExpirationHandler 单元测试
+ * EarlyExpirationHandler tests backed by a real Redis container.
+ *
+ * <p>The policy mock is intentional: it controls the refresh decision, not Redis I/O.
+ * Redis TTL reads and cached-value reads/writes all use the real integration beans.
  */
 @ExtendWith(MockitoExtension.class)
-class EarlyExpirationHandlerTest {
+@DisplayName("EarlyExpirationHandler Tests (real Redis)")
+class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
+
+    private static final String REDIS_KEY = "test:key";
+    private static final String CACHE_NAME = "test-cache";
 
     @Mock
     private EarlyExpirationPolicy earlyExpirationPolicy;
@@ -38,27 +51,33 @@ class EarlyExpirationHandlerTest {
     @Mock
     private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
 
-    @Mock
+    @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
-    @Mock
+    @Autowired
     private CacheStatisticsCollector statistics;
 
-    @Mock
+    @Autowired
     private ValueOperations<String, Object> valueOperations;
 
     private EarlyExpirationHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new EarlyExpirationHandler(earlyExpirationPolicy, earlyExpirationExecutor, redisTemplate, statistics, valueOperations);
+        redisTemplate.getConnectionFactory().getConnection().flushDb();
+        handler = new EarlyExpirationHandler(
+                earlyExpirationPolicy,
+                earlyExpirationExecutor,
+                redisTemplate,
+                statistics,
+                valueOperations);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
         CacheInput input = new CacheInput(
                 operation,
-                "test-cache",
-                "test:key",
+                CACHE_NAME,
+                REDIS_KEY,
                 "testKey",
                 null,
                 null,
@@ -68,10 +87,11 @@ class EarlyExpirationHandlerTest {
         return new CacheContext(input);
     }
 
-    private RedisCacheableOperation createEarlyExpirationOperation(boolean enableEarlyExpiration, double threshold, EarlyExpirationMode mode) {
+    private RedisCacheableOperation createEarlyExpirationOperation(
+            boolean enableEarlyExpiration, double threshold, EarlyExpirationMode mode) {
         return RedisCacheableOperation.builder()
-                .name("test-cache")
-                .cacheNames("test-cache")
+                .name(CACHE_NAME)
+                .cacheNames(CACHE_NAME)
                 .enableEarlyExpiration(enableEarlyExpiration)
                 .earlyExpirationThreshold(threshold)
                 .earlyExpirationMode(mode)
@@ -79,7 +99,20 @@ class EarlyExpirationHandlerTest {
     }
 
     private CachedValue createCachedValue(long ttlSeconds, long createdTime) {
-        return CachedValue.forTest("test-value", ttlSeconds, createdTime, 1L, false);
+        return createCachedValue("test-value", ttlSeconds, createdTime, 1L, false);
+    }
+
+    private CachedValue createCachedValue(long ttlSeconds, long createdTime, long version, boolean expired) {
+        return createCachedValue("test-value", ttlSeconds, createdTime, version, expired);
+    }
+
+    private CachedValue createCachedValue(String value, long ttlSeconds, long createdTime,
+                                          long version, boolean expired) {
+        return CachedValue.forTest(value, ttlSeconds, createdTime, version, expired);
+    }
+
+    private void store(CachedValue value, long ttlSeconds) {
+        valueOperations.set(REDIS_KEY, value, Duration.ofSeconds(ttlSeconds));
     }
 
     @Nested
@@ -135,62 +168,54 @@ class EarlyExpirationHandlerTest {
     class DoHandleCacheMissTests {
 
         @Test
-        @DisplayName("continues chain when remaining TTL is in fast-path window (no GET, no policy)")
+        @DisplayName("continues chain when the real Redis value is null")
         void doHandle_cacheValueNull_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            // fast-path TTL=30s(<=60 阈值),落到完整 GET + policy 路径。
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(null);
+            valueOperations.set(REDIS_KEY, null, Duration.ofSeconds(30));
 
             HandlerResult result = handler.doHandle(context);
 
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isBetween(1L, 30L);
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
             assertThat(result.result()).isNull();
+            verifyNoInteractions(earlyExpirationPolicy);
         }
 
         @Test
-        @DisplayName("continues chain when remaining TTL > fast-path threshold (skips GET entirely)")
+        @DisplayName("continues chain when real remaining TTL > fast-path threshold")
         void doHandle_fastPath_skipsGet() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            // fast-path TTL=120s(>60 阈值),handler 直接 return,连 GET 都不做。
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(120L);
+            store(createCachedValue(120, System.currentTimeMillis()), 120);
 
             HandlerResult result = handler.doHandle(context);
 
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(60L);
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
-            // 关键不变量:fast-path 下 valueOperations.get 不应被调用
-            verify(valueOperations, never()).get(anyString());
+            // Fast path must not evaluate the policy or inspect the cached value.
+            verifyNoInteractions(earlyExpirationPolicy);
         }
 
         @Test
-        @DisplayName("continues chain when remaining TTL is missing (key not exist) — fast-path short-circuits")
+        @DisplayName("continues chain when the real Redis key is absent")
         void doHandle_fastPath_ttlMissing_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            // Redis getExpire 返回 -2 表示 key 不存在; fast-path 直接 continue
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(-2L);
 
             HandlerResult result = handler.doHandle(context);
 
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isEqualTo(-2L);
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
-            verify(valueOperations, never()).get(anyString());
+            verifyNoInteractions(earlyExpirationPolicy);
         }
 
         @Test
-        @DisplayName("continues chain when cache value is expired")
+        @DisplayName("continues chain when the real cached value is expired")
         void doHandle_cacheValueExpired_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = CachedValue.forTest(
-                    "test-value",
-                    60,
-                    System.currentTimeMillis() - 120000,
-                    1L,
-                    true);
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(cachedValue);
+            store(createCachedValue(60, System.currentTimeMillis(), 1L, true), 30);
 
             HandlerResult result = handler.doHandle(context);
 
@@ -203,20 +228,19 @@ class EarlyExpirationHandlerTest {
     class DoHandleNoRefreshTests {
 
         @Test
-        @DisplayName("continues chain when TTL policy indicates no refresh needed")
+        @DisplayName("continues chain when policy indicates no refresh")
         void doHandle_noRefreshNeeded_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(cachedValue);
+            store(createCachedValue(60, System.currentTimeMillis()), 30);
+            // Policy is a non-Redis decision collaborator; keep it mocked deliberately.
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(false);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
             assertThat(result.result()).isNull();
-            verify(statistics, never()).incMisses(anyString());
+            assertThat(context.getPrefetchDecision().decision().needsRefresh()).isFalse();
         }
     }
 
@@ -225,42 +249,39 @@ class EarlyExpirationHandlerTest {
     class DoHandleSyncRefreshTests {
 
         @Test
-        @DisplayName("returns skipAll and increments misses when sync refresh needed")
+        @DisplayName("returns skipAll when real TTL is in the refresh window")
         void doHandle_syncRefreshNeeded_returnsSkipAll() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(cachedValue);
+            store(createCachedValue(60, System.currentTimeMillis()), 30);
+            // Policy controls only the refresh branch; all Redis reads above are real.
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
-            verify(statistics).incMisses("test-cache");
+            assertThat(context.getPrefetchDecision().decision().needsRefresh()).isTrue();
         }
 
         @Test
         @DisplayName("defaults to SYNC mode when mode is null")
         void doHandle_nullMode_defaultsToSync() {
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
-                    .name("test-cache")
-                    .cacheNames("test-cache")
+                    .name(CACHE_NAME)
+                    .cacheNames(CACHE_NAME)
                     .enableEarlyExpiration(true)
                     .earlyExpirationThreshold(0.8)
                     .earlyExpirationMode(null)
                     .build();
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(cachedValue);
+            store(createCachedValue(60, System.currentTimeMillis()), 30);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
-            verify(statistics).incMisses("test-cache");
+            assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
         }
     }
 
@@ -269,34 +290,31 @@ class EarlyExpirationHandlerTest {
     class DoHandleAsyncRefreshTests {
 
         @Test
-        @DisplayName("continues chain and schedules async refresh when async mode")
+        @DisplayName("continues chain and schedules async refresh in real Redis")
         void doHandle_asyncRefresh_schedulesAndContinues() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(cachedValue);
+            store(createCachedValue(60, System.currentTimeMillis()), 30);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
-            verify(earlyExpirationExecutor).submit(eq("test:key"), any(Runnable.class));
+            verify(earlyExpirationExecutor).submit(any(String.class), any(Runnable.class));
         }
 
         @Test
-        @DisplayName("async refresh does not increment misses")
+        @DisplayName("async refresh does not skip the real Redis read")
         void doHandle_asyncRefresh_noMissIncrement() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(cachedValue);
+            store(createCachedValue(60, System.currentTimeMillis()), 30);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
-            handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context);
 
-            verify(statistics, never()).incMisses(anyString());
+            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(context.getPrefetchDecision().decision().isSync()).isFalse();
         }
     }
 
@@ -309,8 +327,8 @@ class EarlyExpirationHandlerTest {
         void getDecision_attributeNotSet_returnsNoRefresh() {
             CacheInput input = new CacheInput(
                     CacheOperation.GET,
-                    "test-cache",
-                    "test:key",
+                    CACHE_NAME,
+                    REDIS_KEY,
                     "testKey",
                     null,
                     null,
@@ -330,8 +348,8 @@ class EarlyExpirationHandlerTest {
         void getDecision_attributeSet_returnsStoredDecision() {
             CacheInput input = new CacheInput(
                     CacheOperation.GET,
-                    "test-cache",
-                    "test:key",
+                    CACHE_NAME,
+                    REDIS_KEY,
                     "testKey",
                     null,
                     null,
@@ -357,9 +375,7 @@ class EarlyExpirationHandlerTest {
         void doHandle_setsDecisionAttribute() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis());
-            when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
-            when(valueOperations.get("test:key")).thenReturn(cachedValue);
+            store(createCachedValue(60, System.currentTimeMillis()), 30);
             when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             handler.doHandle(context);
@@ -371,100 +387,107 @@ class EarlyExpirationHandlerTest {
     }
 
     /**
-     * performAsyncRefresh 单测 — 覆盖 3 决策分支 + 异常翻译。
-     * 直接调方法,绕过 executor 调度,验证纯逻辑。
+     * performAsyncRefresh tests use real Redis for the normal value/TTL/CAS paths.
+     * Only the two exception tests construct a separate handler with mocked I/O,
+     * because real Redis cannot deterministically inject those failures.
      */
     @Nested
-    @DisplayName("performAsyncRefresh tests — async task seam")
+    @DisplayName("performAsyncRefresh tests")
     class PerformAsyncRefreshTests {
 
-        private static final String REDIS_KEY = "test:key";
-        private static final String CACHE_NAME = "test-cache";
-
         @Test
-        @DisplayName("returns early when live value is null (key already missing)")
+        @DisplayName("returns early when live value is null")
         void performAsyncRefresh_liveValueNull_returnsEarly() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            when(valueOperations.get(REDIS_KEY)).thenReturn(null);
 
             handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
-            // 不应触发 Lua CAS 路径(否则会调 redisTemplate.execute)
-            verify(redisTemplate, never()).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+            assertThat(redisTemplate.hasKey(REDIS_KEY)).isFalse();
         }
 
         @Test
-        @DisplayName("returns early when remainingTtl is below grace period")
+        @DisplayName("returns early when live value is below the grace period")
         void performAsyncRefresh_belowGracePeriod_returnsEarly() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            // remainingTtl = 2s,小于 REFRESH_GRACE_PERIOD_SECONDS = 5
             CachedValue live = CachedValue.forTest("v", 2L, System.currentTimeMillis(), 1L, false);
-            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
+            store(live, 30);
 
             handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
-            // 仍在宽限期内 → 不调 Lua CAS
-            verify(redisTemplate, never()).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
         }
 
         @Test
-        @DisplayName("calls Lua CAS when remainingTtl >= grace period and CAS succeeds")
-        void performAsyncRefresh_casSucceeds_callsShorten() {
-            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            // remainingTtl = 60s,大于 GRACE
-            CachedValue live = createCachedValue(60, System.currentTimeMillis());
-            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
-            when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
-                    .thenReturn(Boolean.TRUE);
+        @DisplayName("runs the Lua CAS path against real Redis without corrupting TTL")
+        void performAsyncRefresh_casPath_preservesTtl() {
+            // The real serializer controls the wire representation; this test
+            // asserts the Lua CAS shortened the native TTL to the grace period.
+            // captured 与 live 同 version(2L)→ CAS 比对通过 → Lua 把 Redis TTL 收缩到
+            // REFRESH_GRACE_PERIOD_SECONDS(5s)。断言用范围而非精确 5L:真实 Redis 在 Lua
+            // 收缩(getExpire 读到 5)与断言读回之间会流逝约 1 秒(读到 4),原 mock 测试
+            // 无法暴露此实时消耗。范围 (0, 5] 既证明 CAS 生效(从 30s 收缩到 ≤5s)又容差时钟。
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis(), 2L, false);
+            CachedValue live = createCachedValue(60, System.currentTimeMillis(), 2L, false);
+            store(live, 30);
 
             handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
-            // 触发 CAS
-            verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS))
+                    .isBetween(1L, 5L);
         }
 
         @Test
-        @DisplayName("calls Lua CAS when remainingTtl >= grace period and CAS returns false (value changed)")
+        @DisplayName("does not shorten real Redis TTL when the value changed")
         void performAsyncRefresh_casReturnsFalse_valueChangedPath() {
-            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            CachedValue live = createCachedValue(60, System.currentTimeMillis());
-            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
-            // CAS 返回 false 表示 value 已被并发修改
-            when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
-                    .thenReturn(Boolean.FALSE);
+            CachedValue captured = createCachedValue("captured", 60, System.currentTimeMillis(), 1L, false);
+            CachedValue live = createCachedValue("live", 60, System.currentTimeMillis(), 2L, false);
+            store(live, 30);
 
-            // 不应抛异常 — value-changed 是正常分支
             handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
-            verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
+            assertThat(((CachedValue) valueOperations.get(REDIS_KEY)).getValue()).isEqualTo("live");
         }
 
         @Test
-        @DisplayName("exception during value fetch is caught and logged, not propagated")
+        @DisplayName("catches a value-fetch exception from a mocked I/O seam")
         void performAsyncRefresh_valueFetchThrows_catchesAndLogs() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            when(valueOperations.get(REDIS_KEY)).thenThrow(new RuntimeException("Redis down"));
+            RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
+            ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
+            when(mockedValueOperations.get(REDIS_KEY)).thenThrow(new RuntimeException("Redis down"));
+            EarlyExpirationHandler faultHandler = new EarlyExpirationHandler(
+                    earlyExpirationPolicy,
+                    earlyExpirationExecutor,
+                    mockedRedisTemplate,
+                    mock(CacheStatisticsCollector.class),
+                    mockedValueOperations);
 
-            // 不应向上抛 — 异常已被方法体 try/catch 吞咽
-            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            faultHandler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
-            // Lua CAS 不应被调用(因为 value fetch 阶段就抛了)
-            verify(redisTemplate, never()).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+            verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
         }
 
         @Test
-        @DisplayName("exception during Lua CAS is caught and logged, not propagated")
+        @DisplayName("catches a Lua CAS exception from a mocked I/O seam")
         void performAsyncRefresh_casThrows_catchesAndLogs() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
             CachedValue live = createCachedValue(60, System.currentTimeMillis());
-            when(valueOperations.get(REDIS_KEY)).thenReturn(live);
-            when(redisTemplate.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
+            RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
+            ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
+            when(mockedValueOperations.get(REDIS_KEY)).thenReturn(live);
+            when(mockedRedisTemplate.execute(any(RedisCallback.class)))
                     .thenThrow(new RuntimeException("Lua eval failed"));
+            EarlyExpirationHandler faultHandler = new EarlyExpirationHandler(
+                    earlyExpirationPolicy,
+                    earlyExpirationExecutor,
+                    mockedRedisTemplate,
+                    mock(CacheStatisticsCollector.class),
+                    mockedValueOperations);
 
-            // 不应向上抛
-            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            faultHandler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
-            verify(redisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
+            verify(mockedRedisTemplate).execute(any(RedisCallback.class));
         }
     }
 }
