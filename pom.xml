@@ -65,16 +65,22 @@
         <testcontainers.ryuk.disabled>true</testcontainers.ryuk.disabled>
     </properties>
 
-    <!-- Override Spring Boot parent's testcontainers-bom: parent 管理的 1.20.6 拉入
-         docker-java 3.5.0 (Docker client API 1.54), 与 CI Docker daemon (API 1.48) 不兼容,
-         导致集成测试全 skip、覆盖率跌破 0.70 门。1.20.4 用 docker-java 3.4.x (API <=1.43),
-         daemon 兼容。child dependencyManagement override parent。 -->
+    <!--
+        Testcontainers BOM. Both 1.20.4 and 1.20.6 bundle docker-java 3.4.x
+        (3.4.0 vs 3.4.1), whose DefaultDockerClientConfig falls back to a
+        hardcoded Docker Engine API v1.32 when no version is configured —
+        rejected by modern daemons (e.g. local daemon 29.7.1, min API 1.40).
+        The version itself is not what fixes the daemon handshake;
+        DockerApiVersionResolver (test source) detects the daemon's minimum
+        API version at test runtime and sets the docker-java "api.version"
+        system property so the v1.32 fallback never triggers.
+    -->
     <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
-                <version>1.20.4</version>
+                <version>1.20.6</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -152,18 +158,24 @@
             <version>3.1.8</version>
         </dependency>
 
-        <!-- Testcontainers for integration tests -->
+        <!-- Testcontainers for integration tests (version managed by BOM import above) -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
-            <version>1.20.4</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Needed for LauncherSessionListener (Docker API version negotiation
+             runs once at session start, before any test class loads). -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
