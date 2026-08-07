@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link CacheKeys} 单元测试 — ADR-0011。
+ * {@link CacheKeys} 单元测试。
  *
  * <p>固化键派生不变量:bloom 键 ≡ actualKey;{@code fromRedisKey} 剥前缀;无前缀原样透传。
  * 防止 actualKey(剥前缀)与 createCacheKey(带前缀)之间的漂移在两个 bloom 消费者处复发。

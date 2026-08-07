@@ -49,22 +49,19 @@ public class RedisCacheableOperation extends CacheableOperation {
     }
 
     /**
-     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCacheableOperation} — 单一字段映射 seam
-     * (ADR-0017 + ADR-0021)。
+     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCacheableOperation} — 单一字段映射 seam。
      *
-     * <p>本方法在 ADR-0017 之前是 18 行 builder 链;在 ADR-0017 退化 22 行 builder 链内联
-     * 委派;在 <strong>ADR-0021</strong> 进一步退化为 1 行委派,把"attribute → operation field"
-     * 的映射知识完全下放给 {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)}
-     * (字段拥有者)。
+     * <p>本方法为 1 行委派,把"attribute → operation field"的映射知识完全下放给
+     * {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)} (字段拥有者)。
      *
-     * <p>Factory 调用形态不变:
+     * <p>Factory 调用形态:
      * <pre>
      *   return RedisCacheableOperation.fromAttributes(method, key, attributes);
      * </pre>
      *
-     * <p>字段映射规则:22 字段全量应用;{@code expectedInsertions} 在 Cacheable 是 {@code int}
-     * 槽位,故 {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)} 内部
-     * 做 {@code long → int} 窄化 + 边界裁剪(0..Integer.MAX_VALUE),与原契约 byte-for-byte 一致。
+     * <p>字段映射规则:22 字段全量应用;{@code expectedInsertions} 在 Cacheable Builder 是
+     * {@code long} 槽位,直传无窄化,由 {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)}
+     * 内部决定。
      *
      * <p>本方法<strong>不是</strong> Spring {@code @Cacheable} 适配路径,后者经
      * {@code SpringCacheableAdapterFactory} 处理(走 hasText 守卫,因
@@ -77,7 +74,7 @@ public class RedisCacheableOperation extends CacheableOperation {
 
 
     @EqualsAndHashCode(callSuper = true)
-    public static class Builder extends CacheableOperation.Builder {
+    public static class Builder extends CacheableOperation.Builder implements RedisCacheAttributeSink {
         private long ttl = 0;
         private Class<?> type = Object.class;
         private boolean cacheNullValues;

@@ -16,7 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * NullValueEncoder 单元测试 — ADR-0048 contract 验证:
+ * NullValueEncoder 单元测试 — contract 验证:
  * <ol>
  *   <li>{@code value == null} ⇒ {@code TypeSupport.serializeToBytes(NullValue.INSTANCE)}</li>
  *   <li>{@code value != null} ⇒ {@code TypeSupport.serializeToBytes(value)}(直通)</li>

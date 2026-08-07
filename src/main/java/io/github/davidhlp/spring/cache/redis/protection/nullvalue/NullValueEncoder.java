@@ -11,13 +11,8 @@ import org.springframework.stereotype.Component;
  * Null-aware 字节编码器 seam — 单一职责:把"是否将 {@code null} 编码为
  * {@link NullValue#INSTANCE}"的 null 决策与"实际字节生产"两类职责解耦。
  *
- * <p>此前 {@code DefaultNullValuePolicy.toReturnValue} 同时承担:
- * <ol>
- *   <li>null 决策层 — 决定何时把 {@code null} 映射为 {@code NullValue.INSTANCE}</li>
- *   <li>字节生产层 — 委托 {@link TypeSupport#serializeToBytes} 产出字节</li>
- * </ol>
- * 本类承接 null 决策层(ADR-0048):{@code value == null ⇒ NullValue.INSTANCE}。
- * 字节生产仍由 {@link TypeSupport} 完成(经 {@code SecureNullValueDeserializer}
+ * <p>本类承接 null 决策层:{@code value == null ⇒ NullValue.INSTANCE}。
+ * 字节生产由 {@link TypeSupport} 完成(经 {@code SecureNullValueDeserializer}
  * 走白名单往返);本类作为决策层,不强求知晓字节内部细节。
  *
  * <p><b>依赖方向</b>:{@code NullValueEncoder} → {@code TypeSupport}(单向,
@@ -37,7 +32,7 @@ public class NullValueEncoder {
     /**
      * 将缓存返回值编码为字节,完成 null 决策的最后一英里。
      *
-     * <p>contract 来自 ADR-0048:
+     * <p>contract:
      * <ul>
      *   <li>{@code value == null} ⇒ 返回 {@link NullValue#INSTANCE} 的字节(由
      *       {@code TypeSupport.serializeToBytes} 内部识别 + 安全 Java 序列化往返)</li>

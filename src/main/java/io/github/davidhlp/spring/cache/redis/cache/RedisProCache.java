@@ -23,27 +23,12 @@ import java.util.concurrent.Callable;
  *       并在 override 中按业务语义记录(timing + 命中/未命中/写/淘汰计数)。{@code MeterRegistry} 缺失时
  *       全 no-op,与 Spring 默认行为一致。</li>
  *   <li><b>Loader 路径编排</b> — 委派 {@link LoaderOrchestrator} 统一处理 bloom 短路 / sync 锁 /
- *       default load 三分支(Round 49 / ADR-0062)。本类仅做 callback capture(4 个 closure) +
- *       outcome switch 翻译。</li>
+ *       default load 三分枝。本类仅做 callback capture(4 个 closure) + outcome switch 翻译。</li>
  *   <li><b>方法级 operation 解析</b> — 委派 {@link CacheOperationResolver} 提供 method → operation 元数据
- *       查找(ADR-0057)。</li>
+ *       查找。</li>
  * </ol>
  *
- * <p><b>历史 seam 收敛(本类已下沉) — deletion test 通过的收敛</b>:
- * <ul>
- *   <li>Round 5 / ADR-0014 — 可选特性收口到 {@link ResiCacheFeatures} 值对象(单一契约点)</li>
- *   <li>Round 22 / ADR-0031 — 6 个 metric 字段 + null-safe 样板迁移到 {@code RedisProCacheTimers}</li>
- *   <li>Round 43 / ADR-0057 — {@code RedisCacheRegister} + {@code MethodMetadataResolver} 合并为
- *       {@link CacheOperationResolver},消除 4 行镜像协议漂移</li>
- *   <li>Round 49 / ADR-0062 — loader 路径编排 + 3 个 protection 协作 bean 下沉到 {@link LoaderOrchestrator},
- *       本类不再持 {@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout} 字段</li>
- *   <li><b>当前 (Round 50 / 提案 ADR-0065)</b> — 6 个 metric 字段 + 12 行注册样板 + 5 处分散自增
- *       收口到 {@link RedisProCacheMetricsRegistry},与 {@link CacheMetrics}(读侧快照)形成
- *       "写侧注册+记录" vs "读侧快照" 的对称边界。本类主体退化为 cache 业务行为协调,指标
- *       关注点 100% 移出</li>
- * </ul>
- *
- * <p><b>设计纪律</b>:本类不再直接 import {@code Timer} / {@code Counter} / {@code MeterRegistry} —
+ * <p><b>设计纪律</b>:本类不直接 import {@code Timer} / {@code Counter} / {@code MeterRegistry} —
  * 全部 metric 关注点由 {@link RedisProCacheMetricsRegistry} 承载。{@link ResiCacheFeatures#getMeterRegistry()}
  * 唯一耦合点是构造期把 registry 透传给 registry seam,运行期本类对 Micrometer API 零依赖。
  */
@@ -51,11 +36,9 @@ import java.util.concurrent.Callable;
 public class RedisProCache extends RedisCache {
 
     /**
-     * 指标写侧 seam — 6 个 metric 的注册 + null-safe 记录 + 快照读取全部收口在本字段,
-     * 替换原 7 个 Timer/Counter 字段 + 12 行注册样板 + 5 处分散自增。
+     * 指标写侧 seam — 6 个 metric 的注册 + null-safe 记录 + 快照读取全部收口在本字段。
      *
-     * <p>{@code MeterRegistry} 缺失时本字段构造为空 registry(全部 6 字段为 null),
-     * 行为与原 {@code RedisProCache} 字节级等价。
+     * <p>{@code MeterRegistry} 缺失时本字段构造为空 registry(全部 6 字段为 null),record 方法全 no-op。
      */
     private final RedisProCacheMetricsRegistry metricsRegistry;
 
@@ -63,11 +46,11 @@ public class RedisProCache extends RedisCache {
     private final CacheOperationResolver operationResolver;
 
     /**
-     * Loader 路径编排器 — Round 49 / ADR-0062 抽出的 deep seam。
+     * Loader 路径编排器 — loader-path deep seam。
      *
-     * <p>本类不再持有 {@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout}
-     * 3 个 protection 协作 bean — 这些 seam 全部下沉到 {@link LoaderOrchestrator},
-     * 由本类在构造期一次性 build 后委派 {@link LoaderOrchestrator#orchestrate}。
+     * <p>{@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout} 3 个 protection
+     * 协作 bean 全部由 {@link LoaderOrchestrator} 持有,本类在构造期一次性 build 后委派
+     * {@link LoaderOrchestrator#orchestrate}。
      *
      * <p>设计纪律:orchestrator 不持有本类引用,委派通过回调实现 —
      * {@link #put} 闭包(preserve metrics)+ {@code super.get}/{@code super.get(key, loader)}
@@ -76,18 +59,18 @@ public class RedisProCache extends RedisCache {
     private final LoaderOrchestrator loaderOrchestrator;
 
     /**
-     * 构造 ResiCache 实例 — Round 5 / ADR-0014 + Round 50 收敛后的唯一构造入口.
+     * 构造 ResiCache 实例 — 唯一构造入口。
      *
      * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点。
-     * 全部可选特性收口到单一 {@link ResiCacheFeatures} 值对象(取代原 4 个位置可空参数),
-     * 「null = 该特性禁用」的契约只存在于 {@link ResiCacheFeatures} 一处,不再由本构造器
-     * 逐参数重述。测试用 {@link ResiCacheFeatures#none()} 或 builder 显式声明启用的特性。
+     * 全部可选特性收口到单一 {@link ResiCacheFeatures} 值对象,「null = 该特性禁用」的契约
+     * 只存在于 {@link ResiCacheFeatures} 一处。测试用 {@link ResiCacheFeatures#none()} 或
+     * builder 显式声明启用的特性。
      *
      * <p>构造期委派 3 个 deep seam:
      * <ol>
-     *   <li>{@link RedisProCacheMetricsRegistry} — 6 metric 注册(2 行委派,替换原 12 行样板)</li>
-     *   <li>{@link CacheOperationResolver} — operation 解析(1 行委派)</li>
-     *   <li>{@link LoaderOrchestrator} — loader 路径编排(1 行委派)</li>
+     *   <li>{@link RedisProCacheMetricsRegistry} — 6 metric 注册</li>
+     *   <li>{@link CacheOperationResolver} — operation 解析</li>
+     *   <li>{@link LoaderOrchestrator} — loader 路径编排</li>
      * </ol>
      *
      * <p><b>参数契约</b>:
@@ -105,7 +88,7 @@ public class RedisProCache extends RedisCache {
         super(name, cacheWriter, cacheConfiguration);
         this.metricsRegistry = new RedisProCacheMetricsRegistry(features.getMeterRegistry(), name);
         this.operationResolver = features.getOperationResolver();
-        // ADR-0062:loader 路径编排器 build — 委派 bloomGate/syncSupport/syncLockTimeout + 1 putAfterLoad 闭包;
+        // loader 路径编排器 build — 委派 bloomGate/syncSupport/syncLockTimeout + 1 putAfterLoad 闭包;
         // orchestrator 与本类解耦,通过闭包 + super 引用完成 cache-specific 操作。
         this.loaderOrchestrator = new LoaderOrchestrator(
                 features.getBloomGate(),
@@ -140,17 +123,15 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * Loader 路径主入口 — Round 49 / ADR-0062 收敛后:
-     * 编排逻辑(bloom 短路 / sync vs default 调度 / locked-load 主体)已全部下沉到
-     * {@link LoaderOrchestrator#orchestrate},本方法主体退化为
+     * Loader 路径主入口 — 编排逻辑(bloom 短路 / sync vs default 调度 / locked-load 主体)
+     * 由 {@link LoaderOrchestrator#orchestrate} 承担,本方法:
      * <ol>
      *   <li>timed wrap(getTimer)(委派 {@link RedisProCacheMetricsRegistry#recordGet})</li>
      *   <li>委派 orchestrator.orchestrate(...) 返回 {@link LoadOutcome}</li>
      *   <li>switch 翻译 3 态 → 路径返回 / miss 自增 / 异常翻译</li>
      * </ol>
-     * 行为字节等价于 Round 47 / ADR-0057 / C3 的内联 9 行版本 — miss counter 自增
-     * 次数对齐(bloom 短路 1 次 / 失败路径 1 次 / 成功路径 0 次),异常翻译规则对齐
-     * (RuntimeException 直接抛 / checked Exception 翻译为 RuntimeException)。
+     * miss counter 自增:bloom 短路 1 次 / 失败路径 1 次 / 成功路径 0 次;异常翻译:
+     * RuntimeException 直接抛 / checked Exception 翻译为 RuntimeException。
      *
      * <p>4 个 callback 一次性 capture 在此处:
      * <ul>
@@ -227,11 +208,10 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * 查找当前方法的缓存操作元数据 —— ADR-0057 收敛后的 1 行委派。
+     * 查找当前方法的缓存操作元数据 —— 1 行委派。
      *
-     * <p>原 4 行镜像协议(ThreadLocal key null-check + register 查询 + 缺日志)已迁至
-     * {@link CacheOperationResolver#resolve(String)};本方法退化委派。{@code operationResolver}
-     * 为 null 时直接返回 null(测试场景关闭元数据查找,行为与原 {@code redisCacheRegister=null} 等价)。
+     * <p>委派 {@link CacheOperationResolver#resolve(String)}。{@code operationResolver}
+     * 为 null 时直接返回 null(测试场景关闭元数据查找)。
      */
     private RedisCacheableOperation lookupOperation() {
         return operationResolver == null ? null : operationResolver.resolve(getName());
@@ -253,13 +233,13 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * 当前缓存实例的指标快照 — Round 50 (提案 ADR-0065) 收敛.
+     * 当前缓存实例的指标快照。
      *
      * <p>委派 {@link RedisProCacheMetricsRegistry#metrics()} 读取,本方法仅做 1 行委派 —
      * 全部 4 个 Counter 字段的 null-safe 读取收口在 registry seam 内。{@link CacheMetrics} 派生
-     * 指标 {@code hitRate} 仍由 record 内集中计算,调用方不再做除法。
+     * 指标 {@code hitRate} 由 record 内集中计算。
      *
-     * <p>Spring Boot Actuator 与 Micrometer Timer/Counter 注册维持原状
+     * <p>Spring Boot Actuator 与 Micrometer Timer/Counter 注册不受影响
      * (本方法只读,不重置),外部观测不破坏。
      *
      * @return 当前缓存实例的指标快照(不可变)

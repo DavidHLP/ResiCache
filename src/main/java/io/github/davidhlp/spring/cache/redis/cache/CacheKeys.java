@@ -1,18 +1,14 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 /**
- * 缓存键派生的单一权威(deep module)— ADR-0011。
- *
- * <p>收口此前散落在 {@code RedisProCacheWriter.extractActualKey} 与
- * {@code RedisProCache.get(key, loader)} 的 loader 前置 bloom 短路里的键派生逻辑。
- * 两处各自推导 actualKey 导致 <b>bloom 键漂移</b>:链层 PUT 以 actualKey(剥前缀)写入
- * 过滤器,而 loader 路径却用 {@code createCacheKey}(带前缀)查询 —— 查的 key 永不在
- * 过滤器里(sync + bloom 组合静默返回 null)。
+ * 缓存键派生的单一权威(deep module)。
  *
  * <p>本类把"从 (cacheName, redisKey) 派生各键形态"集中一处,调用方只问形态:
- * {@link #actualKey()} / {@link #redisKey()} / {@link #bloomKey()}。两个 bloom 消费者
- * (链层 {@code BloomFilterHandler} 与 loader 路径 {@code RedisProCache})同源派生,
- * 结构上杜绝漂移。
+ * {@link #actualKey()} / {@link #redisKey()} / {@link #bloomKey()}。集中收口杜绝
+ * <b>bloom 键漂移</b>:链层 PUT 以 actualKey(剥前缀)写入过滤器,而 loader 路径若用
+ * {@code createCacheKey}(带前缀)查询 —— 查的 key 永不在过滤器里(sync + bloom 组合
+ * 静默返回 null)。两个 bloom 消费者(链层 {@code BloomFilterHandler} 与 loader 路径
+ * {@code RedisProCache})同源派生,结构上杜绝漂移。
  *
  * <p><b>删除测试</b>:删掉本类 → actualKey/bloomKey 必须在 Writer + RedisProCache 两处
  * 重新各自推导,复杂度重现且漂移风险回归 → 本 seam 挣得起存在代价。
@@ -28,7 +24,7 @@ public record CacheKeys(String cacheName, String actualKey, String redisKey) {
      * 从已带前缀的完整 Redis key 反推键形态。
      *
      * <p>剥 {@code {cacheName}::} 前缀得 actualKey;若 redisKey 不以该前缀开头
-     * (自定义 keyPrefix 等场景),原样作为 actualKey,保持与历史 extractActualKey 一致的行为。
+     * (自定义 keyPrefix 等场景),原样作为 actualKey。
      *
      * @param cacheName 缓存名称
      * @param redisKey  完整 Redis key(如经 Spring {@code createCacheKey} 产出)

@@ -12,11 +12,9 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * DefaultTtlPolicy 单元测试
+ * DefaultTtlPolicy 单元测试。
  *
- * <p>ADR-0025:仅覆盖 TTL 应用判定 + 抖动计算。提前过期判定({@code shouldEarlyExpiration})已迁至
- * {@code protection.refresh.DefaultEarlyExpirationPolicy}(见 {@code DefaultEarlyExpirationPolicyTest})。
- * {@code DefaultTtlPolicy} 退化为无状态,不再需要 {@code Clock} mock。
+ * <p>覆盖 TTL 应用判定 + 抖动计算(DefaultTtlPolicy 无状态,无需 {@code Clock} mock)。
  */
 @DisplayName("DefaultTtlPolicy Tests")
 class DefaultTtlPolicyTest {

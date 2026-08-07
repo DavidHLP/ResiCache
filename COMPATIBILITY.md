@@ -1,17 +1,16 @@
 # Compatibility Matrix
 
-ResiCache ships on a **single build line** (post-WS-1.1 FIRE; merged into `master`
-at `38c514a`):
+ResiCache ships on a **single build line**:
 
 - **`master` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50**.
 
 Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backed integration tests).
 
-> **Historical context**: Pre-FIRE (≤ commit `3e72546`), `master` carried a `boot3`
-> line (Boot 3.4.13 / Java 17 / Redisson 3.27). WS-1.1 FIRE M1–M4 migrated to Boot 4
-> and merged into `master` at `38c514a`; the dual-branch (`master` / `boot4`)
+> **Historical context**: Previously `master` carried a `boot3`
+> line (Boot 3.4.13 / Java 17 / Redisson 3.27). The migration to Boot 4
+> merged into `master`; the dual-branch (`master` / `boot4`)
 > strategy is **abandoned**. Boot 3.4 has been OSS-EOL since 2025-12; no `boot3`
-> compatibility line is retained. See `CHANGELOG.md` WS-1.1 FIRE for migration context.
+> compatibility line is retained. See `CHANGELOG.md` for migration context.
 
 ## Supported versions
 
@@ -33,8 +32,7 @@ Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backe
 - **`master` line (sole line)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0 + Spring 7
   + Java 21 + Redisson 3.50. Build/verify locally with `./mvnw verify -B`
   (no profile flag needed). Boot 4 is configured directly in `pom.xml` as the
-  sole build line — the historical `boot4`/`boot3` Maven profiles were removed
-  in commit `9ad22bf`.
+  sole build line — the historical `boot4`/`boot3` Maven profiles were removed.
 - **Boot 4 modularization note**: Boot 4 relocated packages
   (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*`,
   `o.s.b.actuate.health.*` → `o.s.b.health.contributor.*`) and SDR 4 renamed
@@ -42,7 +40,7 @@ Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backe
   drove FIRE; all imports are Boot 4-aligned.
 - **CI coverage**: `master` runs full `verify -B` on Java 21 against Boot 4.0
   via `.github/workflows/ci.yml`. The historical `.github/workflows/ci-boot4.yml`
-  and the `compatibility` job in `ci.yml` have been removed (commit `6f00471`).
+  and the `compatibility` job in `ci.yml` have been removed.
 - **Not supported**: Spring Boot 2.x and 3.x. No `boot3` compatibility line is
   maintained; users on Boot 3.x should remain on ResiCache v0.0.x or migrate.
 - **Pre-1.0 caveat**: matrix coverage is best-effort until 1.0.
@@ -60,9 +58,11 @@ Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backe
 ⚠️ ResiCache serializes values in an internal `{version, payload}` envelope via
 `SecureJackson` for safe deserialization. This is **not** wire-compatible with
 Spring's `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. Existing caches must be **migrated** when adopting ResiCache, otherwise the
-entire cache misses on cutover. Use the bounded shadow-read → dual-write →
-cutover workflow in [Serialization Migration CLI](docs/serialization-migration.md);
-it preserves TTL, supports resumable rollback, and does not require a cache flush.
+entire cache misses on cutover. Adopt a bounded **shadow-read → dual-write →
+cutover** migration workflow: run ResiCache alongside the existing cache,
+shadow-read through the new serializer while dual-writing, then cut over once
+hit rates stabilize. This preserves TTL, supports resumable rollback, and does
+not require a cache flush.
 
 ## Known limitations
 
@@ -74,7 +74,7 @@ it preserves TTL, supports resumable rollback, and does not require a cache flus
 - **Transaction-aware caching**: supported, but requires explicit
   `resi-cache.transaction-aware=true`.
 - **Redis Cluster distributed locks**: lock keys are **hash-tag pinned** to the
-  same slot as the cache key (WS-1.2b), so the lock and the data it guards
+  same slot as the cache key, so the lock and the data it guards
   co-locate on one node. Validated by `RedisClusterSlotIntegrationTest` against a
   real three-master `redis:7` Cluster: the live Redisson lock key and cache key
   return the same `CLUSTER KEYSLOT`, and a two-key command completes without

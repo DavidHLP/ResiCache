@@ -17,7 +17,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Round 5 regression IT — verifies that the low-level
+ * Verifies that the low-level
  * {@code RedisConnectionConfiguration#redisCacheTemplate} bean (the one used by
  * {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter} for
  * direct {@code opsForValue/HashOperations}) actually honors the
@@ -26,11 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * defaults (whitelist = {@code [io.github.davidhlp]}, polymorphic typing off).
  *
  * <p>The companion {@code RedisProCacheConfiguration#defaultRedisCacheConfiguration}
- * (path used by Spring {@code @Cacheable} infrastructure) already wires the
- * properties at lines 63-69 — this IT covers the previously unwired sister site.
- *
- * <p>Per COMPETITIVENESS_GUIDE.md §3 pillar B1 first-contact consistency: a
- * property documented in CHANGELOG must behave identically in every code path.
+ * (path used by Spring {@code @Cacheable} infrastructure) wires the properties
+ * separately; this IT covers the sister site used by direct
+ * opsForValue/HashOperations access.
  */
 @SpringBootTest(classes = TestApplication.class)
 @ActiveProfiles("integration-test")
@@ -44,8 +42,8 @@ class RedisConnectionConfigurationTest extends AbstractRedisIntegrationTest {
      * 序列化 JSON 中,从而真正触发 {@code SecureJacksonRedisSerializer#validateTypeIds}
      * 的白名单校验路径。
      *
-     * <p>Bug 状态下(未注入 properties)两个属性被忽略,序列化器回退到默认:多态类型
-     * 信息关闭 + 白名单 {@code [io.github.davidhlp]}。roundtrip 后的对象类型会降级为
+     * <p>若属性未注入,序列化器回退到默认:多态类型信息关闭 + 白名单
+     * {@code [io.github.davidhlp]},roundtrip 后的对象类型降级为
      * {@code LinkedHashMap}(class 信息丢失)+ 不抛异常(whitelist 检查未触发)。
      */
     @DynamicPropertySource
@@ -81,7 +79,7 @@ class RedisConnectionConfigurationTest extends AbstractRedisIntegrationTest {
         assertThat(roundtripped)
                 .as("redisCacheTemplate must deserialize back to the original POJO type, "
                     + "confirming both polymorphicTypingEnabled=true and the custom "
-                    + "whitelist prefix are wired through (Round 5 fix)")
+                    + "whitelist prefix are wired through")
                 .isNotNull()
                 .isInstanceOf(CustomDomainValue.class);
 

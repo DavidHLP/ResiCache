@@ -23,19 +23,19 @@ import org.springframework.stereotype.Component;
  * <p>Spring 原生 {@code @Cacheable} 由 {@link SpringCacheableAdapterFactory} 内部直接构造，
  * 无需投影层。
  *
- * <p><b>ADR-0019 seam 收敛</b>：三个 {@code from(annotation)} 公共面之下，22 个共享字段
- * 的 builder 链已下沉到单一 {@code project(FieldSource, boolean, boolean)} 方法
+ * <p><b>seam 收敛</b>：三个 {@code from(annotation)} 公共面之下，22 个共享字段
+ * 的 builder 链下沉到单一 {@code project(FieldSource, boolean, boolean)} 方法
  * + 三个轻量 {@code extractFrom(annotation)} 提取器。Cacheable / Put 的 Evict-only
- * 字段显式传 {@code false}，Evict 则传入注解值。后续新增
+ * 字段显式传 {@code false}，Evict 则传入注解值。新增
  * 共享字段：1 处改 {@link FieldSource} + 1 处改 {@code project()} body + 3 处改
- * {@code extractFrom()}（或部分子集），不再三处重复同一份 builder 链。
+ * {@code extractFrom()}（或部分子集），共享一份 builder 链。
  *
- * <p><b>ADR-0019 已知 type-drift（不修，记录在 ADR）</b>：{@code @RedisCacheable.
- * expectedInsertions} 当前为 {@code int}，{@code @RedisCachePut} / {@code @RedisCacheEvict}
+ * <p><b>已知 type-drift（不修）</b>：{@code @RedisCacheable.
+ * expectedInsertions} 为 {@code int}，{@code @RedisCachePut} / {@code @RedisCacheEvict}
  * 与 {@link RedisCacheAttributes#expectedInsertions} 均为 {@code long}。投影器靠 Java
  * 隐式 {@code int→long} 拓宽把字段写入统一 {@code long} 容器——表面无 bug，但公开注解
- * 字段类型不一致。按 {@code STABILITY.md} §1 注解属性类型契约，本类型不静默修复，留待
- * 1.0 毕业时（§4）显式开 BREAKING 变更统一。详见 ADR-0019。
+ * 字段类型不一致。按注解属性类型契约，本类型不静默修复，留待
+ * 1.0 毕业时显式开 BREAKING 变更统一。
  */
 @Component
 public class RedisCacheAttributesProjector {
@@ -62,7 +62,7 @@ public class RedisCacheAttributesProjector {
      * {@code CachingAnnotationHandler} 的内联 lambda）自行决定是否应用。
      * <p>Evict 不持有 {@code type / cacheNullValues / randomTtl / variance} 字段（无对应
      * 业务语义），由 {@link #extractFrom(RedisCacheEvict)} 填入合理默认
-     * （{@code Object.class / false / false / 0.0F}），与 v0.0.3 行为完全一致。
+     * （{@code Object.class / false / false / 0.0F}）。
      */
     public RedisCacheAttributes from(RedisCacheEvict annotation) {
         if (annotation == null) {
@@ -73,7 +73,7 @@ public class RedisCacheAttributesProjector {
     }
 
     // ---------------------------------------------------------------------
-    // ADR-0019 seam: 3 共享字段 + Evict-only delta 收敛到 project(...)
+    // seam: 共享字段 + Evict-only delta 收敛到 project(...)
     // ---------------------------------------------------------------------
 
     /**
@@ -216,7 +216,7 @@ public class RedisCacheAttributesProjector {
      *
      * <p>Evict 注解缺 4 字段：{@code type / cacheNullValues / randomTtl / variance}——Evict
      * 不持有这些语义，按"Evict 不缓存值"前提填入合理默认（{@code Object.class / false /
-     * false / 0.0F}），与 v0.0.3 行为完全一致。{@code ttl} Evict 持有但语义不同
+     * false / 0.0F}）。{@code ttl} Evict 持有但语义不同
      * （{@code 0} = 不设置过期），原样传入。
      *
      * <p>Evict-only 字段（{@code allEntries / beforeInvocation}）<strong>不</strong>走

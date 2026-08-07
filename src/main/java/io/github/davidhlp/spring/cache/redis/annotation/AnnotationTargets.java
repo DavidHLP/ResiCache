@@ -9,7 +9,7 @@ import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 
 /**
- * 注解目标对象(Method / Class)的反射多态 seam — Round 10 / ADR-0020.
+ * 注解目标对象(Method / Class)的反射多态 seam.
  *
  * <p>本类把"在方法或类上读注解 + 提取操作名"两件散落在
  * {@link AnnotationParser} / {@link SpringAnnotationAdapter} 23 处
@@ -22,7 +22,7 @@ import java.lang.reflect.Method;
  *       已是多态)</li>
  *   <li>{@link #extractTargetName(Object)} — 多态提取操作名,Method 走
  *       {@code method.getName()},Class 走 {@code class.getName()},其它走
- *       {@code toString()}(保持与原 {@code target.toString()} fallback 行为一致)</li>
+ *       {@code toString()} fallback</li>
  * </ul>
  *
  * <p><b>为什么是 seam</b>:23 处 {@code if (target instanceof Method) ... else if (target
@@ -38,9 +38,8 @@ import java.lang.reflect.Method;
  * 故 {@code (AnnotatedElement) target} 强转对 Method/Class 双向安全。
  *
  * <p><b>Null 容忍</b>:{@code findMerged} 对非 {@code AnnotatedElement} 的 {@code target}
- * 返回 {@code null}(与原 {@code instanceof} 不匹配时 {@code findMergedAnnotation} 不调用的
- * 行为等价);{@code extractTargetName} 对非 Method/Class 走 {@code toString()}(与原
- * {@code target.toString()} fallback 等价)。
+ * 返回 {@code null};{@code extractTargetName} 对非 Method/Class 走 {@code toString()}
+ * fallback。
  *
  * <p><b>本类的位置</b>:放在 {@code annotation} 包而非独立 {@code common} 包 ——
  * {@link AnnotationParser} / {@link SpringAnnotationAdapter} 是本 utility 的两个
@@ -88,10 +87,8 @@ public final class AnnotationTargets {
      * 多态提取缓存操作的名称.
      *
      * <p>方法路径取 {@code method.getName()}(保留方法名作为 op 名),类路径取
-     * {@code class.getName()}(全限定类名作为 op 名,与原行为一致 — 原本用
-     * {@code target.toString()} 对 Class 返回的也是类全名的字符串形式,但走
-     * {@code getName()} 更显式、更明确)。其它非 Method/Class 走 {@code toString()}
-     * fallback(与原 else 分支 {@code target.toString()} 等价,保留行为兼容)。
+     * {@code class.getName()}(全限定类名作为 op 名,比 {@code toString()} 更显式、
+     * 更明确)。其它非 Method/Class 走 {@code toString()} fallback。
      *
      * <p>典型用法:
      * <pre>

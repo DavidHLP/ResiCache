@@ -19,16 +19,14 @@ import java.util.List;
  * 处理 {@link RedisCacheEvict @RedisCacheEvict} 注解：为方法上每个 @RedisCacheEvict
  * 构建并注册一个 {@code RedisCacheEvictOperation}。
  *
- * <p>注册样板（for-loop + null-check + ArrayList 装配）已收敛到
- * {@link AbstractAnnotationHandler#registerAll}。本类只负责获取注解数组 + 提供
+ * <p>注册样板（for-loop + null-check + ArrayList 装配）由
+ * {@link AbstractAnnotationHandler#registerAll} 承担。本类只负责获取注解数组 + 提供
  * key 提取器（{@code RedisCacheEvict::key}） + 委派。
  *
- * <p><b>ADR-0059</b>:register 调用改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
- * 工厂 lambda,kind = {@link OperationKind#CACHE_EVICT}。
- *
- * <p><b>ADR-0065 深化(本 seam)</b>:删除浅 {@code EvictOperationFactory} @Component
- * (2 行委派 + 类样板),内联为 lambda 直传 {@link RedisCacheAttributesProjector#from}
- * + {@link RedisCacheEvictOperation#fromAttributes}。
+ * <p>register 调用使用 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
+ * 工厂 lambda,kind = {@link OperationKind#CACHE_EVICT};factory 以 lambda 直传
+ * {@link RedisCacheAttributesProjector#from} +
+ * {@link RedisCacheEvictOperation#fromAttributes}。
  */
 @Slf4j
 @Component

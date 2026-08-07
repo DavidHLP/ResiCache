@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * {@link RedisProCacheMetricsRegistry} 单元测试 — 提案 ADR-0065 写侧 seam 契约验证.
+ * {@link RedisProCacheMetricsRegistry} 单元测试 — 写侧 seam 契约验证.
  *
  * <p>本测试独立验证 registry seam 的 6 大契约:
  * <ol>

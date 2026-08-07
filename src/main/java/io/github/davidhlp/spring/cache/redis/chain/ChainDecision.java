@@ -18,7 +18,6 @@ public enum ChainDecision {
     /** 跳过剩余处理器，返回成功。
      *  <p>不变式：返回 {@code SKIP_ALL} 等价于请求引擎跳过剩余 handler，
      *  并由引擎在遇到该决策时单点置 {@code CacheContext.skipRemaining=true}
-     *  （见 {@code ChainEngine.driveChain} 的 SKIP_ALL 分支）。
-     *  <p>ADR-0033：标记位从原 {@code CacheOutput} 迁移到 {@code CacheContext} 一级字段。 */
+     *  （见 {@code ChainEngine.driveChain} 的 SKIP_ALL 分支）。 */
     SKIP_ALL
 }

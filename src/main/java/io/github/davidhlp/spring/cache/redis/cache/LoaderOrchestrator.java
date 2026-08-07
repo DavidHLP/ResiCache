@@ -14,12 +14,9 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
- * 缓存 loader 路径编排器 — Round 49 / ADR-0062 抽出的 loader-path deep seam.
+ * 缓存 loader 路径编排器 — loader-path deep seam.
  *
- * <p>把 {@link RedisProCache#get(Object, Callable)} 的 3 步编排 + 嵌套的 3 个子 seam
- * 整体抽到本类,替换原 {@code RedisProCache} 上的
- * {@code isBloomShortCircuited} / {@code loadValue} / {@code performLockedLoad} 三个
- * package-private seam + 2 个 private helper({@code executeSyncLoad} / {@code resolveSyncTimeout}):
+ * <p>承接 {@link RedisProCache#get(Object, Callable)} 的 3 步 loader 编排:
  *
  * <ol>
  *   <li><b>Bloom 短路检查</b> — 经 {@link BloomGate#definiteMiss} 判定「确定不存在」 →
@@ -41,8 +38,7 @@ import java.util.function.Function;
  *       {@link SyncLockTimeout} + 4 个 callback(redisKey / doubleCheck / putAfterLoad / defaultLoad);
  *       单测可零 RedisProCache fixture 验证 3 决策分支({@code BloomShortCircuited} /
  *       {@code Loaded} / {@code LoadFailed})</li>
- *   <li><b>leverage</b>:{@code RedisProCache.get(key, loader)} 主体退化为 1 行委派 + switch 翻译;
- *       3 个 package-private seam + 2 个 private helper 从 {@code RedisProCache} 删除</li>
+ *   <li><b>leverage</b>:{@code RedisProCache.get(key, loader)} 主体仅 1 行委派 + switch 翻译</li>
  * </ul>
  *
  * <p><b>callback 协议</b>:orchestrator 不继承 {@code RedisCache},因此需要 cache-specific 操作
@@ -61,10 +57,8 @@ import java.util.function.Function;
  * 在构造期一次性 capture(指向 {@code super.get} / {@code this.put} / {@code super.createCacheKey});
  * {@code cacheName} 在每次 orchestrate() 调用传入。
  *
- * <p><b>非覆盖原行为</b>:异常翻译、键派生({@link CacheKeys} ADR-0011)、{@code -1} 永久缓存哨兵、
- * null-value 缓存等所有现有契约均逐字保留;caller-side switch 的 metric 自增对齐原
- * {@code RedisProCache} 在 {@code isBloomShortCircuited} / outer catch 中自增 miss counter 的
- * 时机(各路径恰好 1 次)。
+ * <p><b>契约保真</b>:异常翻译、键派生({@link CacheKeys})、{@code -1} 永久缓存哨兵、
+ * null-value 缓存等契约逐字保留;caller-side switch 的 metric 自增保证各路径恰好 1 次 miss 计数。
  */
 @Slf4j
 public final class LoaderOrchestrator {
@@ -169,12 +163,11 @@ public final class LoaderOrchestrator {
     }
 
     /**
-     * Bloom 短路检查 — 抽自 {@code RedisProCache.isBloomShortCircuited}(Round 47 ADR-0057 / C3),
-     * 行为字节等价,差异:miss counter 自增下沉到 caller(orchestrator 不感知 metric)。
+     * Bloom 短路检查 — miss counter 自增下沉到 caller(orchestrator 不感知 metric)。
      *
      * <p>前置条件任一缺失(operation null / 未启用 bloom / bloomGate null)→ return false(不短路)。
      * 键派生经 {@link CacheKeys#fromRedisKey} 与链层 {@code BloomFilterHandler.add} 同源,杜绝
-     * actualKey/redisKey 漂移缺陷(ADR-0011)。
+     * actualKey/redisKey 漂移缺陷。
      */
     private boolean isBloomShortCircuited(String cacheName, String redisKey,
                                           @Nullable RedisCacheableOperation operation) {
@@ -186,7 +179,7 @@ public final class LoaderOrchestrator {
     }
 
     /**
-     * Sync 路径编排 — 抽自 {@code RedisProCache.executeSyncLoad} + {@code resolveSyncTimeout}。
+     * Sync 路径编排。
      * 职责:解析 timeout → 委派 {@link SyncSupport#executeSync} → 锁内 {@link #performLockedLoad}。
      * 锁内 loader 抛异常 → {@link LoadOutcome.LoadFailed}(cause 已被 performLockedLoad 翻译)。
      */
@@ -214,8 +207,7 @@ public final class LoaderOrchestrator {
     }
 
     /**
-     * 持锁后单飞加载契约 — 抽自 {@code RedisProCache.performLockedLoad}(Round 47 ADR-0057),
-     * 行为字节等价:
+     * 持锁后单飞加载契约:
      *
      * <ol>
      *   <li><b>double-check</b>:{@code doubleCheckFn.apply(key)} 已有值 → 直接返回(走
@@ -223,8 +215,7 @@ public final class LoaderOrchestrator {
      *   <li><b>load + put</b>:cache miss → 调 {@code loader.call()},无论 null 与否都
      *       {@link BiConsumer#accept 写回}(由 RedisCache 配置处理 null-value 缓存契约)</li>
      *   <li><b>异常翻译</b>:loader 抛 checked exception → 翻译为
-     *       {@link Cache.ValueRetrievalException}(Spring 抽象层契约);RuntimeException 也走同一翻译路径
-     *       以保持原 lambda 字节级行为</li>
+     *       {@link Cache.ValueRetrievalException}(Spring 抽象层契约);RuntimeException 也走同一翻译路径</li>
      * </ol>
      */
     @SuppressWarnings("unchecked")

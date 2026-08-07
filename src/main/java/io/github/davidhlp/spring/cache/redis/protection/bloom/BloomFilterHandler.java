@@ -38,8 +38,7 @@ public class BloomFilterHandler extends AbstractCacheHandler {
     }
 
     /**
-     * ADR-0018 — 语义 counter 元数据声明。WS-1.4 per-handler tag 试点：
-     * Bloom 拒绝事件计数（key 判定不在集合 → 直接短路）。
+     * 语义 counter 元数据声明:Bloom 拒绝事件计数(key 判定不在集合 → 直接短路)。
      */
     @Override
     protected CounterMetadata semanticCounter() {
@@ -56,9 +55,8 @@ public class BloomFilterHandler extends AbstractCacheHandler {
 
     @Override
     protected HandlerResult doHandle(CacheContext context) {
-        // ADR-0047:C7 收敛 — 三个空分支(原 handlePut / handlePutIfAbsent / handleClean)
-        // 已 inline 到此处。PUT/PIF/CLEAN 的"实际工作"在 afterChainExecution() 后置路径,
-        // requiresPostProcess() 派生自 operation 枚举(ADR-0045),不在此处重复分派。
+        // PUT/PIF/CLEAN 的"实际工作"在 afterChainExecution() 后置路径,
+        // requiresPostProcess() 派生自 operation 枚举,不在此处重复分派。
         return switch (context.getOperation()) {
             case GET -> handleGet(context);
             case PUT, PUT_IF_ABSENT, CLEAN -> HandlerResult.continueChain();
@@ -77,7 +75,7 @@ public class BloomFilterHandler extends AbstractCacheHandler {
         // 读侧确定 miss 判定 + 统一 debug 日志收口到 BloomGate(与 RedisProCache loader 路径共享)
         if (bloomGate.definiteMiss(context.getCacheName(), context.getActualKey())) {
             statistics.incMisses(context.getCacheName());
-            // WS-1.4 per-handler tag 试点:Bloom 拒绝事件计数
+            // Bloom 拒绝事件计数
             safeIncrementSemantic();
             return HandlerResult.terminate(CacheResult.miss());
         }
@@ -90,13 +88,10 @@ public class BloomFilterHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 判断是否需要执行后置处理 — ADR-0045 替代原 POST_PROCESS_KEY stringly-typed
-     * 标记,从 {@link CacheContext#getOperation()} 直接派生。ADR-0054 进一步把
-     * 谓词「PUT / PUT_IF_ABSENT / CLEAN」提到 {@link CacheOperation#requiresBloomPostProcess()},
-     * 本方法只调一行。
+     * 判断是否需要执行后置处理 — 从 {@link CacheContext#getOperation()} 直接派生,
+     * 谓词「PUT / PUT_IF_ABSENT / CLEAN」收口于 {@link CacheOperation#requiresBloomPostProcess()}。
      *
-     * <p>locality-first:post-process 判定走类型化的 operation enum,不再跨 seam
-     * 通过 {@code context.setAttribute} 写 stringly-typed 标记。
+     * <p>post-process 判定走类型化的 operation enum,保持 locality。
      */
     @Override
     public boolean requiresPostProcess(CacheContext context) {

@@ -8,13 +8,14 @@ welcome, and the bar below keeps the project healthy.
 
 - ResiCache is **pre-1.0**: APIs may change. If your change alters a public API,
   please open an issue to discuss it first.
-- Read [README.md](README.md) (Known Limitations + Not in Scope) and the
-  relevant [wiki](wiki/) pages so your change fits the architecture.
+- Read [README.md](README.md) (Known Limitations + Not in Scope) and
+  [CLAUDE.md](CLAUDE.md) (Project Structure + Key Architecture) so your change
+  fits the architecture.
 
 ## Development setup
 
-Requirements: **JDK 21+** (matches `pom.xml` `<java.version>21</java.version>`
-after the WS-1.1 FIRE cut), **Maven 3.x** (the wrapper `./mvnw` is bundled),
+Requirements: **JDK 21+** (matches `pom.xml` `<java.version>21</java.version>`),
+**Maven 3.x** (the wrapper `./mvnw` is bundled),
 **Docker** (for Testcontainers-based integration tests).
 
 ```bash
@@ -58,7 +59,8 @@ tests.**
 | Serialization | `serialization/SecureJackson*` |
 | Cache core | `cache/RedisProCache`, `RedisProCacheManager`, `RedisProCacheWriter` |
 
-See `wiki/architecture/` and `wiki/mechanisms/` for the design rationale.
+See [CLAUDE.md](CLAUDE.md) (Key Architecture + Where to Look) for the design
+rationale and source pointers.
 
 ## Adding a protection handler
 
@@ -67,16 +69,12 @@ See `wiki/architecture/` and `wiki/mechanisms/` for the design rationale.
 2. Annotate it `@HandlerPriority(HandlerOrder.YOUR_ORDER)` — `HandlerOrder` is
    the single source of truth for ordering (gap = 100, extend the enum to insert).
 3. Make it a `@Component` so `CacheHandlerChainFactory` auto-discovers it.
-4. Add tests; document the mechanism in `wiki/mechanisms/`.
+4. Add tests; document the mechanism's design rationale in Javadoc on the
+   handler class (matching the existing codebase style).
 
-See `wiki/how-to/add-protection-handler.md` for a worked example.
-
-## Maintaining the wiki
-
-Source → wiki is a **one-way relationship**: when source changes, update the
-relevant wiki page. The wiki is the compiled knowledge base — don't re-derive
-architecture from source in answers. Change history is carried by `git log`
-(commit body is the source of truth).
+See [CLAUDE.md](CLAUDE.md) § Key Architecture: Chain of Responsibility for the
+handler-ordering model, and the `protection/` packages for worked examples of
+existing handlers.
 
 ## Code of conduct
 

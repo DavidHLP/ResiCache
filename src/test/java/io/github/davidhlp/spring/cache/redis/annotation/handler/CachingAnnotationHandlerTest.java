@@ -26,7 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for CachingAnnotationHandler —— ADR-0059 收敛后形态。
+ * Unit tests for CachingAnnotationHandler。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CachingAnnotationHandler Tests")
@@ -122,7 +122,7 @@ class CachingAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            // ADR-0065:operation 由真实 projector 生成;验证 2 个 kind 各调用 1 次
+            // operation 由真实 projector 生成;验证 2 个 kind 各调用 1 次
             verify(redisCacheRegister).register(
                     any(Method.class), any(Class.class),
                     any(RedisCacheableOperation.class), eq(OperationKind.CACHEABLE));

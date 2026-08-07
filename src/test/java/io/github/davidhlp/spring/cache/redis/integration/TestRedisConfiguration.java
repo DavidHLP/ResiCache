@@ -38,8 +38,8 @@ public class TestRedisConfiguration {
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
         // 与生产 RedisConnectionConfiguration#redisCacheTemplate 对称:让
-        // resi-cache.serializer.* 属性在 IT 中也真正生效(Round 5 fix)。
-        // 否则测试 bean 会让 IT 测不到产品 bean,bug fix 无法验证。
+        // resi-cache.serializer.* 属性在 IT 中也真正生效,
+        // 否则测试 bean 会让 IT 测不到产品 bean。
         SecureJacksonRedisSerializer jsonSerializer =
                 new SecureJacksonRedisSerializer(
                         objectMapper,

@@ -379,8 +379,8 @@ class ActualCacheHandlerTest {
             assertThat(resultRemove.shouldTerminate()).isTrue();
         }
 
-        // ADR-0033: dead `setFinalResult` field removed; final result is now returned via HandlerResult
-        // (verified above via result.shouldTerminate() + result.result().isSuccess()), no separate
+        // final result is returned via HandlerResult (verified above via
+        // result.shouldTerminate() + result.result().isSuccess()), no separate
         // context-output assertion needed.
     }
 }

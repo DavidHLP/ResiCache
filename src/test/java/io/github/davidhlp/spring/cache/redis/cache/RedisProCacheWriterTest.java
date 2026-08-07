@@ -67,8 +67,7 @@ class RedisProCacheWriterTest {
     void setUp() throws NoSuchMethodException {
         when(chainFactory.createChain()).thenReturn(chain);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        // ADR-0047:C3 收敛 — 测试改走 instance activate() 路径,不再直接调
-        // DefaultMethodMetadataResolver.activateStatic/clearStatic(可见性收紧至 private 后不可见)。
+        // 测试走 instance activate() 路径(activateStatic/clearStatic 为 private 不可见)。
         // 测试 fixture 持有 activation 引用,@AfterEach 通过 close() 恢复到调用前状态。
         resolver = new DefaultMethodMetadataResolver();
         writer = new RedisProCacheWriter(

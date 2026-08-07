@@ -6,7 +6,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * S2 (Round 47) — TLS 启动期验证器.
+ * TLS 启动期验证器.
  *
  * <p>对齐 {@code SyncSupport.warnIfNoDistributedBackend} 的 fail-loud 模式:
  * 检测 plaintext 凭证/凭据/敏感缓存值在网络上明文传输的 misconfig,要么 WARN 提醒

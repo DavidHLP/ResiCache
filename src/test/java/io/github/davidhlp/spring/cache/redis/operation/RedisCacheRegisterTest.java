@@ -12,11 +12,10 @@ import java.lang.reflect.Method;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * RedisCacheRegister 单元测试 —— ADR-0059 / Round 45 收敛后形态。
+ * RedisCacheRegister 单元测试。
  *
- * <p>原 3 对 register/get 公开方法(registerCacheableOperation / registerCacheEvictOperation /
- * registerCachePutOperation + 对应 get)已收敛为单一 {@link RedisCacheRegister#register} +
- * {@link RedisCacheRegister#get} 方法对,通过 {@link OperationKind} 枚举区分命名空间。
+ * <p>使用单一 {@link RedisCacheRegister#register} + {@link RedisCacheRegister#get} 方法对,
+ * 通过 {@link OperationKind} 枚举区分命名空间。
  *
  * <p>注册/查询以 {@link AnnotatedElementKey}(方法 + 目标类)为查找键;
  * operation 自身的 key 字段不参与 register lookup(那是运行时缓存键的来源)。
@@ -407,7 +406,7 @@ class RedisCacheRegisterTest {
     }
 
     @Nested
-    @DisplayName("Type Guard Tests (ADR-0059)")
+    @DisplayName("Type Guard Tests")
     class TypeGuardTests {
 
         @BeforeEach

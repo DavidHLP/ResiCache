@@ -31,8 +31,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>设计说明：
  * <ul>
- *   <li>原设计：提前过期逻辑在 ActualCacheHandler 中，通过回调实现</li>
- *   <li>新设计：独立为 Handler，直接检查缓存值并做出决策</li>
+ *   <li>独立 Handler，直接检查缓存值并做出决策</li>
  *   <li>GET 操作时，先获取缓存值，判断是否需要提前过期</li>
  *   <li>如果需要同步刷新，返回 skipAll，ActualCacheHandler 检查标记后返回 miss</li>
  * </ul>
@@ -45,17 +44,15 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
 
     /**
-     * P1 (Round 47) fast-path TTL 阈值:当 Redis 报告的剩余 TTL 仍大于此值时,
-     * 跳过本 handler 的全部逻辑(包括 value GET),让 ActualCacheHandler 走原生
-     * 一次 GET 完成 hit 处理 — 把热路径从"early handler GET + actual GET"
-     * 两次 RTT 降为"actual GET"一次 RTT。
+     * fast-path TTL 阈值:当 Redis 报告的剩余 TTL 仍大于此值时,跳过本 handler 的
+     * 全部逻辑(包括 value GET),让 ActualCacheHandler 走原生一次 GET 完成 hit 处理 —
+     * 把热路径从"early handler GET + actual GET"两次 RTT 降为"actual GET"一次 RTT。
      *
      * <p>选 60s 是因为典型缓存 TTL 是 30s~10min,refresh window 通常在剩余最后
      * 5-30%(<3min);绝对阈值 60s 落在"不会立即需要刷新"的合理边界。比百分比策略
      * 更简单也更便宜 —— 不需要先 GET CachedValue 拿 totalTtl。
      *
-     * <p>边界:剩余 TTL <= 60s 时仍走原 GET + policy check(行为字节等价),
-     * 行为对调用方无变化。
+     * <p>边界:剩余 TTL <= 60s 时走 GET + policy check,行为对调用方无变化。
      */
     static final long FAST_PATH_TTL_SECONDS = 60L;
 
@@ -78,8 +75,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     }
 
     /**
-     * ADR-0018 — 语义 counter 元数据声明。Path C 后续(WS-1.4)：
-     * 同步提前过期触发事件计数。
+     * 语义 counter 元数据声明:同步提前过期触发事件计数。
      */
     @Override
     protected CounterMetadata semanticCounter() {
@@ -98,10 +94,10 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
 
     @Override
     protected HandlerResult doHandle(CacheContext context) {
-        // P1 (Round 47) fast-path:对剩余 TTL 仍较大的"新鲜"缓存项,跳过本 handler
-        // 全部逻辑(不 GET value、不判定 policy),让 ActualCacheHandler 走原生
-        // GET 完成 hit 处理。把热路径从"early handler GET + actual GET"两次
-        // RTT 降为"actual GET"一次 RTT。
+        // fast-path:对剩余 TTL 仍较大的"新鲜"缓存项,跳过本 handler 全部逻辑
+        // (不 GET value、不判定 policy),让 ActualCacheHandler 走原生 GET 完成
+        // hit 处理。把热路径从"early handler GET + actual GET"两次 RTT 降为
+        // "actual GET"一次 RTT。
         Long remainingTtl = redisTemplate.getExpire(context.getRedisKey(), TimeUnit.SECONDS);
         // getExpire 返回值约定:
         //   -2 = key 不存在(没必要 GET,ActualCacheHandler 会自己处理)
@@ -125,7 +121,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
             return HandlerResult.continueChain();
         }
 
-        // 缓存命中：判定提前过期 + 一次性写入类型化 PrefetchDecision（ADR-0036 / Round 26 C1）
+        // 缓存命中：判定提前过期 + 一次性写入类型化 PrefetchDecision
         EarlyExpirationDecision decision = checkEarlyExpiration(context, cachedValue);
         boolean skipped = decision.needsRefresh() && decision.isSync();
         context.setPrefetchDecision(PrefetchDecision.of(skipped, cachedValue, decision));
@@ -134,7 +130,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
             // 同步提前过期：返回 skipAll，ActualCacheHandler 检查 prefetchDecision 后返回 miss
             log.debug("Sync early-expiration triggered, skipping actual cache: cacheName={}, key={}",
                       context.getCacheName(), context.getRedisKey());
-            // WS-1.4 per-handler tag:同步提前过期触发事件计数
+            // 同步提前过期触发事件计数
             safeIncrementSemantic();
             return HandlerResult.skipAll();
         }
@@ -184,13 +180,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 安排异步提前过期任务 — ADR-0057 收敛后的 1 行委派。
-     *
-     * <p>原 22 行 lambda body 内联捕获 5 状态(redisKey + cacheName + valueOperations
-     * 字段 + REFRESH_GRACE_PERIOD_SECONDS 常量 + cachedValue 参数),3 个决策分支
-     * (key 缺失 / 宽限期内 / CAS 成功失败)各自带独立 log,0 单元测试。已抽出为
-     * package-private {@link #performAsyncRefresh(String, String, CachedValue)},
-     * submit 退化为单行委派,decision 命名 + 直接单测入口。
+     * 安排异步提前过期任务 — 委派给 {@link #performAsyncRefresh(String, String, CachedValue)}。
      */
     private void scheduleAsyncRefresh(CacheContext context, CachedValue cachedValue) {
         String redisKey = context.getRedisKey();
@@ -203,9 +193,9 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 异步提前过期任务体 — ADR-0057 抽出的 deep seam.
+     * 异步提前过期任务体。
      *
-     * <p>职责(从原 scheduleAsyncRefresh 内联 lambda 平移,逐字保留原行为):
+     * <p>职责:
      * <ol>
      *   <li>读 live value:为 null → 调试日志 "key already missing" + return</li>
      *   <li>读 live TTL:介于 (0, REFRESH_GRACE_PERIOD_SECONDS) → 调试日志
@@ -216,7 +206,7 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
      *         <li>返回 true → 调试日志 "shortened TTL"</li>
      *         <li>返回 false → 调试日志 "value changed"(并发写覆盖)</li>
      *       </ul></li>
-     *   <li>任意异常 → ERROR 日志(异常已吞,不污染外层)</li>
+     *   <li>任意异常 → ERROR 日志(异常吞,不污染外层)</li>
      * </ol>
      *
      * <p>设计纪律:
@@ -228,12 +218,11 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
      *       因其单测入口已由本方法覆盖。</li>
      *   <li><b>不返回 mainResult</b>:无返回值,3 决策分支各自有副作用(log + return);
      *       调用方不需要 mainResult,避免 split-knowledge。</li>
-     *   <li><b>异常吞咽保留</b>:try/catch 在原 lambda 内(平移至此方法体),本方法不
-     *       向上抛 — 与原匿名 lambda 行为字节等价。</li>
+     *   <li><b>异常吞咽</b>:try/catch 在本方法体内,不向上抛。</li>
      * </ul>
      *
-     * <p><b>deletion test</b>:把本方法删掉、内联回 submit lambda → 22 行 + 5 状态
-     * + 0 测试,代码量相同但失去 seam 名 + 单测入口 + 分支命名 — 复杂度上升。
+     * <p><b>deletion test</b>:把本方法删掉、内联回 submit lambda → 失去 seam 名 +
+     * 单测入口 + 分支命名,复杂度上升。
      *
      * @param redisKey     缓存键(完整 Redis key)
      * @param cacheName    缓存名(用于 ERROR 日志)
@@ -273,8 +262,8 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
             RedisSerializer<String> keySerializer = redisTemplate.getStringSerializer();
 
             byte[] keyBytes = keySerializer.serialize(redisKey);
-            // P3 (Round 47):仅传 expectedValue 的 version 字段(8 字节)而非整个
-            // serialized value(O(N×payload_size)字节)—— 脚本 cjson 解析后比较。
+            // 仅传 expectedValue 的 version 字段(8 字节)而非整个 serialized
+            // value(O(N×payload_size)字节)—— 脚本 cjson 解析后比较。
             byte[] versionBytes = String.valueOf(expectedValue.getVersion())
                     .getBytes(StandardCharsets.UTF_8);
             byte[] ttlBytes = String.valueOf(REFRESH_GRACE_PERIOD_SECONDS).getBytes(StandardCharsets.UTF_8);

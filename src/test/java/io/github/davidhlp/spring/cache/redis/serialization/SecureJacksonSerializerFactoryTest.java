@@ -13,8 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Round 11:把 SecureJacksonRedisSerializer 装配从多个 config 内联点抽出到
- * 单个 {@link SecureJacksonSerializerFactory} (@Component) — 验证 factory 的
+ * 验证 {@link SecureJacksonSerializerFactory} 的
  * {@code create(ObjectMapper, SerializerProperties)} 真的把 props 传下去,
  * 不只是「调了一下 ctor」。
  *
@@ -24,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code io.github.davidhlp.spring.cache.redis.cache.CachedValue})。
  * 如果 factory 真的把 props 穿下去,白名单检查会拒
  * CachedValue(抛 SerializationException);如果 factory 只用默认
- * (即没接 props),roundtrip 会成功。Round 5 + 11 的 contract 由这一断言守护。
+ * (即没接 props),roundtrip 会成功。
  */
 @DisplayName("SecureJacksonSerializerFactory Tests")
 class SecureJacksonSerializerFactoryTest {

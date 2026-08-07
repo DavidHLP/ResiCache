@@ -15,11 +15,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 /**
- * Unit tests for {@link AnnotationHandler} 抽象节点 — ADR-0013 后的精简形态.
+ * Unit tests for {@link AnnotationHandler} 抽象节点.
  *
- * <p>原 {@code AnnotationHandlerTest} 覆盖了已删除的 {@code setNext} / {@code handle}
- * 递归逻辑(链推进已迁出至 {@link AnnotationChainEngine});本测试聚焦抽象节点的
- * 两个钩子契约:
+ * <p>本测试聚焦抽象节点的两个钩子契约:
  *
  * <ul>
  *   <li>{@link AnnotationHandler#canHandle(Method)} — 判定接口</li>
@@ -166,7 +164,7 @@ class AnnotationHandlerTest {
         @Test
         @DisplayName("next field and setNext method are removed (chain migrated to engine)")
         void nextFieldAndSetNextRemoved() {
-            // 验证 next 字段不存在(原 chain 拓扑已迁移到 AnnotationChainEngine)
+            // 验证 next 字段不存在(chain 拓扑由 AnnotationChainEngine 承载)
             assertThatThrownBy(() -> AnnotationHandler.class.getDeclaredField("next"))
                     .isInstanceOf(NoSuchFieldException.class);
         }

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * {@link RedisProCacheTimers} helper class 单元测试 —— ADR-0031 收敛目标.
+ * {@link RedisProCacheTimers} helper class 单元测试.
  *
  * <p>本测试承担原 {@link RedisProCache} 6 处私有 {@code try-finally + safeRecord} 样板的测试覆盖:
  * <ul>
@@ -93,7 +93,7 @@ class RedisProCacheTimersTest {
         @Test
         @DisplayName("null counter is silent no-op")
         void nullCounter_silentNoOp() {
-            // 必须不抛 NPE —— 这是 ADR-0031 行为保真的核心承诺
+            // 必须不抛 NPE —— 这是 null-safe 行为的核心承诺
             RedisProCacheTimers.safeIncrement(null);
         }
 

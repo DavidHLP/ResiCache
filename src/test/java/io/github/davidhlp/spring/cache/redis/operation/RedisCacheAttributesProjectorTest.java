@@ -15,9 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * {@link RedisCacheAttributesProjector} 单元测试。
  *
- * <p>聚焦 3 处默认值漂移的修复收敛行为：{@code syncTimeout} /
- * {@code expectedInsertions} / {@code falseProbability}。本类是 drift 修复的
- * <em>唯一</em>收敛点，单元覆盖必须 100%。
+ * <p>聚焦 3 处默认值对齐：{@code syncTimeout} /
+ * {@code expectedInsertions} / {@code falseProbability}。
  */
 @DisplayName("RedisCacheAttributesProjector Tests")
 class RedisCacheAttributesProjectorTest {
@@ -159,7 +158,7 @@ class RedisCacheAttributesProjectorTest {
 
 
     @Nested
-    @DisplayName("ADR-0019 FieldSource seam — Cacheable ≡ Put identity")
+    @DisplayName("FieldSource seam — Cacheable ≡ Put identity")
     class Adr0019CacheableEqualsPut {
 
         @Test
@@ -212,7 +211,7 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("ADR-0019 FieldSource seam — Evict 默认字段 fallback")
+    @DisplayName("FieldSource seam — Evict 默认字段 fallback")
     class Adr0019EvictDefaults {
 
         @Test
@@ -242,14 +241,13 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("ADR-0019 已知 type-drift (S1 Round 47 已修复)")
+    @DisplayName("已知 type-drift (已修复)")
     class Adr0019TypeDriftSentinel {
 
         @Test
         @DisplayName("Put/Evict/Cacheable 的 expectedInsertions 都是 long, 可承载 > Integer.MAX_VALUE 的值")
         void allThree_expectedInsertions_areLong_acceptsLargeValues() {
-            // S1 (Round 47):@RedisCacheable.expectedInsertions 从 int 提升为 long,
-            // 与 Put/Evict 对齐;不再有 narrowToInt 死代码 + DoS 风险。
+            // expectedInsertions 为 long 类型,与 Put/Evict 对齐。
             long largeValue = 5_000_000_000L; // 5B > Integer.MAX_VALUE (~2.147B)
             RedisCachePut p = stubPut(pp -> pp.expectedInsertions = largeValue);
             RedisCacheEvict e = stubEvict(ee -> ee.expectedInsertions = largeValue);
@@ -262,13 +260,12 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("ADR-0019 文档化的类型漂移不影响现有契约")
+    @DisplayName("文档化的类型漂移不影响现有契约")
     class Adr0019DriftNoRegression {
 
         @Test
         @DisplayName("Cacheable 默认 expectedInsertions=100000 投影为 long 100_000L")
         void cacheableDefaultExpectedInsertions_projectsTo100_000L() {
-            // 这是现存 DriftFix 锁定的契约, 本 refactor 必须保持
             RedisCacheable c = stubCacheable(s -> {});
             assertThat(projector.from(c).getExpectedInsertions()).isEqualTo(100_000L);
         }

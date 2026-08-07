@@ -8,10 +8,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * 缓存层 timing & metric 注册与调用的单一 seam —— Round 22 / ADR-0031 收敛.
+ * 缓存层 timing & metric 注册与调用的单一 seam.
  *
- * <p>本类吸收 {@link RedisProCache} 中重复的 6 处 {@code try-finally + System.nanoTime() + safeRecord}
- * 模板,把 null-safe timer/counter 行为封装在四个静态入口:
+ * <p>把 null-safe timer/counter 行为封装在四个静态入口:
  * <ul>
  *   <li>{@link #registerTimer} / {@link #registerCounter} —— Timer & Counter 创建,
  *       {@code registry == null} 时返回 {@code null}</li>
@@ -20,24 +19,20 @@ import java.util.function.Supplier;
  *   <li>{@link #timedGet} —— 返回值 body timing wrapper(get 的 3 个重载)</li>
  * </ul>
  *
- * <p><b>行为保真</b>:与 Round 21 之前散在 {@link RedisProCache} 的字节级逻辑等价。
+ * <p><b>行为保真</b>:
  * <ul>
  *   <li>{@code timer == null}({@code meterRegistry} 未启用)时静默 no-op:
- *       {@code timed/timedGet} 直接执行 body,不计算 nanoTime;
- *       等价于原{@code try-finally + safeRecord(null, ..., NANOSECONDS)}(后者对 null timer 是 no-op)</li>
+ *       {@code timed/timedGet} 直接执行 body,不计算 nanoTime</li>
  *   <li>{@code timer != null} 时按 {@code start → body → finally record duration} 推进,
- *       异常不被吞 —— 仍沿 finally 释放,与原 try-finally 字节级等价</li>
+ *       异常不被吞 —— 仍沿 finally 释放</li>
  * </ul>
  *
- * <p><b>接口是测试面</b>:RedisProCache 的 6 处私有样板收敛后,本类四个方法成为单一测试目标。
- * 未来若新增 metric(hit-ratio / 复合 timer 等)只在 seam 内扩展,不污染 6 个调用点。
+ * <p><b>接口是测试面</b>:本类四个方法是单一测试目标。新增 metric(hit-ratio / 复合 timer 等)
+ * 只在 seam 内扩展,不污染调用点。
  *
- * <p><b>deletion test 通过</b>(per Round 22 复审):删 {@code RedisProCache} 散落的
- * {@code safeRecord} + 6 处样板后,复杂度从 6 处集中消失,不在调用点重现 —— 真实归并,
- * 不是搬家。
+ * <p><b>deletion test</b>:删本类 → timing/counter 样板在调用点重现 → 真 seam。
  *
  * @see RedisProCache
- * @see <a href="../../../../../../../../../wiki/adr/0031-redisprocache-timing-helper-seam.md">ADR-0031</a>
  */
 final class RedisProCacheTimers {
 
@@ -102,9 +97,7 @@ final class RedisProCacheTimers {
     /**
      * void body 用 timing wrapper —— 语义与 try-finally 等价:
      * <ul>
-     *   <li>{@code timer == null}:直接执行 body,不计算 nanoTime(语义等价于原
-     *       {@code try { body.run(); } finally { safeRecord(null, ..., NANOSECONDS); }},
-     *       后者对 null timer 是 no-op)</li>
+     *   <li>{@code timer == null}:直接执行 body,不计算 nanoTime</li>
      *   <li>{@code timer != null}:{@code start → body → finally record duration};异常不被吞,
      *       仍沿 finally 释放</li>
      * </ul>
@@ -135,7 +128,7 @@ final class RedisProCacheTimers {
      *
      * <p>调用方如需把 body 异常翻译为 {@code Cache.ValueRetrievalException} 或自增 miss 计数,
      * 应当在本 {@code timedGet} 之外再套一层 try-catch —— 调用点的 catch 与本类的
-     * {@code finally} 互不干扰,与原 RedisProCache.get(key, loader) 结构语义等价。
+     * {@code finally} 互不干扰。
      *
      * @param <T>  返回值类型
      * @param timer 待记录 Timer,生产可为 null

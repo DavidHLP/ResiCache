@@ -18,28 +18,15 @@ import java.util.Map;
  *   <li>按 operation 调度策略 + 应用策略（日志级别 + CacheResult 形态）</li>
  * </ol>
  *
- * <p><b>深度化 vs 浅层 — ADR-0067</b>：原设计 5 个 wrapper 方法
- * （{@code handleGetError} / {@code handlePutError} / {@code handlePutIfAbsentError} /
- * {@code handleRemoveError} / {@code handleCleanError}）都是 1 行委派到
- * {@link #handleException(String, String, String, Exception, ErrorStrategy)},
- * 把"per-operation 策略"这个隐含概念拆散到 6 处。调用方
- * （{@link ActualCacheHandler}）必须记忆"PUT 走哪个 wrapper 方法"，
- * 新增 operation 必须加 wrapper 方法 + 测试。
- *
- * <p>deepening：把 5 wrapper 收口成单 {@link #handleError(CacheOperation, String, String, Exception)}
- * 入口，per-operation 策略集中到 {@link #STRATEGIES} 不可变 Map。调用方只需传
- * {@link CacheContext#getOperation() context.getOperation()} 即可，无需记忆具体方法名；
+ * <p>单一入口 {@link #handleError(CacheOperation, String, String, Exception)} +
+ * per-operation 策略集中到 {@link #STRATEGIES} 不可变 Map。调用方只需传
+ * {@link CacheContext#getOperation() context.getOperation()}，无需记忆具体方法名；
  * 新增 operation 只需在 {@link CacheOperation} 追加枚举值 + 在 {@link #STRATEGIES} 追加一行。
  *
  * <p><b>deletion test</b>：删掉 {@link #STRATEGIES} → 调用方必须自己感知每个 operation 的
- * 策略，per-operation 概念散落，本类的"统一错误处理"语义丢失。删掉新
- * {@link #handleError} 方法 → 必须恢复 5 wrapper，deepening 失败。两条路径都让 seam
+ * 策略，per-operation 概念散落，本类的"统一错误处理"语义丢失。删掉
+ * {@link #handleError} 方法 → per-operation 调度失去入口。两条路径都让 seam
  * 失去价值 — 真 seam。
- *
- * <p><b>back-compat</b>：5 wrapper 方法已删除；所有内部 caller
- * （{@link ActualCacheHandler}）同步迁移至 {@link #handleError}。
- * 外部 caller 如依赖具体方法名，改用 {@link #handleException} 显式传策略或
- * {@link #handleError} 传 operation。
  */
 @Slf4j
 @Component
@@ -106,7 +93,7 @@ public class CacheErrorHandler {
      *   <li>SILENT：log.debug + CacheResult.miss()</li>
      * </ul>
      *
-     * <p>ADR-0039：CacheResult.failure() 不再携带 exception（零生产读者）；
+     * <p>CacheResult.failure() 不携带 exception（零生产读者）；
      * 异常已在上方 log 记录，此处仅置 success=false。
      *
      * @param operation 操作名（字符串，用于日志）

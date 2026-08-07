@@ -7,23 +7,19 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
- * {@link RedisCacheAttributes} → Operation Builder 的字段填充 deep seam —
- * Round 51 / 架构评审候选 A 抽出.
+ * {@link RedisCacheAttributes} → Operation Builder 的字段填充 deep seam。
  *
- * <p><b>problem (背景)</b>:{@link RedisCacheAttributes} 暴露 3 个 {@code applyTo(B)} 重载
+ * <p><b>设计动机</b>:{@link RedisCacheAttributes} 暴露 3 个 {@code applyTo(B)} 重载
  * (Cacheable/Put/Evict 三种 Builder 类型).每个重载都遵循同一形状:
  * <ol>
  *   <li>14 个<em>共享字段</em>({@code cacheNames / keyGenerator / cacheManager / cacheResolver /
  *       condition / sync / syncTimeout / ttl / useBloomFilter / expectedInsertions /
  *       falseProbability / enableEarlyExpiration / earlyExpirationThreshold / earlyExpirationMode})
- *       逐个调用 builder 对应 setter — <b>14 行 setter 链在 3 个重载中重复 3 遍 = 42 行</b></li>
+ *       逐个调用 builder 对应 setter — 14 行 setter 链若在 3 个重载中重复 = 42 行</li>
  *   <li>1-2 个<em>builder-only 差异字段</em>(Cacheable/Put 5 项,Evict 2 项)直接调用</li>
  *   <li>return builder(链式)</li>
  * </ol>
- *
- * <p>原代码把 14 共享字段的"共享列表"放在 {@code COMMON_FIELD_NAMES} <b>Javadoc</b> 里
- * 当作"文字"单一来源 — 新增 1 个共享字段需改 Javadoc + 3 个重载各加 1 行 setter = 4 触点;
- * 共享列表的实质"形状"是注释,不是代码,无法编译期约束.
+ * 把 14 共享字段放在 Javadoc 当"文字"单一来源无法编译期约束.
  *
  * <p><b>solution</b>:把"形状 → 字段填充"收口到本类的两个 seam:
  * <ul>
@@ -32,10 +28,16 @@ import java.util.function.Function;
  *       setX 接受 {@code Object} 让 14 字段混合类型(int / long / boolean / double / String / String[] /
  *       EarlyExpirationMode)可放在同一 List 内,无需 14 个 generic 专用 sink.</li>
  *   <li>{@link #populate(Object, Object, List)} — 整个 builder 的 14 共享字段迭代应用;
- *       单一调用方,3 个 applyTo 重载退化到 "1 行 populate(...) + 1-2 行差异字段 setter" 的形状.</li>
+ *       单一调用方,3 个 applyTo 重载收敛到 "1 行 populate(...) + 1-2 行差异字段 setter" 的形状.</li>
  * </ul>
  *
- * <p><b>与 {@code BuilderPopulator} 的关系</b>:Round 50 的
+ * <p><b>角色定位</b>:14 共享字段的<strong>列表本身</strong>由
+ * {@link RedisCacheAttributes#applyTo} 调用的 {@code COMMON_SINKS} 单一常量持有(字段拥有者持有真相),
+ * 由 {@link RedisCacheAttributeSink} 接口(3 个 Builder 实现)提供编译期漂移守护。本类仅保留
+ * <em>迭代编排</em>({@link #populate}) + <em>字段描述类型</em>(
+ * {@link FieldSink})。即:真相在 {@code RedisCacheAttributes.COMMON_SINKS},机制在本类。
+ *
+ * <p><b>与 {@code BuilderPopulator} 的关系</b>:
  * {@code io.github.davidhlp.spring.cache.redis.annotation.BuilderPopulator} 走
  * Spring 标准 {@code CacheableOperation.Builder} 的 {@code setX} 命名(setX 接受 String),
  * 处理"annotation → Spring builder"的字段填充.
@@ -48,13 +50,12 @@ import java.util.function.Function;
  * 已 set(每 caller 在 fromAttributes 入口 setName + setKey),与 {@code BuilderPopulator} 一致.
  * "value vs cacheNames 合并"逻辑各 caller 略不同(cacheNames 来自 POJO 字段),由 caller 自行处理.
  *
- * <p><b>deletion test</b>:删本类 + 内联回 3 个 applyTo 重载 →
- * <ul>
- *   <li>14 setter × 3 重载 = 42 行重复 setter 链恢复</li>
- *   <li>共享字段列表再次沦为 Javadoc 注释,失去编译期约束</li>
- *   <li>新加 1 个共享字段触点 4 处(Javadoc + 3 重载)</li>
- * </ul>
- * seam 挣得起存在代价(单类 ~50 SLOC 含 Javadoc).
+ * <p><b>deletion test</b>:本类角色为"迭代编排 + FieldSink 类型宿主"
+ * —— 字段列表真相由 {@code RedisCacheAttributes.COMMON_SINKS} 持有,漂移守护由
+ * {@link RedisCacheAttributeSink} 接口承担。删本类 → {@code FieldSink} 类型 + 5 行 for-each
+ * 迭代器需内联到 {@link RedisCacheAttributes}(单一 consumer),复杂度小幅搬迁但
+ * {@code COMMON_SINKS} 列表保持单源。本类作为 small iteration utility + 类型宿主
+ * 仍在(locality:迭代语义集中一处)。
  *
  * <p><b>包归属</b>:放在 {@code operation} 包 — {@link RedisCacheAttributes} 是本 utility
  * 唯一生产 consumer,本类无 domain 依赖(纯 JDK functional API).

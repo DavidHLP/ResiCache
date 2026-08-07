@@ -10,7 +10,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link BuilderPopulator} deep seam contract tests — Round 50 / 架构评审候选 A.
+ * {@link BuilderPopulator} deep seam contract tests.
  *
  * <p>钉住两个 helper 的语义:
  * <ul>

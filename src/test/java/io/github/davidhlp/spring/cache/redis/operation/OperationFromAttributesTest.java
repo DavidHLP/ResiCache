@@ -11,7 +11,7 @@ import java.lang.reflect.Method;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@code XxxOperation.fromAttributes(method, key, attributes)} seam (ADR-0017) 的契约测试。
+ * {@code XxxOperation.fromAttributes(method, key, attributes)} seam 的契约测试。
  *
  * <p>本测试覆盖三个 Operation 的静态 {@code fromAttributes} 方法,验证:
  * <ul>
@@ -20,15 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>跨 Operation 字段集差异(Cacheable/Put 全集 vs Evict 子集)</li>
  * </ul>
  *
- * <p>S1 (Round 47):@RedisCacheable.expectedInsertions 从 int 提升为 long 后,
- * 本类不再有"边界裁剪到 int"测试 — 直传无窄化。
- *
- * <p>ADR-0065:原 "Factory 1-liner 委派契约" nested class 已删除 —— 3 个浅 factory
- * @Component 被内联为 handler 中的 lambda,委派等价性不再需要独立测试钉子
- * (factory.create === fromAttributes 现在恒真,因 factory 已不存在)。本测试聚焦
- * {@code fromAttributes} 自身的字段映射正确性。
+ * <p>{@code expectedInsertions} 为 long 类型,直传无窄化。
  */
-@DisplayName("Operation.fromAttributes seam (ADR-0017)")
+@DisplayName("Operation.fromAttributes seam")
 class OperationFromAttributesTest {
 
     private static Method testMethod() throws NoSuchMethodException {
@@ -118,7 +112,7 @@ class OperationFromAttributesTest {
         @Test
         @DisplayName("expectedInsertions 直传无窄化(S1 后 long→long)")
         void fromAttributes_passesExpectedInsertionsThrough() throws Exception {
-            // S1 (Round 47):Cacheable Builder 槽位是 long,直传无窄化。
+            // Cacheable Builder 槽位是 long,直传无窄化。
             RedisCacheAttributes a = emptyExcept(RedisCacheAttributes.builder()
                     .cacheNames(new String[]{"c"})
                     .expectedInsertions(Long.MAX_VALUE));

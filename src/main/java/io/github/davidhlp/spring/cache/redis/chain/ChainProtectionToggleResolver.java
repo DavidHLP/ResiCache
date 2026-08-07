@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * 责任链 protection 机制禁用集合 resolver — ADR-0047 / C5 收敛.
+ * 责任链 protection 机制禁用集合 resolver.
  *
  * <p>从 {@link CacheHandlerChainFactory#createChain()} 抽取的 4 段逻辑:
  * <ol>
@@ -19,17 +19,10 @@ import java.util.function.Function;
  *   <li>收集到 {@code disabled} 集合供后续 filter 使用</li>
  * </ol>
  *
- * <p><b>平行列表消除(C5 核心交付)</b>:原 {@link CacheHandlerChainFactory}
- * 同时持有两份「4 个 protection 机制」列表:
- * <ul>
- *   <li>{@code PROTECTION_HANDLER_ORDERS}(4 个 {@code HandlerOrder} 枚举,用于
- *       {@code protection.enabled=false} 短路)</li>
- *   <li>{@code PROTECTION_TOGGLES}(4 个 {@link Toggle} record,含 getter + configPath,
- *       用于 per-mechanism 覆盖)</li>
- * </ul>
- * 两份列表的 cardinality 必须保持一致(都是 4),且第 i 项描述同一机制 —
- * 改一处忘改另一处即静默失效。本类把两份列表合成一个 {@link #TOGGLES}
- * 单一 source of truth,新增机制只追加一行。
+ * <p><b>单一事实源</b>:{@link #TOGGLES} 把「order + getter + configPath」三要素
+ * 合成一份列表。新增机制只追加一行;避免了维护两份 cardinality 必须一致的
+ * 平行列表(短路枚举列表 + per-mechanism 覆盖列表)时,改一处忘改另一处即
+ * 静默失效的漂移风险。
  *
  * <p><b>不可实例化</b>:纯静态工具,与 {@link CacheHandlerChainFactory} 协作。
  *
@@ -100,8 +93,7 @@ final class ChainProtectionToggleResolver {
         }
 
         if (!protection.isEnabled()) {
-            // 总开关关闭:从单一 TOGGLES 列表派生 4 个 disableName(不再用单独的
-            // PROTECTION_HANDLER_ORDERS 列表 —— 与 TOGGLES 合并,消除平行列表漂移风险)
+            // 总开关关闭:从单一 TOGGLES 列表派生 4 个 disableName,避免平行列表漂移
             TOGGLES.stream()
                     .map(toggle -> toggle.order().getDisableName())
                     .forEach(disabled::add);

@@ -50,3 +50,6 @@ application-myself.yml
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+
+# Auto-flow workflow artifacts (tool-generated)
+.auto-flow/

@@ -7,11 +7,8 @@ import org.springframework.lang.Nullable;
  * 空值策略 seam:封装 null 缓存判定、存储/返回值转换、null 值识别(防穿透)。
  *
  * <p>默认实现 {@link DefaultNullValuePolicy} 为 Spring {@code @Component};自定义实现声明
- * {@code @Bean} 即可顶替(对齐 {@code LockManager} / {@code BloomIFilter} 的可替换纪律,
- * 落实 ADR-0005)。{@code NullValueHandler} 依赖本接口而非具体类。
- *
- * <p>此前 {@code DefaultNullValuePolicy} 是无接口的 {@code @Component}(假 seam)。本接口
- * 把它升为真 seam。
+ * {@code @Bean} 即可顶替(对齐 {@code LockManager} / {@code BloomIFilter} 的可替换纪律)。
+ * {@code NullValueHandler} 依赖本接口而非具体类。
  */
 public interface NullValuePolicy {
 

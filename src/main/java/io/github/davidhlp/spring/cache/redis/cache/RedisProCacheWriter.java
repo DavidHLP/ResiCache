@@ -31,12 +31,9 @@ import java.util.concurrent.CompletableFuture;
  * <p>责任链顺序： BloomFilterHandler → SyncLockHandler → TtlHandler → NullValueHandler →
  * ActualCacheHandler
  *
- * <p><b>ADR-0057 (Round 43) 收敛</b>:原构造参数的 {@link
- * io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister} + {@link MethodMetadataResolver}
- * 已合并为单一 {@link CacheOperationResolver} seam —— 消除本类
- * {@link #resolveOperation(String)} 与 {@link RedisProCache#lookupOperation()}
- * 中"读 ThreadLocal key → 查 register"的 4 行镜像协议漂移风险。本类持有 1 个 deep 依赖
- * (而非 2 个浅依赖);{@code resolveOperation} 退化为 1 行委派。
+ * <p>本类持有单一 {@link CacheOperationResolver} seam —— 消除 {@link #resolveOperation(String)}
+ * 与 {@link RedisProCache#lookupOperation()} 的"读 ThreadLocal key → 查 register"镜像协议漂移风险;
+ * {@code resolveOperation} 为 1 行委派。
  */
 @Slf4j
 public class RedisProCacheWriter implements RedisCacheWriter {
@@ -84,9 +81,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     @Override
     public boolean supportsAsyncRetrieve() {
-        // Path C Step 6 落地:retrieve()/store() 经 resolver.runWithSnapshot 透传方法级元数据
-        // (布隆/同步锁/TTL/空值等 operation 配置)+ MDC 到 commonPool 异步线程。恢复 true 让
-        // SDR 走异步 retrieve 路径(性能优化)。边界管理归位 MethodMetadataResolver(ADR-0035)。
+        // retrieve()/store() 经 resolver.runWithSnapshot 透传方法级元数据
+        // (布隆/同步锁/TTL/空值等 operation 配置)+ MDC 到 commonPool 异步线程,让 SDR 走
+        // 异步 retrieve 路径(性能优化)。边界管理归 MethodMetadataResolver。
         return true;
     }
 
@@ -100,10 +97,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @NonNull
     public CompletableFuture<byte[]> retrieve(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        // Path C Step 6 / ADR-0035 + ADR-0057:resolver.runWithSnapshot 在 commonPool 异步
-        // 线程内 snapshot/restore 方法元数据 + MDC,保证链处理器读到正确 context。
-        // 本类不再直接持 MethodMetadataResolver,经 CacheOperationResolver.runWithSnapshot
-        // 委派(原 resolver 协议收口到单一 seam,消除 lookup 与 snapshot 两协议并行)。
+        // resolver.runWithSnapshot 在 commonPool 异步线程内 snapshot/restore 方法元数据 + MDC,
+        // 保证链处理器读到正确 context。委派经 CacheOperationResolver.runWithSnapshot 单一 seam。
         return CompletableFuture.supplyAsync(
                 () -> operationResolver.runWithSnapshot(() -> get(name, key, ttl)));
     }
@@ -129,7 +124,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         // 反序列化值
         Object deserializedValue = typeSupport.deserializeFromBytes(value);
 
-        // 构建上下文(带操作配置)—— operation 已传入,直接走 buildContext,跳过 register 查询(ADR-0034)
+        // 构建上下文(带操作配置)—— operation 已传入,直接走 buildContext,跳过 register 查询
         CacheContext context = buildContext(
                 CacheOperation.PUT, name, redisKey, actualKey,
                 value, deserializedValue, ttl, operation, null);
@@ -154,7 +149,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        // Path C Step 6 / ADR-0035 + ADR-0057:同 retrieve(),经 operationResolver.runWithSnapshot 透传。
+        // 同 retrieve(),经 operationResolver.runWithSnapshot 透传。
         return CompletableFuture.runAsync(
                 () -> operationResolver.runWithSnapshot(() -> {
                     put(name, key, value, ttl);
@@ -188,7 +183,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         String keyPattern = typeSupport.bytesToString(pattern);
         String actualKey = extractActualKey(name, keyPattern);
 
-        // 构建上下文 —— keyPattern 前置进 buildContext,消除原后置 mutate(ADR-0033/0034)
+        // 构建上下文 —— keyPattern 前置进 buildContext,避免后置 mutate
         CacheContext context = buildContext(
                 CacheOperation.CLEAN, name, keyPattern, actualKey,
                 null, null, null, resolveOperation(name), keyPattern);
@@ -231,10 +226,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 解析方法级 operation 配置(布隆/同步锁/TTL/空值等)—— ADR-0057 收敛后的 1 行委派。
+     * 解析方法级 operation 配置(布隆/同步锁/TTL/空值等)—— 1 行委派。
      *
-     * <p>原 6 行 ThreadLocal key 协议 + register 查询 + 缺日志已迁至
-     * {@link CacheOperationResolver#resolve(String)};{@code operationResolver} 为 null
+     * <p>委派 {@link CacheOperationResolver#resolve(String)};{@code operationResolver} 为 null
      * 时直接返回 null(测试场景关闭元数据查找)。
      *
      * @param cacheName 缓存名称
@@ -247,11 +241,11 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     /**
      * 统一的 CacheContext 构造 seam —— 5 个 SDR 入口(GET/PUT/PUT_IF_ABSENT/REMOVE/CLEAN)
-     * 与带 operation 的 put 重载均经此构造,消除原三路分裂(ADR-0034)。
+     * 与带 operation 的 put 重载均经此构造。
      *
      * <p>cacheOperation 由调用方解析:executeChain/clean 走 {@link #resolveOperation} 查 register,
-     * put 5参重载直接传入已持有的 operation。keyPattern 仅 CLEAN 操作非 null —— ADR-0033 已把
-     * keyPattern 升格为 CacheContext direct field,此处前置设置,消除原 clean 后置 mutate。
+     * put 5参重载直接传入已持有的 operation。keyPattern 仅 CLEAN 操作非 null —— 作为
+     * CacheContext direct field 前置设置,避免 clean 后置 mutate。
      *
      * @param operation 操作类型
      * @param cacheName 缓存名称
@@ -292,7 +286,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 从完整的 Redis key 中提取实际的 key 部分。键派生统一收口到 {@link CacheKeys}(ADR-0011),
+     * 从完整的 Redis key 中提取实际的 key 部分。键派生统一收口到 {@link CacheKeys},
      * 与 {@link RedisProCache} 的 loader 路径 bloom 查询同源,杜绝 actualKey/redisKey 漂移。
      *
      * @param cacheName 缓存名称
@@ -309,7 +303,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
      *
      * <p>读路径(GET/PUT_IF_ABSENT)取返回字节;写路径(PUT/REMOVE)忽略返回值。
      * 带 operation 的 put 重载(operation 已传入,跳过 register 查询)与 clean(传 keyPattern)
-     * 各自直接调 {@link #buildContext},不经此入口 —— 三路共用同一 buildContext seam(ADR-0034)。
+     * 各自直接调 {@link #buildContext},不经此入口 —— 三路共用同一 buildContext seam。
      *
      * @param operation 操作类型
      * @param name 缓存名称

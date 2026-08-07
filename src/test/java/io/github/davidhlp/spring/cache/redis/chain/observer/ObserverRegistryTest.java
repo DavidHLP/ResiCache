@@ -5,7 +5,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -17,11 +16,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * ObserverRegistry 契约测试 — 验证泛型 observer 列表管理的单一 seam(ADR-0016).
+ * ObserverRegistry 契约测试 — 验证泛型 observer 列表管理的单一 seam.
  *
- * <p>本测试只覆盖 registry 自身行为:add / snapshot / forEach / size / 线程安全.
- * 引擎层(ChainEngine / AnnotationChainEngine)的委派正确性由各自测试覆盖
- * (ChainEngineTest.addNullObserver_throws / AnnotationChainEngineTest.addObserver_null_throws).
+ * <p>本测试只覆盖 registry 自身行为:add / snapshot / size / 线程安全.
+ * 引擎层(ChainEngine)的委派正确性由 {@code ChainEngineTest.addNullObserver_throws} 覆盖.
  */
 @DisplayName("ObserverRegistry 契约")
 class ObserverRegistryTest {
@@ -91,38 +89,12 @@ class ObserverRegistryTest {
     }
 
     @Nested
-    @DisplayName("forEach")
-    class ForEach {
-
-        @Test
-        @DisplayName("forEach(action) — 遍历每个 observer,顺序与 add 顺序一致")
-        void forEachPreservesOrder() {
-            registry.add("first");
-            registry.add("second");
-            registry.add("third");
-
-            List<String> visited = new ArrayList<>();
-            registry.forEach(visited::add);
-
-            assertThat(visited).containsExactly("first", "second", "third");
-        }
-
-        @Test
-        @DisplayName("forEach(action) — 空 registry 不触发 action")
-        void forEachOnEmpty() {
-            AtomicInteger calls = new AtomicInteger();
-            registry.forEach(o -> calls.incrementAndGet());
-            assertThat(calls).hasValue(0);
-        }
-    }
-
-    @Nested
     @DisplayName("线程安全")
     class Concurrency {
 
         @Test
-        @DisplayName("add / forEach 并发 — 不抛 ConcurrentModificationException")
-        void concurrentAddAndForEach() throws InterruptedException {
+        @DisplayName("add / snapshot 并发 — 不抛 ConcurrentModificationException")
+        void concurrentAddAndSnapshot() throws InterruptedException {
             int writerCount = 4;
             int readerCount = 4;
             int iterationsPerWriter = 500;
@@ -155,10 +127,11 @@ class ObserverRegistryTest {
                         start.await();
                         for (int i = 0; i < iterationsPerReader; i++) {
                             try {
-                                registry.forEach(o -> {
-                                    // 读取 observer (此处只校验不抛异常)
+                                // snapshot() 是 registry 真正剩余的遍历表面:
+                                // List.copyOf(CopyOnWriteArrayList) 在并发 add 下不抛 CME
+                                for (String o : registry.snapshot()) {
                                     assert o != null;
-                                });
+                                }
                             } catch (RuntimeException ex) {
                                 readerFailures.incrementAndGet();
                             }
@@ -175,7 +148,7 @@ class ObserverRegistryTest {
             assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
             pool.shutdownNow();
 
-            // COW 弱一致性迭代保证不抛 CME; reader 失败数应为 0
+            // COW 弱一致性 + List.copyOf 保证不抛 CME; reader 失败数应为 0
             assertThat(readerFailures).hasValue(0);
             // 总 add 数应等于 writerCount * iterationsPerWriter
             assertThat(registry.size()).isEqualTo(writerCount * iterationsPerWriter);

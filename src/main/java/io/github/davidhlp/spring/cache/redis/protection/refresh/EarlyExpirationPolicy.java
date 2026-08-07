@@ -5,13 +5,10 @@ package io.github.davidhlp.spring.cache.redis.protection.refresh;
  *
  * <p>默认实现 {@link DefaultEarlyExpirationPolicy} 为 Spring {@code @Component};自定义实现声明
  * {@code @Bean} 即可顶替(对齐 {@code TtlPolicy} / {@code NullValuePolicy} / {@code LockManager} /
- * {@code BloomIFilter} 的可替换纪律,落实 ADR-0005「handlers 可替换」长寿对冲)。
- * {@code EarlyExpirationHandler} 依赖本接口而非具体类,使判定可独立测试与替换。
+ * {@code BloomIFilter} 的可替换纪律)。{@code EarlyExpirationHandler} 依赖本接口而非具体类,
+ * 使判定可独立测试与替换。
  *
- * <p>ADR-0025 前,本判定寄生在 {@code protection.avalanche.TtlPolicy} 上(唯一消费者是 refresh 域的
- * {@code EarlyExpirationHandler}),且其所需的 {@code Clock} 依赖被一同拖进 avalanche 包。本接口把
- * 判定迁回 refresh 域自有 seam,使 {@code TtlPolicy} 回归纯雪崩(抖动)关注,refresh 与 avalanche
- * 两域依赖方向不再倒置。
+ * <p>本 seam 属 refresh 域;{@code TtlPolicy} 专注雪崩(抖动),两域依赖方向不倒置。
  *
  * @see EarlyExpirationHandler
  */

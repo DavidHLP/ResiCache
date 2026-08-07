@@ -11,21 +11,12 @@ import java.util.function.Supplier;
 /**
  * 缓存实例的 Micrometer 指标注册 + 记录 deep seam — 与 {@link CacheMetrics} 读侧快照配对的写侧 seam.
  *
- * <p><b>动机（deletion test）</b>：{@link RedisProCache} 此前持有 6 个 metric 字段（3 Timer + 3 Counter），
- * 在构造期一次性注册（12 行样板），并在 5 个 override 方法里分散自增（每次 1-2 行 + 多次 null-safe 调用）。
- * "这个缓存实例采集哪些指标 + 怎么采集" 的概念被切碎到 4 个不同的代码位置：
- * <ol>
- *   <li>字段声明（6 行）</li>
- *   <li>构造期注册（6 行 registerXxx 调用）</li>
- *   <li>override 自增（5+ 处 hit/miss/put/evict/clear 路径）</li>
- *   <li>metrics() 快照读取（4 个 null-safe 读取）</li>
- * </ol>
- * 新增一个指标（如 hit-ratio / p99 / 复合 timer）需同时改 4 处 — locality 失守。本类把 4 处
- * 收口为 1 处 deep seam。
+ * <p><b>动机（deletion test）</b>：把 metric 注册 + 记录收口为单一 deep seam，避免
+ * "采集哪些指标 + 怎么采集"的概念散到字段声明、构造期注册、override 自增、metrics() 快照读取
+ * 多处 —— 新增一个指标（如 hit-ratio / p99 / 复合 timer）需同时改多处，locality 失守。
  *
- * <p><b>与 {@link CacheMetrics} 的对称性</b>：ADR-0047 / C2 把"读侧"（快照值对象）抽到
- * {@link CacheMetrics}；本 seam 是"写侧"（注册 + 记录），与读侧配对形成
- * <em>指标领域</em> 完整边界。读侧只读、写侧只写 — 关注点分离。
+ * <p><b>与 {@link CacheMetrics} 的对称性</b>：本 seam 是"写侧"（注册 + 记录），与读侧
+ * 快照（{@link CacheMetrics}）配对形成<em>指标领域</em> 完整边界。读侧只读、写侧只写 — 关注点分离。
  *
  * <p><b>与 {@link RedisProCacheTimers} 的关系</b>：{@link RedisProCacheTimers} 是 metric 原语
  * helper（{@code registerTimer} / {@code registerCounter} / {@code timed} / {@code timedGet} /
@@ -39,18 +30,18 @@ import java.util.function.Supplier;
  *   <li>{@link #recordPut} — put 路径的 timing + 写计数</li>
  *   <li>{@link #recordEvict} — evict 路径的 timing + 淘汰计数</li>
  *   <li>{@link #recordClear} — clear 路径的 timing（无计数，clear 是 batch 操作）</li>
- *   <li>{@link #metrics()} — 返回当前 cache 实例的不可变指标快照（与原有契约字节等价）</li>
+ *   <li>{@link #metrics()} — 返回当前 cache 实例的不可变指标快照</li>
  * </ul>
  *
  * <p><b>null-safe 语义</b>：{@link MeterRegistry} 为 null 时（即未启用指标），全部 6 个内部
- * 字段为 null，所有 record 方法走 no-op 路径 — 与原 {@code RedisProCache} 行为字节级等价。
+ * 字段为 null，所有 record 方法走 no-op 路径。
  *
  * <p><b>线程安全</b>：本类仅在 cache 构造期由单线程初始化；运行期 record 方法调
  * {@link Timer#record} / {@link Counter#increment}（Micrometer 自身线程安全）。metrics() 仅读
  * 字段，多线程并发安全。
  *
- * <p><b>deletion test</b>：删本类 → {@link RedisProCache} 恢复 6 字段 + 12 行注册 + 5 处分散自增
- * 样板，复杂度从 1 处回弹到 4 处，deletion 失败 → 真 seam。
+ * <p><b>deletion test</b>：删本类 → metric 注册 + 自增样板在 {@link RedisProCache} 调用点重现，
+ * locality 失守 → 真 seam。
  */
 public final class RedisProCacheMetricsRegistry {
 
@@ -92,10 +83,9 @@ public final class RedisProCacheMetricsRegistry {
     private final Counter evictCounter;
 
     /**
-     * 构造期一次性注册 6 个 metric — 在 cache 构造期调用一次，运行期 record 路径不再重新注册。
+     * 构造期一次性注册 6 个 metric — 在 cache 构造期调用一次，运行期 record 路径直接复用。
      *
-     * <p>内部委派 {@link RedisProCacheTimers} 原语（registerTimer / registerCounter）保证 null-safe
-     * 语义与原 {@code RedisProCache} 字节级一致。
+     * <p>内部委派 {@link RedisProCacheTimers} 原语（registerTimer / registerCounter）保证 null-safe 语义。
      *
      * @param meterRegistry Micrometer 注册表（可为 null → 全部 6 字段为 null）
      * @param cacheName     cache 标识，作为 {@code tags("cache", cacheName)} 写入每个 metric
@@ -146,9 +136,6 @@ public final class RedisProCacheMetricsRegistry {
     /**
      * 记录 put 路径 — 同时记录 timer + 写计数。
      *
-     * <p>等价于原 {@link RedisProCache#put} 内的 {@code timed(putTimer, () -> { super.put; safeIncrement(putCounter); })}
-     * 模板 — 复杂度从 2 行调用收敛为 1 行委派。
-     *
      * @param body 实际的 put 操作（不可为 null），包含 {@code super.put} 与必要的 metric 副作用
      */
     public void recordPut(Runnable body) {
@@ -168,8 +155,6 @@ public final class RedisProCacheMetricsRegistry {
 
     /**
      * 记录 evict 路径 — 同时记录 timer + 淘汰计数。
-     *
-     * <p>等价于原 {@link RedisProCache#evict} 内的模板。
      *
      * @param body 实际的 evict 操作（不可为 null）
      */
@@ -191,8 +176,6 @@ public final class RedisProCacheMetricsRegistry {
     /**
      * 记录 clear 路径 — 仅记录 timer（无 Counter，batch 操作语义）。
      *
-     * <p>等价于原 {@link RedisProCache#clear} 内的 {@code timed(evictTimer, super::clear)}。
-     *
      * @param body 实际的 clear 操作（不可为 null）
      */
     public void recordClear(Runnable body) {
@@ -200,9 +183,9 @@ public final class RedisProCacheMetricsRegistry {
     }
 
     /**
-     * 当前 cache 实例的指标快照 — 与原 {@link RedisProCache#metrics()} 契约字节等价。
+     * 当前 cache 实例的指标快照。
      *
-     * <p>Counter 字段为 null 时（registry 缺失）对应字段为 0L；与原 getter 语义一致。
+     * <p>Counter 字段为 null 时（registry 缺失）对应字段为 0L。
      *
      * @return 不可变指标快照
      */

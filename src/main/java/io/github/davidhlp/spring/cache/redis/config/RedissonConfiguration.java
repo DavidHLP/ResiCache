@@ -24,10 +24,8 @@ import java.io.IOException;
  *
  * <p><b>为什么独立成类:</b> Spring 的 {@code @ConditionalOnClass} 只有在标注于
  * 独立的 {@code @Configuration} 类(类级别)时,才会在类加载/解析阶段可靠生效。
- * 此前 {@code redissonClient} bean 仅在方法上标注 {@code @ConditionalOnClass},
- * 但宿主类 {@link RedisConnectionConfiguration} 的 import 与私有方法签名直接
- * 引用了 Redisson 强类型;当 Redisson 不在 classpath 时,宿主类存在
- * {@code NoClassDefFoundError} 风险。
+ * {@link RedisConnectionConfiguration} 的 import 与方法签名若直接引用 Redisson
+ * 强类型,在 Redisson 不在 classpath 时会触发 {@code NoClassDefFoundError}。
  *
  * <p>将 Redisson 相关代码隔离到本类、并在<b>类级别</b>加
  * {@code @ConditionalOnClass(RedissonClient.class)},可确保 Redisson 缺失时
@@ -154,7 +152,7 @@ public class RedissonConfiguration {
                 .setDatabase(database)
                 .setConnectionPoolSize(pool.getConnectionPoolSize())
                 .setConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize());
-        // timeout/retry 5 setter 与 cluster/sentinel 共享 BaseConfig 基类,抽离收敛 2-site 样板(ADR-0053)
+        // timeout/retry 5 setter 与 cluster/sentinel 共享 BaseConfig 基类,抽离收敛 2-site 样板
         applyTimeoutAndRetrySettings(singleConfig, pool);
 
         // Apply password from ResiCache properties, fallback to Spring's RedisProperties
@@ -183,7 +181,7 @@ public class RedissonConfiguration {
                 .setSlaveConnectionPoolSize(pool.getConnectionPoolSize())
                 .setMasterConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize())
                 .setSlaveConnectionMinimumIdleSize(pool.getConnectionMinimumIdleSize());
-        // timeout/retry 5 setter 与 single 模式共享 BaseConfig 基类,抽离收敛 2-site 样板(ADR-0053)
+        // timeout/retry 5 setter 与 single 模式共享 BaseConfig 基类,抽离收敛 2-site 样板
         applyTimeoutAndRetrySettings(serverConfig, pool);
 
         // Username/password for ACL (Redis 6+)
@@ -201,9 +199,9 @@ public class RedissonConfiguration {
      * <p>这 5 个 setter —— {@code setIdleConnectionTimeout} / {@code setConnectTimeout} /
      * {@code setTimeout} / {@code setRetryAttempts} / {@code setRetryInterval} —— 定义在
      * {@link BaseConfig} 上,被 {@link SingleServerConfig} 与
-     * {@link BaseMasterSlaveServersConfig} 共同继承。抽离消除了 {@code configureSingle}
-     * 与 {@code applyCommonSettings} 各写一遍的 2-site 样板(ADR-0029 real-seam 门槛,
-     * ADR-0053 落地)。
+     * {@link BaseMasterSlaveServersConfig} 共同继承,因此可跨 single 与 cluster/sentinel
+     * 模式复用,避免 {@code configureSingle} 与 {@code applyCommonSettings} 各写一遍的
+     * 2-site 样板。
      *
      * <p><b>不在本 helper 内</b>:pool size / database / address —— 它们的 setter 名在
      * SingleServer({@code setConnectionPoolSize})与 MasterSlave
@@ -212,7 +210,7 @@ public class RedissonConfiguration {
      * {@code configureSingle} 内有 ResiCache → Spring {@code RedisProperties} fallback 链,
      * 与 {@code applyCommonSettings} 的直取语义不同,亦不合并。
      *
-     * <p><b>字节等价</b>:5 个 setter 之间无顺序依赖,helper 内调用顺序与原两处逐字一致。
+     * <p><b>顺序无关</b>:5 个 setter 之间无顺序依赖。
      *
      * @param config 任意 Redisson {@link BaseConfig} 子类(Single / Cluster / Sentinel)
      * @param pool   ResiCache Redisson 连接池/超时属性

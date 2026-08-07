@@ -257,13 +257,22 @@ simultaneous expiry.
 ## Comparison
 
 ResiCache is one of four common options for caching on top of Redis: JetCache,
-Caffeine, raw Redisson, and ResiCache. The detailed feature matrix, honest
-trade-offs, and "when to pick which" guidance live in
-[`docs/comparison.md`](docs/comparison.md) — including the line the project
-ships under: "ResiCache for Redisson — the declarative cache protection
-chain Redisson forgot to ship".
+Caffeine, raw Redisson, and ResiCache. The project ships under one line:
+**"ResiCache for Redisson — the declarative cache protection chain Redisson
+forgot to ship"**.
 
-Headline takeaway: **the 3 protections JetCache is missing, in one
+| Capability | JetCache | Caffeine | Raw Redisson | **ResiCache** |
+|------------|:--------:|:--------:|:------------:|:-------------:|
+| Multi-level local + remote cache | ✅ | local only | — | — |
+| Bloom filter (anti-penetration) | — | — | manual | ✅ |
+| TTL jitter (anti-avalanche) | — | — | manual | ✅ |
+| Distributed breakdown lock | — | — | manual | ✅ |
+| Null-value caching | — | — | manual | ✅ |
+| Hot-key early refresh | — | — | manual | ✅ |
+| Declarative `@Annotation` chain | partial | — | — | ✅ |
+| Broadcast invalidation | ✅ | — | — | — |
+
+**Headline takeaway: the 3 protections JetCache is missing, in one
 Redisson-native chain** — bloom-filter (penetration), TTL jitter (avalanche),
 and distributed breakdown lock (breakdown). ResiCache is the Redisson
 companion that closes those gaps; JetCache is the multi-level / broadcast

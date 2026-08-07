@@ -22,16 +22,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * BloomRebuilder 单元测试 —— ADR-0058 抽出后的独立 seam 覆盖。
+ * BloomRebuilder 单元测试。
  *
- * <p>覆盖原 {@link BloomSupport} 内嵌的 rebuilding 窗口状态机:
+ * <p>覆盖 rebuilding 窗口状态机:
  * <ul>
  *   <li>isRebuilding:窗口禁用 / Redis 标志存在 / 本地 Caffeine 缓存 / Redis 异常降级</li>
  *   <li>markRebuilding:窗口禁用 no-op / 写 Redis 标志(带 TTL)/ 异常不抛出</li>
  * </ul>
- *
- * <p>原 {@code BloomSupportTest} 包含的对应断言已迁出至本类;{@link BloomSupportTest}
- * 现在仅覆盖代理 + fail-open 契约(以 {@code BloomRebuilder} mock 为依赖)。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)

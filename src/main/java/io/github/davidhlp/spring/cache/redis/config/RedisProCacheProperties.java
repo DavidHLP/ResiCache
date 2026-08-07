@@ -31,8 +31,7 @@ import java.util.concurrent.TimeUnit;
  * </pre>
  *
  * <p>注:布隆过滤器的启用/关闭由 {@code resi-cache.protection.bloom-filter-enabled} 控制
- * (见 {@link ProtectionProperties});{@code bloom-filter.enabled / expected-insertions /
- * false-probability / hash-cache-size} 在历史上从未被生产代码读取,已删除。布隆实际参数
+ * (见 {@link ProtectionProperties});布隆实际参数
  * (bit-size / hash-functions / hash-cache-size)由 {@code resi-cache.bloom.*} 经
  * {@link io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterConfig} 读取。
  */
@@ -153,7 +152,7 @@ public class RedisProCacheProperties {
         /** 是否启用 TLS */
         private boolean tlsEnabled = false;
         /**
-         * S2 (Round 47):强制 TLS —— 当为 {@code true} 时,启动期会校验
+         * 强制 TLS —— 当为 {@code true} 时,启动期会校验
          * {@link #tlsEnabled} 必须为 {@code true},否则抛 {@link IllegalStateException}
          * fail-fast。生产推荐设为 {@code true}。
          */
@@ -174,7 +173,7 @@ public class RedisProCacheProperties {
         /**
          * CLEAN 后布隆过滤器的 rebuilding 窗口(秒)。默认 {@code 30};{@code 0} = 禁用。
          *
-         * <p>背景(WS-1.2c):CLEAN({@code @CacheEvict(allEntries=true)})清空布隆后,
+         * <p>问题:CLEAN({@code @CacheEvict(allEntries=true)})清空布隆后,
          * 空布隆对所有 key 判定 {@code mightContain=false},导致后续 GET 在
          * {@code RedisProCache.get(key, loader)} 的前置短路处<b>静默返回 null</b>
          * (既不查缓存也不调 loader),违反 Spring {@code @Cacheable}"miss 即调 loader
@@ -187,7 +186,7 @@ public class RedisProCacheProperties {
          * TTL 自动结束,无需猜测重建 key 数量。标志走 Redis 以保证 Cluster 多实例一致
          * (容忍秒级 local 缓存延迟)。
          *
-         * <p>{@code 0} 禁用 = 保持 v0.0.x 旧行为(向后兼容),但保留静默 null 缺陷。
+         * <p>{@code 0} 禁用 = 不开启 fail-open 窗口,保留静默 null 缺陷。
          */
         private long rebuildWindowSeconds = 30;
     }
@@ -225,7 +224,7 @@ public class RedisProCacheProperties {
          *
          * <p>设为 {@code true} 显式接受单 JVM 同步作为合法降级(单实例部署或测试场景),
          * 此时仍保证 JVM 内线程互斥,但 ResiCache 会发出 {@code protection.degraded=local-only}
-         * 告警使安全属性可观测(WS-1.4 升级为链级 Observation 事件)。
+         * 告警使安全属性可观测。
          *
          * @see io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport
          */
@@ -278,7 +277,7 @@ public class RedisProCacheProperties {
         private boolean enabled = true;
 
         /**
-         * Path C 后续(WS-1.4) — per-mechanism 运行时 kill-switch(分项覆盖)。
+         * per-mechanism 运行时 kill-switch(分项覆盖)。
          * <p>每个字段 {@code null} = 继承 {@link #enabled} 总开关;非 {@code null}
          * = 单独覆盖该机制。便于只关某个机制(例如生产故障时关闭布隆但保留锁)。
          * <p>对应 handler: bloom-filter / sync-lock / early-expiration / null-value。

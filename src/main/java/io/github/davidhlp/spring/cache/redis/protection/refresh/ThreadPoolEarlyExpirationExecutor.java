@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 在有限的线程池上执行提前过期任务，同时防止每个键的重复提交。
  *
- * <p>装配（ADR-0024）：本类是 {@code resi-cache.early-expiration.*} 配置兑现的 seam ——
+ * <p>装配:本类是 {@code resi-cache.early-expiration.*} 配置兑现的 seam ——
  * 由 {@link io.github.davidhlp.spring.cache.redis.config.RedisProCacheConfiguration#earlyExpirationExecutor}
  * {@code @Bean} 从 {@code RedisProCacheProperties.EarlyExpirationProperties} 读池参数
  * ({@code pool-size}/{@code max-pool-size}/{@code queue-capacity}) 构造；用户可自定义
@@ -47,8 +47,7 @@ public class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
     private final RefreshTaskMetrics metrics;
 
     /**
-     * 默认构造函数（测试 / 无配置 fallback）：硬编码 {@code 2/10/100} 池参数，
-     * 行为等价 ADR-0024 前 {@code @Component} 无参装配。
+     * 默认构造函数（测试 / 无配置 fallback）：硬编码 {@code 2/10/100} 池参数。
      *
      * <p>生产装配走 {@link io.github.davidhlp.spring.cache.redis.config.RedisProCacheConfiguration#earlyExpirationExecutor}
      * {@code @Bean}，从 {@code resi-cache.early-expiration.*} properties 读池参数。
@@ -58,7 +57,7 @@ public class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
     }
 
     /**
-     * 配置化构造（ADR-0024，生产 {@code @Bean} 主路径）：用 {@code resi-cache.early-expiration}
+     * 配置化构造（生产 {@code @Bean} 主路径）：用 {@code resi-cache.early-expiration}
      * 池参数创建线程池。
      *
      * @param corePoolSize   核心线程数
@@ -100,7 +99,7 @@ public class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         try {
             // 初始化 Micrometer 指标（注册逻辑收敛于 RefreshTaskMetrics）
             this.metrics = new RefreshTaskMetrics(meterRegistry, inFlight, executorService);
-            // ADR-0024: 池容量参数化后从实际 executor 读取打印，避免日志撒谎（旧硬编码 core=2/max=10/queue=100）
+            // 从实际 executor 读取打印，避免日志撒谎
             String poolDesc = (executorService instanceof ThreadPoolExecutor tpe)
                     ? "core=" + tpe.getCorePoolSize() + ", max=" + tpe.getMaximumPoolSize()
                     : executorService.getClass().getSimpleName();
@@ -115,7 +114,7 @@ public class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
     }
 
     /**
-     * 创建线程池执行器（ADR-0024：参数化，池容量由调用方传入而非硬编码）。
+     * 创建线程池执行器（池容量由调用方传入）。
      *
      * @param corePoolSize   核心线程数
      * @param maxPoolSize    最大线程数

@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * ChainEngine 单元测试 — ADR-0009 后唯一推进引擎的契约。
+ * ChainEngine 单元测试 — 唯一推进引擎的契约。
  *
  * <p>Engine 的全部职责（链推进 + decision switch + 观测编排 + post-process）在本测试
  * 中直接验证。{@code CacheHandlerChainTest} 仅覆盖 facade 自身的 handler 列表管理。
@@ -34,9 +34,9 @@ class ChainEngineTest {
     private ChainEngine engine;
 
     /**
-     * ADR-0046:Engine 不再持 chainSnapshotRef — 测试改用本字段在每个测试方法
-     * 里显式装好链快照,作为 {@link ChainEngine#execute(List, CacheContext)} 的
-     * 第一参数传入。{@link #installChain(CacheHandler...)} helper 负责赋值。
+     * Engine 不持 chainSnapshotRef — 测试在每个测试方法里显式装好链快照,作为
+     * {@link ChainEngine#execute(List, CacheContext)} 的第一参数传入。
+     * {@link #installChain(CacheHandler...)} helper 负责赋值。
      */
     private List<CacheHandler> snapshot;
 
@@ -56,7 +56,7 @@ class ChainEngineTest {
     }
 
     private void installChain(CacheHandler... handlers) {
-        // ADR-0046:Engine 不再持 chainSnapshotRef — 链快照作为 execute 的第一参数传入
+        // 链快照作为 execute 的第一参数传入
         this.snapshot = List.of(handlers);
     }
 
@@ -149,8 +149,8 @@ class ChainEngineTest {
         @Test
         @DisplayName("aroundChain 与 node token hooks 按嵌套顺序执行")
         void aroundChain_andPerNode_calledInOrder() {
-            // ADR-0061:用真实 observer 录制 4 个钩子的调用顺序(替代 mock —— onChainStart
-            // 返回 Object 后,mock-based 验证语义不再适用,真实 observer 录制更鲁棒)
+            // 用真实 observer 录制 4 个钩子的调用顺序(onChainStart 返回 Object 后,
+            // mock-based 验证语义不适用,真实 observer 录制更鲁棒)
             RecordingObserver observer = new RecordingObserver();
             engine.addObserver(observer);
             installChain(new RecordingHandler("h1", HandlerResult.continueWith(CacheResult.success())));
@@ -165,7 +165,7 @@ class ChainEngineTest {
         @Test
         @DisplayName("onChainStart 返回的 scope token 配对回传到 onChainEnd(per-observer 隔离)")
         void scopeToken_pairedFromStartToEnd() {
-            // ADR-0061:Engine 按 observer index 配对 scope token,scopeToken 与 onChainStart
+            // Engine 按 observer index 配对 scope token,scopeToken 与 onChainStart
             // 返回的引用完全相同
             TokenRecordingObserver observer = new TokenRecordingObserver();
             engine.addObserver(observer);
@@ -185,14 +185,14 @@ class ChainEngineTest {
         void executeFragment_skipsAroundChain() {
             RecordingObserver observer = new RecordingObserver();
             engine.addObserver(observer);
-            // ADR-0022: executeChainFragment 语义为「推进 from 之后的剩余链」(不再含 from 本身)
+            // executeChainFragment 语义为「推进 from 之后的剩余链」(不含 from 本身)
             // h0 作 fragment 发起者(模拟 SyncLockHandler 锁内传 this),h1/h2 是其后继
             CacheHandler h0 = new RecordingHandler("h0", HandlerResult.continueChain());
             CacheHandler h1 = new RecordingHandler("h1", HandlerResult.continueChain());
             CacheHandler h2 = new RecordingHandler("h2", HandlerResult.continueWith(CacheResult.success()));
             installChain(h0, h1, h2);
 
-            // ADR-0046:fragment 隐式从 ThreadLocal 读快照 — 直接用 test helper 设入
+            // fragment 隐式从 ThreadLocal 读快照 — 直接用 test helper 设入
             // (绕开 execute 避免触发 aroundChain 观测,正是本测试要验证 fragment 不触发它们)
             engine.setCurrentSnapshotForTest(snapshot);
             try {
@@ -246,7 +246,7 @@ class ChainEngineTest {
         }
 
         @Test
-        @DisplayName("observer 抛异常被吞掉(ADR-0026),主链结果不受影响")
+        @DisplayName("observer 抛异常被吞掉,主链结果不受影响")
         void observerThrows_swallowed_mainChainUnaffected() {
             ChainObserver throwing = new ChainObserver() {
                 @Override public Object onChainStart(CacheContext context) { throw new RuntimeException("start boom"); }
@@ -363,7 +363,7 @@ class ChainEngineTest {
         @Test
         @DisplayName("executeChainFragment(from=null) → 返回 success,不调任何 observer")
         void executeFragment_fromNull_returnsSuccess() {
-            // ADR-0061:用真实 observer 录制替代 mock —— onChainStart 返回 Object 后
+            // 用真实 observer 录制替代 mock —— onChainStart 返回 Object 后
             // mock + times(0) 验证语义混乱(详见 ObserverTests 注释)
             RecordingObserver observer = new RecordingObserver();
             engine.addObserver(observer);
@@ -454,12 +454,12 @@ class ChainEngineTest {
         }
     }
 
-    // ==================== 测试用 observer(ADR-0061 替换 mock) ====================
+    // ==================== 测试用 observer(替换 mock) ====================
 
     /**
-     * 录制 4 个钩子调用顺序的 ChainObserver — ADR-0061 替换原 Mockito mock 验证。
+     * 录制 4 个钩子调用顺序的 ChainObserver — 替换 mock 验证。
      *
-     * <p>为什么用真实 observer 而非 mock:onChainStart 从 void 改为返回 Object 后,
+     * <p>为什么用真实 observer 而非 mock:onChainStart 返回 Object 时,
      * {@code inOrder.verify(observer).onChainStart(any())} 这种 mock-based 验证
      * 语义失效(mock 返回 Object + 链式 verify 互相干扰),用真实 observer 录制更
      * 鲁棒且意图清晰。
@@ -502,7 +502,7 @@ class ChainEngineTest {
     }
 
     /**
-     * 专门验证 scope token 配对的 observer — ADR-0061 scope token 机制契约测试。
+     * 专门验证 scope token 配对的 observer — scope token 机制契约测试。
      *
      * <p>onChainStart 返回唯一标识 token,onChainEnd 校验传入的 token 与 start 时的
      * 引用相同(Engine 按 index 配对,跨 observer 不混淆)。无 state map 累积干扰。

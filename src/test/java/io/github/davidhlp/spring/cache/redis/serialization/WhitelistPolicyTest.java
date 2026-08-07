@@ -11,8 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * WhitelistPolicy 单元测试
  *
  * <p>验证 JSON 侧白名单判断的单一来源:前缀匹配 / java.lang / java.time / java.math /
- * 20 条 java.util 集合枚举 / 拒绝路径。这是 C01 抽出 WhitelistPolicy 的核心可测性收益——
- * 原本散布在 SecureJacksonRedisSerializer 三处的规则现可独立断言。
+ * 20 条 java.util 集合枚举 / 拒绝路径。
  */
 @DisplayName("WhitelistPolicy Tests")
 class WhitelistPolicyTest {
@@ -77,8 +76,6 @@ class WhitelistPolicyTest {
         assertThat(policy.isClassAllowed(null)).isFalse();
     }
 
-    // Round 9: wildcard ".*" support in allowed-package-prefixes (TDD red phase).
-
     @Test
     @DisplayName("wildcard '.*' suffix matches any direct class in package")
     void isClassNameAllowed_wildcardSuffix_matchesDirectClass() {
@@ -106,10 +103,8 @@ class WhitelistPolicyTest {
     @Test
     @DisplayName("plain literal prefix still works (backward compat with existing configs)")
     void isClassNameAllowed_literalPrefix_stillMatches() {
-        // Round 9 red phase 修正:literal prefix 走 String.startsWith,所以
-        // 'com.exampleX.Foo' 在 literal 'com.example' 下仍匹配(无 dot 边界)。
-        // 这是既有行为(stripped of Round 9 changes),新 .* 通配语义仅作用于
-        // 以 '.*' 结尾的项。
+        // literal prefix 走 String.startsWith,所以 'com.exampleX.Foo' 在 literal
+        // 'com.example' 下仍匹配(无 dot 边界);'.*' 通配语义仅作用于以 '.*' 结尾的项。
         WhitelistPolicy literalPolicy = new WhitelistPolicy(List.of("com.example"));
         assertThat(literalPolicy.isClassNameAllowed("com.example.Foo")).isTrue();
         assertThat(literalPolicy.isClassNameAllowed("com.example.sub.Bar")).isTrue();

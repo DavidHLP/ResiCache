@@ -12,28 +12,17 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * Bloom 过滤器 rebuilding 窗口状态机 —— ADR-0058 / Round 44 从 {@link BloomSupport} 抽出的
- * deep seam。
+ * Bloom 过滤器 rebuilding 窗口状态机 —— 从 {@link BloomSupport} 抽出的 deep seam。
  *
- * <p><b>problem (背景)</b>:原 {@link BloomSupport} 同时承担 4 件关注点:
- * <ol>
- *   <li>filter 代理(mightContain / add / clear)</li>
- *   <li>rebuilding 窗口标志(per-cacheName Redis 标志 + TTL)</li>
- *   <li>本地 Caffeine 缓存(避免每次 hasKey 打 Redis)</li>
- *   <li>fail-open 策略(底层异常 → 返回 true;CLEAN 后 → 返回 true)</li>
- * </ol>
- * rebuilding 窗口的 60+ 行状态机(标记、查询、本地缓存、Redis TTL)埋在中段,无独立测试,
- * "什么算 rebuilding?" 无法命名,藏在 try-catch + log 里。
- *
- * <p><b>solution</b>:本类收口 rebuilding 窗口的读/写/失效/禁用判定,让 {@link BloomSupport}
+ * <p>本类收口 rebuilding 窗口的读/写/失效/禁用判定,让 {@link BloomSupport}
  * 回归纯代理 + fail-open 角色。{@link BloomFilterHandler} 的外部 API 不变(mightContain /
  * add / clear)。
  *
  * <p><b>deletion test</b>:删本类 + 内联回 {@link BloomSupport} → 60+ 行状态机 + 本地 Caffeine
- * 缓存 + Redis 标志协议在 BloomSupport 中段重新出现,4 关注点交织。seam 挣得起存在代价。
+ * 缓存 + Redis 标志协议在 BloomSupport 中段重新出现,关注点交织。seam 挣得起存在代价。
  *
  * <p><b>Spring 装配</b>:{@code @Component} + {@code @Autowired} 构造注入。{@code properties}
- * 为 null(测试场景)时 {@code rebuildWindowSeconds=0} → 禁用语义,保持 v0.0.x 旧行为。
+ * 为 null(测试场景)时 {@code rebuildWindowSeconds=0} → 禁用语义。
  *
  * <p><b>线程安全</b>:本地 Caffeine cache 单写多读(失效操作并发安全);Redis 标志由
  * 跨实例共享(per-cacheName key 唯一),多 JVM 写入冲突由 SETNX 不必要 —— 后写覆盖即
@@ -49,7 +38,7 @@ public class BloomRebuilder {
     /** rebuilding 状态本地缓存 TTL(秒):容忍此延迟的跨实例不一致 */
     static final long REBUILD_LOCAL_CACHE_TTL_SECONDS = 1L;
 
-    /** rebuilding 窗口禁用阈值(秒):{@code <=} 此值表示禁用,保持 v0.0.x 旧行为 */
+    /** rebuilding 窗口禁用阈值(秒):{@code <=} 此值表示禁用 */
     static final long REBUILD_WINDOW_DISABLED = 0L;
 
     private final RedisTemplate<String, String> redisTemplate;
@@ -77,13 +66,13 @@ public class BloomRebuilder {
      *
      * <p>三级短路:
      * <ol>
-     *   <li>{@code rebuildWindowSeconds <= 0} → 直接返回 false(窗口禁用,保持 v0.0.x 行为)</li>
+     *   <li>{@code rebuildWindowSeconds <= 0} → 直接返回 false(窗口禁用)</li>
      *   <li>本地 Caffeine 缓存命中 → 返回缓存值(避免每次都打 Redis)</li>
      *   <li>Caffeine miss → 查 Redis rebuilding 标志,缓存并返回</li>
      * </ol>
      *
      * <p>Redis 查询异常时退化到 false(假设未在 rebuilding,不阻断 fail-open 语义)
-     * ——{@link BloomSupport} 在本类返回 false 后会照常查底层 bloom,与原 v0.0.x 行为等价。
+     * ——{@link BloomSupport} 在本类返回 false 后会照常查底层 bloom。
      *
      * @param cacheName 缓存名(per-cacheName 独立窗口)
      * @return true 表示正在 rebuilding 窗口期,调用方应 fail-open
@@ -112,8 +101,8 @@ public class BloomRebuilder {
      * {@link #isRebuilding} 立即查到 true。
      *
      * <p>窗口由 Redis TTL 自动到期结束,无需猜测重建 key 数量。
-     * 窗口禁用时本方法为 no-op(保持 v0.0.x 行为)。
-     * 标志写入失败仅记日志(退化为无窗口旧行为,不阻断 {@link BloomSupport#clear} 主流程)。
+     * 窗口禁用时本方法为 no-op。
+     * 标志写入失败仅记日志(退化为无窗口语义,不阻断 {@link BloomSupport#clear} 主流程)。
      *
      * @param cacheName 缓存名
      */
@@ -128,7 +117,7 @@ public class BloomRebuilder {
             log.warn("Bloom filter cleared; rebuilding window opened ({}s, fail-open): cacheName={}",
                     rebuildWindowSeconds, cacheName);
         } catch (Exception ex) {
-            // 标志设置失败不阻断 clear 本身;最坏退化为无 rebuilding 窗口(即 v0.0.x 旧行为)
+            // 标志设置失败不阻断 clear 本身;最坏退化为无 rebuilding 窗口
             log.error("Failed to mark bloom rebuilding window (falling back to legacy no-window behavior): cacheName={}",
                     cacheName, ex);
         }

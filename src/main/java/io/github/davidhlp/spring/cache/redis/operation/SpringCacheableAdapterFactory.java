@@ -10,17 +10,14 @@ import java.util.Arrays;
 /**
  * Spring 原生 {@link Cacheable @Cacheable} 注解 → {@link RedisCacheableOperation} 的适配工厂。
  *
- * <p><strong>Candidate C:Spring 适配器</strong>。Spring 的 {@code @Cacheable} 字段名与
+ * <p><strong>Spring 适配器</strong>。Spring 的 {@code @Cacheable} 字段名与
  * ResiCache 注解不同({@code value}/{@code cacheNames} 等价但缺 TTL/布隆/早过期等增强属性),
  * 且 Spring 注解<strong>不</strong>持有 3 处漂移字段({@code syncTimeout/expectedInsertions/
  * falseProbability}),所以适配器<em>不</em>走 {@link RedisCacheAttributesProjector} —— 直接用
  * Spring 注解字段构造 {@link RedisCacheAttributes},未指定字段由 POJO 的 {@code @Builder}
  * 默认值填入。
  *
- * <p><b>ADR-0028 seam 收窄</b>:{@code create} 移除 implementation 未用的
- * {@code target}/{@code args}(原 5 参 → 3 参),不再继承已删除的
- * {@code AbstractOperationFactory}(其 {@code supports}/{@code annotationClass} 死链一并清理)。
- * {@code toAttributes} 与 {@code materialize} 因承载 Spring→ResiCache 字段映射的非平凡逻辑,
+ * <p>{@code toAttributes} 与 {@code materialize} 因承载 Spring→ResiCache 字段映射的非平凡逻辑,
  * 保留为命名 seam。
  */
 @Component

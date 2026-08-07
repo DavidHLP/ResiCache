@@ -17,11 +17,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Path C Step 6 遗留 — {@code supportsAsyncRetrieve=true} 后 async 路径行为 + MDC 透传验证.
- *
- * <p>Path C Step 6(commit {@code b9d6b40})把 {@code RedisProCacheWriter.supportsAsyncRetrieve()}
- * 翻回 {@code true},并在 {@code withMethodMetadataSnapshot} 内加 {@code CacheInvocationContext}
- * snapshot/restore(本 tick 25 commit {@code eeab1fe} 加 MDC capture/restore)。
+ * async 路径行为 + MDC 透传验证.
  *
  * <p>本 IT 验证 async 路径关键契约:
  * <ol>
@@ -30,14 +26,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>MDC(traceId/spanId)在 commonPool 异步线程内可读(set 在调用线程,
  *       async 线程内仍可见)</li>
  * </ol>
- *
- * <p>注: 本 IT 是 Step 6 遗留,本会话前未补(优先 Path C 7 步序列 + WS-1.4
- * per-handler tag + health cascade)。现在补全。
  */
 @SpringBootTest(classes = TestApplication.class)
 @ActiveProfiles("integration-test")
 @Import(TestRedisConfiguration.class)
-@DisplayName("Path C Step 6 — async 路径 + MDC 透传契约")
+@DisplayName("async 路径 + MDC 透传契约")
 class PathCAopAsyncIT extends AbstractRedisIntegrationTest {
 
     private static final String CACHE_NAME = "testCache";
@@ -61,11 +54,10 @@ class PathCAopAsyncIT extends AbstractRedisIntegrationTest {
     @Test
     @DisplayName("PathC-Step6-1: retrieve() async 路径正常完成(CompletableFuture 不抛异常)")
     void asyncRetrieve_completesNormally() throws Exception {
-        // 本 tick 最小切片:仅验证 async 路径 future 正常完成(不抛异常),证明
+        // 仅验证 async 路径 future 正常完成(不抛异常),证明
         // commonPool 异步线程 + withMethodMetadataSnapshot 链路通。
-        // (raw byte[] 内容不直接断言 — 跨 SerializeFilter 链的字节比对复杂度高,
-        // 留 v0.2.0 端到端测试补 — 现有 RedisCacheSemanticsIT 已覆盖 sync 路径
-        // 缓存值内容,async 路径逻辑等价于 sync 路径同样的 chain.execute)
+        // (raw byte[] 内容不直接断言 — 跨 SerializeFilter 链的字节比对复杂度高;
+        // sync 路径缓存值内容由 RedisCacheSemanticsIT 覆盖,async 路径逻辑等价)
         CompletableFuture<byte[]> future = redisProCacheWriter.retrieve(CACHE_NAME, KEY);
 
         // future.get() 不抛异常 + 5s 内完成,证明 async 路径正常工作

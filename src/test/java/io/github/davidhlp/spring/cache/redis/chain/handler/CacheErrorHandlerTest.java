@@ -15,22 +15,19 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheErrorHandler 单元测试 — ADR-0067 后契约。
+ * CacheErrorHandler 单元测试。
  *
- * <p>原设计 5 个 wrapper 方法（{@code handleGetError} / {@code handlePutError} /
- * {@code handlePutIfAbsentError} / {@code handleRemoveError} / {@code handleCleanError}）
- * 已收口为单 {@link CacheErrorHandler#handleError(CacheOperation, String, String, Exception)}
- * 入口，per-operation 策略集中到 {@code STRATEGIES} 不可变 Map。本测试：
+ * <p>单 {@link CacheErrorHandler#handleError(CacheOperation, String, String, Exception)}
+ * 入口,per-operation 策略集中到 {@code STRATEGIES} 不可变 Map。本测试：
  *
  * <ul>
- *   <li>保留 {@code handleException} 直策略调用测试（{@link StrategyDispatchTests}）</li>
- *   <li>原 5 个 wrapper Nested 类替换为 1 个 parametric 测试
- *       （{@link PerOperationStrategyTests}）— 单一事实源 + pin 全部 op→策略映射</li>
- *   <li>保留原 {@link StrategySelectionTests} 作为策略语义总览</li>
+ *   <li>{@code handleException} 直策略调用测试（{@link StrategyDispatchTests}）</li>
+ *   <li>1 个 parametric 测试（{@link PerOperationStrategyTests}）— 单一事实源 + pin 全部 op→策略映射</li>
+ *   <li>{@link StrategySelectionTests} 作为策略语义总览</li>
  * </ul>
  *
- * <p>删除测试：删掉 {@code STRATEGIES} Map 或 {@code handleError} 入口，本测试集无法 pin
- * per-operation 策略 → 退化到 5 个分散 wrapper 时代。
+ * <p>deletion test:删掉 {@code STRATEGIES} Map 或 {@code handleError} 入口,本测试集无法 pin
+ * per-operation 策略。
  */
 @DisplayName("CacheErrorHandler Tests")
 class CacheErrorHandlerTest {
@@ -127,7 +124,7 @@ class CacheErrorHandlerTest {
     }
 
     @Nested
-    @DisplayName("handleError per-operation strategy (ADR-0067)")
+    @DisplayName("handleError per-operation strategy")
     class PerOperationStrategyTests {
 
         @ParameterizedTest(name = "{0} → success={1}")

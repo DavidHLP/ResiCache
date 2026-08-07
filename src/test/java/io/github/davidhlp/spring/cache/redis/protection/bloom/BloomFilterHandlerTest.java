@@ -187,7 +187,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("returns false for GET operation (no post-process needed)")
         void requiresPostProcess_getOperation_returnsFalse() {
-            // ADR-0045:requiresPostProcess 改走 operation enum 派生,GET 不参与后置
+            // requiresPostProcess 走 operation enum 派生,GET 不参与后置
             CacheContext context = createContext(CacheOperation.GET, cacheOperation);
 
             boolean result = handler.requiresPostProcess(context);

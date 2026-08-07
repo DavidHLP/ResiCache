@@ -31,26 +31,18 @@ import java.util.function.Function;
  * <ul>
  *   <li>{@code @RedisCacheable} —— 走内联 lambda
  *       ({@code projector.from(a) + RedisCacheableOperation.fromAttributes});</li>
- *   <li>Spring {@code @Cacheable} —— 走 {@link SpringCacheableAdapterFactory}
- *       （<strong>Candidate C</strong>：原本内联的 47 行 if-Builder 模板已抽出到该 factory）。</li>
+ *   <li>Spring {@code @Cacheable} —— 走 {@link SpringCacheableAdapterFactory}。</li>
  * </ul>
  *
- * <p><b>ADR-0059 收敛</b>:两条路径都通过
- * {@link AbstractAnnotationHandler#registerActionFor(OperationKind)} 工厂返回的 lambda
- * 注册到 {@link OperationKind#CACHEABLE} 命名空间,取代原
- * {@code redisCacheRegister::registerCacheableOperation} 方法引用 —— register API
- * 已从 6 方法收敛到 2 方法,kind 编译期固定。
+ * <p>两条路径都通过 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
+ * 工厂返回的 lambda 注册到 {@link OperationKind#CACHEABLE} 命名空间,kind 编译期固定。
  *
- * <p><b>ADR-0065 深化(本 seam)</b>:删除浅 {@code CacheableOperationFactory} @Component
- * (2 行委派 + 类样板),ResiCache 路径内联为 lambda 直传 {@link RedisCacheAttributesProjector#from}
- * + {@link RedisCacheableOperation#fromAttributes}。{@link OperationFactory} 接口保留 ——
+ * <p>ResiCache 路径以 lambda 直传 {@link RedisCacheAttributesProjector#from} +
+ * {@link RedisCacheableOperation#fromAttributes}。{@link OperationFactory} 接口保留 ——
  * 本类的 ResiCache lambda 与 {@link SpringCacheableAdapterFactory} 在 {@code doRegister}
  * 处仍是真多态分叉(两种 annotation 来源 → 同一种 operation)。
  *
- * <p><b>ADR-0060 doHandle 浅路径分叉收敛</b>(本次):原 {@link #doHandle(Method, Object, Object[])}
- * 持有 15 行"if @RedisCacheable 命中 → register + 早 return;else if Spring @Cacheable
- * 命中 → register;else return empty"双路径浅分叉,两路径结构近镜像(registerOne + add to list)
- * 但早 return 形态不对称,需逐字阅读才能理解。重构后:
+ * <p>{@code doHandle} 主路径 = 1 行(select + map + register):
  * <ol>
  *   <li>{@link #selectCacheableSource(Method)} —— 决定走 ResiCache 源还是 Spring 源;
  *       package-private 暴露给单测,「哪种注解被选中」可零 mock 断言</li>
@@ -58,8 +50,7 @@ import java.util.function.Function;
  *       选中的注解完成 registerOne + add-to-list 的 1-shot 动作;
  *       内部 instanceof 模式匹配决定走 ResiCache 还是 Spring factory + key 提取器</li>
  * </ol>
- * 收敛后 {@code doHandle} 主路径退化为 1 行(select + map + register);两路径的"近镜像样板"
- * 完全消失,单一职责(select / register)各自单测。
+ * select / register 单一职责各自单测。
  */
 @Slf4j
 @Component
@@ -85,16 +76,15 @@ public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
 
     @Override
     protected List<CacheOperation> doHandle(Method method, Object target, Object[] args) {
-        // ADR-0060:select + map + register 三步走 —— 选中源、用源注册;
-        // 未选中任一源(无注解)→ empty list。流程控制由 Optional.map 单形态承担,
-        // 原 doHandle 的"早 return" + "else if" 浅分叉完全消失。
+        // select + map + register 三步走 —— 选中源、用源注册;
+        // 未选中任一源(无注解)→ empty list。流程控制由 Optional.map 单形态承担。
         return selectCacheableSource(method)
                 .map(annotation -> registerFromSource(annotation, method, target, args))
                 .orElse(Collections.emptyList());
     }
 
     /**
-     * 选定"此方法上要处理的 Cacheable 注解" — ADR-0060 收敛后从 doHandle 抽出的 deep seam.
+     * 选定"此方法上要处理的 Cacheable 注解"的 deep seam.
      *
      * <p><b>职责</b>:在 method 上探测 {@link RedisCacheable} / Spring {@link Cacheable} 注解,
      * 返回首个命中的注解实例(无强类型,内部用 instanceof 区分)。
@@ -109,9 +99,8 @@ public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
      * 调用点的 type inference 正常工作。本 seam 的"决策"价值未损失 —— 测试「哪种注解被选中」
      * 仍可零 mock 断言(只需断言返回的注解类型是 RedisCacheable / Cacheable / empty)。
      *
-     * <p><b>package-private</b> — 暴露给单测,直接断言"哪种注解被选中"无需 mock factory/register。
-     * 原 doHandle 的"哪种注解被选中"逻辑被"register + add to list"样板覆盖,需全 mock
-     * 才能间接验证 — 单测 locality 改善。
+     * <p><b>package-private</b> — 暴露给单测,直接断言"哪种注解被选中"无需 mock factory/register,
+     * 单测 locality 改善。
      *
      * <p><b>deletion test</b>:删本方法、内联回 doHandle → 2 行 findMergedAnnotation 调用
      * + 2 个 null-check 重新出现,主路径回到 15 行浅分叉。seam 挣得起存在代价。
@@ -132,8 +121,7 @@ public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
     }
 
     /**
-     * 用选中的注解完成 registerOne + add-to-list 1-shot 动作 — ADR-0060 收敛后从 doHandle
-     * 抽出的执行 seam.
+     * 用选中的注解完成 registerOne + add-to-list 1-shot 动作的执行 seam.
      *
      * <p><b>职责</b>:
      * <ol>

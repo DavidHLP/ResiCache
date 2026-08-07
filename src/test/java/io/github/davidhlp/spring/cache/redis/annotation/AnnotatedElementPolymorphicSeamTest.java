@@ -9,10 +9,9 @@ import java.lang.reflect.Method;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link AnnotationTargets} 反射多态 seam contract tests — Round 10 / ADR-0020.
+ * {@link AnnotationTargets} 反射多态 seam contract tests。
  *
- * <p>钉住 2 个 helper 在 Method / Class 双向的行为等价(消除原 23 处
- * {@code instanceof Method/Class} 手动分派后的回归可能)。零 Spring 容器依赖,
+ * <p>钉住 2 个 helper 在 Method / Class 双向的行为等价。零 Spring 容器依赖,
  * 纯反射 + Lombok + Spring Core API。
  */
 @DisplayName("AnnotationTargets Polymorphic Seam Tests")

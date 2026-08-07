@@ -89,10 +89,9 @@ public @interface RedisCacheable {
     /**
      * 布隆过滤器预期插入数量.
      *
-     * <p><b>S1 (Round 47)</b>:类型从 {@code int} 提升为 {@code long},与
-     * {@code @RedisCachePut}/{@code @RedisCacheEvict} 保持一致,避免负值裁剪 + bloom
-     * sizing DoS 风险(超大值 int 溢出后被 narrowToInt 截为负数 → bloom 分配异常)。
-     * 字段类型契约现与 {@link io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes#expectedInsertions}
+     * <p>类型为 {@code long},与 {@code @RedisCachePut}/{@code @RedisCacheEvict} 保持一致,
+     * 避免负值裁剪 + bloom sizing DoS 风险(超大值 int 溢出后被 narrowToInt 截为负数 →
+     * bloom 分配异常)。字段类型契约与 {@link io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributes#expectedInsertions}
      * 双向一致,无隐式拓宽/窄化。
      */
     @PositiveOrZero

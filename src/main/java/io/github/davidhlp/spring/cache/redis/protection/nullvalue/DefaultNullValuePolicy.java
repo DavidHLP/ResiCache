@@ -10,10 +10,8 @@ import org.springframework.stereotype.Component;
  * 默认空值策略 — 4 个纯决策 / 恒等变换方法,外加 {@code toReturnValue} 委派给
  * {@link NullValueEncoder} 完成 null-aware 字节编码。
  *
- * <p><b>Round 35 拆分动机(ADR-0047 C6 / ADR-0048)</b>:此前 5 方法中
- * {@code toReturnValue} 是唯一耦合 {@code TypeSupport} 的方法,混入字节编码职责。
- * 抽 seam 后本类不再 {@code import TypeSupport},全部类型支持职责经
- * {@code NullValueEncoder} 转交;类瘦身 ~42 SLOC,单一职责清晰。
+ * <p>本类不 {@code import TypeSupport},全部类型支持职责经 {@link NullValueEncoder}
+ * 转交(单一职责)。
  *
  * <p>遵循 Spring 缓存对 null 值的预期处理语义。
  */
@@ -74,8 +72,6 @@ public class DefaultNullValuePolicy implements NullValuePolicy {
 
     /**
      * 将值转换为返回字节 — 委派 {@link NullValueEncoder#encodeForReturn}。
-     *
-     * <p>本方法已成 1 行委派,null-aware 字节编码职责完全交给 seam 类。
      *
      * @param value 待转换的值
      * @param cacheName 缓存名称（用于 debug 日志定位）

@@ -26,22 +26,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * SyncSupport single-flight 并发测试 (ADR-0042).
+ * SyncSupport single-flight 并发测试。
  *
- * <p>覆盖 {@code runAsFollower} / 重入 fast-path —— 这是 ADR-0042 把 per-key
- * {@code synchronized(monitor)} 换成 {@code CompletableFuture} single-flight 后的
- * <b>新代码路径</b>,既有 {@code SyncSupportTest} 只覆盖单线程 leader 边界。
+ * <p>覆盖 {@code runAsFollower} / 重入 fast-path —— per-key single-flight 基于
+ * {@code CompletableFuture},leader 独占回源,follower 共享结果。
  *
  * <p>断言契约:
  * <ul>
  *   <li>同 key 高并发:loader 只调一次(leader 独占回源),所有 follower 共享 leader 结果</li>
- *   <li>leader 失败:follower 收到相同异常(failure-propagation 语义改变,ADR-0042)</li>
+ *   <li>leader 失败:follower 收到相同异常(failure-propagation)</li>
  *   <li>重入:同线程同 key 嵌套 executeSync 走 fast-path,不死锁(future 不可重入陷阱)</li>
  *   <li>follower 超时:leader 未完成时,follower 按时超时</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("SyncSupport Single-Flight Concurrent Tests (ADR-0042)")
+@DisplayName("SyncSupport Single-Flight Concurrent Tests")
 class SyncSupportSingleFlightTest {
 
     @Mock

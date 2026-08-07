@@ -15,7 +15,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 /**
- * SyncSupport single-flight 选举产出的运行时角色 — ADR-0055 (Round 41).
+ * SyncSupport single-flight 选举产出的运行时角色。
  *
  * <p>single-flight 协议下,一个 key 的并发请求在运行期会落到 3 个互斥角色之一:
  * <ul>
@@ -29,10 +29,10 @@ import java.util.function.Supplier;
  * </ul>
  *
  * <p>每个角色自承 state + cleanup,本 seam 让「角色是什么」与「选举函数」解耦 —
- * {@link SyncSupport#executeSync} 现在只做"选角色 → 调 run"两步,角色内部知道自己的全部生命周期。
+ * {@link SyncSupport#executeSync} 只做"选角色 → 调 run"两步,角色内部知道自己的全部生命周期。
  *
  * <p><b>deletion test</b>:把 3 个角色删掉、内联回 {@code SyncSupport.executeSync} →
- * 3 个分支变 3 段 inline 镜像样板(原 Round 40 前的状态),复杂度**上升**。本 seam 浓缩复杂度。
+ * 3 个分支变 3 段 inline 镜像样板,复杂度**上升**。本 seam 浓缩复杂度。
  *
  * <p><b>设计纪律</b>:
  * <ul>
@@ -41,7 +41,7 @@ import java.util.function.Supplier;
  *   <li>{@link Leader} / {@link Follower} 持有构造时传入的 state,**不**反向引用 SyncSupport
  *       实例(避免角色认识 orchestrator,违反 locality)</li>
  *   <li>{@code run(loader)} 的 {@code InterruptedException} 由 Leader 内部处理
- *       (转换为 IllegalStateException,保留原 SyncSupport 行为)</li>
+ *       (转换为 IllegalStateException)</li>
  *   <li>包私有:仅 SyncSupport 调用,不对外暴露</li>
  * </ul>
  */
@@ -156,7 +156,7 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
         private T doLeaderWork(Supplier<T> loader)
                 throws InterruptedException {
             if (distributedManagers.isEmpty()) {
-                // 无分布式锁后端:WS-1.2a fail-fast 或 local-only 显式降级(均不进 LockStack)
+                // 无分布式锁后端:fail-fast 或 local-only 显式降级(均不进 LockStack)
                 return executeWithoutDistributedBackend(loader);
             }
 
@@ -183,8 +183,7 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
          */
         private T executeWithoutDistributedBackend(Supplier<T> loader) {
             if (properties.getSyncLock().isLocalOnly()) {
-                // 显式合法降级:单 JVM single-flight(leader 串行跑 loader,follower join future)。
-                // WS-1.4 将此告警升级为链级 Observation 事件 protection.degraded=local-only。
+            // 显式合法降级:单 JVM single-flight(leader 串行跑 loader,follower join future)。
                 log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
                         + "已按 local-only=true 降级为单 JVM 同步 (key={})", key);
                 return loader.get();
@@ -199,8 +198,8 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
         }
 
         /**
-         * 锁堆栈,用于管理多个锁的自动关闭(从原 SyncSupport 迁出,改为 Leader 私有,
-         * 因为它本质上是 leader 持锁的载体,不应暴露给 SyncSupport 或 Follower)。
+         * 锁堆栈,用于管理多个锁的自动关闭 —— Leader 私有,因为它本质上是 leader
+         * 持锁的载体,不应暴露给 SyncSupport 或 Follower。
          */
         private static final class LockStack implements AutoCloseable {
 
@@ -241,7 +240,7 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
      *       未完成则立即失败,模仿 Redisson tryLock(0) 立即返回语义)</li>
      * </ul>
      *
-     * <p>失败传播(ADR-0042):leader 异常经 {@code completeExceptionally} 透传给 follower,
+     * <p>失败传播:leader 异常经 {@code completeExceptionally} 透传给 follower,
      * follower 收到的是 leader 的原始异常(RuntimeException 原样抛;checked 包成 RuntimeException)。
      */
     final class Follower<T> implements SyncRole<T> {

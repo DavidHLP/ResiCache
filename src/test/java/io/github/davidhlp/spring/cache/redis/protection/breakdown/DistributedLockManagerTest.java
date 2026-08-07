@@ -128,7 +128,7 @@ class DistributedLockManagerTest {
     }
 
     @Nested
-    @DisplayName("buildLockKey / Cluster hash-tag tests (WS-1.2b)")
+    @DisplayName("buildLockKey / Cluster hash-tag tests")
     class BuildLockKeyTests {
 
         @Test

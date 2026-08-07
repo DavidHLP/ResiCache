@@ -9,14 +9,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 责任链管理器 — ADR-0009 抽 Engine 后的 thin facade；ADR-0022 起为链结构单一真理源。
+ * 责任链管理器 — thin facade,链结构单一真理源。
  *
- * <p>原先在 {@code execute} 中的链推进 + 节点级决策分发 + Timer 装配 / 记录 +
- * MDC stamp（约 110 SLOC）已全部迁出到 {@link ChainEngine}。本 facade 只保留：
+ * <p>链推进 + 节点级决策分发 + Timer 装配 / 记录 + MDC stamp 由 {@link ChainEngine}
+ * 承担;本 facade 只保留：
  *
  * <ul>
  *   <li>{@code List<CacheHandler> handlers} 维护（addHandler / size / clear / getHandlerNames）—
- *       <b>ADR-0022</b> 起为链结构唯一表示，不再并行维护 next 指针链 / head 引用</li>
+ *       链结构唯一表示</li>
  *   <li>{@code synchronized(chainGuard)} 守护 handlers 结构性修改(addHandler/clear 与
  *       size/getHandlerNames 互斥);<b>execute() 无锁</b> —— 取本 facade 持有的 list
  *       不可变快照({@code List.copyOf})后委派 {@link ChainEngine#execute(List, CacheContext)},
@@ -25,8 +25,7 @@ import java.util.List;
  *   <li>{@link #MDC_REQUEST_ID_KEY} 常量（供 {@code MDCStampChainObserver} 引用）</li>
  * </ul>
  *
- * <p><b>ADR-0046</b>:Engine 上的 {@code chainSnapshotRef} + {@code setChainSnapshot}
- * 字段/方法已删除 — 链 list 单一真理源完全收敛在本 facade 上;Engine 通过
+ * <p><b>快照归属</b>:链 list 单一真理源收敛在本 facade 上;Engine 通过
  * {@link ChainEngine#execute(List, CacheContext)} 接收快照参数,与
  * {@link ChainEngine#executeChainFragment(CacheContext, CacheHandler)} 共享
  * ThreadLocal 隐式快照(由 {@code execute} entry 设入,finally 清出)。
@@ -52,7 +51,7 @@ public class CacheHandlerChain {
      */
     public static final String MDC_REQUEST_ID_KEY = "requestId";
 
-    /** 所有处理器列表（用于调试和后置处理；ADR-0022 起为链结构单一真理源） */
+    /** 所有处理器列表（用于调试和后置处理；链结构单一真理源） */
     private final List<CacheHandler> handlers = new ArrayList<>();
 
     /**
@@ -82,8 +81,8 @@ public class CacheHandlerChain {
     /**
      * 添加处理器到责任链末尾 — O(N) 链表遍历。
      *
-     * <p>不改 Engine 持有的快照引用（ADR-0046:Engine 不再持有 chainSnapshotRef）——
-     * 下次 {@link #execute} 会从本 facade 的 handlers 列表重新拍快照。
+     * <p>Engine 不持有快照引用 —— 下次 {@link #execute} 会从本 facade 的 handlers
+     * 列表重新拍快照。
      *
      * @param handler 处理器
      * @return 当前 facade（支持链式调用）
@@ -102,7 +101,7 @@ public class CacheHandlerChain {
      * <p>本 facade 在 synchronized 块内一次性拍 {@code List.copyOf(handlers)} 快照,
      * 快照交给 Engine;Engine 在 try/finally 内把它推到 ThreadLocal(供
      * {@code executeChainFragment} 读),execute 返回前清出。Engine 完全不持
-     * list 状态(ADR-0046)。
+     * list 状态。
      *
      * @param context 缓存上下文
      * @return 处理结果
@@ -127,8 +126,8 @@ public class CacheHandlerChain {
     }
 
     /**
-     * 清空责任链 — ADR-0046 不再 setChainSnapshot(null);Engine 完全不持 list 状态,
-     * 本 facade 的 handlers 列表空 → 下次 execute 拍出空快照 → Engine 直接走空链路径。
+     * 清空责任链 — Engine 完全不持 list 状态,本 facade 的 handlers 列表空 →
+     * 下次 execute 拍出空快照 → Engine 直接走空链路径。
      */
     public void clear() {
         synchronized (chainGuard) {

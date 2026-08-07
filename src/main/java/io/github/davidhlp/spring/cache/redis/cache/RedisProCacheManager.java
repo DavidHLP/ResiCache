@@ -18,10 +18,9 @@ public class RedisProCacheManager extends RedisCacheManager {
     private final ResiCacheFeatures features;
 
     /**
-     * 构造 ResiCacheManager 实例 — Round 5 / ADR-0014 收敛后的唯一构造入口.
+     * 构造 ResiCacheManager 实例 — 唯一构造入口.
      *
-     * <p><b>单一 seam</b>:全部可选特性收口到 {@link ResiCacheFeatures} 值对象(取代原
-     * 4 个位置可空参数 meterRegistry/bloomSupport/operationResolver/syncSupport),
+     * <p><b>单一 seam</b>:全部可选特性收口到 {@link ResiCacheFeatures} 值对象,
      * 「null = 该特性禁用」的契约只存在于 {@link ResiCacheFeatures} 一处。
      *
      * <p><b>参数契约</b>:
@@ -63,8 +62,8 @@ public class RedisProCacheManager extends RedisCacheManager {
     }
 
     /**
-     * 实例化 {@link RedisProCache} 的单一 seam — 收敛两个 Spring 扩展点回调的重复样板
-     * (ADR-0016,原 {@code createRedisCache} 与 {@code getMissingCache} 各自重复).
+     * 实例化 {@link RedisProCache} 的单一 seam — 两个 Spring 扩展点回调
+     * ({@code createRedisCache} 与 {@code getMissingCache})共用。
      *
      * @param name   缓存名称
      * @param config 已归一化的缓存配置(可为 null,走默认)

@@ -6,11 +6,11 @@ import java.util.Set;
 /**
  * 统一的白名单判断策略对象（JSON 侧全集）。
  *
- * <p>背景：原先 {@link SecureJacksonRedisSerializer} 内部散布着三套白名单判断逻辑——
- * {@code createSecureObjectMapper} 中 {@code BasicPolymorphicTypeValidator} 的 {@code TypeMatcher}、
- * 反序列化前的 {@code validateTypeIds} 二次校验、以及 {@code ALLOWED_JAVA_UTIL_CLASSES} 集合。
- * 三处规则需要严格一致（任意一处漏放行 → 合法类反序列化被拒；任意一处误放行 → 安全漏洞），
- * 但分散在三个代码位置极易漂移。本类将『className 是否允许』这一判断收敛为单一来源。
+ * <p>本类是『className 是否允许』判断的单一来源。JSON 反序列化的多个校验点
+ * ({@code BasicPolymorphicTypeValidator} 的 {@code TypeMatcher}、反序列化前的
+ * {@code validateTypeIds} / {@code validateTypeIdsStreaming} 二次校验)统一委托本类,
+ * 保证规则严格一致(任意一处漏放行 → 合法类反序列化被拒;任意一处误放行 → 安全漏洞),
+ * 避免分散判断导致的漂移。
  *
  * <p><b>设计契约</b>：
  * <ul>
@@ -47,8 +47,6 @@ public final class WhitelistPolicy {
      *
      * <p>这些是 Jackson 多态反序列化中合法集合类型的完整清单。任何未列出的 {@code java.util.*}
      * 类（如 {@code java.util.concurrent.*}、各种 gadget 链相关类）一律拒绝。
-     *
-     * <p>清单来源：原 {@link SecureJacksonRedisSerializer} 私有常量，逐项搬迁（无增删）。
      */
     private static final Set<String> ALLOWED_JAVA_UTIL_CLASSES = Set.of(
             "java.util.ArrayList",
@@ -88,13 +86,12 @@ public final class WhitelistPolicy {
     /**
      * 判断给定全限定类名是否在 JSON 反序列化白名单内。
      *
-     * <p>判断规则（与原 {@code SecureJacksonRedisSerializer.isAllowedClass} 完全一致，新增
-     *   {@code .*} 通配符项除外 — 见 step 1）：
+     * <p>判断规则：
      * <ol>
      *   <li>命中任一允许前缀（{@link #allowedPackagePrefixes}）→ 放行；若前缀以
      *       {@code .*} 结尾则视为通配符前缀（如 {@code com.example.*} 匹配
-     *       {@code com.example.Foo} 与 {@code com.example.sub.Bar}），Round 9 增量扩展；
-     *       其他形式按字面 {@code startsWith} 匹配（即原行为，向后兼容）</li>
+     *       {@code com.example.Foo} 与 {@code com.example.sub.Bar}）；
+     *       其他形式按字面 {@code startsWith} 匹配</li>
      *   <li>{@code java.lang.} 前缀 → 放行（基础类型包装、String 等）</li>
      *   <li>{@link #ALLOWED_JAVA_UTIL_CLASSES} 逐项枚举命中 → 放行（集合类）</li>
      *   <li>{@code java.time.} 前缀 → 放行（时间类型）</li>
@@ -118,12 +115,12 @@ public final class WhitelistPolicy {
     }
 
     /**
-     * 单条前缀匹配规则（Round 9 引入）。
+     * 单条前缀匹配规则。
      *
      * <p>若前缀以 {@code .*} 结尾，视为通配前缀：去掉 {@code .*} 后要求
      * {@code className} 等于或以 {@code <前缀去.*> + "."} 开头（覆盖
      * {@code com.example} 与 {@code com.example.foo.bar} 两种情形）。其他形式
-     * 按字面 {@link String#startsWith(String)} 判断（即原行为，向后兼容）。
+     * 按字面 {@link String#startsWith(String)} 判断。
      */
     private static boolean matchesPrefix(String className, String prefix) {
         if (prefix.endsWith(".*")) {

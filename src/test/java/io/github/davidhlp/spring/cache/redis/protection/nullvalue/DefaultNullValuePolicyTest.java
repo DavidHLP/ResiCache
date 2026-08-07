@@ -17,8 +17,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * DefaultNullValuePolicy 单元测试 — Round 35 (ADR-0048) 后:
- * 4 个纯方法 + 1 个 {@code toReturnValue} 委派测试。
+ * DefaultNullValuePolicy 单元测试 — 4 个纯方法 + 1 个 {@code toReturnValue} 委派测试。
  *
  * <p>{@code toReturnValue} 的字节生产细节由 {@link NullValueEncoderTest} 覆盖;
  * 本测试仅验证 {@code DefaultNullValuePolicy} 委派语义。
@@ -173,7 +172,7 @@ class DefaultNullValuePolicyTest {
     }
 
     @Nested
-    @DisplayName("toReturnValue() Tests — Round 35:delegates to NullValueEncoder")
+    @DisplayName("toReturnValue() Tests — delegates to NullValueEncoder")
     class ToReturnValueTests {
 
         @Test

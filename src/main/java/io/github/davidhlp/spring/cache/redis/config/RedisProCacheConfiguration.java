@@ -62,7 +62,7 @@ public class RedisProCacheConfiguration {
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             RedisProCacheProperties properties,
             SecureJacksonSerializerFactory serializerFactory) {
-        // Round 11:装配走单点 factory,与 RedisConnectionConfiguration 同源。
+        // 装配走单点 factory,与 RedisConnectionConfiguration 同源。
         SecureJacksonRedisSerializer valueSerializer =
                 serializerFactory.create(objectMapper, properties.getSerializer());
 
@@ -179,9 +179,8 @@ public class RedisProCacheConfiguration {
     }
 
     /**
-     * 提前过期异步刷新执行器（ADR-0024）：从 {@code resi-cache.early-expiration.*}
-     * 读池参数构造，兑现配置承诺（旧 {@code @Component} 无参硬编码 2/10/100 使配置失效）。
-     * 用户可自定义同类型 bean 顶替（{@code @ConditionalOnMissingBean}）。
+     * 提前过期异步刷新执行器:从 {@code resi-cache.early-expiration.*}
+     * 读池参数构造。用户可自定义同类型 bean 顶替（{@code @ConditionalOnMissingBean}）。
      */
     @Bean
     @ConditionalOnMissingBean

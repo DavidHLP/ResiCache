@@ -186,7 +186,7 @@ class RedisProCacheManagerTest {
     }
 
     @Nested
-    @DisplayName("instantiateRedisProCache contract tests (ADR-0016)")
+    @DisplayName("instantiateRedisProCache contract tests")
     class InstantiateRedisProCacheContract {
 
         @Test

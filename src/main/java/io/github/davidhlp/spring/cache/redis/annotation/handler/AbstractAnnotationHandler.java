@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * 注解处理器模板基类 — ADR-0015 进一步收敛后的精简形态。
+ * 注解处理器模板基类。
  *
  * <p>提供三种可复用样板（按"逐元素 → 逐注解"维度逐层下沉）：
  * <ol>
@@ -26,23 +26,21 @@ import java.util.function.Function;
  *       否则走 {@link KeyGenerator}（单元素版，{@link #registerOne} 内部使用）</li>
  *   <li>{@link #registerOne(Method, Object, Object[], Annotation, String, OperationFactory, RegisterAction, String)}
  *       —— 单注解注册模板：key 生成 → 工厂创建 → 注册 → 日志；异常返回 null
- *       （逐字保留原语义：单个注解解析失败不得中断整个拦截器链导致缓存全失效）</li>
+ *       （单个注解解析失败不得中断整个拦截器链导致缓存全失效）</li>
  *   <li>{@link #registerAll(Method, Object, Object[], Annotation[], Function, OperationFactory, RegisterAction, String)}
  *       —— 多注解批量注册模板：迭代 {@code annotations[]} 调 {@code registerOne}，
  *       收集成功的 operation。空数组 / null 数组返回空 list；单元素异常隔离由
  *       {@code registerOne} 内部 try/catch 保证</li>
  * </ol>
  *
- * <p><b>ADR-0059 收敛</b>:原 {@link RegisterAction} 函数式接口签名
- * {@code (Method, Class<?>, O) -> void} 已扩展为 {@code (Method, Class<?>, O, OperationKind) -> void}
- * —— 新增第 4 参数传入 {@link OperationKind} 让 {@link RedisCacheRegister#register} 单一 seam
- * 区分命名空间。4 个具体 handler 调用点改为 lambda(本 seam 内嵌),丢失方法引用的
- * "语法糖",换来 register API 6 方法 → 2 方法的 seam 收敛与新增操作种类的零漂移。
+ * <p>{@link RegisterAction} 函数式接口签名
+ * {@code (Method, Class<?>, O, OperationKind) -> void},第 4 参数 {@link OperationKind}
+ * 让 {@link RedisCacheRegister#register} 单一 seam 区分命名空间。register API 为 2 方法,
+ * 新增操作种类零漂移。
  *
  * <p><b>下游契约</b>：4 个具体 handler（{@code Cacheable} / {@code CachePut} /
- * {@code Evict} / {@code Caching}）的 {@code doHandle} 方法现在只负责"获取注解
- * 数组 + 委派 registerAll"，不再重复 for-loop / null-check / ArrayList 样板。
- * 详见 ADR-0015。
+ * {@code Evict} / {@code Caching}）的 {@code doHandle} 方法只负责"获取注解
+ * 数组 + 委派 registerAll"。
  */
 @Slf4j
 public abstract class AbstractAnnotationHandler extends AnnotationHandler {
@@ -65,8 +63,8 @@ public abstract class AbstractAnnotationHandler extends AnnotationHandler {
     }
 
     /**
-     * 注册动作的函数式接口 —— ADR-0059 扩展后增加 {@link OperationKind} 参数,
-     * 对齐 {@link RedisCacheRegister#register(Method, Class, CacheOperation, OperationKind)}
+     * 注册动作的函数式接口 —— 带 {@link OperationKind} 参数,对齐
+     * {@link RedisCacheRegister#register(Method, Class, CacheOperation, OperationKind)}
      * 的 4 参 seam 签名。
      *
      * <p>调用方在 4 个具体 handler 中以 lambda 形式提供(如

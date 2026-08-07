@@ -193,14 +193,14 @@ class RedisProCacheTest {
         }
     }
 
-    // ==================== ADR-0062 / Round 49: get(key, loader) 编排集成测试 ====================
-    // 注:bloom 短路 / sync 路由 / locked-load 3 决策分支的细粒度单元测试已迁出至
+    // ==================== get(key, loader) 编排集成测试 ====================
+    // 注:bloom 短路 / sync 路由 / locked-load 3 决策分支的细粒度单元测试在
     // LoaderOrchestratorTest(orchestrator 自身即可零 RedisProCache fixture 单测);
     // 本测试类专注于 RedisProCache 与 orchestrator 的集成:miss counter 自增 / putAfterLoad
     // 走 override 保留 putTimer + putCounter / 异常翻译规则等 RedisProCache 侧契约。
 
     @Nested
-    @DisplayName("get(key, loader) Integration Tests — ADR-0062 orchestrator delegation")
+    @DisplayName("get(key, loader) Integration Tests — orchestrator delegation")
     class GetWithLoaderIntegrationTests {
 
         @Mock

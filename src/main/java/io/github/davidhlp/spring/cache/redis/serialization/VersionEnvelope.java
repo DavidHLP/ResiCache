@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
  *   <li>payload 承载实际的缓存值（通常是 {@code CachedValue}）</li>
  * </ul>
  *
- * <p><b>类型信息策略（Round 47 D3 文档化）</b>：payload 字段使用字段级
+ * <p><b>类型信息策略</b>：payload 字段使用字段级
  * {@code @JsonTypeInfo} —— 这是 wire format 的实际承重者，移除它会破坏
  * 反序列化路径（payload 退化为 LinkedHashMap，{@code CachedValue} 等
  * 自定义类型丢失）。
@@ -33,10 +33,6 @@ import lombok.NoArgsConstructor;
  * </ol>
  * 即便 {@code polymorphicTypingEnabled=false} 关闭了全局 default typing,
  * 字段级注解仍嵌入 {@code @class}，但白名单预检始终拦截非白名单类名。
- *
- * <p>Round 47 修复：本字段的 {@code property} 与 ObjectMapper 构造期
- * {@code typeProperty} 参数（{@link SecureJacksonRedisSerializer#typeProperty}）
- * 双向绑定，<b>不再</b>硬编码 {@code "@class"} —— 详见 D2 fix。
  */
 @Data
 @NoArgsConstructor

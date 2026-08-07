@@ -21,12 +21,11 @@ import java.time.Duration;
  *   <li>支持随机化 TTL（防止缓存雪崩）</li>
  * </ol>
  *
- * <p>输出（ADR-0033 类型化决策 — 替代原 {@code CacheOutput} 三字段共享袋）：
+ * <p>输出：
  * <ul>
  *   <li>{@link CacheContext#setTtlDecision} 写入 {@link TtlDecision}</li>
  *   <li>{@link ActualCacheHandler#handlePut} / {@link ActualCacheHandler#handlePutIfAbsent}
  *       通过 {@code context.getTtlDecision()} 读取</li>
- *   <li>原 {@code ttlFromContext} 字段已删（main code 0 reader，test 5 处断言随之删）</li>
  * </ul>
  */
 @Slf4j
@@ -40,9 +39,9 @@ public class TtlHandler extends AbstractCacheHandler {
     private static final long DEFAULT_TTL = 60;
 
     /**
-     * ADR-0018 — 语义 counter 元数据声明。guide §223b1：TTL jitter 应用事件
-     * 计数（防雪崩：randomTtl=true 的 variance 展开）。基类负责注册 + null-safe
-     * 自增 helper，子类不持有字段也不写注册样板。
+     * 语义 counter 元数据声明:TTL jitter 应用事件计数(防雪崩:randomTtl=true
+     * 的 variance 展开)。基类负责注册 + null-safe 自增 helper,子类不持有字段
+     * 也不写注册样板。
      */
     @Override
     protected CounterMetadata semanticCounter() {
@@ -53,7 +52,7 @@ public class TtlHandler extends AbstractCacheHandler {
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
-        // ADR-0054:写路径子集谓词,操作枚举承担单一真理源
+        // 写路径子集谓词,操作枚举承担单一真理源
         return context.getOperation().isWrite();
     }
 
@@ -65,7 +64,7 @@ public class TtlHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 计算 TTL — ADR-0033 类型化决策替代原 {@code CacheOutput} 三字段共享袋。
+     * 计算 TTL。
      */
     private void calculateTtl(CacheContext context) {
         Duration ttl = context.getTtl();
@@ -84,7 +83,7 @@ public class TtlHandler extends AbstractCacheHandler {
 
             context.setTtlDecision(TtlDecision.applied(finalTtl));
 
-            // guide §223b1:TTL jitter 应用计数(randomTtl=true 时 variance 展开)
+            // TTL jitter 应用计数(randomTtl=true 时 variance 展开)
             if (context.getCacheOperation().isRandomTtl()) {
                 safeIncrementSemantic();
             }

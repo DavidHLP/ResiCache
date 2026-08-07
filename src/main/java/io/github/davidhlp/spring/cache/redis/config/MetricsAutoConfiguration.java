@@ -17,7 +17,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 /**
  * Metrics auto-configuration for Redis cache monitoring.
  *
- * <p>WS-1.4 评估结论(2026-06-29)— <strong>默认 OFF,opt-in 开启</strong>。
+ * <p><strong>默认 OFF,opt-in 开启</strong>。
  * 决策: 作为 library,observability 行为必须显式 opt-in —— 默认开启会:
  * <ol>
  *   <li>把 {@code MeterRegistry}/{@code HealthIndicator} 变成强依赖(用户集成

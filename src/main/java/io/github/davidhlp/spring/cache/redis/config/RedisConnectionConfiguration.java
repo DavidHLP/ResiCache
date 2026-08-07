@@ -20,8 +20,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  *
  * <p>职责:仅负责 {@link RedisTemplate} 与衍生 Operations bean 的装配。
  *
- * <p><b>不再持有任何 Redisson 强类型引用</b>——Redisson 相关配置已迁移至
- * {@link RedissonConfiguration}(独立类 + 类级 {@code @ConditionalOnClass}),
+ * <p>本类不持有任何 Redisson 强类型引用——Redisson 配置由
+ * {@link RedissonConfiguration}(独立类 + 类级 {@code @ConditionalOnClass})负责,
  * 使 Redisson 成为真正的可选依赖:当 Redisson 不在 classpath 时,本类仍可
  * 正常加载与实例化,不会触发 {@code NoClassDefFoundError}。
  */
@@ -40,10 +40,8 @@ public class RedisConnectionConfiguration {
         template.setConnectionFactory(redisConnectionFactory);
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        // Round 11:SecureJacksonSerializerFactory 抽出后,装配走单点
-        // （Round 5 fix 保留 — props 真的传进去）。Round 5 注释里的「与
-        // RedisProCacheConfiguration ... 镜像」警示被工厂吸收,两个装配点
-        // 再不会漂移。
+        // 装配走单点 SecureJacksonSerializerFactory,与
+        // RedisProCacheConfiguration 同源,两个装配点不会漂移。
         SecureJacksonRedisSerializer jsonSerializer =
                 serializerFactory.create(objectMapper, properties.getSerializer());
 

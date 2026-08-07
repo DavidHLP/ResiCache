@@ -31,7 +31,7 @@ public class RedisProxyCachingConfiguration {
         BeanFactoryCacheOperationSourceAdvisor advisor =
                 new BeanFactoryCacheOperationSourceAdvisor();
         advisor.setCacheOperationSource(redisCacheOperationSource);
-        // Path C 单一 advice seam — advisor 直接持有 RedisCacheInterceptor
+        // 单一 advice seam — advisor 直接持有 RedisCacheInterceptor
         advisor.setAdvice(redisCacheInterceptor);
         advisor.setOrder(50);
         return advisor;
@@ -45,14 +45,10 @@ public class RedisProxyCachingConfiguration {
     }
 
     /**
-     * Path C 单一 advice —— advisor 直接持有的拦截器,装配职责与拦截职责收口到同一处
-     * (原 Step 4/5/7 残骸 {@code CacheAspectSupportHelper}/{@code ResiCacheMethodInterceptor}
-     * 已于本轮收敛删除,继承面 3 层 → 2 层,dead-injection 参数同步清理)。
+     * 单一 advice —— advisor 直接持有的拦截器,装配职责与拦截职责收口到同一处。
      *
-     * <p><strong>ADR-0013 链装配单一化</strong>:构造函数不再注入 4 个独立的
-     * {@code *AnnotationHandler},改注入 {@link AnnotationChainEngine}。Engine
-     * 由 Spring 自动装配 {@code List<AnnotationHandler>}(4 个 @Component handler),
-     * 链结构在 Engine 内部维护,本配置类零感知。
+     * <p>构造函数注入 {@link AnnotationChainEngine},由 Spring 自动装配
+     * {@code List<AnnotationHandler>};链结构在 Engine 内部维护,本配置类零感知。
      */
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)

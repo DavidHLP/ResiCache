@@ -14,14 +14,14 @@ import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Component;
 
 /**
- * 启动期序列化 pre-flight 探测(guide §115:"v0.0.3 对 v0.2.0 migration tool 的 down-payment")。
+ * 启动期序列化 pre-flight 探测。
  *
  * <p>ApplicationReady 时(opt-in via {@code resi-cache.serializer.probe-enabled})采样 N 个 Redis key,
  * 检测其值是否为 ResiCache 的 {@code VersionEnvelope {version,payload}} 格式。若发现非 envelope 值
  * (如 Spring 原生 {@code GenericJackson2JsonRedisSerializer} / {@code JdkSerializer} 的遗留数据),发
- * prominent WARN 提示存量缓存将在接入后全量 miss,链 ADR-0003 + v0.2.0 迁移工具。
+ * prominent WARN 提示存量缓存将在接入后全量 miss,链 v0.2.0 迁移工具。
  *
- * <p>设计:诊断工具,非迁移工具 —— 不松 envelope(ADR-0003),尊重减法纪律。仅 WARN,不阻塞启动。
+ * <p>设计:诊断工具,非迁移工具 —— 不松 envelope,尊重减法纪律。仅 WARN,不阻塞启动。
  * 默认关闭(扫描 Redis 是启动副作用);{@link ObjectProvider} 允许无 Redis 环境静默跳过。
  */
 @Slf4j
@@ -42,7 +42,7 @@ public class SerializationPreFlightProbe {
 
     /**
      * ApplicationReady 时若 probe-enabled 则采样扫描。@EventListener 由 Spring 生命周期触发;
-     * 集成测试可直接调 {@link #scanAndReport()} 避开事件 firing 复杂度(镜像 R15 shouldWarn() 范式)。
+     * 集成测试可直接调 {@link #scanAndReport()} 避开事件 firing 复杂度(镜像 shouldWarn() 范式)。
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
@@ -87,7 +87,7 @@ public class SerializationPreFlightProbe {
         if (nonEnvelope > 0) {
             log.warn(
                 "[ResiCache] Serialization pre-flight probe found {}/{} sampled Redis keys whose values are NOT "
-                    + "in ResiCache's {{version,payload}} envelope format (ADR-0003). These will fail to deserialize "
+                    + "in ResiCache's {{version,payload}} envelope format. These will fail to deserialize "
                     + "and miss on cutover. Migrate legacy caches before relying on them; a shadow→dual-write→cutover "
                     + "CLI is available; start with SHADOW_READ. (sample-size={}, set resi-cache.serializer.probe-enabled=false "
                     + "to silence)",

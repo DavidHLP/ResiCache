@@ -21,14 +21,14 @@ surfaces are stable in 0.x and which change.
 
 ## [Unreleased] — current development
 
-The project is on a **single build line** post-WS-1.1 FIRE: Spring Boot
+The project is on a **single build line**: Spring Boot
 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50.0. Dual-branch
 (`master` / `boot4`) is abandoned; Boot 4 is configured directly in
 `pom.xml`. See [`COMPATIBILITY.md`](./COMPATIBILITY.md).
 
 Latest shipped milestones:
 
-### Hardening of the protection chain (WS-1.2 / WS-1.3)
+### Hardening of the protection chain
 
 - ⚠️ **Sync without distributed backend fails fast** — `SyncSupport`
   no longer silently degrades to a single-JVM `synchronized` when
@@ -45,12 +45,12 @@ Latest shipped milestones:
   `DistributedLockManager` ensures the lock key lands in the same Redis
   Cluster slot as the cache key (via `{...}` hash-tag), so the lock and
   the data it guards co-locate on one node.
-- **ThreadLocal destruction sequence (WS-1.3 Path C, 7-step)** — closes
+- **ThreadLocal destruction sequence** — closes
   the destroy-on-pool-shutdown leak path. TDD: dedicated unit test plus
   Testcontainers IT verifying thread-id reuse after `RedisProCacheManager`
   close.
 
-### Single-build FIRE M0–M4 (commit `38c514a`)
+### Single-build FIRE M0–M4
 
 - `master` runs Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50
   on `verify -B` (tests + JaCoCo 70% / 40% gate + Testcontainers ITs).
@@ -63,7 +63,7 @@ Latest shipped milestones:
   (the starter hard-references Boot 3 classes), defensive
   `supportsAsyncRetrieve()=false` shim.
 - CI: `.github/workflows/ci-boot4.yml` and the `compatibility` job in
-  `ci.yml` removed (`6f00471`); Boot 4 is the sole line.
+  `  ci.yml` removed; Boot 4 is the sole line.
 
 ### Serializer hardening
 
@@ -115,20 +115,13 @@ Latest shipped milestones:
   `.github/PULL_REQUEST_TEMPLATE.md`); `CODEOWNERS` relocated to
   `.github/`.
 - Versions reconciled across `README.md` / `README.zh-CN.md` /
-  `wiki/overview.md` / `CLAUDE.md` to **Boot 4.0.0 / Java 21+ /
+  `CLAUDE.md` to **Boot 4.0.0 / Java 21+ /
   Redisson 3.50.0 / Caffeine 3.1.8** (was 3.4.13 / 17+ / 3.27.0).
-- **ADR-0006 JetCache coverage arithmetic correction** — JetCache
+- **JetCache coverage arithmetic correction** — JetCache
   Issue #269 (TTL jitter) is **closed unimplemented**, so
   ResiCache–JetCache coverage is **3/5** (not 4/5); ResiCache's true
   technical increment is **Bloom + TTL jitter + pluggable responsibility
-  chain**. `docs/comparison.md` anti-avalanche row updated to match.
-- Wiki sync — `wiki/modules/serialization.md`,
-  `wiki/modules/configuration.md`, `wiki/modules/observability.md`,
-  `wiki/architecture/{auto-configuration,cache-lifecycle}.md`,
-  `wiki/chain-of-responsibility.md` brought to current source with
-  factual corrections (`fail-on-unknown-type=true`,
-  `polymorphic-typing-enabled=false`, `sync-lock.timeout=3000ms`,
-  `native-annotation-mode=SELECTIVE`).
+  chain**.
 
 ### Fixed
 
@@ -151,7 +144,7 @@ Latest shipped milestones:
 
 ## [0.0.2] — current
 
-### Removed — over-engineering cleanup (commit `a5ab55b`, ~2,989 lines)
+### Removed — over-engineering cleanup (~2,989 lines)
 
 ⚠️ The following were removed as dead / over-engineered code (had been
 documented but never shipped as stable features):
@@ -191,6 +184,6 @@ development.
 
 ---
 
-Link reference policy: this file links to the README and wiki within the
+Link reference policy: this file links to the README within the
 repo. External links point to upstream tooling (Resilience4j, Caffeine,
 Keep a Changelog, SemVer).

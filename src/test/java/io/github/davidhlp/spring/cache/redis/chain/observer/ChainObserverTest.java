@@ -23,12 +23,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ChainObserver 实现测试 — ADR-0009 引入的 4 个标准 observer 的契约。
+ * ChainObserver 实现测试 — 4 个标准 observer 的契约。
  *
  * <p>每个 observer 独立测试其特定钩子的行为（MDC stamp / DEBUG log / Timer / fired counter），
  * 验证与 Engine 解耦后能正确实现单一职责。空 observer 列表的"什么都不做"语义由
  * {@link io.github.davidhlp.spring.cache.redis.chain.ChainEngine} 的 ObserverRegistry
- * 空列表分支承载（ADR-0039 删除 NoOpChainObserver 后,空观测无需占位单例）。
+ * 空列表分支承载(空观测无需占位单例)。
  */
 @DisplayName("ChainObserver Implementations")
 class ChainObserverTest {
@@ -60,7 +60,7 @@ class ChainObserverTest {
 
             MDC.put(CacheHandlerChain.MDC_REQUEST_ID_KEY, "caller-id");
             try {
-                // ADR-0061:onChainStart 返回 scope token(MdcScope record),Engine 配对回传到
+                // onChainStart 返回 scope token(MdcScope record),Engine 配对回传到
                 // onChainEnd。test 直接持有 token 模拟 Engine 协议
                 Object scopeToken = observer.onChainStart(ctx);
                 String stamped = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);

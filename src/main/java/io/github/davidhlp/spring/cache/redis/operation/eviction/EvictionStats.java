@@ -5,10 +5,8 @@ import org.springframework.lang.NonNull;
 /**
  * 淘汰策略统计信息。
  *
- * <p><strong>Candidate B：聚合工厂方法</strong>。原 {@code TwoListEvictionStrategy.getStats()}
- * 是 9 行聚合（{@code lru.size()} + {@code lru.getActiveSize()} + ... 凑足 6 个字段）；
- * 该聚合被抽出为本类的静态工厂方法 {@link #of(TwoListLRU, int, int)}，承载"算法与统计快照"
- * 的统一接口。原 105 SLOC 的 {@code TwoListEvictionStrategy} 包装层因此失去存在意义——删除。
+ * <p>静态工厂方法 {@link #of(TwoListLRU, int, int)} 聚合 LRU 算法内部状态
+ * 与策略层容量配置,承载"算法与统计快照"的统一接口。
  */
 public record EvictionStats(
         int totalEntries,

@@ -11,38 +11,21 @@ import org.springframework.context.expression.AnnotatedElementKey;
 import java.lang.reflect.Method;
 
 /**
- * Redis 缓存注册器 —— ADR-0059 / Round 45 收敛后的精简形态。
+ * Redis 缓存注册器。
  *
- * <p><b>原 API(6 公开方法)</b>:
+ * <p><b>API(2 公开方法)</b>:
  * <ul>
- *   <li>{@code registerCacheableOperation} / {@code getCacheableOperation}</li>
- *   <li>{@code registerCacheEvictOperation} / {@code getCacheEvictOperation}</li>
- *   <li>{@code registerCachePutOperation} / {@code getCachePutOperation}</li>
- * </ul>
- * 三对方法各 2-3 行包 {@code registerInternal}/{@code getInternal},内部用 stringly-typed
- * tag ({@code "CACHE"} / {@code "EVICT"} / {@code "PUT"}) 区分命名空间。注释自述
- * "为方法引用稳定保留"—— 但新增第 4 种操作类型须改 register 1 处 + 注解处理器 N 处,
- * 6 方法 API 难以统一维护。
- *
- * <p><b>收敛后 API(2 公开方法)</b>:
- * <ul>
- *   <li>{@link #register(Method, Class, CacheOperation, OperationKind)} —— 1 个 seam 取代 3 个</li>
- *   <li>{@link #get(String, AnnotatedElementKey, OperationKind)} —— 1 个 seam 取代 3 个</li>
+ *   <li>{@link #register(Method, Class, CacheOperation, OperationKind)} —— 单一注册 seam</li>
+ *   <li>{@link #get(String, AnnotatedElementKey, OperationKind)} —— 单一查询 seam</li>
  * </ul>
  * 调用方传入 {@link OperationKind} 替代方法名;tag 字符串 + 期望 operation 类型
  * 均由 enum 派生,杜绝 stringly-typed 漂移。
- *
- * <p><b>向后兼容</b>:LRU key 中的 tag 字符串({@code "CACHE"} / {@code "PUT"} / {@code "EVICT"})
- * 与原 stringly-typed tag 字节级等价 —— 已部署的 register 数据(若被持久化,虽然
- * 当前实现是 in-memory)可平滑迁移。
  *
  * <p><b>查找键</b> = {@code <tag>:<cacheName>:<elementKey.toString()>},由
  * {@link #buildKey(String, AnnotatedElementKey, String)} 统一构造。operation 自身的
  * {@code key} 字段(SpEL/字面量)是运行时缓存键的来源,与这里的注册查找键无关。
  *
- * <p><strong>策略层删除</strong>(Round 26 之前已迁移):原 105 SLOC 的
- * {@code TwoListEvictionStrategy} 仅做 1:1 委托,本类<em>直接</em>绑 {@link TwoListLRU},
- * 省略中间包装。
+ * <p>本类<em>直接</em>绑 {@link TwoListLRU},无中间策略包装。
  */
 @Slf4j
 public class RedisCacheRegister {
@@ -62,10 +45,10 @@ public class RedisCacheRegister {
         this.operationLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
     }
 
-    // ============================ 注册（ADR-0059 单一 seam）============================
+    // ============================ 注册（单一 seam）============================
 
     /**
-     * 注册一个缓存操作 —— ADR-0059 收敛后的唯一 seam,取代原 3 个 register 方法。
+     * 注册一个缓存操作 —— 单一 seam。
      *
      * <p>按 {@code operation.getCacheNames()} 逐个 cacheName 写入 LRU,key 形如
      * {@code <kind.tag()>:<cacheName>:<elementKey>}。{@code kind} 同时决定 tag 字符串
@@ -96,10 +79,10 @@ public class RedisCacheRegister {
         }
     }
 
-    // ============================ 查询（ADR-0059 单一 seam）============================
+    // ============================ 查询（单一 seam）============================
 
     /**
-     * 查询一个缓存操作 —— ADR-0059 收敛后的唯一 seam,取代原 3 个 get 方法。
+     * 查询一个缓存操作 —— 单一 seam。
      *
      * <p>按 {@code kind.tag()} 派生查找键,从 LRU 取出,做 instance-of 安全转型后返回。
      * 类型不匹配(同 cacheName+elementKey 但不同 kind,或 LRU 槽位被另一种 kind 占用)

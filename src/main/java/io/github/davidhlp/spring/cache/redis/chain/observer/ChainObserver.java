@@ -8,7 +8,7 @@ import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 
 /**
- * 责任链推进与观测的注入点 — ADR-0009 (Chain Engine extraction) D2.
+ * 责任链推进与观测的注入点.
  *
  * <p>本接口把责任链 advance / per-node / around-chain 各阶段的横切关注点
  * 收口到 default no-op 钩子，让 {@link ChainEngine} 与
@@ -33,17 +33,16 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
  *       Engine 保证 start/end 配对(即使主路径异常也调用 finally 守护)</li>
  * </ol>
  *
- * <p><b>ADR-0061 scope token 机制</b>:onChainStart 返回 {@code Object} 类型的
- * "scope token" 替代原 {@code CacheContext.attributes} 字符串键 map —— observer
+ * <p><b>scope token 机制</b>:onChainStart 返回 {@code Object} 类型的
+ * "scope token" —— observer
  * 可在 token 内携带本调用专属的恢复状态(MDCStamp → previousRequestId,
- * ChainTimer → per-node startNanos),Engine 在对应 end hook 配对回传。CacheContext 不再
- * 提供 stringly-typed 通用 attributes 袋,observer 状态机完全自承,新 observer
- * 零字符串键漂移风险,Engine 不感知 observer 内部协议。
+ * ChainTimer → per-node startNanos),Engine 在对应 end hook 配对回传。observer
+ * 状态机完全自承,新 observer 零字符串键漂移风险,Engine 不感知 observer 内部协议。
  *
  * <p>所有钩子默认 no-op;observability 实现(Mdc / Timer / Counter / DebugLog)
  * 各自只 override 关心的钩子,正交组合。{@code aroundChain} 关注点(MDC / Timer)
  * 必须在 {@code onChainStart} 配对,{@code perNode} 关注点(counter / log)只在
- * before/afterNode 触发。WS-1.4 引入 Observation Span 时只需新增
+ * before/afterNode 触发。新增 Observation Span 时只需新增
  * {@code SpanObserver implements ChainObserver},Engine 与所有 handler 零修改
  * — 这是本 seam 的核心 leverage 兑现。
  *
@@ -56,7 +55,7 @@ public interface ChainObserver {
      * 链入口 hook。Engine 在 stamp MDC / 启动 Timer 之后、第一次
      * {@code beforeNode} 之前调用。典型实现:MDCStamp / Timer 启动。
      *
-     * <p><b>返回值</b>(ADR-0061):本 observer 的 per-call 状态,Engine 在
+     * <p><b>返回值</b>:本 observer 的 per-call 状态,Engine 在
      * {@link #onChainEnd} 配对回传。无状态 observer 返回 {@code null}。
      * Engine 内部按 observer 注册顺序收集 token,onChainEnd 按相同顺序
      * 回传(逐个 observer 配对,跨 observer 不混淆)。
@@ -73,7 +72,7 @@ public interface ChainObserver {
      * 链出口 hook。Engine 在 post-process 完成后、MDC restore / Timer record
      * 之前调用(与 {@link #onChainStart(CacheContext)} 配对)。典型实现:Timer 记录。
      *
-     * <p><b>scopeToken</b>(ADR-0061):即本 observer 在 {@code onChainStart} 返回的
+     * <p><b>scopeToken</b>:即本 observer 在 {@code onChainStart} 返回的
      * 同一引用;Engine 跨 start/end 配对透传(其他 observer 的 token 不会误传)。
      * 无状态 observer 的 token 恒为 {@code null}。
      *

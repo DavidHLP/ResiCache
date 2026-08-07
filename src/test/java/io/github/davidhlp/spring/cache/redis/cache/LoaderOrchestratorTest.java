@@ -37,13 +37,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link LoaderOrchestrator} 单测 — Round 49 / ADR-0062 抽出后从
- * {@code RedisProCacheTest} 迁来的 3 个 seam 测试集。
+ * {@link LoaderOrchestrator} 单测 — 3 个 seam 测试集。
  *
- * <p>原 RedisProCache 的 {@code isBloomShortCircuited} / {@code loadValue} /
- * {@code performLockedLoad} 3 个 package-private seam 现已下沉到 LoaderOrchestrator,
- * 通过 {@link LoaderOrchestrator#orchestrate} 公开方法间接覆盖 — 每条 case 路径
- * (bloom 短路 / sync 路由 / default 路由 / 锁内 3 决策)用 {@link LoadOutcome} 三态断言。
+ * <p>{@code isBloomShortCircuited} / {@code loadValue} / {@code performLockedLoad}
+ * 3 个 package-private seam 下沉到 LoaderOrchestrator,通过 {@link LoaderOrchestrator#orchestrate}
+ * 公开方法间接覆盖 — 每条 case 路径(bloom 短路 / sync 路由 / default 路由 / 锁内 3 决策)
+ * 用 {@link LoadOutcome} 三态断言。
  *
  * <p>测试 seam 形态:orchestrator 接受 {@link RedisCache} 引用 + 4 个 callback
  * (redisKey / doubleCheck / putAfterLoad / defaultLoad),本测试用 Mockito mock RedisCache
@@ -93,7 +92,7 @@ class LoaderOrchestratorTest {
     // ==================== Bloom 短路路径 ====================
 
     @Nested
-    @DisplayName("Bloom Short-Circuit Tests — ADR-0057 isBloomShortCircuited 迁移")
+    @DisplayName("Bloom Short-Circuit Tests — isBloomShortCircuited 迁移")
     class BloomShortCircuitTests {
 
         @Test
@@ -190,7 +189,7 @@ class LoaderOrchestratorTest {
     // ==================== Sync 路径(loadValue → executeSyncLoad 迁移) ====================
 
     @Nested
-    @DisplayName("Sync Path Routing Tests — ADR-0057 loadValue 迁移")
+    @DisplayName("Sync Path Routing Tests — loadValue 迁移")
     class SyncPathRoutingTests {
 
         @Test
@@ -227,7 +226,7 @@ class LoaderOrchestratorTest {
     // ==================== 锁内 performLockedLoad 3 决策分支 ====================
 
     @Nested
-    @DisplayName("performLockedLoad Tests — ADR-0057 single-flight seam 迁移")
+    @DisplayName("performLockedLoad Tests — single-flight seam 迁移")
     class PerformLockedLoadTests {
 
         @Test

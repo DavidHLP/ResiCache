@@ -10,26 +10,22 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 注解解析责任链推进引擎 — ADR-0013 (Annotation Chain Engine extraction).
+ * 注解解析责任链推进引擎.
  *
- * <p>把"链推进 + handler 求值 + 结果收集"三件关注点集中到单一 {@code @Component} seam,
- * 替换原先散落在 {@link AnnotationHandler#handle(Method, Object, Object[])} 的并行实现
- * (约 25 SLOC 中 ~15 SLOC 是递归样板)。
+ * <p>把"链推进 + handler 求值 + 结果收集"三件关注点集中到单一 {@code @Component} seam。
  *
  * <p><b>推进协议</b>:Engine 持有有序的 {@link AnnotationHandler} 列表(构造期由 Spring 一次性
- * 注入,对应原 {@code AnnotationHandler.next} 链表),按顺序对每个 handler 做:
+ * 注入),按顺序对每个 handler 做:
  * <ol>
  *   <li>{@code canHandle(method)} 判定 — 不命中则跳过,链中所有 handler 都有平等
  *       参与机会(filter 语义,无 decision 短路)</li>
  *   <li>命中则调 {@code doHandle(method, target, args)} 收集 0+ 个 {@link CacheOperation}</li>
  *   <li>结果追加到累计列表(per-handler 异常隔离 — 单 handler 失败记 ERROR 后继续遍历,
- *       不影响其他 handler;与原 {@code AnnotationHandler.handle} 的"全链失败"相比是严格更宽松
- *       的行为,符合"单个 handler 失败不应中断整个缓存链路"的本意)</li>
+ *       不影响其他 handler,符合"单个 handler 失败不应中断整个缓存链路"的本意)</li>
  * </ol>
  *
- * <p><b>无 observer 通道</b>(ADR-0044):本 Engine 曾规划过 {@code AnnotationChainObserver}
- * aroundChain 观测编排,但零生产实现,已删除。{@link #execute} 是纯粹的"遍历 + 收集",
- * 不涉及 MDC / 计时 / observer 钩子 —— 与 cache 写入侧的 {@code chain.ChainEngine}(有
+ * <p><b>无 observer 通道</b>:{@link #execute} 是纯粹的"遍历 + 收集",不涉及
+ * MDC / 计时 / observer 钩子 —— 与 cache 写入侧的 {@code chain.ChainEngine}(有
  * {@code ChainObserver} 观测通道)不同,注解解析是启动近似静态的一次性映射,无观测价值。
  *
  * <p><b>线程安全</b>:Engine 单例 Bean;handler 列表构造期一次性注入
@@ -81,7 +77,6 @@ public class AnnotationChainEngine {
         // 但本 seam 期望 target 非 null(对应拦截器契约),只做 args null 兜底
         Object[] safeArgs = args != null ? args : new Object[0];
 
-        // ADR-0044：observer 通道已删除（AnnotationChainObserver 0 生产实现），
         // 直接遍历 handlers — per-handler 异常隔离即可。
         List<CacheOperation> collected = new ArrayList<>();
         for (AnnotationHandler handler : handlers) {

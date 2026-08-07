@@ -141,17 +141,13 @@ public class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
             return SecureNullValueDeserializer.deserializeNullValue(bytes);
         }
         try {
-            // P2 (Round 47) 单遍流式反序列化:用 JsonParser 一次性走完 bytes 验证
-            // 所有 typeProperty 字段(走白名单),然后从同一 parser 直接 readValue
-            // 收口为 VersionEnvelope —— 替代原 readTree(bytes) → validateTypeIds(tree) →
-            // treeToValue(tree, VersionEnvelope) 的"建完整 JsonNode + 二次遍历"双 pass。
-            // 对大 payload(>10KB)减少一次 JsonNode 树构建 + 一次树遍历,
+            // 单遍流式反序列化:用 JsonParser 一次性走完 bytes 验证
+            // 所有 typeProperty 字段(走白名单),再收口为 VersionEnvelope。
+            // 对大 payload(>10KB)避免完整 JsonNode 树构建 + 二次遍历,
             // ~30-40% CPU 节省、显著降低 GC 压力(transient JsonNode 消失)。
             try (com.fasterxml.jackson.core.JsonParser parser = objectMapper.createParser(bytes)) {
                 validateTypeIdsStreaming(parser);
-                // 同一 parser 已被消耗,重置并 reparse 收口为 envelope;
-                // 注:JWT 流式 parser 不支持 rewind,因此需重新 open 一个 parser 反序列化。
-                // 净效应:省一次"建 JsonNode 树" + 一次"treeToValue 遍历",仍是单遍字节扫描。
+                // 流式 parser 不支持 rewind,验证后需重新 open 一个 parser 反序列化。
             }
 
             VersionEnvelope envelope;
@@ -184,8 +180,8 @@ public class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
 
     /**
      * 流式遍历 JSON,验证所有 {@code @class} 字段值在白名单中。失败 fail-fast
-     * 抛 {@link SerializationException};不构建中间 JsonNode 树(对比原 validateTypeIds
-     * 基于 JsonNode 的实现),对大 payload 显著降低内存与 GC。
+     * 抛 {@link SerializationException};不构建中间 JsonNode 树,对大 payload
+     * 显著降低内存与 GC。
      *
      * <p>遍历语义:任何 {@code FIELD_NAME} 与 {@code "@class"} 匹配时,下一个 STRING
      * token 视为 className,委派 {@link WhitelistPolicy#isClassNameAllowed} 判断。

@@ -12,7 +12,7 @@
 | Build | Maven | 3.x |
 | Testing | JUnit 5 + Testcontainers + AssertJ + Awaitility | - |
 
-> Tech Stack 表为单构建口径(Boot 4.0 / Java 21 / Redisson 3.50.0 单构建线)。`a5ab55b` 重构后已无 `wrapper/`/`spi/`/`event/`/`evaluator/`/`CacheMetricsRecorder`,目录树见下方 Project Structure + 已移除 callout。
+> Tech Stack 表为单构建口径(Boot 4.0 / Java 21 / Redisson 3.50.0 单构建线)。重构后已无 `wrapper/`/`spi/`/`event/`/`evaluator/`/`CacheMetricsRecorder`,目录树见下方 Project Structure + 已移除 callout。
 
 ## Code Style
 
@@ -35,18 +35,6 @@
 - **Checkstyle only**: `./mvnw checkstyle:check`
 - **Package**: `./mvnw clean package -DskipTests`
 
-## 项目知识库(LLM Wiki)
-
-本项目有一个由 LLM 持续维护的知识库,位于 **`wiki/`**。**任何 LLM 会话开始时优先读它**,避免从源码重新推导已沉淀过的内容:
-
-- **入口**:`wiki/overview.md` —— 一句话概览 + 技术栈 + 阅读路线
-- **目录**:`wiki/index.md` —— 全部页面(架构 / 机制 / 模块 / 概念 / 指南)
-- **规范**:`wiki/README.md` —— 如何维护(ingest / query / lint 三大操作)
-
-**源码 → wiki 是单向关系**:源码变了 → 更新对应 wiki 页;源码没变 → 直接引用 wiki,不要重新推导。变更历史由 `git log` 承载(commit body 是 SOURCE OF TRUTH)。
-
-回答架构 / 机制 / 模块问题先读 `index.md` 定位,再下钻;不直接 grep 源码(wiki 已编译过)。
-
 ## Project Structure
 
 ```
@@ -57,7 +45,7 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │                        #   LoaderOrchestrator, CacheOperationResolver, CacheKeys, CachedValue,
 │                        #   ResiCacheFeatures
 │   └── metrics/         #   CacheMetrics + RedisProCacheMetricsRegistry + RedisProCacheTimers
-├── chain/               # Chain of Responsibility (22% of source — see wiki/architecture/chain-of-responsibility)
+├── chain/               # Chain of Responsibility core (root + handler/ + metadata/ + model/ + observer/)
 │   ├── (root)           #   CacheHandler/Chain/Factory, AbstractCacheHandler, ChainEngine (推进引擎),
 │   │                    #   HandlerOrder/Priority, CacheOperation/Result, ChainProtectionToggleResolver
 │   ├── handler/         #   ActualCacheHandler + CacheErrorHandler (terminal Redis execution)
@@ -84,7 +72,7 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 └── health/              # RedisCacheHealthIndicator (actuator health)
 ```
 
-> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`holder/`、`factory/`(已并入 `operation/`,ADR-0065 收尾) —— 见 `a5ab55b` 重构。wiki 始终以实际源码为准。
+> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`holder/`、`factory/`(已并入 `operation/`)。文档始终以实际源码为准。
 
 ### Test Structure
 
@@ -129,10 +117,10 @@ Each handler implements `CacheHandler` interface with `handle()` method.
 
 | I want to... | Look at... |
 |--------------|-----------|
-| Understand the chain / a mechanism | `wiki/architecture/` and `wiki/mechanisms/` |
-| Understand a module | `wiki/modules/<name>.md` |
+| Understand the chain / a mechanism | `chain/` package + `protection/<mechanism>/` (each handler carries design rationale in Javadoc) |
+| Understand a module | the package itself under `src/main/java/.../`; module layout is in Project Structure above |
 | Add a new cache protection handler | `protection/<mechanism>/` + implement `CacheHandler`, annotate `@HandlerPriority(HandlerOrder.X)` |
 | Modify annotation processing | `annotation/handler/` + `AnnotationHandler` interface |
 | Change Redis connection config | `config/RedisConnectionConfiguration.java` |
-| Configure behavior | `wiki/modules/configuration.md` + `config/RedisProCacheProperties.java` |
+| Configure behavior | `config/RedisProCacheProperties.java` (311 LOC, `resi-cache.*` prefix) |
 | Add integration tests | `AbstractRedisIntegrationTest.java` + Testcontainers |

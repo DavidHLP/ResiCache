@@ -6,10 +6,9 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 /**
- * 注解处理器抽象节点 — ADR-0013 (Annotation Chain Engine extraction) D3 后的精简形态.
+ * 注解处理器抽象节点.
  *
- * <p>链推进 + handler 遍历 + 结果收集 + 观测编排(原内联在
- * {@code handle} 方法的 ~25 SLOC 样板)已全部迁出到 {@link AnnotationChainEngine}。
+ * <p>链推进 + handler 遍历 + 结果收集由 {@link AnnotationChainEngine} 承担。
  * 本抽象类只保留两个钩子:
  *
  * <ul>
@@ -18,20 +17,13 @@ import java.util.List;
  *       {@link CacheOperation}</li>
  * </ul>
  *
- * <p><b>不再维护 next 指针</b>:原 {@code next} 字段 + {@code setNext} 方法 +
- * {@code handle} 递归方法全部删除 — 链结构由 Engine 持有的 List 维护
- * (Spring 启动期一次性注入,运行期无变更)。
+ * <p><b>链结构</b>:链结构由 Engine 持有的 List 维护
+ * (Spring 启动期一次性注入,运行期无变更),本类不持有 next 指针。
  *
  * <p><b>失败隔离</b>:Engine 调用 {@code doHandle} 时自带 per-handler try/catch,
  * handler 异常不会污染其他 handler 也不阻塞拦截器链(详见
- * {@link AnnotationChainEngine#execute(Method, Object, Object[])})。
- * 原 {@code handle} 递归版本无此隔离 — 这是行为收窄方向的强化,符合"单个注解
+ * {@link AnnotationChainEngine#execute(Method, Object, Object[])}),符合"单个注解
  * 解析失败不应中断整个缓存链路"的本意。
- *
- * <p><b>back-compat 兜底</b>:删除 {@code setNext} / {@code next} / {@code handle}
- * 三个 public/protected API。如有外部代码直接构造链或调用 {@code handle},需迁移到
- * 使用 {@link AnnotationChainEngine}。本仓内 4 个具体 handler 与
- * {@link AbstractAnnotationHandler} 0 调用,删除无影响。
  */
 public abstract class AnnotationHandler {
 

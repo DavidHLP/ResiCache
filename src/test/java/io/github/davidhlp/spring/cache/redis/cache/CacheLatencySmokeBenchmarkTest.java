@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * WS-1.5 JMH 基准最小切片 — smoke test 级别.
+ * JMH 基准最小切片 — smoke test 级别.
  *
  * <p>分歧推荐表约束: <strong>不引入 jmh 框架</strong>(per 「引入新依赖/框架 → 不引入」)。
  * JMH 是 jmh-core 间接依赖,引入价值需评估(对 solo 维护者不构成阻塞 v0.1.0 发版)。
@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(classes = TestApplication.class)
 @ActiveProfiles("integration-test")
 @Import(TestRedisConfiguration.class)
-@DisplayName("WS-1.5 — cache 延迟 smoke 基准(不引入 jmh)")
+@DisplayName("cache 延迟 smoke 基准(不引入 jmh)")
 class CacheLatencySmokeBenchmarkTest extends AbstractRedisIntegrationTest {
 
     private static final int WARMUP_ITERATIONS = 50;
@@ -67,7 +67,7 @@ class CacheLatencySmokeBenchmarkTest extends AbstractRedisIntegrationTest {
     }
 
     @Test
-    @DisplayName("WS-1.5-Smoke-1: cache hit 平均延迟 < 100ms(1000 次迭代)")
+    @DisplayName("cache hit 平均延迟 < 100ms(1000 次迭代)")
     void cacheHit_latencyUnderThreshold() {
         // 预置 value 让后续 get 都命中
         cacheService.getById(1L);  // miss + put
@@ -91,7 +91,7 @@ class CacheLatencySmokeBenchmarkTest extends AbstractRedisIntegrationTest {
         long p50 = percentile(latencies, 50);
         long p99 = percentile(latencies, 99);
 
-        System.out.printf("[WS-1.5 cache hit] mean=%.2f us, p50=%.2f us, p99=%.2f us, n=%d%n",
+        System.out.printf("[cache hit] mean=%.2f us, p50=%.2f us, p99=%.2f us, n=%d%n",
                 mean / 1000.0, p50 / 1000.0, p99 / 1000.0, MEASURE_ITERATIONS);
 
         assertThat(mean)
@@ -100,7 +100,7 @@ class CacheLatencySmokeBenchmarkTest extends AbstractRedisIntegrationTest {
     }
 
     @Test
-    @DisplayName("WS-1.5-Smoke-2: cache miss 平均延迟 < 100ms(1000 次迭代,每次 unique key)")
+    @DisplayName("cache miss 平均延迟 < 100ms(1000 次迭代,每次 unique key)")
     void cacheMiss_latencyUnderThreshold() {
         // Warmup
         for (int i = 0; i < WARMUP_ITERATIONS; i++) {
@@ -119,7 +119,7 @@ class CacheLatencySmokeBenchmarkTest extends AbstractRedisIntegrationTest {
         long p50 = percentile(latencies, 50);
         long p99 = percentile(latencies, 99);
 
-        System.out.printf("[WS-1.5 cache miss] mean=%.2f us, p50=%.2f us, p99=%.2f us, n=%d%n",
+        System.out.printf("[cache miss] mean=%.2f us, p50=%.2f us, p99=%.2f us, n=%d%n",
                 mean / 1000.0, p50 / 1000.0, p99 / 1000.0, MEASURE_ITERATIONS);
 
         assertThat(mean)
@@ -128,7 +128,7 @@ class CacheLatencySmokeBenchmarkTest extends AbstractRedisIntegrationTest {
     }
 
     @Test
-    @DisplayName("WS-1.5-Smoke-3: async retrieve 平均延迟 < 100ms(1000 次迭代)")
+    @DisplayName("async retrieve 平均延迟 < 100ms(1000 次迭代)")
     void asyncRetrieve_latencyUnderThreshold() throws Exception {
         // 预置 value
         cacheService.getById(1L);
@@ -151,7 +151,7 @@ class CacheLatencySmokeBenchmarkTest extends AbstractRedisIntegrationTest {
         long p50 = percentile(latencies, 50);
         long p99 = percentile(latencies, 99);
 
-        System.out.printf("[WS-1.5 async retrieve] mean=%.2f us, p50=%.2f us, p99=%.2f us, n=%d%n",
+        System.out.printf("[async retrieve] mean=%.2f us, p50=%.2f us, p99=%.2f us, n=%d%n",
                 mean / 1000.0, p50 / 1000.0, p99 / 1000.0, MEASURE_ITERATIONS);
 
         assertThat(mean)

@@ -21,7 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * WS-1.5 故障注入最小切片 — Redis 断连场景.
+ * 故障注入最小切片 — Redis 断连场景.
  *
  * <p>本 IT 用 {@link Primary} 覆盖 bean 把 {@link RedisConnectionFactory} 替换为
  * 不可达地址(端口 1,无效)。验证 ResiCache 在 Redis 断连时:
@@ -35,9 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       调用方业务流不被打断</li>
  * </ol>
  *
- * <p>本 tick 范围:<strong>GET 路径 1 个 test</strong> — 验证 Redis GET 失败时
- * cache 层抛 {@code RedisConnectionFailureException}。PUT/CLEAN 路径类似
- * 行为,留独立 tick 补(per-WS-1.5 验收)。
+ * <p>GET/PUT/CLEAN 三路径行为类似,均验证 Redis 故障时 cache 层走 graceful degradation。
  *
  * <p>注: 用 {@link Primary} 覆盖是 Testcontainers IT 内的常见模式
  * (不污染生产代码)— 类似 Toxiproxy 故障注入(分歧推荐表优先"不引入新
@@ -46,7 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest(classes = {TestApplication.class, RedisDownFaultInjectionIT.BrokenRedisConfig.class})
 @ActiveProfiles({"integration-test", "redis-down-test"})
 @Import(TestRedisConfiguration.class)
-@DisplayName("WS-1.5 — Redis 断连故障注入(GET 路径最小切片)")
+@DisplayName("Redis 断连故障注入(GET 路径最小切片)")
 class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
 
     @Autowired
@@ -58,9 +56,8 @@ class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
     @Test
     @DisplayName("RedisDown-2: PUT 路径在 Redis 不可达时走 CacheErrorHandler graceful degradation(不抛异常,行为等价 put 失败被吞)")
     void redisDown_put_degradesGracefully() {
-        // WS-1.5 PUT 路径故障注入(GET 路径已 commit 59c1f6d):
-        // 与 GET 同样的 graceful degradation 设计 — CacheErrorHandler.handlePutError
-        // log warn + 返回 failed CacheResult,future / sync put 都不抛异常。
+        // PUT 路径故障注入:与 GET 同样的 graceful degradation 设计 —
+        // CacheErrorHandler.handlePutError log warn + 返回 failed CacheResult,future / sync put 都不抛异常。
         // **安全属性**: 上游调用方不会因为 Redis 故障被炸 — put 失败被吞,
         // 业务流继续(下次读会回源 loader)。
         // **不静默数据**: put 失败意味着 cache 没写入,下次读会触发 loader → 数据
@@ -85,12 +82,10 @@ class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
     @Test
     @DisplayName("RedisDown-3: CLEAN 路径在 Redis 不可达时走 CacheErrorHandler graceful degradation(不抛异常,行为等价 clean 失败被吞)")
     void redisDown_clean_degradesGracefully() {
-        // WS-1.5 CLEAN 路径故障注入(GET + PUT 已 commit,本 tick 收官 3 路径):
-        // 与 GET/PUT 同样的 graceful degradation 设计 —
+        // CLEAN 路径故障注入:与 GET/PUT 同样的 graceful degradation 设计 —
         // CacheErrorHandler.handleRemoveError log warn + 返回 failed CacheResult。
         // **安全属性**: cache clean 失败 = 该 key 未清除 → 下次读还会命中旧 value
-        // (cache 库不知道 stale 数据对调用方是否可接受 — 这是缓存一致性 trade-off,
-        // 已在 WS-1.2 文档说明)
+        // (cache 库不知道 stale 数据对调用方是否可接受 — 这是缓存一致性 trade-off)
         // **不抛异常**: clean 失败被吞,业务流继续
 
         // 不抛异常 — sync clean 走通(graceful degradation 模式)
@@ -103,7 +98,7 @@ class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
     @Test
     @DisplayName("RedisDown-1: GET 路径在 Redis 不可达时走 CacheErrorHandler graceful degradation(不抛异常,future 正常完成,行为等价 cache miss)")
     void redisDown_get_degradesGracefully() throws Exception {
-        // WS-1.5 故障注入发现的真实行为(诚实记录 — 重要架构发现):
+        // 故障注入发现的真实行为(诚实记录 — 重要架构发现):
         // ResiCache 继承 Spring Cache 的 CacheErrorHandler 模式 — 当 Redis 不可达时,
         // ActualCacheHandler 的 try-catch 调用 errorHandler.handleGetError(),
         // 后者 log \"Cache GET failed, degrading gracefully\" + 返回失败 CacheResult。
@@ -112,7 +107,7 @@ class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
         // - **安全属性未丢**: 上游收到的是 cache miss 结果,会触发 loader 重新计算 —
         //   不会用损坏/null 数据响应用户
         // - **错误可见**: log warn \"degrading gracefully\" 记录 Redis 故障,
-        //   运维可感知(配合 WS-1.4 per-handler Counter 可量化)
+        //   运维可感知(配合 per-handler Counter 可量化)
         // - **不破坏 SLA**: 上游业务调用不抛异常,可用 loader 兜底
         //
         // **trade-off**: 与 fail-fast 模式相反 — 选 fail-graceful-degrade
@@ -135,8 +130,8 @@ class RedisDownFaultInjectionIT extends AbstractRedisIntegrationTest {
     }
 
     /**
-     * Path C 后续(WS-1.5) — 故障注入测试用 Redis 不可达配置。
-     * <p>用 {@code @Primary} 覆盖原 {@link RedisConnectionFactory} bean — 启动时
+     * 故障注入测试用 Redis 不可达配置。
+     * <p>用 {@code @Primary} 覆盖 {@link RedisConnectionFactory} bean — 启动时
      * 客户端连接本地端口 1(无效,任何 host 都不会监听 1 端口 — IANA 保留)→
      * 任何 Redis 操作立即抛 {@code RedisConnectionFailureException}。
      */

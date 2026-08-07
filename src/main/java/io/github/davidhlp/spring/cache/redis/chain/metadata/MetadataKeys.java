@@ -7,34 +7,32 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * {@link AnnotatedElementKey} 反射访问 &amp; 类型安全 narrow seam —— Round 23 / ADR-0032 收敛.
+ * {@link AnnotatedElementKey} 反射访问 &amp; 类型安全 narrow seam.
  *
  * <p>本类吸收 {@code chain} 包内两文件共 3 处 {@code reflectField + instanceof} 样板:
  * <ul>
  *   <li>{@link DefaultMethodMetadataResolver} —— {@code currentMethod()} /
- *       {@code currentTargetClass()}(原 line 56-74)</li>
- *   <li>{@link CacheInvocationContext} —— {@code of(AnnotatedElementKey)}(原 line 57-67)</li>
+ *       {@code currentTargetClass()}</li>
+ *   <li>{@link CacheInvocationContext} —— {@code of(AnnotatedElementKey)}</li>
  * </ul>
  *
- * <p>两文件的 {@code reflectField} private static helper 字节级同构(7 行 try/catch 反射),
- * 是 ADR-0020 {@code AnnotationTargets} 模式在 {@code chain} 包的对称扩展:
+ * <p>提供:
  * <ol>
  *   <li>{@link #reflectField(AnnotatedElementKey, String)} —— 反射私有字段,
- *       key 为 null 或字段缺失时返回 null(WARN 日志仅在字段缺失时记录,与原行为等价)</li>
+ *       key 为 null 或字段缺失时返回 null(WARN 日志仅在字段缺失时记录)</li>
  *   <li>{@link #extractMethod(AnnotatedElementKey)} —— typed narrow,把反射值收窄到
  *       {@link Method}(非 Method 时返回 null)</li>
  *   <li>{@link #extractTargetClass(AnnotatedElementKey)} —— typed narrow,把反射值收窄到
  *       {@link Class}(非 Class 时返回 null)</li>
  * </ol>
  *
- * <p><b>设计要点</b>(与 ADR-0020 平行):
+ * <p><b>设计要点</b>:
  * <ul>
  *   <li><b>类型保证</b>:Spring 6.2 {@code AnnotatedElementKey} 私有字段为
  *       {@code element}({@code Object},实际是 {@link Method}) +
  *       {@code targetClass}({@code Object},实际是 {@code Class<?>});helper 反射后用
- *       {@code instanceof} 窄化为目标类型,与原行为一致</li>
- *   <li><b>Null 容忍</b>:{@code key == null} / 字段为 null / 字段类型不符 → 返回 null,
- *       与原 try-cast 三态语义等价</li>
+ *       {@code instanceof} 窄化为目标类型</li>
+ *   <li><b>Null 容忍</b>:{@code key == null} / 字段为 null / 字段类型不符 → 返回 null</li>
  *   <li><b>可见性</b>:package-private(同包 2 个 caller,无跨包泄漏需求);private 构造 +
  *       {@code final class} 阻止实例化</li>
  * </ul>
@@ -44,7 +42,6 @@ import java.lang.reflect.Method;
  *
  * @see DefaultMethodMetadataResolver
  * @see CacheInvocationContext
- * @see <a href="../../../../../../../../../wiki/adr/0032-metadata-keys-extract-seam.md">ADR-0032</a>
  */
 @Slf4j
 final class MetadataKeys {
@@ -59,7 +56,7 @@ final class MetadataKeys {
      * <p>行为契约:
      * <ul>
      *   <li>{@code key == null} → 返回 null(不抛 NPE)</li>
-     *   <li>字段不存在或访问被拒 → 返回 null + WARN 日志(原 helper 行为)</li>
+     *   <li>字段不存在或访问被拒 → 返回 null + WARN 日志</li>
      *   <li>读取成功 → 返回字段当前值(可能为 null,这是 Spring 内部状态机的合法情况)</li>
      * </ul>
      *

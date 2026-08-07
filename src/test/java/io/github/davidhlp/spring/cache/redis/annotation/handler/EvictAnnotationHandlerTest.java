@@ -23,15 +23,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for EvictAnnotationHandler —— ADR-0065 深化后形态。
+ * Unit tests for EvictAnnotationHandler。
  *
- * <p>ADR-0065:删除浅 {@code EvictOperationFactory} @Component 后,handler 直接持有
- * {@link RedisCacheAttributesProjector}(真实实例,非 mock)。operation 由真实 projector
- * + {@link RedisCacheEvictOperation#fromAttributes} 生成,测试从"mock factory 返回 canned
- * op"升级为"真实投影路径产生真实 op"。projector + fromAttributes 各自有独立单测覆盖。
+ * <p>handler 直接持有 {@link RedisCacheAttributesProjector}(真实实例,非 mock)。operation
+ * 由真实 projector + {@link RedisCacheEvictOperation#fromAttributes} 生成,测试验证
+ * "真实投影路径产生真实 op"。projector + fromAttributes 各自有独立单测覆盖。
  *
- * <p>删除的测试:{@code usesFactoryToCreateOperation}(无工厂可验证) /
- * {@code withFactoryException}(KeyGenerator 异常测试已覆盖 registerOne try/catch 隔离)。
+ * <p>KeyGenerator 异常测试覆盖 registerOne try/catch 隔离。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("EvictAnnotationHandler Tests")
@@ -111,8 +109,8 @@ class EvictAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            // ADR-0065:operation 由真实 projector + fromAttributes 生成,验证 register 收到
-            // RedisCacheEvictOperation + CACHE_EVICT kind(不再用 eq(cannedOp))
+            // operation 由真实 projector + fromAttributes 生成,验证 register 收到
+            // RedisCacheEvictOperation + CACHE_EVICT kind
             verify(redisCacheRegister).register(
                     any(Method.class), any(Class.class),
                     any(RedisCacheEvictOperation.class), eq(OperationKind.CACHE_EVICT));

@@ -14,18 +14,14 @@ import java.util.concurrent.ConcurrentMap;
  * ChainObserver 的 perNode 实现 — per-handler uniform {@code resicache.handler.fired}
  * counter（handler tag = 运行时子类 SimpleName；cardinality bounded = handler 类数）。
  *
- * <p>替换原 {@code AbstractCacheHandler#attachMeterRegistry} 的 uniform fired counter
- * 装配逻辑（约 15 SLOC）+ handle 模板里的 {@code if (firedCounter != null) firedCounter.increment()}
- * 样板代码（约 4 SLOC × 5+ handler）。本类把 fired counter 的"装配 + 自增"收口
- * 到单一 observer，{@code AbstractCacheHandler} 退化为只保留子类的语义 counter
+ * <p>本类把 fired counter 的"装配 + 自增"收口
+ * 到单一 observer，{@code AbstractCacheHandler} 只保留子类的语义 counter
  * 注册钩子（{@code onAttachMetrics}）。
  *
- * <p>行为变化：disabled handler 语义 counter 不再注册（修正现存双轨不一致：
- * 原 fired 按进链注册、语义按 bean 存在注册；统一到本 observer 后，fired 与语义
- * counter 都在 handler 进链时统一注册）。registry 缺失时本 observer 全 no-op，
- * 与原 {@code AbstractCacheHandler} 一致。
+ * <p>disabled handler 语义 counter 不注册；fired 与语义
+ * counter 都在 handler 进链时统一注册。registry 缺失时本 observer 全 no-op。
  *
- * <p>WS-1.4 Span：per-handler span child 可在本类的 {@code afterNode} 内挂载，
+ * <p>per-handler span child 可在本类的 {@code afterNode} 内挂载，
  * 零修改 Engine 即可与本 counter 同步打点。
  *
  * <p>线程安全：counter map 用 {@link ConcurrentHashMap}（lazy register 时多个

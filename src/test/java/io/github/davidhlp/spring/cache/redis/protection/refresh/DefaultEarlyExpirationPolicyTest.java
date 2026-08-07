@@ -12,11 +12,7 @@ import java.time.ZoneId;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * DefaultEarlyExpirationPolicy 单元测试
- *
- * <p>ADR-0025:用例自 {@code protection.avalanche.DefaultTtlPolicyTest.ShouldEarlyExpirationTests} 原样迁入,
- * 断言逻辑 byte-for-byte 等价;仅方法名 {@code shouldEarlyExpiration_*} → {@code shouldRefresh_*},
- * 调用 {@code shouldEarlyExpiration} → {@code shouldRefresh} 对齐新 seam 命名。
+ * DefaultEarlyExpirationPolicy 单元测试。
  */
 @DisplayName("DefaultEarlyExpirationPolicy Tests")
 class DefaultEarlyExpirationPolicyTest {

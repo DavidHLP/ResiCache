@@ -25,15 +25,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for CacheableAnnotationHandler —— ADR-0059 收敛后形态。
+ * Unit tests for CacheableAnnotationHandler。
  *
- * <p>register 调用已从 {@code redisCacheRegister::registerCacheableOperation} 方法引用
- * 改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)} 工厂 lambda,
- * 测试断言改为 {@code redisCacheRegister.register(..., OperationKind.CACHEABLE)}。
+ * <p>register 调用走 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
+ * 工厂 lambda,测试断言 {@code redisCacheRegister.register(..., OperationKind.CACHEABLE)}。
  *
- * <p><b>ADR-0060 测试扩展</b>:本类新增 {@link SelectCacheableSourceTests} nested class,
- * 覆盖从 doHandle 抽出的 selectCacheableSource seam —— 验证"ResiCache 注解优先于 Spring
- * 注解"的源选择规则,无需 mock factory/register 即可断言 source 类型,显著提升单测 locality。
+ * <p>{@link SelectCacheableSourceTests} 覆盖 selectCacheableSource seam —— 验证
+ * "ResiCache 注解优先于 Spring 注解"的源选择规则,无需 mock factory/register 即可
+ * 断言 source 类型,显著提升单测 locality。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CacheableAnnotationHandler Tests")
@@ -136,8 +135,8 @@ class CacheableAnnotationHandlerTest {
 
             handler.doHandle(method, target, args);
 
-            // ADR-0065:operation 由真实 projector + fromAttributes 生成;验证 register 收到
-            // RedisCacheableOperation + CACHEABLE kind(不再用 eq(cannedOp))
+            // operation 由真实 projector + fromAttributes 生成;验证 register 收到
+            // RedisCacheableOperation + CACHEABLE kind
             verify(redisCacheRegister).register(
                     any(Method.class), any(Class.class),
                     any(RedisCacheableOperation.class), eq(OperationKind.CACHEABLE));
@@ -158,7 +157,7 @@ class CacheableAnnotationHandlerTest {
         }
 
         @Test
-        @DisplayName("ADR-0060:doHandle returns empty list when no annotation is present")
+        @DisplayName("doHandle returns empty list when no annotation is present")
         void doHandle_withoutAnnotation_returnsEmpty() throws Exception {
             Method method = getMethod("noAnnotation");
             Object target = new TestClass();
@@ -171,7 +170,7 @@ class CacheableAnnotationHandlerTest {
     }
 
     @Nested
-    @DisplayName("ADR-0060: selectCacheableSource() Tests")
+    @DisplayName("selectCacheableSource() Tests")
     class SelectCacheableSourceTests {
 
         @Test
@@ -207,10 +206,10 @@ class CacheableAnnotationHandlerTest {
         }
 
         @Test
-        @DisplayName("ADR-0060: ResiCache 注解优先于 Spring 注解(同方法共存时 ResiCache 胜出)")
+        @DisplayName("ResiCache 注解优先于 Spring 注解(同方法共存时 ResiCache 胜出)")
         void selectCacheableSource_withBothAnnotations_prefersResiCache() throws Exception {
             // bothAnnotatedMethod 同时标注 @RedisCacheable + Spring @Cacheable;
-            // ADR-0060 源选择规则:ResiCache 优先(Spring 路径被忽略)。
+            // 源选择规则:ResiCache 优先(Spring 路径被忽略)。
             Method method = getMethod("bothAnnotatedMethod");
 
             Optional<java.lang.annotation.Annotation> annotation = handler.selectCacheableSource(method);

@@ -6,18 +6,10 @@ import org.springframework.lang.Nullable;
 /**
  * 预取/提前过期决策 — {@link io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationHandler}
  * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler} 读取的
- * 类型化跨 handler 消息(ADR-0036 / Round 26 C1).
+ * 类型化跨 handler 消息.
  *
- * <p><b>替代 {@code CacheContext.attributes} 的 3 个业务 magic-string key</b>:
- * <ul>
- *   <li>{@code "earlyExpiration.skipped"} → {@link #earlyExpirationSkipped()}</li>
- *   <li>{@code "cache.prefetchedValue"} → {@link #prefetchedValue()}</li>
- *   <li>{@code "earlyExpiration.decision"} → {@link #decision()}</li>
- * </ul>
- * 三者皆是 {@code EarlyExpirationHandler} 同一次 GET 预取 + 判定的产物,生产者/消费者一一对应,
- * 收编为单一 record 消除跨 handler 字符串契约——与 ADR-0033 的 {@link TtlDecision} /
- * {@link NullDecision} 同构,是 CacheContext 类型化脉络的最后一对收官(原 attributes 袋
- * 业务 key 至此清零,仅保留 observer/bloom/lock 各模块自管的临时键).
+ * <p>三个字段皆是 {@code EarlyExpirationHandler} 同一次 GET 预取 + 判定的产物,
+ * 生产者/消费者一一对应,与 {@link TtlDecision} / {@link NullDecision} 同构。
  *
  * <p><b>字段关系(运行期典型,非编译期约束)</b>:
  * <ul>

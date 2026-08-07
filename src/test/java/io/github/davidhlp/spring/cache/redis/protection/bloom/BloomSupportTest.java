@@ -18,7 +18,7 @@ import static org.mockito.Mockito.*;
 /**
  * BloomSupport 单元测试。
  *
- * <p>ADR-0058 收敛后,本测试聚焦"代理 + fail-open"契约(rebuilding 窗口状态机细节
+ * <p>本测试聚焦"代理 + fail-open"契约(rebuilding 窗口状态机细节
  * 由 {@link BloomRebuilder} 独立覆盖,见 {@link BloomRebuilderTest})。
  */
 @ExtendWith(MockitoExtension.class)

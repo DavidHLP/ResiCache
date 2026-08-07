@@ -23,19 +23,11 @@ import java.util.List;
  * SELECTIVE 模式下,若 ResiCache 同名注解已存在则跳过对应 Spring 注解,避免重复操作。
  * 纯函数,持有不可变的 {@code NativeAnnotationMode} 枚举(构造期注入)。
  *
- * <p><b>Round 10 / ADR-0020 seam 收敛</b>:本类原先 14 处
- * {@code instanceof Method} / {@code instanceof Class} 分派样板已统一委派给
- * {@link AnnotationTargets#findMerged} 与 {@link AnnotationTargets#extractTargetName}。
- * 原 6 对 {@code hasResiCacheXxx(Method)} + {@code hasResiCacheXxx(Class)} 重载 +
- * 6 对 {@code convertSpringXxx(Method, List)} + {@code convertSpringXxx(Class, List)}
- * 重载 + {@code addSpringNativeOperations} 内 SELECTIVE / FULL 双分支的 Method/Class
- * 二分法,共 14 个分派点全部塌缩为多态 {@link AnnotatedElement} 路径。
+ * <p>Method/Class 的注解探测与名称提取统一走 {@link AnnotationTargets} 的多态
+ * {@link AnnotatedElement} 路径。
  *
- * <p><b>Round 50 / 架构评审候选 A 收敛</b>:3 个 build 方法原持有 17 处私有
- * {@code applyText(ann.x(), builder::setX)} 调用 + 私有 {@code applyText} helper
- * 已统一委派到 {@link BuilderPopulator#populate} —— 字段填充形状(text + special)
- * 收口到 deep seam,与 {@link AnnotationParser} 共享同一填充协议,新增字段触点
- * = 1 个 populate spec 行而非两份独立 applyText 实现。
+ * <p>3 个 build 方法的字段填充(text + special)统一委派给
+ * {@link BuilderPopulator#populate},与 {@link AnnotationParser} 共享同一填充协议。
  */
 @Slf4j
 final class SpringAnnotationAdapter {
@@ -52,10 +44,8 @@ final class SpringAnnotationAdapter {
      *
      * <p>使 @Cacheable, @CachePut, @CacheEvict 也能被 ResiCache 处理.
      *
-     * <p>Round 10 / ADR-0020:SELECTIVE / FULL 两个分支的 Method/Class 二分法
-     * 已统一为 {@link AnnotatedElement} 多态路径(target 走
-     * {@code instanceof Method} / {@code instanceof Class} 判断已下沉至
-     * {@link AnnotationTargets#extractTargetName})。
+     * <p>SELECTIVE / FULL 两个分支均走 {@link AnnotatedElement} 多态路径,名称提取
+     * 由 {@link AnnotationTargets#extractTargetName} 完成。
      *
      * @param target 方法或类对象
      * @param ops 操作集合
@@ -88,8 +78,7 @@ final class SpringAnnotationAdapter {
     /**
      * 目标上是否含任意 ResiCache 注解(3 个原生 + @RedisCaching 复合).
      *
-     * <p>Round 10 / ADR-0020:多态 {@link AnnotatedElement} 路径,
-     * 原 Method/Class 二分法已消失。
+     * <p>走 {@link AnnotatedElement} 多态路径。
      */
     private boolean hasResiCacheAnnotation(Object target) {
         if (target instanceof AnnotatedElement) {
@@ -100,17 +89,17 @@ final class SpringAnnotationAdapter {
         return false;
     }
 
-    /** 多态 {@link AnnotatedElement} 路径,原 Method/Class 重载对已合并. */
+    /** 走 {@link AnnotatedElement} 多态路径. */
     private boolean hasResiCacheable(Object target) {
         return AnnotationTargets.findMerged(target, RedisCacheable.class) != null;
     }
 
-    /** 多态 {@link AnnotatedElement} 路径,原 Method/Class 重载对已合并. */
+    /** 走 {@link AnnotatedElement} 多态路径. */
     private boolean hasResiCacheEvict(Object target) {
         return AnnotationTargets.findMerged(target, RedisCacheEvict.class) != null;
     }
 
-    /** 多态 {@link AnnotatedElement} 路径,原 Method/Class 重载对已合并. */
+    /** 走 {@link AnnotatedElement} 多态路径. */
     private boolean hasResiCachePut(Object target) {
         return AnnotationTargets.findMerged(target, RedisCachePut.class) != null;
     }
@@ -119,9 +108,9 @@ final class SpringAnnotationAdapter {
      * 转换 Spring 原生 {@code @Cacheable} 为 ResiCache 的
      * {@link org.springframework.cache.interceptor.CacheableOperation}.
      *
-     * <p>Round 10 / ADR-0020:多态 {@code (AnnotatedElement) target} 路径,原
-     * Method/Class 重载对已合并;name 由调用方通过 {@link AnnotationTargets#extractTargetName}
-     * 预提取,本方法只负责"读注解 + build operation"两步。
+     * <p>走多态 {@code (AnnotatedElement) target} 路径;name 由调用方通过
+     * {@link AnnotationTargets#extractTargetName} 预提取,本方法只负责"读注解 +
+     * build operation"两步。
      */
     private void convertSpringCacheable(Object target, String name, List<CacheOperation> ops) {
         Cacheable ann = AnnotationTargets.findMerged(target, Cacheable.class);
@@ -135,7 +124,7 @@ final class SpringAnnotationAdapter {
      * 转换 Spring 原生 {@code @CachePut} 为 ResiCache 的
      * {@link RedisCachePutOperation}.
      *
-     * <p>Round 10 / ADR-0020:多态路径,原 Method/Class 重载对已合并。
+     * <p>走多态 {@link AnnotatedElement} 路径。
      */
     private void convertSpringCachePut(Object target, String name, List<CacheOperation> ops) {
         CachePut ann = AnnotationTargets.findMerged(target, CachePut.class);
@@ -149,7 +138,7 @@ final class SpringAnnotationAdapter {
      * 转换 Spring 原生 {@code @CacheEvict} 为 ResiCache 的
      * {@link RedisCacheEvictOperation}.
      *
-     * <p>Round 10 / ADR-0020:多态路径,原 Method/Class 重载对已合并。
+     * <p>走多态 {@link AnnotatedElement} 路径。
      */
     private void convertSpringCacheEvict(Object target, String name, List<CacheOperation> ops) {
         CacheEvict ann = AnnotationTargets.findMerged(target, CacheEvict.class);
@@ -165,7 +154,7 @@ final class SpringAnnotationAdapter {
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
-        // Round 50:6 文本字段 + 1 special 字段(sync)委派到 BuilderPopulator.populate
+        // 6 文本字段 + 1 special 字段(sync)委派到 BuilderPopulator.populate
         BuilderPopulator.populate(builder, ann,
                 List.of(
                         BuilderPopulator.TextField.textField(
@@ -191,7 +180,7 @@ final class SpringAnnotationAdapter {
         builder.name(name);
         builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
-        // Round 50:6 文本字段 + 0 special 字段委派(Lombok 链式 builder 用 x 命名 setter)
+        // 6 文本字段 + 0 special 字段委派(Lombok 链式 builder 用 x 命名 setter)
         BuilderPopulator.populate(builder, ann,
                 List.of(
                         BuilderPopulator.TextField.textField(
@@ -217,7 +206,7 @@ final class SpringAnnotationAdapter {
         builder.name(name);
         builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
-        // Round 50:5 文本字段 + 2 special 字段(allEntries + beforeInvocation)委派。
+        // 5 文本字段 + 2 special 字段(allEntries + beforeInvocation)委派。
         // 注:本方法返回 RedisCacheEvictOperation(ResiCache 子类)而非 Spring 标准
         // CacheEvictOperation,与 AnnotationParser 产出 Spring 标准类的语义不同——
         // ResiCache 自家 build 走 ResiCache 子类(持有 ResiCache 增强字段)。

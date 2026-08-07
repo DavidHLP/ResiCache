@@ -9,7 +9,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
- * 注解 → Builder 字段填充的 deep seam — Round 50 / 架构评审候选 A 抽出.
+ * 注解 → Builder 字段填充的 deep seam.
  *
  * <p><b>problem (背景)</b>:两条注解 → Spring {@code CacheOperation} 解析路径
  * ({@link AnnotationParser} 解析 {@code @RedisCacheable/@RedisCacheEvict/@RedisCachePut},
@@ -33,11 +33,10 @@ import java.util.function.Function;
  * <p><b>solution</b>:把"形状 → 字段填充"收口到本类两个 seam:
  * <ul>
  *   <li>{@link #applyText(Object, String, BiConsumer)} — 单字段 null-safe 写入,
- *       替换 {@code if (hasText) b.setX(value)} 样板.原 {@code SpringAnnotationAdapter}
- *       的私有 {@code applyText} 迁移到此,两类的 35 处 if-守卫收敛为一处.</li>
+ *       替换 {@code if (hasText) b.setX(value)} 样板.两类的 35 处 if-守卫收敛为一处.</li>
  *   <li>{@link #populate(Object, Object, List, List)} — 整个 builder 的字段填充
  *       编排:迭代 textFields(应用 {@code applyText}) + 迭代 specialFields(直接应用).
- *       每个 parse/build 方法退化为 1 个 populate(...) 调用 + 1 个 build().</li>
+ *       每个 parse/build 方法仅含 1 个 populate(...) 调用 + 1 个 build().</li>
  * </ul>
  *
  * <p><b>name + cacheNames 不在 populate 范围内</b>:这两个字段的 setter 类型/语义各 Builder
@@ -157,14 +156,12 @@ public final class BuilderPopulator {
      * 单字段 null-safe 写入 — {@code value} 非空(经 {@link StringUtils#hasText} 判定)
      * 时调 setter,空/null 时跳过.
      *
-     * <p>迁移自 {@code SpringAnnotationAdapter} 私有 helper(原签名
-     * {@code applyText(String, Consumer<String>)},只能传递 setter 而非 builder);
-     * 本方法用 {@link BiConsumer} 把 builder 也传入,允许 setter 在 lambda 体内捕获 builder
+     * <p>本方法用 {@link BiConsumer} 把 builder 也传入,允许 setter 在 lambda 体内捕获 builder
      * 实例(适配 Lombok 链式 builder 写法).
      *
      * <p>{@link AnnotationParser} 18 处
      * {@code if (StringUtils.hasText(ann.x())) builder.setX(ann.x());} 样板
-     * 全部改为本方法调用,消除重复的 if-守卫.
+     * 经本方法统一处理,消除重复的 if-守卫.
      *
      * @param builder 目标 builder
      * @param value   待写入值(null 或空串时跳过)

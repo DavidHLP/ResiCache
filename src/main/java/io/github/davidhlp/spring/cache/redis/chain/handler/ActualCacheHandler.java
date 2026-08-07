@@ -28,14 +28,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>职责：
  * <ul>
  *   <li>执行实际的 Redis 缓存操作（GET/PUT/PUT_IF_ABSENT/REMOVE/CLEAN）</li>
- *   <li>不包含锁逻辑（已移至 SyncLockHandler）</li>
+ *   <li>不包含锁逻辑（由 SyncLockHandler 处理）</li>
  *   <li>提前过期逻辑由 EarlyExpirationHandler 处理</li>
- * </ul>
- *
- * <p>设计改进：
- * <ul>
- *   <li>原设计：锁逻辑、提前过期逻辑、实际操作混在一起，职责过重</li>
- *   <li>新设计：仅负责 Redis 操作，其他逻辑由专门的 Handler 处理</li>
  * </ul>
  */
 @Slf4j
@@ -63,7 +57,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(context.getOperation(), "Cache operation must not be null");
 
-        // 检查是否已被提前过期处理跳过（ADR-0036:类型化 PrefetchDecision 替代 attributes magic string）
+        // 检查是否已被提前过期处理跳过（类型化 PrefetchDecision）
         PrefetchDecision prefetch = context.getPrefetchDecision();
         if (prefetch != null && prefetch.earlyExpirationSkipped()) {
             return HandlerResult.terminate(CacheResult.miss());
@@ -71,7 +65,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         CacheResult result = dispatchOperation(context);
 
-        // 终止责任链（ADR-0033:原 CacheOutput.finalResult 死字段删除,结果仅通过 HandlerResult 返回）
+        // 终止责任链（结果仅通过 HandlerResult 返回）
         return HandlerResult.terminate(result);
     }
 
@@ -102,7 +96,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
         log.debug("Cache GET: cacheName={}, key={}", context.getCacheName(), context.getRedisKey());
 
         try {
-            // 优先复用 EarlyExpirationHandler 预取的缓存值，避免双重 Redis GET（ADR-0036:类型化）
+            // 优先复用 EarlyExpirationHandler 预取的缓存值，避免双重 Redis GET（类型化）
             PrefetchDecision prefetchDecision = context.getPrefetchDecision();
             CachedValue cachedValue = prefetchDecision != null ? prefetchDecision.prefetchedValue() : null;
             if (cachedValue == null) {
@@ -331,7 +325,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
      * 存储意图 — 把 chain 的 {@link NullDecision} + {@link TtlDecision} 解析为一个不可变的
      * "写什么 + 写多久"决议物，是 PUT / PUT_IF_ABSENT 两个写路径共享的深模块。
      *
-     * <p>封装三件原本散落在 handlePut / handlePutIfAbsent 各 13 行近镜像样板中的复杂度：
+     * <p>封装的复杂度：
      * <ol>
      *   <li>Spring Data Redis 的 {@code set} / {@code setIfAbsent} 各有「带 Duration」与
      *       「不带 Duration」两条重载；{@code ttl == null}（永久缓存）走无 Duration 重载、
@@ -342,11 +336,10 @@ public class ActualCacheHandler extends AbstractCacheHandler {
      *   <li>{@code Duration.ofSeconds(finalTtl)} 的单位映射仅本记录产生。</li>
      * </ol>
      *
-     * <p><b>deepening 理由（vs 内联）</b>：handlePut 与 handlePutIfAbsent 原各持一段 13 行
-     * 近镜像的 TTL 分支 + CachedValue 构造 + 重载选择样板。本记录 + 两个 {@code resolve}
-     * helper 把这段复杂度从两处搬家到一处<b>浓缩</b>（deletion test：删掉后内联回去 =
-     * 重复回归，复杂度上升而非下降 → 真 seam）。同时让「存储意图」这个隐含概念获得命名
-     * 与 locality，未来新增写路径可直接复用。
+     * <p><b>deepening 理由（vs 内联）</b>：本记录 + 两个 {@code resolve} helper 把两个写路径
+     * 共享的 TTL 分支 + CachedValue 构造 + 重载选择逻辑<b>浓缩</b>到一处（deletion test：
+     * 删掉后内联回去 = 重复回归，复杂度上升而非下降 → 真 seam）。「存储意图」这个隐含概念
+     * 获得命名与 locality，未来新增写路径可直接复用。
      *
      * <p>本记录为 ActualCacheHandler 私有：当前仅 PUT / PUT_IF_ABSENT 两个消费者，
      * 未达提升为顶层类型的必要性（YAGNI）。
@@ -379,7 +372,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
      * 用决策值；否则（NullDecision 缺席，或显式 {@link NullDecision#of(Object) of(null)}
      * 表示「无需转换」）沿用 {@link CacheContext#getDeserializedValue() deserializedValue}。
      *
-     * <p>提取理由：handlePut 与 handlePutIfAbsent 原各持一段相同的 5 行 null-fallback 样板。
+     * <p>handlePut 与 handlePutIfAbsent 共享相同的 null-fallback 逻辑。
      */
     private Object resolveStoreValue(CacheContext context) {
         NullDecision nullDecision = context.getNullDecision();
@@ -395,9 +388,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
      * 否则（TtlDecision 缺席，或 {@link TtlDecision#skipped() skipped}）物化为永久缓存
      * （CachedValue 携 -1、Duration 为 null → 调用方走无 TTL 重载）。
      *
-     * <p>提取理由：handlePut 与 handlePutIfAbsent 原各持一段相同的 13 行 TTL 分支 +
-     * CachedValue 构造样板；本方法 + {@link StoreIntent} 把「TTL 决策如何物化为存储意图」
-     * 浓缩为单点，调用方仅剩"调 applyPut / applyPutIfAbsent"的 1-liner。
+     * <p>handlePut 与 handlePutIfAbsent 共享 TTL 决策物化为存储意图的逻辑；本方法 +
+     * {@link StoreIntent} 把它浓缩为单点，调用方仅剩"调 applyPut / applyPutIfAbsent"的 1-liner。
      */
     private StoreIntent resolveStoreIntent(CacheContext context, Object storeValue) {
         TtlDecision ttl = context.getTtlDecision();

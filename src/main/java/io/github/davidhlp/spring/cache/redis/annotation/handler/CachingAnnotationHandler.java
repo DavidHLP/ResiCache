@@ -35,14 +35,12 @@ import java.util.List;
  * </pre>
  * 三个 for-loop 全部下沉到基类,本类只剩 3 行 {@code addAll} 委派。
  *
- * <p><b>ADR-0059</b>:三处 register 调用改用 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
- * 工厂 lambda(kind 在编译期固定),register API 从 6 方法收敛到 2 方法后,新增第 4 种操作类型
- * 仅需追加 enum 行 + register/get 内部 switch —— 调用方零改动。
+ * <p>三处 register 调用使用 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
+ * 工厂 lambda(kind 在编译期固定),register API 为 2 方法,新增操作类型仅需追加
+ * enum 行 + register/get 内部 switch —— 调用方零改动。
  *
- * <p><b>ADR-0065 深化(本 seam)</b>:删除 3 个浅 {@code @Component} 工厂
- * ({@code CacheableOperationFactory}/{@code EvictOperationFactory}/{@code CachePutOperationFactory}),
- * 内联为 3 个 lambda 直传 {@link RedisCacheAttributesProjector#from} +
- * {@code XxxOperation.fromAttributes}。本类从持有 3 个工厂字段收敛为 1 个 projector 字段。
+ * <p>factory 以 lambda 直传 {@link RedisCacheAttributesProjector#from} +
+ * {@code XxxOperation.fromAttributes},本类只持有 1 个 projector 字段。
  */
 @Slf4j
 @Component

@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 /**
- * {@link AttributePopulator} deep seam 的契约测试 — Round 51 / 架构评审候选 A.
+ * {@link AttributePopulator} deep seam 的契约测试。
  *
  * <p>本测试覆盖 4 类契约:
  * <ul>
@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
  * {@code OperationFromAttributesTest} 跨 3 Operation 类型 pin 住行为,本类聚焦
  * {@link AttributePopulator} seam 自身的协议契约。
  */
-@DisplayName("AttributePopulator seam (Round 51 / candidate A)")
+@DisplayName("AttributePopulator seam")
 class AttributePopulatorTest {
 
     /**

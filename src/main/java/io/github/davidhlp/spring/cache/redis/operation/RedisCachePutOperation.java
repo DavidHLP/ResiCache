@@ -51,18 +51,16 @@ public class RedisCachePutOperation extends CachePutOperation {
     }
 
     /**
-     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCachePutOperation} — 单一字段映射 seam
-     * (ADR-0017 + ADR-0021)。
+     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCachePutOperation} — 单一字段映射 seam。
      *
-     * <p>本方法在 ADR-0017 退化 22 行 builder 链内联委派;在 <strong>ADR-0021</strong> 进一步
-     * 退化为 1 行委派,把"attribute → operation field"的映射知识完全下放给
+     * <p>本方法为 1 行委派,把"attribute → operation field"的映射知识完全下放给
      * {@link RedisCacheAttributes#applyTo(RedisCachePutOperation.Builder)} (字段拥有者)。
      *
      * <p>与 Cacheable.fromAttributes 唯一字段类型差异:{@code expectedInsertions} 在 Put
      * 是 {@code long} 槽位,直传(无窄化),由 {@link RedisCacheAttributes#applyTo(RedisCachePutOperation.Builder)}
      * 内部决定。
      *
-     * <p>Factory 退化为单行委派:
+     * <p>Factory 调用形态:
      * <pre>
      *   return RedisCachePutOperation.fromAttributes(method, key, attributes);
      * </pre>
@@ -74,7 +72,7 @@ public class RedisCachePutOperation extends CachePutOperation {
 
 
     @EqualsAndHashCode(callSuper = true)
-    public static class Builder extends CachePutOperation.Builder {
+    public static class Builder extends CachePutOperation.Builder implements RedisCacheAttributeSink {
         private long ttl = 60;
         private Class<?> type = Object.class;
         private boolean cacheNullValues;

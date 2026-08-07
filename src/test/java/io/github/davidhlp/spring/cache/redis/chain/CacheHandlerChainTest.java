@@ -15,10 +15,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheHandlerChain 单元测试 — ADR-0009 后 thin facade 形态。
+ * CacheHandlerChain 单元测试 — thin facade 形态。
  *
  * <p>facade 仅做"维护 handler 列表 + 委派 execute 到 Engine"两件事；
- * 推进 / 观测 / post-process 已迁出到 {@link ChainEngine}，相关行为由
+ * 推进 / 观测 / post-process 由 {@link ChainEngine} 承载,相关行为由
  * {@code ChainEngineTest} 覆盖。本测试只覆盖 facade 自身的契约。
  */
 @DisplayName("CacheHandlerChain Tests")

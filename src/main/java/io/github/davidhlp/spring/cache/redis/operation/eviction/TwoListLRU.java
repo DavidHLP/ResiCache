@@ -44,11 +44,10 @@ public class TwoListLRU<K, V> {
      * 节点在两个链表之间移动时需要保证原子性，因此全局互斥锁是正确性要求而非性能瓶颈。
      * 节点查找本身是线程安全的（ConcurrentHashMap），锁仅在链表结构修改时需要。
      *
-     * <p><b>ADR-0043</b>:原 {@link java.util.concurrent.locks.ReentrantReadWriteLock} 是 false seam —
-     * 所有路径（{@code put}/{@code get}/{@code remove}/{@code clear}）均只取
-     * {@code writeLock()}，从不取 {@code readLock()}。{@code get()} 即使命中
-     * 头部节点仍需持锁（晋升路径需修改链表）；降级为 {@link ReentrantLock}
-     * 砍掉双 Sync 队列内存与单次获取的 CAS 开销，并诚实化接口语义
+     * <p><b>独占锁选择</b>:所有路径（{@code put}/{@code get}/{@code remove}/{@code clear}）均只取
+     * 互斥访问,{@code get()} 即使命中头部节点仍需持锁（晋升路径需修改链表）。
+     * 选用 {@link ReentrantLock} 而非 {@link java.util.concurrent.locks.ReentrantReadWriteLock},
+     * 砍掉双 Sync 队列内存与单次获取的 CAS 开销,并诚实化接口语义
      * （"exclusive-only" 比 "看似可并发读" 更准确反映实际行为）。
      */
     private final ReentrantLock globalLock = new ReentrantLock();

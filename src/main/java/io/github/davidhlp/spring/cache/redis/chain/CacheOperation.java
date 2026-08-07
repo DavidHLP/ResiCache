@@ -3,20 +3,17 @@ package io.github.davidhlp.spring.cache.redis.chain;
 /**
  * 缓存操作类型枚举。
  *
- * <p><b>ADR-0054 — 操作子集类型化</b>:本枚举是「操作 → 哪些 handler 关心这个操作」契约的
- * 单一真理源。protection handler 之前各自手写多操作判定（如
- * {@code op == PUT || op == PUT_IF_ABSENT}）散落在 4 个 handler 中,无测试 pin,
- * 未来加新操作易漏改某一处。本枚举提供 3 个语义谓词消除该漂移:
+ * <p><b>操作子集类型化</b>:本枚举是「操作 → 哪些 handler 关心这个操作」契约的
+ * 单一真理源。本枚举提供 3 个语义谓词集中表达该映射,避免散落在各 handler 中
+ * 的多操作判定({@code op == PUT || op == PUT_IF_ABSENT} 等)漂移:
  * <ul>
  *   <li>{@link #isWrite()} — 写路径(PUT / PUT_IF_ABSENT),TtlHandler / NullValueHandler 用</li>
  *   <li>{@link #requiresSyncLock()} — sync-lock 关心的操作(GET / PUT / PUT_IF_ABSENT),SyncLockHandler 用</li>
  *   <li>{@link #requiresBloomPostProcess()} — bloom 后置回填关心的操作(PUT / PUT_IF_ABSENT / CLEAN),BloomFilterHandler 用</li>
  * </ul>
  *
- * <p><b>为什么枚举自身承担谓词</b>:子类不应再手写 op 列表 ——
- * 这是 ADR-0033/0036/0045 类型化浪潮(产生 {@code TtlDecision}/{@code NullDecision}/
- * {@code PrefetchDecision})的逻辑收官,操作枚举本身成为谓词源。新增操作时只在本枚举改一处,
- * 测试自动 pin。
+ * <p><b>为什么枚举自身承担谓词</b>:操作枚举本身成为谓词源,新增操作时只在本枚举
+ * 改一处,测试自动 pin。
  */
 public enum CacheOperation {
     /** 获取缓存 */

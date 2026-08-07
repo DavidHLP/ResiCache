@@ -19,8 +19,8 @@ import java.util.List;
  * 处理 {@link RedisCachePut @RedisCachePut} 注解：为方法上每个 @RedisCachePut
  * 构建并注册一个 {@link RedisCachePutOperation}。
  *
- * <p>注册样板（for-loop + null-check + ArrayList 装配）已收敛到
- * {@link AbstractAnnotationHandler#registerAll}。本类只负责获取注解数组 + 提供
+ * <p>注册样板（for-loop + null-check + ArrayList 装配）由
+ * {@link AbstractAnnotationHandler#registerAll} 承担。本类只负责获取注解数组 + 提供
  * key 提取器（{@code RedisCachePut::key}） + 委派：
  *
  * <pre>
@@ -29,11 +29,8 @@ import java.util.List;
  *           registerActionFor(OperationKind.CACHE_PUT), "cache put");
  * </pre>
  *
- * <p><b>ADR-0059</b>:原 {@code redisCacheRegister::registerCachePutOperation} 方法引用
- * 改为 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)} 工厂 lambda。
- *
- * <p><b>ADR-0065 深化(本 seam)</b>:删除浅 {@code CachePutOperationFactory} @Component
- * (2 行委派 + 类样板),内联为 lambda 直传 {@link RedisCacheAttributesProjector#from}
+ * <p>register 调用使用 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
+ * 工厂 lambda;factory 以 lambda 直传 {@link RedisCacheAttributesProjector#from}
  * + {@link RedisCachePutOperation#fromAttributes}。{@link OperationFactory} 接口保留
  * (CacheableAnnotationHandler 的 ResiCache↔Spring 多态分叉仍承重)。
  */

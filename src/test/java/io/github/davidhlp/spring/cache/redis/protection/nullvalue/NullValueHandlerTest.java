@@ -199,35 +199,35 @@ class NullValueHandlerTest {
     }
 
     @Nested
-    @DisplayName("handle method integration (ADR-0009 后:handler 不再自行推进/短路,推进与短路由 ChainEngine 负责)")
+    @DisplayName("handle method integration (handler 不再自行推进/短路,推进与短路由 ChainEngine 负责)")
     class HandleMethodIntegrationTests {
 
         @Test
         @DisplayName("GET operation 不在 shouldHandle 范围,handler.handle 返回 continueChain,不调 next")
         void handle_getOperation_returnsContinueChainWithoutAdvancing() {
-            // ADR-0009/0022:AbstractCacheHandler.handle 只做"shouldHandle ? doHandle : continueChain"
+            // AbstractCacheHandler.handle 只做"shouldHandle ? doHandle : continueChain";
             // 链推进由 ChainEngine 负责 —— handler 自身不持有也不调 next。
             CacheHandler nextHandler = mock(CacheHandler.class);
             CacheContext context = createContext(CacheOperation.GET, "value");
 
             HandlerResult result = handler.handle(context);
 
-            // 关键:handler 不再主动推进 —— 推进是 engine 的职责
+            // handler 不主动推进 —— 推进是 engine 的职责
             verify(nextHandler, never()).handle(context);
-            // GET 不在 shouldHandle 范围,直接退化为 continueChain
+            // GET 不在 shouldHandle 范围,直接返回 continueChain
             assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
         }
 
         @Test
         @DisplayName("skipRemaining 短路改由 ChainEngine 处理,handler 自身不感知")
         void handle_skipRemaining_isNoLongerHandledByHandler() {
-            // ADR-0009:AbstractCacheHandler.handle 顶部不再有 isSkipRemaining() 短路;
+            // AbstractCacheHandler.handle 顶部无 isSkipRemaining() 短路;
             // 该短路由 ChainEngine.driveChain 在节点循环开头检测。
-            // 本测试断言:即使 context 已 markSkipRemaining,handler 仍按 shouldHandle/doHandle 正常求值
+            // 断言:即使 context 已 markSkipRemaining,handler 按 shouldHandle/doHandle 正常求值
             // (PUT + null 走到 NullValueHandler.doHandle → skipAll 分支)。
             CacheContext context = createContext(CacheOperation.PUT, null);
             context.markSkipRemaining();
-            // 即使 skipRemaining 已置位,NullValueHandler.doHandle 仍会执行(短路是 engine 责任)
+            // 即使 skipRemaining 已置位,NullValueHandler.doHandle 照常执行(短路是 engine 责任)
             when(nullValuePolicy.shouldCacheNull(any())).thenReturn(false);
 
             HandlerResult result = handler.handle(context);

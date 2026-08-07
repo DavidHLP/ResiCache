@@ -100,7 +100,7 @@ class RedissonConfigurationTest {
         }
 
         @Test
-        @DisplayName("应用 timeout/retry 设置(跨模式共享 BaseConfig helper,ADR-0053)")
+        @DisplayName("应用 timeout/retry 设置(跨模式共享 BaseConfig helper)")
         void singleMode_appliesTimeoutSettings() {
             properties.getRedisson().setIdleConnectionTimeout(15000);
             properties.getRedisson().setConnectTimeout(20000);

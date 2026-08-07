@@ -15,24 +15,20 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Path C Step 0 — AOP 行为回归契约测试.
+ * AOP 行为回归契约测试.
  *
- * <p>在 WS-1.3 Path C 7 步重构(销毁 ThreadLocal)启动前,固化当前 AOP 行为契约:
+ * <p>固化当前 AOP 行为契约:
  * <ul>
- *   <li>纯 Spring {@code @Cacheable} 通过 ResiCache 缓存链路正常工作 ——
- *       保护 Step 3 {@code ResiCacheMethodInterceptor} 不破坏 Spring 原生注解处理</li>
+ *   <li>纯 Spring {@code @Cacheable} 通过 ResiCache 缓存链路正常工作</li>
  *   <li>{@code @RedisCacheable} + {@code useBloomFilter} 触发布隆处理器</li>
  *   <li>{@code @RedisCacheable} + {@code sync} 触发同步锁处理器</li>
  *   <li>{@code @RedisCacheable} + {@code ttl} 触发 TTL 处理器,Redis 实际 TTL 匹配</li>
  * </ul>
- *
- * <p>Step 1 起每改一处,本测试须仍全绿(零回归护栏)。
- * 详见 {@code TASK_BACKLOG.md} §2 #1 + {@code MASTER_PLAN.md} §6 Path C 定义。
  */
 @SpringBootTest(classes = TestApplication.class)
 @ActiveProfiles("integration-test")
 @Import(TestRedisConfiguration.class)
-@DisplayName("Path C Step 0 — AOP 行为回归契约")
+@DisplayName("AOP 行为回归契约")
 class PathCAopContractIT extends AbstractRedisIntegrationTest {
 
     @Autowired
@@ -105,11 +101,11 @@ class PathCAopContractIT extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("sync + bloom 组合(ADR-0011 键漂移回归)")
+    @DisplayName("sync + bloom 组合(键漂移回归)")
     class SyncPlusBloomTests {
 
         @Test
-        @DisplayName("ADR-0011: 预热 bloom 后 sync+bloom 用 actualKey 命中,返回真实值非 null")
+        @DisplayName("预热 bloom 后 sync+bloom 用 actualKey 命中,返回真实值非 null")
         void syncPlusBloom_warmBloom_usesActualKey_returnsValue() {
             // createCacheKey(1L) = "testCache::1" → actualKey = "1"(与链层 BloomFilterHandler.add 同源)
             bloomSupport.add("testCache", "1");

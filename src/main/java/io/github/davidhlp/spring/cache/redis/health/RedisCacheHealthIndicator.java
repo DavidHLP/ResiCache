@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 /**
  * Redis cache health indicator for Spring Boot Actuator.
  *
- * <p>Path C 后续(WS-1.4)健康级联:
+ * <p>健康级联:
  * <ol>
  *   <li>Redis PING(基础 — Redis 自身连通性)</li>
  *   <li>Protection 机制级联 — sync=true 但无分布式锁后端(Redisson 缺失)时,
@@ -54,7 +54,7 @@ public class RedisCacheHealthIndicator implements HealthIndicator {
                     .build();
         }
 
-        // WS-1.4 health 级联:protection 机制健康(仅在 Redis 自身 UP 时检查)
+        // protection 机制健康(仅在 Redis 自身 UP 时检查)
         if (syncSupport != null && syncSupport.isDegraded()) {
             // sync=true 但无分布式锁后端 — 降级为 local-only(单 JVM 锁,跨实例不协调)
             // 状态仍是 UP(Redis 可用),但 detail 记录 protection.degraded

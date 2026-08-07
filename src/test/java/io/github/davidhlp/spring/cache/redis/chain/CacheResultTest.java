@@ -7,11 +7,9 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheResult 单元测试 — ADR-0039 收敛后形态(2 字段 + 4 工厂)。
+ * CacheResult 单元测试 — 2 字段 + 4 工厂形态。
  *
- * <p>删除的字段({@code hit / rejectedByBloomFilter / exception})与读法
- * ({@code isHit / isRejectedByBloomFilter / isFailure / hasResult / getException})
- * 已在 ADR-0039 删除,本测试仅覆盖保留契约:{@code success / resultBytes} 字段、
+ * <p>本测试覆盖保留契约:{@code success / resultBytes} 字段、
  * {@code isSuccess / getResultBytes} 读法,以及 {@code miss()} 作为 {@code success()}
  * 语义别名的等价性。
  */
@@ -46,7 +44,7 @@ class CacheResultTest {
         void miss_isSuccessAlias() {
             CacheResult result = CacheResult.miss();
 
-            // ADR-0039:miss() 字节同构 success()(都 success=true、resultBytes=null),
+            // miss() 字节同构 success()(都 success=true、resultBytes=null),
             // 保留为独立工厂仅为调用方表达 GET 未命中语义
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.getResultBytes()).isNull();

@@ -9,10 +9,10 @@ import java.util.concurrent.ThreadLocalRandom;
  * 默认的 TTL 策略:无状态纯 TTL 数学(TTL 应用判定 + 高斯抖动防雪崩)。
  *
  * <p>实现 {@link TtlPolicy} seam;自定义实现声明 {@code @Bean} 可顶替(对齐 LockManager /
- * BloomIFilter 纪律,落实 ADR-0005)。
+ * BloomIFilter 纪律)。
  *
- * <p>ADR-0025:原 {@code shouldEarlyExpiration} + {@code Clock} 字段(仅为该方法而存在)已迁至
- * {@code protection.refresh.DefaultEarlyExpirationPolicy};本类随之退化为无状态,不再持有 {@code Clock}。
+ * <p>本类无状态,不持有 {@code Clock};提前过期判定由
+ * {@code protection.refresh.DefaultEarlyExpirationPolicy} 承载。
  */
 @Component
 public class DefaultTtlPolicy implements TtlPolicy {

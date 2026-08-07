@@ -43,11 +43,9 @@ public class RedisCacheEvictOperation extends CacheEvictOperation {
     }
 
     /**
-     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCacheEvictOperation} — 单一字段映射 seam
-     * (ADR-0017 + ADR-0021)。
+     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCacheEvictOperation} — 单一字段映射 seam。
      *
-     * <p>本方法在 ADR-0017 之前是 18 行 builder 链;在 <strong>ADR-0021</strong> 退化为
-     * 1 行委派,把"attribute → operation field"的映射知识完全下放给
+     * <p>本方法为 1 行委派,把"attribute → operation field"的映射知识完全下放给
      * {@link RedisCacheAttributes#applyTo(RedisCacheEvictOperation.Builder)} (字段拥有者)。
      *
      * <p>Evict 字段集是 Cacheable/Put 的<em>子集 + Evict-only 字段</em>:
@@ -59,7 +57,7 @@ public class RedisCacheEvictOperation extends CacheEvictOperation {
      * 子集与排除规则由 {@link RedisCacheAttributes#applyTo(RedisCacheEvictOperation.Builder)}
      * 决定,本方法不感知。
      *
-     * <p>Factory 退化为单行委派:
+     * <p>Factory 调用形态:
      * <pre>
      *   return RedisCacheEvictOperation.fromAttributes(method, key, attributes);
      * </pre>
@@ -71,7 +69,7 @@ public class RedisCacheEvictOperation extends CacheEvictOperation {
 
 
     @EqualsAndHashCode(callSuper = true)
-    public static class Builder extends CacheEvictOperation.Builder {
+    public static class Builder extends CacheEvictOperation.Builder implements RedisCacheAttributeSink {
         private boolean sync;
         private long syncTimeout = -1;
         private long ttl = 0;

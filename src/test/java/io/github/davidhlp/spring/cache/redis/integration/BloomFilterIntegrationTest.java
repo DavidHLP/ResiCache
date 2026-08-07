@@ -196,7 +196,7 @@ class BloomFilterIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("Rebuilding Window (WS-1.2c)")
+    @DisplayName("Rebuilding Window")
     class RebuildingWindowTests {
 
         private RedisProCacheProperties properties;

@@ -99,7 +99,7 @@ public class TestCacheService {
     }
 
     /**
-     * sync + useBloomFilter 同时开启 —— ADR-0011 键漂移回归契约。
+     * sync + useBloomFilter 同时开启 —— 键漂移回归契约。
      *
      * <p>loader 路径 bloom 前置短路必须用 actualKey(经 CacheKeys)查询,与链层
      * {@code BloomFilterHandler.add} 同源。键漂移(用 createCacheKey 带前缀)会使
@@ -113,9 +113,8 @@ public class TestCacheService {
 
     /**
      * 纯 Spring 原生 {@link Cacheable} —— 不带任何 ResiCache 特性(useBloomFilter/sync/ttl)。
-     * 用于 Path C Step 0 契约测试: 验证 ResiCache 链对 Spring 原生 @Cacheable 也正常工作
-     * (Step 3 引入 ResiCacheMethodInterceptor 后,纯 @Cacheable 仍应通过 ResiCache
-     * CacheManager 走链,而不是被绕开)。
+     * 用于验证 ResiCache 链对 Spring 原生 @Cacheable 也正常工作
+     * (纯 @Cacheable 通过 ResiCache CacheManager 走链,而不是被绕开)。
      */
     @Cacheable(cacheNames = "testCache", key = "#id")
     public String getByIdWithPureSpring(Long id) {

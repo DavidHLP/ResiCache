@@ -25,7 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link AnnotationChainEngine} — ADR-0013 唯一推进引擎的契约.
+ * Unit tests for {@link AnnotationChainEngine} — 唯一推进引擎的契约.
  *
  * <p>Engine 全部职责(链推进 + per-handler 失败隔离 + 结果收集 + 观测编排)
  * 在本测试中直接验证。{@code AnnotationHandlerTest} 仅覆盖抽象节点的两个钩子契约。

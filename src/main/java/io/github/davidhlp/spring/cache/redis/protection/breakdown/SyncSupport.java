@@ -18,31 +18,25 @@ import java.util.function.Supplier;
  * 同一 key 的并发请求中,只有 leader 线程获取分布式锁并执行 loader,
  * follower 线程共享 leader 的结果(不重复获取分布式锁、不重复回源)。
  *
- * <p><b>ADR-0042 演进</b>:原 per-key {@code synchronized(monitor)} + 引用计数(MonitorHolder)
- * 模型已替换为 CompletableFuture single-flight。动机与权衡:
+ * <p><b>single-flight 设计权衡</b>:
  * <ul>
- *   <li><b>吞吐</b>:follower 不再串行 acquire JVM monitor + 分布式锁 + double-check GET,
- *       而是直接 {@code join} leader 的 future。同 key 高并发读 miss 时,N 个 follower 的
+ *   <li><b>吞吐</b>:follower 直接 {@code join} leader 的 future,不串行 acquire JVM
+ *       monitor + 分布式锁 + double-check GET。同 key 高并发读 miss 时,N 个 follower 的
  *       O(N × (锁往返 + GET)) 串行开销降为 O(ε)。leader 仍独占分布式锁,击穿语义
  *       (1 个回源)反而更硬。</li>
  *   <li><b>可重入(future 不可重入陷阱)</b>:chain 内 {@code SyncLockHandler} 会嵌套重入
  *       {@code executeSync}(同 key —— {@code RedisProCache.executeSyncLoad} 的 loader 内
- *       {@code super.get} → chain GET → SyncLockHandler 再次进入)。{@code synchronized}
- *       原本天然可重入;{@link CompletableFuture} 不可重入(leader 重入会 join 自己 → 死锁)。
- *       故用 {@link ThreadLocal} 标记当前线程已持有的 key,重入时走 fast-path 直接跑 loader
- *       —— 语义等价,且省去二次分布式锁往返。</li>
- *   <li><b>失败传播(语义改变)</b>:leader loader 抛异常 → future
- *       {@code completeExceptionally},所有 follower 一起失败(不再独立 double-check 自救)。
- *       这更符合击穿保护精神(避免 N 个 follower 在 leader 失败后继续打 DB);
- *       调用方可自行重试。详见 ADR-0042。</li>
+ *       {@code super.get} → chain GET → SyncLockHandler 再次进入)。{@link CompletableFuture}
+ *       不可重入(leader 重入会 join 自己 → 死锁),故用 {@link ThreadLocal} 标记当前线程
+ *       已持有的 key,重入时走 fast-path 直接跑 loader —— 语义等价,且省去二次分布式锁往返。</li>
+ *   <li><b>失败传播</b>:leader loader 抛异常 → future {@code completeExceptionally},
+ *       所有 follower 一起失败(不独立 double-check 自救)。这符合击穿保护精神(避免 N 个
+ *       follower 在 leader 失败后继续打 DB);调用方可自行重试。</li>
  * </ul>
  *
- * <p><b>ADR-0055 (Round 41) 进一步收敛</b>:把 single-flight 选举产出的 3 个运行时角色
- * (Reentrant / Leader / Follower)抽到 {@link SyncRole} sealed interface,本类只剩
- * <b>选举函数 + orchestrator</b>职责,角色行为(state + cleanup)由角色自承。具体语义、
- * state 字段、try/catch 翻译规则全部内聚到对应角色 ——
- * 「读 follower 怎么 join 未来」不再需要在 SyncSupport 与 Follower 之间跳转,改为
- * 读 {@link SyncRole.Follower#run} 单一文件。
+ * <p>single-flight 选举产出的 3 个运行时角色(Reentrant / Leader / Follower)收口于
+ * {@link SyncRole} sealed interface。本类只保留<b>选举函数 + orchestrator</b>职责,
+ * 角色行为(state + cleanup)由角色自承。
  *
  * <p><b>本类剩余职责</b>:
  * <ol>
@@ -51,12 +45,12 @@ import java.util.function.Supplier;
  *   <li>{@link #executeSync} 选举 + 委派</li>
  * </ol>
  *
- * <p><b>永不静默降级 (WS-1.2a)</b>:当无分布式锁后端(无 RedissonClient → 无 LockManager bean)
+ * <p><b>永不静默降级</b>:当无分布式锁后端(无 RedissonClient → 无 LockManager bean)
  * 时,任何 {@code sync=true} 操作<b>绝不</b>静默退化为单 JVM synchronized(多实例下击穿照旧,
  * 是最坏失败模式)。默认行为是<b>运行期 fail-fast</b>(首次未命中即抛
  * {@link IllegalStateException})。仅当用户显式声明 {@code resi-cache.sync-lock.local-only=true}
  * 时,才接受单 JVM 同步作为合法降级(单实例/测试场景),并发出
- * {@code protection.degraded=local-only} 告警使安全属性可观测(WS-1.4 升级为 Observation 事件)。
+ * {@code protection.degraded=local-only} 告警使安全属性可观测。
  *
  * <p>注意:{@code sync=true} 是 per-method 注解属性,启动期不可穷举,故 fail-fast 的精确触发点
  * 在运行期 {@link #executeSync}(即用户确实声明了 sync 且缓存未命中);启动期仅在检测到空后端时
@@ -92,10 +86,8 @@ public class SyncSupport {
      */
     public SyncSupport(final List<LockManager> lockManagers, final RedisProCacheProperties properties) {
         // 按 getOrder() 降序排序(数值越小优先级越高),构造不可变快照。
-        // 用 stream 不改入参 list —— 防御性:调用方可传任意 List(含 List.of 不可变 list),
-        // 原实现 {@code lockManagers.sort(...)} 直接排序入参,传入不可变 list 会抛
-        // UnsupportedOperationException(顺带修复:原 {@code o1-o2} 减法替换为
-        // {@link Integer#compare} 避免理论溢出)。
+        // 用 stream 不改入参 list —— 防御性:调用方可传任意 List(含 List.of 不可变 list);
+        // 用 {@link Integer#compare} 而非减法,避免理论溢出。
         this.distributedManagers = lockManagers.stream()
                 .sorted((o1, o2) -> Integer.compare(o2.getOrder(), o1.getOrder()))
                 .toList();
@@ -126,7 +118,7 @@ public class SyncSupport {
     }
 
     /**
-     * Path C 后续(WS-1.4) — 健康查询:同步锁是否降级到 local-only。
+     * 健康查询:同步锁是否降级到 local-only。
      * <p>{@code true} = 未显式声明 {@code localOnly=true} 且无分布式锁后端(Redisson 缺失),
      * 任何 sync=true 操作会实际降级为单 JVM {@code synchronized}。多实例部署下不防击穿 —
      * 暴露此信号供 {@code RedisCacheHealthIndicator} 级联到 /actuator/health。
@@ -145,10 +137,8 @@ public class SyncSupport {
      * (零重复持锁/零重复回源)。
      * 同线程同 key 重入:fast-path 直接跑 loader(等价 {@code synchronized} 可重入)。
      *
-     * <p><b>ADR-0055 收敛</b>:本方法在 Round 41 之后只剩「选举 + 委派」两步 —
-     * 选哪个角色(role 的 state + cleanup)、跑什么,全部由角色自承。原 50+ SLOC 的
-     * leader/follower/reentrant 三路分支(每路 30+ 行)已迁出至
-     * {@link SyncRole.Reentrant} / {@link SyncRole.Leader} / {@link SyncRole.Follower}。
+     * <p>本方法只做「选举 + 委派」两步 —— 角色的 state + cleanup + run 全部由
+     * {@link SyncRole.Reentrant} / {@link SyncRole.Leader} / {@link SyncRole.Follower} 自承。
      *
      * @param key            缓存键
      * @param loader         数据加载器(leader 在分布式锁内执行)

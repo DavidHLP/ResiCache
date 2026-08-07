@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 契约测试 — {@link AbstractCacheHandler} 语义 counter 模板方法 seam
- * (ADR-0018)。覆盖 4 个不变量：
+ * 契约测试 — {@link AbstractCacheHandler} 语义 counter 模板方法 seam。
+ * 覆盖 4 个不变量：
  *
  * <ul>
  *   <li>子类未 override {@code semanticCounter()} → 注册 no-op（counter 不注册）</li>
@@ -39,7 +39,7 @@ class AbstractCacheHandlerSemanticCounterTest {
     /** 简单测试 handler：override semanticCounter 返回固定元数据。 */
     static final class WithSemanticHandler extends AbstractCacheHandler {
         static final String COUNTER_NAME = "resicache.handler.test.semantic";
-        static final String COUNTER_DESC = "test semantic counter for ADR-0018 contract";
+        static final String COUNTER_DESC = "test semantic counter for semantic-counter contract";
 
         @Override
         protected CounterMetadata semanticCounter() {

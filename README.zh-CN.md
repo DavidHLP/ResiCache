@@ -263,9 +263,19 @@ TTL 随机化避免大量缓存同时过期：
 ## 🆚 与 JetCache / Caffeine / 裸 Redisson 对比
 
 在 Redis 之上做缓存,常见有四个选项:JetCache、Caffeine、裸 Redisson、
-ResiCache。详细功能矩阵、诚实优缺点对比、选型指引见
-[`docs/comparison.md`](docs/comparison.md)(定位:**ResiCache for
-Redisson — Redisson 忘了做的那条可声明缓存防护链**)。
+ResiCache。本项目定位:**ResiCache for Redisson — Redisson 忘了做的那条
+可声明缓存防护链**。
+
+| 能力 | JetCache | Caffeine | 裸 Redisson | **ResiCache** |
+|------|:--------:|:--------:|:-----------:|:-------------:|
+| 多级缓存(本地 + 远程) | ✅ | 仅本地 | — | — |
+| 布隆过滤器(防穿透) | — | — | 手写 | ✅ |
+| TTL 抖动(防雪崩) | — | — | 手写 | ✅ |
+| 分布式击穿锁(防击穿) | — | — | 手写 | ✅ |
+| null 值缓存 | — | — | 手写 | ✅ |
+| 热点 Key 提前刷新 | — | — | 手写 | ✅ |
+| 声明式 `@注解` 责任链 | 部分 | — | — | ✅ |
+| 跨实例广播失效 | ✅ | — | — | — |
 
 一句话结论:**JetCache 缺的那 3 项防护,以 Redisson-native 责任链补齐** —
 布隆过滤器(防穿透)、TTL 抖动(防雪崩)、分布式击穿锁(防击穿)。

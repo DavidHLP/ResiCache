@@ -9,7 +9,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link CacheOperation} 谓词契约测试 — ADR-0054 pinning test.
+ * {@link CacheOperation} 谓词契约测试.
  *
  * <p>本测试把 3 个谓词方法的具体子集固化在测试代码中,作为"操作 → 哪些 handler 关心这个
  * 操作"契约的回归保护。未来新增 {@code CacheOperation} 枚举值时,本测试自动发现未授权
@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>如果没有本测试,该契约仅以散落在 4 个 handler 中的多行
  * {@code op == X || op == Y || op == Z} 形式存在,任何新操作都可能漏改某处。
  */
-@DisplayName("CacheOperation predicate tests (ADR-0054)")
+@DisplayName("CacheOperation predicate tests")
 class CacheOperationTest {
 
     @Nested

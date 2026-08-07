@@ -22,7 +22,7 @@ class CacheHandlerChainExceptionTest {
 
     @BeforeEach
     void setUp() {
-        // ADR-0009:facade 改为 thin,execute 委派 ChainEngine —— 单元测试手动装配
+        // facade 为 thin,execute 委派 ChainEngine —— 单元测试手动装配
         ChainEngine engine = new ChainEngine();
         chain = new CacheHandlerChain();
         chain.setEngine(engine);

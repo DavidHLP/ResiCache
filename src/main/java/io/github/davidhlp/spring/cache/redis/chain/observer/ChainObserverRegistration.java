@@ -6,14 +6,13 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 
 /**
- * 责任链标准 observer 注册器 — ADR-0047 / C5 收敛.
+ * 责任链标准 observer 注册器.
  *
- * <p>从 {@link CacheHandlerChainFactory#createChain()} 抽取的「注册 4 个标准 observer 到
- * {@link ChainEngine}」逻辑。本类作为 seam:
+ * <p>「注册 4 个标准 observer 到 {@link ChainEngine}」逻辑的 seam:
  * <ul>
  *   <li>统一入口:外部仅需 {@link #registerStandardObservers(ChainEngine, ObjectProvider)}</li>
  *   <li>idempotent 由调用方(单例缓存 miss)保证,本类不持有 flag(无副作用)</li>
- *   <li>新增标准 observer(如未来的 {@code SpanObserver})只改本类 + ChainEngine observer 接口,
+ *   <li>新增标准 observer(如 {@code SpanObserver})只改本类 + ChainEngine observer 接口,
  *       {@link CacheHandlerChainFactory} 不感知</li>
  * </ul>
  *
@@ -28,8 +27,7 @@ public final class ChainObserverRegistration {
     /**
      * 注册 4 个标准 observer 到 {@link ChainEngine}.
      *
-     * <p>注册顺序固定(MDC → DebugLog → Timer → FiredCounter),与原
-     * {@link CacheHandlerChainFactory} 内联实现字节级一致。idempotent 性由
+     * <p>注册顺序固定(MDC → DebugLog → Timer → FiredCounter)。idempotent 性由
      * 调用方(单例缓存 miss pattern)保证,本方法每次调用都会向
      * {@link ChainEngine#addObserver} 追加 — 故调用方必须确保本方法只调一次。
      *

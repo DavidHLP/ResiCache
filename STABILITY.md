@@ -44,7 +44,7 @@ If you depend on items in this section, pin to an exact patch version
 - `@RedisCacheable`, `@RedisCachePut`, `@RedisCacheEvict`, `@RedisCaching`
   attribute names and types
 - `resi-cache.*` property keys
-- The `{version, payload}` envelope wire format (per ADR-0003)
+- The `{version, payload}` envelope wire format
 
 These are the absolute minimum a downstream user needs to upgrade between
 0.x patch versions without code changes.
@@ -81,8 +81,6 @@ those areas open for tuning.
 
 - [`CHANGELOG.md`](./CHANGELOG.md) — per-version changelog including
   ⚠️ BREAKING markers.
-- [`COMPETITIVENESS_GUIDE.md`](./COMPETITIVENESS_GUIDE.md) §3 pillar A
-  and §6 Week 9-10 — the strategic context that motivated this contract.
 
 > Historical architecture decisions live in `git log` (commit bodies capture
 > rationale + alternatives rejected). No wiki ADR prose is consulted.

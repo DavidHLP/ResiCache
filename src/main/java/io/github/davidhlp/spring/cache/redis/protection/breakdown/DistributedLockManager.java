@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 基于 Redisson 的分布式锁管理器。将分布式锁相关的逻辑从 SyncSupport 中分离出来。
  *
- * <p><b>Cluster hash-tag pinning (WS-1.2b)</b>:在 Redis Cluster 模式下,锁 key 会与
+ * <p><b>Cluster hash-tag pinning</b>:在 Redis Cluster 模式下,锁 key 会与
  * 缓存 key 落在同一 slot(通过 Redis hash-tag {@code {...}}),避免锁与所保护数据分散到不同
  * 节点。虽然 Redisson 锁在跨 slot 时仍有效,但同 slot 保证了"锁与数据同节点"的语义,且使未来
  * 任何锁内 MULTI/事务(要求同 slot)不会因 cross-slot 失败。single/sentinel 模式保持
@@ -83,7 +83,7 @@ public class DistributedLockManager implements LockManager {
     }
 
     /**
-     * 构造锁 key,确保 Cluster 模式下与缓存 key 落在同一 slot (WS-1.2b).
+     * 构造锁 key,确保 Cluster 模式下与缓存 key 落在同一 slot.
      *
      * <p>Redis Cluster 用 hash-tag(第一个 '{@code {{ }}' 到其后第一个 '{@code }}' 之间的内容)计算 slot。
      * 策略:

@@ -13,10 +13,10 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 
 /**
- * 缓存处理器责任链工厂 — ADR-0009 后的精简形态。
+ * 缓存处理器责任链工厂。
  *
- * <p>原职责（自动发现 / 排序 / 过滤 / 构建 / 装配 metric）保持不变；本类的
- * 新增职责是按需注册 {@link ChainObserver} 到 {@link ChainEngine}：
+ * <p>职责:自动发现 / 排序 / 过滤 / 构建 / 装配 metric + 按需注册 {@link ChainObserver}
+ * 到 {@link ChainEngine}：
  *
  * <ol>
  *   <li>{@link MDCStampChainObserver} — 无 registry 依赖，必注册</li>
@@ -26,17 +26,15 @@ import java.util.*;
  * </ol>
  *
  * <p>observer 装配时机：首次 {@link #createChain} 调时。ChainHandlerChain
- * 自身不再持有 metric 状态，所有 per-handler / per-chain 观测收口到 Engine 的
+ * 自身不持有 metric 状态，所有 per-handler / per-chain 观测收口到 Engine 的
  * observer 列表。Timer 在节点 around-hook 中记录 handler + decision + cacheName。
  *
- * <p>设计改进：
+ * <p>设计要点：
  * <ul>
- *   <li>原设计：CacheHandlerChain 内联 Timer + MDC，AbstractCacheHandler 内联
- *       fired counter 装配，观测逻辑散在 2 个类 4 处</li>
- *   <li>新设计：观测逻辑全部抽到 {@link ChainEngine} 单一 seam，由本工厂统一
- *       装配 4 个 observer，Engine / handler 子类零感知</li>
- *   <li>WS-1.4 OTel/Span 升级：新增 {@code SpanObserver} 即可，Engine / handler
- *       子类零修改 — 这是 ADR-0009 D1+D2 的 leverage 兑现</li>
+ *   <li>观测逻辑全部在 {@link ChainEngine} 单一 seam，由本工厂统一装配 4 个
+ *       observer，Engine / handler 子类零感知</li>
+ *   <li>新增观测维度(如 OTel/Span)只需新增 {@code SpanObserver},Engine / handler
+ *       子类零修改</li>
  * </ul>
  */
 @Slf4j
@@ -76,17 +74,17 @@ public class CacheHandlerChainFactory {
         this.engine = engine;
     }
 
-    /** 缓存的责任链实例（单例，避免 handler next 指针被并发修改） */
+    /** 缓存的责任链实例（单例，避免 handler 列表被并发重建） */
     private volatile CacheHandlerChain cachedChain;
 
     /**
-     * 创建或获取责任链（单例模式，确保 handler next 指针不被并发修改）。
+     * 创建或获取责任链（单例模式，确保 observer 注册与链构建仅执行一次）。
      *
      * <p>首次调用时：
      * <ol>
      *   <li>注册 4 个 ChainObserver 到 Engine（MDC / DebugLog / Timer / FiredCounter）</li>
      *   <li>按 {@code @HandlerPriority} 排序 + 过滤禁用 + 构建链 + 注入 registry</li>
-     *   <li>委派给 {@link CacheHandlerChain}，后者把链快照同步到 Engine</li>
+     *   <li>委派给 {@link CacheHandlerChain}</li>
      * </ol>
      *
      * @return 配置好的责任链
@@ -150,18 +148,10 @@ public class CacheHandlerChainFactory {
     }
 
     /**
-     * 注册 4 个标准 observer 到 Engine — 仅执行一次（{@code registered} flag 守护）。
-     * 多次 createChain 不会重复注册。
-     *
-     * <p><b>ADR-0047 / C5 收敛</b>:本方法已迁出至 {@link ChainObserverRegistration}
-     * package-private seam 类。本工厂仅委派:
-     * <pre>
-     *   ChainObserverRegistration.registerStandardObservers(engine, meterRegistryProvider);
-     * </pre>
+     * 注册 4 个标准 observer 到 Engine — 实际逻辑在 {@link ChainObserverRegistration}
+     * seam 类({@code registerStandardObservers});多次 createChain 不会重复注册。
      */
     private void registerObserversOnce(@SuppressWarnings("unused") ChainEngine engine) {
-        // 占位 — 实际逻辑已迁出。本方法保留仅为最小化本轮 diff(已被 createChain
-        // 内联调用替换),后续若无需保留可整段删除。参见 ADR-0047。
     }
 
     /**

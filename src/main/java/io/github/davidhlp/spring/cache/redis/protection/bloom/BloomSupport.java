@@ -8,9 +8,9 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 /**
- * Bloom 过滤器统一入口 —— ADR-0058 (Round 44) 收敛后的精简形态。
+ * Bloom 过滤器统一入口。
  *
- * <p><b>本类职责(收敛后)</b>:filter 代理 + fail-open 策略。
+ * <p><b>本类职责</b>:filter 代理 + fail-open 策略。
  * <ul>
  *   <li>{@link #mightContain}:rebuilding 窗口期内 fail-open(true);否则代理给 {@link BloomIFilter}
  *       并在底层异常时 fail-open</li>
@@ -19,10 +19,7 @@ import org.springframework.stereotype.Component;
  *       {@link BloomRebuilder#markRebuilding} 开窗(最大程度保护 fail-open 语义)</li>
  * </ul>
  *
- * <p><b>历史职责(已迁出)</b>:rebuilding 窗口的状态机(Redis 标志读写 + 本地 Caffeine 缓存 + TTL)
- * 已迁至 {@link BloomRebuilder},本类通过组合委派消除中段 60+ 行隐含状态机。
- *
- * <p><b>Rebuilding 窗口背景</b>(WS-1.2c):{@link #clear} 清空过滤器后,空布隆对所有 key
+ * <p><b>Rebuilding 窗口背景</b>:{@link #clear} 清空过滤器后,空布隆对所有 key
  * 判定 {@code mightContain=false},导致后续 GET 在 {@code RedisProCache.get(key, loader)}
  * 的前置短路处<b>静默返回 null</b>(既不查缓存也不调 loader)—— 违反 Spring
  * {@code @Cacheable}"miss 即调 loader 返回真实值"的契约,是数据正确性缺陷。rebuilding 窗口
@@ -43,7 +40,7 @@ public class BloomSupport {
 
     /**
      * @param bloomIFilter 底层布隆过滤器(Hierarchical: local + redis)
-     * @param rebuilder     rebuilding 窗口状态机 —— ADR-0058 抽出
+     * @param rebuilder     rebuilding 窗口状态机
      */
     @Autowired
     public BloomSupport(BloomIFilter bloomIFilter, @Nullable BloomRebuilder rebuilder) {

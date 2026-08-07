@@ -139,7 +139,7 @@ class EarlyExpirationHandlerTest {
         void doHandle_cacheValueNull_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            // P1 (Round 47):fast-path TTL=30s(<=60 阈值),落到完整 GET + policy 路径。
+            // fast-path TTL=30s(<=60 阈值),落到完整 GET + policy 路径。
             when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(30L);
             when(valueOperations.get("test:key")).thenReturn(null);
 
@@ -154,7 +154,7 @@ class EarlyExpirationHandlerTest {
         void doHandle_fastPath_skipsGet() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            // P1 (Round 47):fast-path TTL=120s(>60 阈值),handler 直接 return,连 GET 都不做。
+            // fast-path TTL=120s(>60 阈值),handler 直接 return,连 GET 都不做。
             when(redisTemplate.getExpire(eq("test:key"), any())).thenReturn(120L);
 
             HandlerResult result = handler.doHandle(context);
@@ -371,11 +371,11 @@ class EarlyExpirationHandlerTest {
     }
 
     /**
-     * ADR-0057 抽出的 performAsyncRefresh 单测 — 覆盖原 22 行内联 lambda 的 3 决策分支
-     * + 异常翻译。直接调方法,绕过 executor 调度,验证纯逻辑。
+     * performAsyncRefresh 单测 — 覆盖 3 决策分支 + 异常翻译。
+     * 直接调方法,绕过 executor 调度,验证纯逻辑。
      */
     @Nested
-    @DisplayName("performAsyncRefresh tests — ADR-0057 async task seam")
+    @DisplayName("performAsyncRefresh tests — async task seam")
     class PerformAsyncRefreshTests {
 
         private static final String REDIS_KEY = "test:key";

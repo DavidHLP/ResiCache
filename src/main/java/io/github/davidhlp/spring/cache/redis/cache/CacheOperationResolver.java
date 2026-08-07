@@ -17,14 +17,9 @@ import java.util.function.Supplier;
  * 当前方法缓存操作元数据解析器 —— 收敛 {@link RedisProCache#lookupOperation} 与
  * {@link RedisProCacheWriter#resolveOperation} 两处 4 行镜像 lookup 协议的 deep seam。
  *
- * <p><b>problem (背景)</b>:原架构下 {@link RedisProCache} 与 {@link RedisProCacheWriter}
- * 各持有一份"读 ThreadLocal AnnotatedElementKey → 查 RedisCacheRegister"的协议。
- * 两处 4 行近镜像:
- * <ul>
- *   <li>{@code RedisProCache.lookupOperation}:ThreadLocal key 为 null → 返回 null;否则查 register</li>
- *   <li>{@code RedisProCacheWriter.resolveOperation}:ThreadLocal key 为 null → 返回 null;否则查 register + null 日志</li>
- * </ul>
- * 两处任一写错(null-safe 漏检查、log tag 漂移、key derivation 不一致),另一边静默失效。
+ * <p><b>problem</b>:"读 ThreadLocal AnnotatedElementKey → 查 RedisCacheRegister"协议若在
+ * {@code RedisProCache} 与 {@code RedisProCacheWriter} 各持一份,两处 4 行近镜像任一写错
+ * (null-safe 漏检查、log tag 漂移、key derivation 不一致),另一边静默失效。
  *
  * <p><b>solution</b>:本类把"读 ThreadLocal key → 查 register"协议收口到单一 seam,
  * 两个调用方简化为 {@code resolver.resolve(cacheName)},null-safe + 日志在一处。
@@ -101,16 +96,13 @@ public class CacheOperationResolver {
     }
 
     /**
-     * 异步边界 ThreadLocal + MDC 快照透传 — ADR-0057 在本 seam 上的扩展职责。
+     * 异步边界 ThreadLocal + MDC 快照透传 — 本 seam 的扩展职责。
      *
      * <p>{@link RedisProCacheWriter#retrieve} 与 {@code store} 走 commonPool 异步线程,
-     * 异步线程读不到原提交线程的 ThreadLocal {@code AnnotatedElementKey} 与 MDC。
-     * 原架构下本职责由 {@link MethodMetadataResolver#runWithSnapshot} 直接承担,
-     * {@code RedisProCacheWriter} 持有 {@code MethodMetadataResolver} 字段调用。
+     * 异步线程读不到提交线程的 ThreadLocal {@code AnnotatedElementKey} 与 MDC,需经快照透传。
      *
-     * <p>收敛到本 seam 后,writer 不再直接持 {@code MethodMetadataResolver};此处
-     * 委派给内嵌 resolver,行为字节级等价(若内嵌 resolver 为 null,fallback 到
-     * 直接同步执行 — 异步语义降级为同步,但行为正确)。
+     * <p>本方法委派内嵌 resolver;若内嵌 resolver 为 null,fallback 到直接同步执行
+     * (异步语义降级为同步,但行为正确)。
      *
      * @param work 要在快照上下文中执行的工作
      * @param <T>  返回值类型
