@@ -1,23 +1,77 @@
+# =============================================================================
+# 反选(白名单)模式: 默认忽略根目录下一切, 仅跟踪下方显式 "!" 包含的内容.
+#
+# 核心收益: 新建的顶级临时目录(构建输出/缓存/工具产物/实验代码)默认不会进入 git,
+#           必须在此显式声明才会被跟踪 —— 杜绝 .auto-flow/ .reports-like 误提交.
+#
+# 已跟踪文件不受新忽略规则影响(保持跟踪); 如需停止跟踪某已提交文件,
+# 用 `git rm --cached <path>` 显式移除后再提交.
+# =============================================================================
+
+# 默认忽略根目录所有直接子项(文件与目录)
+/*
+
+# --- git 元数据 ---
+!.gitignore
+!.gitattributes
+
+# --- 构建系统(Maven) ---
+!pom.xml
+!mvnw
+!mvnw.cmd
+!.mvn/
+
+# --- 源码 ---
+!src/
+
+# --- 文档 ---
+!README.md
+!README.zh-CN.md
+!LICENSE
+!AGENTS.md
+!CLAUDE.md
+!CHANGELOG.md
+!COMPATIBILITY.md
+!CONTRIBUTING.md
+!STABILITY.md
+!SECURITY.md
+
+# --- 项目配置 ---
+!.editorconfig
+!.cbmignore
+!qodana.yaml
+
+# --- 项目资产目录(已纳入版本控制) ---
+!.github/
+!.ai/
+!.reports/
+
+# =============================================================================
+# 即便白名单包含某目录, 其内部默认全部跟踪; 以下规则排除目录内的生成物 / 临时文件.
+# (这些模式基于相对路径或 ** 双星全局匹配, 在被 ! 包含的目录内同样生效.)
+# =============================================================================
+
+### 构建产物 ###
 target/
 build/
+*.class
+
+### Maven wrapper jar(二进制, 用 .mvn/wrapper 配置即可) ###
 .mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
+### IDE ###
+.idea/
 *.iml
+*.iws
 *.ipr
+.vscode/
+.classpath
+.project
+.settings/
+.springBeans
+.factorypath
+.apt_generated
+.sts4-cache
 
 ### NetBeans ###
 /nbproject/private/
@@ -25,31 +79,20 @@ build/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
-### VS Code ###
-.vscode/
-
-# 自定义忽略规则
+### 运行时数据 ###
+*.rdb
+**/data/
+*.log
+*.zip
 application-myself.yml
-**.rdb
 
-**.log
-**/data
-
-**.zip
-
-### CodeGraph ###
-# Local code-graph index (tool artifact)
+### 工具产物 / 本地缓存(不提交) ###
 .codegraph/
 .codebase-memory
 .omo
-
-# MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
 
-# Auto-flow workflow artifacts (tool-generated)
+### Auto-flow 流程簿记(编排器生成, 不提交) ###
 .auto-flow/
