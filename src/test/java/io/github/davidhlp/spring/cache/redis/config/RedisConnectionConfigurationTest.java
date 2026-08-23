@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import com.example.round5.CustomDomainValue;
+import com.example.domain.CustomDomainValue;
 import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
 import io.github.davidhlp.spring.cache.redis.integration.TestApplication;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RedisConnectionConfigurationTest extends AbstractRedisIntegrationTest {
 
     /**
-     * 白名单需同时包含测试 POJO 包 {@code com.example.round5} 与框架内部 envelope
+     * 白名单需同时包含测试 POJO 包 {@code com.example.domain} 与框架内部 envelope
      * 包 {@code io.github.davidhlp.spring.cache.redis.serialization}(VersionEnvelope,
      * CachedValue, NullValue 等)。打开多态类型信息,使得 {@code @class} 元数据会被写入
      * 序列化 JSON 中,从而真正触发 {@code SecureJacksonRedisSerializer#validateTypeIds}
@@ -48,7 +48,7 @@ class RedisConnectionConfigurationTest extends AbstractRedisIntegrationTest {
      */
     @DynamicPropertySource
     static void serializerProperties(DynamicPropertyRegistry registry) {
-        registry.add("resi-cache.serializer.allowed-package-prefixes", () -> "com.example.round5,io.github.davidhlp.spring.cache.redis.serialization");
+        registry.add("resi-cache.serializer.allowed-package-prefixes", () -> "com.example.domain,io.github.davidhlp.spring.cache.redis.serialization");
         registry.add("resi-cache.serializer.polymorphic-typing-enabled", () -> "true");
         registry.add("resi-cache.serializer.fail-on-unknown-type", () -> "true");
     }
@@ -67,9 +67,9 @@ class RedisConnectionConfigurationTest extends AbstractRedisIntegrationTest {
     @Test
     @DisplayName("redisCacheTemplate honors resi-cache.serializer.* properties end-to-end")
     void redisCacheTemplate_honorsSerializerProperties() {
-        // Arrange: 一个类型在自定义白名单 com.example.round5 的对象
-        CustomDomainValue original = new CustomDomainValue(42L, "round-5-regression");
-        String key = "round5::custom::42";
+        // Arrange: 一个类型在自定义白名单 com.example.domain 的对象
+        CustomDomainValue original = new CustomDomainValue(42L, "domain-custom-value");
+        String key = "domain::custom::42";
 
         // Act: 通过 redisCacheTemplate 写入 + 读回
         valueOps.set(key, original);
@@ -86,6 +86,6 @@ class RedisConnectionConfigurationTest extends AbstractRedisIntegrationTest {
         // Assert (2): 字段值往返保持
         CustomDomainValue restored = (CustomDomainValue) roundtripped;
         assertThat(restored.getId()).isEqualTo(42L);
-        assertThat(restored.getLabel()).isEqualTo("round-5-regression");
+        assertThat(restored.getLabel()).isEqualTo("domain-custom-value");
     }
 }

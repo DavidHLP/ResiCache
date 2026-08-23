@@ -1,4 +1,4 @@
-package com.example.round5;
+package com.example.domain;
 
 /**
  * 集成测试专用 POJO:包路径故意不在默认白名单

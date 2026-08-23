@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 不只是「调了一下 ctor」。
  *
  * <p>关键 verifying:故意把 whitelist 设为非默认(只含
- * {@code com.example.round11},不含 {@code io.github.davidhlp})。然后试图
+ * {@code com.example.custom},不含 {@code io.github.davidhlp})。然后试图
  * roundtrip 一个 {@link CachedValue}(@class 为
  * {@code io.github.davidhlp.spring.cache.redis.cache.model.CachedValue})。
  * 如果 factory 真的把 props 穿下去,白名单检查会拒
@@ -33,17 +33,17 @@ class SecureJacksonSerializerFactoryTest {
     @Test
     @DisplayName("create returns a serializer wired with the props whitelist (not defaults)")
     void create_wiresPropsWhitelistIntoSerializer() {
-        // 故意把白名单限制为只有 com.example.round11 — 不含 io.github.davidhlp
+        // 故意把白名单限制为只有 com.example.custom — 不含 io.github.davidhlp
         RedisProCacheProperties.SerializerProperties props =
                 new RedisProCacheProperties.SerializerProperties();
-        props.setAllowedPackagePrefixes(List.of("com.example.round11"));
+        props.setAllowedPackagePrefixes(List.of("com.example.custom"));
         props.setPolymorphicTypingEnabled(true);
         props.setFailOnUnknownType(true);
 
         SecureJacksonRedisSerializer serializer = factory.create(new ObjectMapper(), props);
 
         // CachedValue 默认类,@class 指向 io.github.davidhlp.spring.cache.redis.cache.model.CachedValue
-        // 既不在 com.example.round11,也不在 java.lang/java.time/java.math/枚举 java.util 集合内
+        // 既不在 com.example.custom,也不在 java.lang/java.time/java.math/枚举 java.util 集合内
         // → roundtrip 必须抛白名单 SerializationException
         CachedValue payload = CachedValue.of("payload-value", 60L);
         assertThatThrownBy(() -> {
