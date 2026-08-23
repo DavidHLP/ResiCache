@@ -118,4 +118,4 @@ jobs:
       - name: Validate All Pipeline Results
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: ./scripts/ci/require-all-green.sh
+        run: bash ./scripts/ci/require-all-green.sh
