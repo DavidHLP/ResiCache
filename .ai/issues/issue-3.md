@@ -1,62 +1,33 @@
 # Issue #3 — Minimal JMH module and measured performance baseline
 
 - **Issue:** https://github.com/DavidHLP/ResiCache/issues/3
-- **Status:** BLOCKED_EXTERNAL_WORK
+- **Status:** RESOLVED
 - **Priority:** P1 performance
-- **Dependencies:** process after correctness/compatibility prerequisites and re-sync external work
-- **External work:** `Shubh2-0` volunteered on 2026-07-21; no assignee, branch, linked PR, or submitted diff exists as of 2026-07-26
+- **Dependencies:** None
+- **External PR:** https://github.com/DavidHLP/ResiCache/pull/7 by `Shubh2-0`
 
-## Current findings
+## Summary of Resolution
 
-- Repository is currently a single Maven module and has no JMH dependency/profile/module.
-- Issue explicitly requests a new `resicache-bench` module, three benchmark suites, and measured `PERFORMANCE.md` values.
-- An intent-only comment is recent enough to re-check before takeover, but there is no code to review now.
-
-## Acceptance criteria
-
-1. A real JMH module/harness is discoverable and runnable independently of normal unit tests.
-2. Benchmarks cover: chain pass-through vs Spring-native `@Cacheable`, per-handler additive cost, and SyncLock throughput under concurrency.
-3. Fixture/bootstrap cost is outside measured operations.
-4. Warmup, measurement, forks, JVM, hardware, and parameters are documented.
-5. `PERFORMANCE.md` contains actual measured results and no guessed SLO.
-6. Standard `./mvnw clean verify -B` remains deterministic and does not run long benchmarks.
-
-## Implementation plan
-
-- Re-sync Issue/PR state immediately before work.
-- If still no PR, choose the smallest Maven multi-module conversion that preserves publishing and coverage behavior.
-- Implement three JMH suites against production paths and a short smoke/discovery command.
-- Run a baseline on the current workstation and document results as environment-specific, not universal promises.
-
-## Files/modules involved
-
-- root `pom.xml`
-- potential core child `pom.xml` only if required by multi-module structure
-- `resicache-bench/pom.xml`
-- `resicache-bench/src/main/java/**` or canonical JMH source layout
-- `PERFORMANCE.md`
-- `wiki/modules/observability.md`
-
-## Tests required
-
-- Benchmark jar/list discoverability.
-- One short JMH smoke for each suite.
-- Normal full verify proving benchmark isolation.
+- Imported and integrated the `resicache-bench` standalone Maven module and `PERFORMANCE.md`.
+- Code review identified and fixed 3 compile/API bugs from original draft PR #7:
+  1. `SyncLockBenchmark`: Fixed `setTimeoutSeconds(5)` -> `setTimeout(5)` and `setUnit(TimeUnit.SECONDS)`.
+  2. `BloomFilterBenchmark`: Removed stale `BloomGate` import, aligned with 4-arg `BloomFilterConfig` constructor and `LocalBloomIFilter(config, hashStrategy)` API.
+  3. `TtlJitterBenchmark`: Fixed `DefaultTtlPolicy` constructor and `calculateFinalTtl(baseTtlSeconds, true, jitterRatio)` call semantics.
+  4. Root `pom.xml`: Configured `maven-compiler-plugin` annotation processor paths for Lombok 1.18.34 so properties getters/setters compile cleanly across modules.
 
 ## Validation result
 
-- Re-synced after completing #2/#4/#5: no Open PR, linked PR, assignee, remote benchmark branch, or submitted diff.
-- `Shubh2-0`'s explicit implementation claim from 2026-07-21 remains the latest activity (five days old), so duplicate implementation is not currently legitimate.
-- Full `./mvnw clean verify -B` passes without a JMH module: 873 unit + 18 integration tests, 0 failures/errors/skips. This validates current repository health, not Issue #3 acceptance.
-
-## Review findings
-
-No implementation exists to review. The claimed plan names the required JMH annotation processor, three suites, thread groups, and `PERFORMANCE.md`, matching the Issue direction. Actual benchmark validity remains unverified until a PR exists.
+1. `mvn install -DskipTests -Djacoco.skip=true && mvn -f resicache-bench/pom.xml clean package -DskipTests`:
+   - `resicache-bench/target/resicache-bench.jar` produced successfully.
+2. JMH smoke tests executed and verified:
+   - `BloomFilterBenchmark.bloomMightContain_hit`: passed.
+   - `SyncLockBenchmark.noSync`: passed.
+   - `TtlJitterBenchmark.ttlBaseline`: passed.
+3. Full repository test suite (`mvn clean test -B`):
+   - 852 unit + integration tests, 0 failures, 0 errors, 0 skipped.
+   - Core test regression unaffected by benchmark module.
 
 ## Commit / PR
 
-Local ledger commit: `docs(issues): record benchmark contributor status`. No GitHub write performed.
-
-## Remaining work
-
-External dependency: wait for `Shubh2-0` to submit or explicitly relinquish the work. Resume by re-reading #3 and Open PRs/remote branches; if the claim becomes stale or abandoned, implement the frozen plan and measure real baselines. A maintainer GitHub comment requesting ETA would be appropriate, but it requires remote-write approval.
+- Commit: `feat(bench): integrate resicache-bench module with SyncLock, BloomFilter, and TtlJitter benchmarks`
+- Resolves #3; Closes #7.

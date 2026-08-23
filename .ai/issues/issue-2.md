@@ -1,7 +1,7 @@
 # Issue #2 — Real Redis Cluster slot co-location integration test
 
 - **Issue:** https://github.com/DavidHLP/ResiCache/issues/2
-- **Status:** COMMITTED
+- **Status:** RESOLVED
 - **Priority:** P1 correctness
 - **Dependencies:** none; production implementation appears present and needs real-topology proof
 - **External work:** no assignee, comments, branch, or linked PR

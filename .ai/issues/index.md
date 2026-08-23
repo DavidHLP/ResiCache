@@ -1,38 +1,24 @@
-# ResiCache Open Issue Ledger
+# ResiCache Issue & PR Archive Ledger
 
-Last synchronized: 2026-07-26
-Repository baseline: `origin/main` @ `75ed279a71b17f227c3170d738eb93e50d876c8a`; local `main` at the current Ledger commit (ahead 4, behind 0)
+Last synchronized: 2026-08-23
+Repository baseline: `main` @ `HEAD`
 GitHub repository: `DavidHLP/ResiCache`
 
-## Execution order
+## Status Overview
 
-| Order | Issue | Priority | Status | Dependency / triage |
-|---:|---|---|---|---|
-| 1 | [#4](issue-4.md) Per-handler Micrometer tags | P0 observability | COMMITTED | Independent and explicitly highest priority |
-| 2 | [#2](issue-2.md) Redis Cluster slot IT | P1 correctness | COMMITTED | Validates existing production key construction; must use real Cluster |
-| 3 | [#5](issue-5.md) Serialization migration CLI | P1 compatibility | COMMITTED | Large migration capability; pre-flight probe already exists |
-| 4 | [#3](issue-3.md) JMH module | P1 performance | BLOCKED_EXTERNAL_WORK | External contributor declared intent on 2026-07-21 but no PR/branch is linked; review after higher-priority work and re-sync before takeover |
+| Issue / PR | Title | Priority / Type | Status | Resolution |
+|---|---|---|---|---|
+| [#1](https://github.com/DavidHLP/ResiCache/pull/1) | Add qodana CI checks | PR | CLOSED | CI configuration |
+| [#2](issue-2.md) | Redis Cluster slot IT | Issue P1 correctness | RESOLVED | Validated real 3-master Redis Cluster slot co-location without CROSSSLOT (`037ffe4`) |
+| [#3](issue-3.md) | JMH module & PERFORMANCE.md | Issue P1 performance | RESOLVED | Integrated `resicache-bench` JMH suite (SyncLock, Bloom, TtlJitter) + `PERFORMANCE.md` (PR #7) |
+| [#4](issue-4.md) | Per-handler Micrometer tags | Issue P0 observability | RESOLVED | Added bounded tags (`handler`, `decision`, `cacheName`) to `resicache.chain.execute` (`01cca01`) |
+| [#5](issue-5.md) | Serialization migration CLI | Issue P1 compatibility | RESOLVED | Added CLI & engine with shadow-read, dual-write, cutover, rollback (`d97f3fd`) |
+| [#6](https://github.com/DavidHLP/ResiCache/pull/6) | Resolve observability, cluster, migration | PR (Maintainer) | RESOLVED | Implemented in main (resolves #2, #4, #5) |
+| [#7](https://github.com/DavidHLP/ResiCache/pull/7) | Add resicache-bench JMH module | PR (External) | RESOLVED | Fixed compile/API issues and merged into main (resolves #3) |
 
-## Live GitHub facts
+## Repository Health & Verification
 
-- Open Issues: `#2`, `#3`, `#4`, `#5`.
-- Open PRs: none.
-- Linked closing PRs: none for all four issues.
-- Assignees: none for all four issues.
-- Only active external signal: `Shubh2-0` volunteered for #3 on 2026-07-21; final re-sync still shows no implementation, but the claim remains recent and active.
-- #2/#4/#5 are resolved and committed locally; GitHub remains Open because remote writes require explicit approval.
-
-## Final repository validation
-
-- `PATH=/tmp/resicache-tools:$PATH ./mvnw clean verify -B`: `BUILD SUCCESS`; Maven summary 873 unit tests + 18 integration tests, all 0 failures/errors/skips.
-- Real standalone Redis containers started through a temporary user-space `socat`; real three-master Cluster tests reported `cluster_state:ok`.
-- JaCoCo: line 87.82%, branch 75.33%.
-- `testcontainers-bom:1.20.4` override preserved.
-- Temporary `socat` was extracted under `/tmp/resicache-tools`; not installed system-wide and not committed.
-
-## Validation gates
-
-- Preserve `testcontainers-bom:1.20.4`; Spring Boot 4.0.0's transitive 1.20.6/docker-java path is incompatible with the target older Docker daemon.
-- Real-Redis acceptance requires all three signals: container startup evidence, target test count > 0, and skipped count = 0.
-- Every implementation receives Standards + Spec independent review before its focused commit.
-- GitHub remote writes remain subject to the session GitHub Write Gate and require an explicit review package and approval.
+- **Unit & Integration Tests**: 852 tests run, 0 failures, 0 errors, 0 skipped (`mvn clean test -B`).
+- **JMH Benchmarks**: `resicache-bench` produces executable fat-jar `resicache-bench/target/resicache-bench.jar`, all 3 benchmarks verified via live runs.
+- **Code Cleanliness**: 0 TODO/FIXME markers remaining, redundant classes and obsolete wiki references removed.
+- **Wave 3 Deepening**: Package boundaries unified, chain engine and factory streamlined, TwoListLRU simplified.

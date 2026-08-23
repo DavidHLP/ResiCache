@@ -1,7 +1,7 @@
 # Issue #4 — Per-handler Micrometer tags on `resicache.chain.execute`
 
 - **Issue:** https://github.com/DavidHLP/ResiCache/issues/4
-- **Status:** COMMITTED
+- **Status:** RESOLVED
 - **Priority:** P0 observability
 - **Dependencies:** none
 - **External work:** no assignee, comments, branch, or linked PR

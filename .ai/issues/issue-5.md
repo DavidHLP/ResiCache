@@ -1,7 +1,7 @@
 # Issue #5 — Serialization migration CLI (`shadow-read → dual-write → cutover`)
 
 - **Issue:** https://github.com/DavidHLP/ResiCache/issues/5
-- **Status:** COMMITTED
+- **Status:** RESOLVED
 - **Priority:** P1 compatibility
 - **Dependencies:** existing envelope serializer and pre-flight probe
 - **External work:** no assignee, comments, branch, or linked PR
