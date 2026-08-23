@@ -20,6 +20,8 @@
 !mvnw
 !mvnw.cmd
 !.mvn/
+!resicache-bench/
+!scripts/
 
 # --- 源码 ---
 !src/
@@ -35,6 +37,7 @@
 !CONTRIBUTING.md
 !STABILITY.md
 !SECURITY.md
+!PERFORMANCE.md
 
 # --- 项目配置 ---
 !.editorconfig
@@ -51,9 +54,9 @@
 # (这些模式基于相对路径或 ** 双星全局匹配, 在被 ! 包含的目录内同样生效.)
 # =============================================================================
 
-### 构建产物 ###
 target/
 build/
+dependency-reduced-pom.xml
 *.class
 
 ### Maven wrapper jar(二进制, 用 .mvn/wrapper 配置即可) ###
