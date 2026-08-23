@@ -3,9 +3,8 @@
 - **PR:** https://github.com/DavidHLP/ResiCache/pull/6
 - **Author:** `DavidHLP`
 - **Base Branch:** `main`
-- **Head Branch:** `main` (DavidHLP:main)
-- **Status (GitHub):** OPEN
-- **Status (Local):** COMMITTED in local `main`
+- **Status (GitHub):** MERGED (Merged on 2026-08-23 into `main`)
+- **Status (Local):** MERGED into local `main`
 - **Labels:** `blocked`, `changes requested`
 - **Comments count:** 1 (`DavidHLP` maintainer review note)
 - **Reviews count:** 1 (`chatgpt-codex-connector[bot]`, State: COMMENTED)

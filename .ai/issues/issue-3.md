@@ -2,8 +2,7 @@
 
 - **Issue:** https://github.com/DavidHLP/ResiCache/issues/3
 - **Author:** `DavidHLP`
-- **Type:** Issue (P1 Performance)
-- **Status (GitHub):** OPEN
+- **Status (GitHub):** CLOSED (Closed on 2026-08-23 via PR #7 integration)
 - **Status (Local):** RESOLVED & COMMITTED (Commit `c26e0dc` + `91285dd`)
 - **Labels:** `help wanted`, `performance`
 - **Comments count:** 4 (`Shubh2-0` ×2, `DavidHLP` ×2)

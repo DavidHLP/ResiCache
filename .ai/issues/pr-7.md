@@ -3,9 +3,8 @@
 - **PR:** https://github.com/DavidHLP/ResiCache/pull/7
 - **Author:** `Shubh2-0` (External Contributor)
 - **Base Branch:** `main`
-- **Head Branch:** `Shubh2-0/feat/jmh-benchmark-module` (Commit `8a3be24`)
-- **Status (GitHub):** OPEN (Draft)
-- **Status (Local):** MERGED & EXTENDED in local `main` (Commits `c26e0dc`, `91285dd`)
+- **Status (GitHub):** CLOSED (Closed on 2026-08-23; merged & extended via commits `c26e0dc` and `91285dd`)
+- **Status (Local):** MERGED & EXTENDED in local `main`
 - **Labels:** `changes requested`, `performance`
 - **Comments count:** 1 (`DavidHLP` review request)
 - **Reviews count:** 0

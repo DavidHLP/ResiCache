@@ -1,7 +1,7 @@
 # ResiCache Issue & PR Archive Ledger
 
 **Last synchronized:** 2026-08-23  
-**Repository baseline:** `origin/main` @ `75ed279a` | local `main` @ `HEAD`  
+**Repository baseline:** `origin/main` @ `HEAD`  
 **GitHub repository:** `DavidHLP/ResiCache`  
 **Total Tracked Objects:** 7 (5 Issues + 3 PRs; note PR #1 is also Issue #1)
 
@@ -13,17 +13,17 @@
 |---|---|---|---|---|---|---|---|---|
 | [#1](issue-1.md) | Add qodana CI checks | PR | `qodana-cloud[bot]` | CLOSED (Unmerged) | CLOSED | - | 1 / 0 | Automated Qodana bot PR; closed without merge; static analysis handled via Checkstyle/JaCoCo |
 | [#2](issue-2.md) | Testcontainers Redis Cluster IT | Issue (P1) | `DavidHLP` | CLOSED (2026-07-26) | RESOLVED | `good first issue` | 1 / 0 | Real 3-master Redis Cluster hash-tag slot co-location verified (`037ffe4` via PR #6) |
-| [#3](issue-3.md) | Minimal JMH module + PERFORMANCE.md | Issue (P1) | `DavidHLP` | OPEN | RESOLVED | `help wanted`, `performance` | 4 / 0 | External draft PR #7 integrated, 3 API bugs fixed, 2 missing suites added, live JMH executed |
+| [#3](issue-3.md) | Minimal JMH module + PERFORMANCE.md | Issue (P1) | `DavidHLP` | CLOSED (2026-08-23) | RESOLVED | `help wanted`, `performance` | 5 / 0 | External draft PR #7 integrated, 3 API bugs fixed, 2 missing suites added, live JMH executed, closed with resolution comment |
 | [#4](issue-4.md) | Per-handler Micrometer tags | Issue (P0) | `DavidHLP` | CLOSED (2026-07-26) | RESOLVED | `help wanted` | 1 / 0 | Bounded `handler`/`decision`/`cacheName` tags added to `resicache.chain.execute` (`01cca01` via PR #6) |
 | [#5](issue-5.md) | Serialization migration CLI | Issue (P1) | `DavidHLP` | CLOSED (2026-07-26) | RESOLVED | `help wanted` | 1 / 0 | Phased migration CLI & engine (`shadow-read`→`dual-write`→`cutover`→`rollback`) with 3×P1+3×P2 fixed (`d97f3fd` via PR #6) |
-| [#6](pr-6.md) | Resolve observability, cluster, migration | PR | `DavidHLP` | OPEN | COMMITTED | `blocked`, `changes requested` | 1 / 1 (Codex) | Maintainer aggregation PR (14 commits) resolving #2, #4, #5 with full 3×P1+3×P2 review dispositions |
-| [#7](pr-7.md) | Add resicache-bench JMH module | PR (Draft) | `Shubh2-0` | OPEN | MERGED_AND_EXTENDED | `changes requested`, `performance` | 1 / 0 | External draft PR for #3; API bugs fixed, 5 full suites completed, raw `jmh-results.json` + `PERFORMANCE.md` backfilled |
+| [#6](pr-6.md) | Resolve observability, cluster, migration | PR | `DavidHLP` | MERGED | MERGED | `blocked`, `changes requested` | 2 / 1 (Codex) | Maintainer aggregation PR (14 commits) resolving #2, #4, #5 with full 3×P1+3×P2 review dispositions; merged into `main` |
+| [#7](pr-7.md) | Add resicache-bench JMH module | PR (Draft) | `Shubh2-0` | CLOSED (Merged/Extended) | MERGED_AND_EXTENDED | `changes requested`, `performance` | 2 / 0 | External draft PR for #3; API bugs fixed, 5 full suites completed, raw `jmh-results.json` + `PERFORMANCE.md` backfilled; closed with notification comment |
 
 ---
 
 ## 2. External Collaboration & Triage Signals
 
-- **`Shubh2-0` (#3 → PR #7):** Volunteered 2026-07-21, submitted draft PR #7 on 2026-07-27. Maintainer requested scope alignment and raw benchmark data on 2026-07-28. The draft PR has now been imported, repaired, extended to 5 suites, and validated locally.
+- **`Shubh2-0` (#3 → PR #7):** Volunteered 2026-07-21, submitted draft PR #7 on 2026-07-27. Maintainer requested scope alignment and raw benchmark data on 2026-07-28. The draft PR was imported, repaired, extended to 5 suites, and validated locally. Notified and closed PR #7 / Issue #3 on 2026-08-23.
 - **`qodana-cloud[bot]` (PR #1):** Cleanly closed; repository rules enforced via Checkstyle and JaCoCo gates.
 - **`chatgpt-codex-connector[bot]` (PR #6):** Automated review comments tracked and addressed in maintainer commits.
 
