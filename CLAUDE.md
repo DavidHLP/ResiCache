@@ -88,7 +88,7 @@ src/test/java/io/github/davidhlp/spring/cache/redis/
 │   ├── *IntegrationTest.java (6) # BloomFilter / CacheOperations / DistributedLock / KeyResolution /
 │   │                             #   SelectiveMode / SyncSingleFlight — full end-to-end protection scenarios
 │   └── *IT.java (3)              # PathCAopContract / PathCAopAsync / RedisCacheSemantics — AOP contract ITs
-└── com/example/round5/          # test fixture for whitelisted custom domain types (serializer interop)
+└── com/example/domain/          # test fixture for whitelisted custom domain types (serializer interop)
 ```
 
 > 集成测试统一位于 `integration/`。新增集成测试:继承 `AbstractRedisIntegrationTest`,放在同一包内,无需显式 import scaffolding。
