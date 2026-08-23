@@ -1,4 +1,4 @@
-name: CI
+name: CI Pipeline
 
 on:
   push:
@@ -6,17 +6,20 @@ on:
   pull_request:
     branches: [main, master]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   JAVA_VERSION: '21'
+  MAVEN_OPTS: '-Xmx1024m -XX:+UseParallelGC'
 
 jobs:
-  build:
-    # WS-1.1 FIRE 后(commit 38c514a):master 为单构建 Boot 4.0/SDR 4.0/Java 21/Redisson 3.50。
-    # Boot 4.0 最低 Java 21,故去掉 Java 17 matrix;Boot 4 为唯一构建线(boot4 profile
-    # 已上移为 pom 默认,见 commit 9ad22bf),构建无需 -Pboot4 flag。
-    # 历史:`compatibility` job(versions:set-parent 探测 Boot 3.3/3.5 编译)已删除 —
-    # 双分支策略废弃,boot3 不再维护,继续跑废的兼容矩阵只是噪声 + MojoNotFoundException。
-    name: Build and Test (Java ${{ env.JAVA_VERSION }})
+  # =========================================================================
+  # Stage 1: Fast Feedback Quality & Guardrails (Parallel)
+  # =========================================================================
+  checkstyle:
+    name: "1.1 Quality · Checkstyle"
     runs-on: ubuntu-latest
 
     steps:
@@ -25,39 +28,12 @@ jobs:
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: ./.github/actions/setup-jdk-21
-      - name: Install socat for integration tests
-        # AbstractRedisIntegrationTest shells out to `socat` to forward the
-        # testcontainers container bridge IP back to 127.0.0.1, which the
-        # Spring context connects to. The Ubuntu runner does not ship socat
-        # by default. Without it every @Testcontainers IT throws
-        # "Cannot start socat for container …" before Spring can start.
-        run: sudo apt-get update -y && sudo apt-get install -y --no-install-recommends socat
 
-      - name: Build with Maven Wrapper
-        run: ./mvnw clean verify -B
-        env:
-          MAVEN_OPTS: -Xmx1024m
+      - name: Run Checkstyle
+        run: ./mvnw checkstyle:check -B
 
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: test-results-java-${{ env.JAVA_VERSION }}
-          path: target/surefire-reports/
-          retention-days: 7
-
-      - name: Upload JaCoCo Report
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: jacoco-report-java-${{ env.JAVA_VERSION }}
-          path: target/site/jacoco/
-          retention-days: 7
-
-  docs-link-check:
-    # 文档一致性护栏:防止 a5ab55b 移除的过度工程特性被对外文档重新宣称,
-    # 并校验 README 宣称的关键类在 src 存在。(Q2 诚实化 + Q11 可推广护栏)
-    name: Docs ↔ Source Consistency
+  docs-consistency:
+    name: "1.2 Guard · Docs Consistency"
     runs-on: ubuntu-latest
 
     steps:
@@ -72,9 +48,6 @@ jobs:
                   SpelConditionEvaluator CacheEvictedEvent CacheMetricsRecorder \
                   BloomFilterProvider LockProvider RedissonLockProvider"
           for sym in $banned; do
-            # 精准匹配:仅当代码标识符(反引号包裹 \`sym\`)出现时才视为"重新宣称已移除
-            # 特性"的回归。纯文本历史叙述(无反引号,如迁移说明里的 "previously provided
-            # by X")允许存在,避免误伤合法的"为何移除"文档。
             hits=$(grep -rnF "\`$sym\`" README.md README.zh-CN.md 2>/dev/null || true)
             if [ -n "$hits" ]; then
               echo "::error::Removed symbol '$sym' is still referenced as a code identifier in README:"
@@ -95,8 +68,8 @@ jobs:
           done
           echo "OK: All key classes referenced in docs exist in src."
 
-  checkstyle:
-    name: Checkstyle
+  dependency-audit:
+    name: "1.3 Security · Dependency Audit"
     runs-on: ubuntu-latest
 
     steps:
@@ -106,46 +79,7 @@ jobs:
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: ./.github/actions/setup-jdk-21
 
-      - name: Run Checkstyle
-        run: ./mvnw checkstyle:check -B
-
-  qodana:
-    name: Qodana Code Quality
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Qodana Scan
-        uses: JetBrains/qodana-action@v2025.3
-        with:
-          cache-dir: .qodana/cache
-          use-caches: true
-        env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-        continue-on-error: true
-
-      - name: Upload Qodana Report
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: qodana-report
-          path: ./qodana/report/
-          retention-days: 7
-
-  dependency-check:
-    name: Dependency Analysis
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: ./.github/actions/setup-jdk-21
-
-      - name: Dependency Analysis
+      - name: Analyze Dependencies
         run: ./mvnw dependency:analyze -B
         continue-on-error: true
 
@@ -153,12 +87,13 @@ jobs:
         run: ./mvnw versions:display-dependency-updates -B
         continue-on-error: true
 
-  build-package:
-    name: Build Package
+  # =========================================================================
+  # Stage 2: Core Test & Coverage Matrix
+  # =========================================================================
+  core-verify:
+    name: "2.1 Test · Core & Testcontainers IT"
     runs-on: ubuntu-latest
-    needs: [build, docs-link-check, checkstyle, qodana, dependency-check]
-    # 不用 if: always():恢复 needs 默认门控——仅当 gating job(build/checkstyle/docs-link-check)
-    # 成功时才打包上传。compatibility/qodana/dependency-check 自带 continue-on-error,失败不阻塞。
+    needs: [checkstyle, docs-consistency]
 
     steps:
       - name: Checkout
@@ -167,12 +102,102 @@ jobs:
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: ./.github/actions/setup-jdk-21
 
-      - name: Build JAR
-        run: ./mvnw clean package -DskipTests -B
+      - name: Verify Core (Unit Tests, Testcontainers IT, JaCoCo Gate)
+        run: ./mvnw clean verify -B
 
-      - name: Upload JAR Artifact
+      - name: Upload Test Results
+        if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: resicache-artifact
-          path: target/*.jar
+          name: surefire-test-results
+          path: target/surefire-reports/
           retention-days: 7
+
+      - name: Upload JaCoCo Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: jacoco-coverage-report
+          path: target/site/jacoco/
+          retention-days: 7
+
+  # =========================================================================
+  # Stage 3: Module Packaging & Benchmark Verification (Parallel)
+  # =========================================================================
+  bench-module:
+    name: "3.1 Module · resicache-bench JMH"
+    runs-on: ubuntu-latest
+    needs: [core-verify]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: ./.github/actions/setup-jdk-21
+
+      - name: Install ResiCache Core into local repo
+        run: ./mvnw install -DskipTests -B
+
+      - name: Build resicache-bench Fat-JAR
+        run: mvn -f resicache-bench/pom.xml clean package -DskipTests -B
+
+      - name: Upload Benchmark JAR
+        uses: actions/upload-artifact@v5
+        with:
+          name: resicache-bench-fatjar
+          path: resicache-bench/target/resicache-bench-*.jar
+          retention-days: 7
+
+  package-artifact:
+    name: "3.2 Package · ResiCache JAR"
+    runs-on: ubuntu-latest
+    needs: [core-verify]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: ./.github/actions/setup-jdk-21
+
+      - name: Package JAR
+        run: ./mvnw clean package -DskipTests -B
+
+      - name: Upload ResiCache Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: resicache-core-jar
+          path: target/ResiCache-*.jar
+          retention-days: 7
+
+  # =========================================================================
+  # Stage 4: CI Pipeline Gate (Canonical Branch Protection Anchor)
+  # =========================================================================
+  ci-gate:
+    name: "4.1 Gate · All Checks Passed"
+    runs-on: ubuntu-latest
+    needs: [checkstyle, docs-consistency, dependency-audit, core-verify, bench-module, package-artifact]
+    if: always()
+
+    steps:
+      - name: Evaluate Pipeline Status
+        run: |
+          echo "Evaluating CI Pipeline Stage Results..."
+          echo "Checkstyle: ${{ needs.checkstyle.result }}"
+          echo "Docs Consistency: ${{ needs.docs-consistency.result }}"
+          echo "Dependency Audit: ${{ needs.dependency-audit.result }}"
+          echo "Core Verify: ${{ needs.core-verify.result }}"
+          echo "Bench Module: ${{ needs.bench-module.result }}"
+          echo "Package Artifact: ${{ needs.package-artifact.result }}"
+
+          if [[ "${{ needs.checkstyle.result }}" != "success" ]] || \
+             [[ "${{ needs.docs-consistency.result }}" != "success" ]] || \
+             [[ "${{ needs.core-verify.result }}" != "success" ]] || \
+             [[ "${{ needs.bench-module.result }}" != "success" ]] || \
+             [[ "${{ needs.package-artifact.result }}" != "success" ]]; then
+            echo "❌ Pipeline failed! One or more required gating jobs did not pass."
+            exit 1
+          fi
+
+          echo "✅ All required CI pipeline gates passed successfully!"

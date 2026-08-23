@@ -47,15 +47,8 @@ jobs:
 
       - name: Update POM Version
         run: ./mvnw versions:set -DnewVersion=${{ steps.version.outputs.VERSION }} -B
-      - name: Install socat for integration tests
-        # AbstractRedisIntegrationTest shells out to `socat` to forward the
-        # testcontainers container bridge IP back to 127.0.0.1, which the
-        # Spring context connects to. The Ubuntu runner does not ship socat
-        # by default. Without it every @Testcontainers IT throws
-        # "Cannot start socat for container …" before Spring can start.
-        run: sudo apt-get update -y && sudo apt-get install -y --no-install-recommends socat
 
-      - name: Build & Test
+      - name: Build & Test (Unit & IT with Testcontainers)
         run: ./mvnw clean verify -B
         env:
           MAVEN_OPTS: -Xmx1024m

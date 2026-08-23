@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.chain.handler.CacheErrorHandler;
 import lombok.Builder;
 import lombok.Data;
 import org.springframework.lang.Nullable;
