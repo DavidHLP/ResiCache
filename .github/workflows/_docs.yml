@@ -1,0 +1,45 @@
+name: "Reusable · Docs"
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-consistency:
+    name: Docs ↔ Source Consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Guard against removed-feature regressions in docs
+        run: |
+          set -e
+          # 1. 黑名单:被移除的过度工程符号不应再出现在对外 README 中
+          banned="CircuitBreakerCacheWrapper RateLimiterCacheWrapper \
+                  SpelConditionEvaluator CacheEvictedEvent CacheMetricsRecorder \
+                  BloomFilterProvider LockProvider RedissonLockProvider"
+          for sym in $banned; do
+            hits=$(grep -rnF "\`$sym\`" README.md README.zh-CN.md 2>/dev/null || true)
+            if [ -n "$hits" ]; then
+              echo "::error::Removed symbol '$sym' is still referenced as a code identifier in README:"
+              echo "$hits"
+              exit 1
+            fi
+          done
+          echo "OK: No removed-symbol regressions (as code identifiers) in README."
+
+          # 2. 白名单:README 宣称的关键类必须在 src 存在
+          for cls in RedisCacheAutoConfiguration RedisProCacheProperties RedisProCache \
+                     RedisProCacheManager CacheHandlerChainFactory RedisCacheInterceptor \
+                     RedisCacheOperationSource RedissonConfiguration; do
+            if ! find src/main/java -name "${cls}.java" | grep -q .; then
+              echo "::error::Key class '$cls' referenced in docs not found in src/main/java"
+              exit 1
+            fi
+          done
+          echo "OK: All key classes referenced in docs exist in src."

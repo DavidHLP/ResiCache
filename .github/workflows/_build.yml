@@ -1,0 +1,41 @@
+name: "Reusable · Build & Test"
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build & Verify (Java 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: ./.github/actions/setup-jdk-21
+
+      - name: Verify Core (Unit & Integration Tests, JaCoCo Gate)
+        run: ./mvnw clean verify -B
+        env:
+          MAVEN_OPTS: '-Xmx1024m -XX:+UseParallelGC'
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: surefire-test-results
+          path: target/surefire-reports/
+          retention-days: 7
+
+      - name: Upload JaCoCo Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: jacoco-coverage-report
+          path: target/site/jacoco/
+          retention-days: 7

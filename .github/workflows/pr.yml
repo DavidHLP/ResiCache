@@ -1,11 +1,12 @@
-name: CI Pipeline
+name: PR Pipeline
 
 on:
-  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main, master]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -13,7 +14,40 @@ permissions:
 
 jobs:
   # =========================================================================
-  # Stage 1: Fast Feedback (Parallel)
+  # Change Detection
+  # =========================================================================
+  changes:
+    name: "Detect Changes"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      product: ${{ steps.filter.outputs.product }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate Changed Files
+        id: filter
+        run: |
+          target="origin/${{ github.base_ref }}"
+          echo "Comparing HEAD against $target"
+          changed=$(git diff --name-only "$target"...HEAD || true)
+          echo "Changed files:"
+          echo "$changed"
+
+          if echo "$changed" | grep -qE '^(src/|resicache-bench/|pom\.xml|\.github/|mvnw)'; then
+            echo "Product code or build configuration changed."
+            echo "product=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Only non-product files (docs/markdown) changed."
+            echo "product=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # =========================================================================
+  # Stage 1: Fast Feedback (Lint, Docs, Quality)
   # =========================================================================
   lint:
     name: "1.1 Lint"
@@ -36,7 +70,7 @@ jobs:
     uses: ./.github/workflows/_build.yml
 
   # =========================================================================
-  # Stage 3: Benchmark & Package Artifacts
+  # Stage 3: Benchmark & Packaging
   # =========================================================================
   bench:
     name: "3.1 Bench"
@@ -47,7 +81,8 @@ jobs:
     name: "3.2 Package"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [build]
+    needs: [changes, build]
+    if: needs.changes.outputs.product == 'true'
 
     steps:
       - name: Checkout
@@ -62,9 +97,9 @@ jobs:
       - name: Upload ResiCache Artifact
         uses: actions/upload-artifact@v5
         with:
-          name: resicache-core-jar
+          name: pr-resicache-jar
           path: target/ResiCache-*.jar
-          retention-days: 7
+          retention-days: 5
 
   # =========================================================================
   # Stage 4: Canonical Status Check Gate (Single Branch Protection Anchor)
@@ -73,7 +108,7 @@ jobs:
     name: "ci-ok"
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint, docs, quality, build, bench, package]
+    needs: [changes, lint, docs, quality, build, bench, package]
     if: always()
 
     steps:

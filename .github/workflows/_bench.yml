@@ -1,0 +1,33 @@
+name: "Reusable · Bench"
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  bench-module:
+    name: JMH Bench Module
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: ./.github/actions/setup-jdk-21
+
+      - name: Install Core to Local Repo
+        run: ./mvnw install -DskipTests -B
+
+      - name: Build resicache-bench Fat-JAR
+        run: mvn -f resicache-bench/pom.xml clean package -DskipTests -B
+
+      - name: Upload Benchmark Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: resicache-bench-fatjar
+          path: resicache-bench/target/resicache-bench-*.jar
+          retention-days: 7
