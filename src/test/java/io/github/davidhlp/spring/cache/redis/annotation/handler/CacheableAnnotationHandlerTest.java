@@ -47,7 +47,7 @@ class CacheableAnnotationHandlerTest {
     private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
 
     @Mock
-    private io.github.davidhlp.spring.cache.redis.operation.SpringCacheableAdapterFactory springCacheableAdapterFactory;
+    private io.github.davidhlp.spring.cache.redis.operation.SpringCacheableAdapter springCacheableAdapterFactory;
 
     private CacheableAnnotationHandler handler;
 

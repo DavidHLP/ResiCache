@@ -13,7 +13,7 @@ import java.lang.reflect.Method;
  * <ul>
  *   <li>{@link DefaultMethodMetadataResolver} —— {@code currentMethod()} /
  *       {@code currentTargetClass()}</li>
- *   <li>{@link CacheInvocationContext} —— {@code of(AnnotatedElementKey)}</li>
+ *   <li>{@link MethodSnapshot} —— {@code of(AnnotatedElementKey)}</li>
  * </ul>
  *
  * <p>提供:
@@ -41,7 +41,7 @@ import java.lang.reflect.Method;
  * 复杂度从 N 处集中消失,不在 caller 端重现 —— 真实归并,而非搬家。
  *
  * @see DefaultMethodMetadataResolver
- * @see CacheInvocationContext
+ * @see MethodSnapshot
  */
 @Slf4j
 final class MetadataKeys {

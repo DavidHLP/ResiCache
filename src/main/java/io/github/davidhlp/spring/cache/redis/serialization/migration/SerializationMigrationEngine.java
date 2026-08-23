@@ -1,8 +1,10 @@
-package io.github.davidhlp.spring.cache.redis.serialization;
+package io.github.davidhlp.spring.cache.redis.serialization.migration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.config.SerializationPreFlightProbe;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;

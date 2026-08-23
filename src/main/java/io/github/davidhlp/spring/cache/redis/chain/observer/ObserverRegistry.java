@@ -8,13 +8,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * Observer 列表管理单一 seam — observer 注册 / 不可变快照收口.
  *
- * <p>本类把"observer 注册 + 不可变快照"两件关注点收口到一个泛型 utility,
- * {@link ChainEngine} 借此无需直接持有 {@code CopyOnWriteArrayList<O>} 字段 +
- * 重复的 {@code addObserver(O)} / {@code observers()} 样板。
+ * <p>本类把"observer 注册 + 不可变快照"两件关注点收口到一个 utility,
+ * {@link ChainEngine} 借此无需直接持有 {@code CopyOnWriteArrayList<ChainObserver>} 字段 +
+ * 重复的 {@code addObserver(ChainObserver)} / {@code observers()} 样板。
  *
  * <p><b>使用方式</b>:
  * <pre>
- * private final ObserverRegistry&lt;ChainObserver&gt; observers = new ObserverRegistry&lt;&gt;();
+ * private final ObserverRegistry observers = new ObserverRegistry();
  *
  * public void addObserver(ChainObserver o) { observers.add(o); }
  * public List&lt;ChainObserver&gt; observers() { return observers.snapshot(); }
@@ -39,20 +39,19 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p><b>本类的位置</b>:放在 {@code chain} 包 — chain 是 observer 模式的发源域
  * (本项目 5+ 生产 observer 都在 {@code chain.observer})。当前唯一消费者是
- * {@code chain.ChainEngine};保留泛型 {@code <O>} 使其可被未来的 observer-bearing engine
- * 复用而无需 domain 依赖(纯泛型 utility)。
+ * {@code chain.ChainEngine};原本保留的泛型 {@code <O>} 假设"未来其他 observer-bearing
+ * engine 复用"从未实现(YAGNI),Wave 3 TASK-018 特化为 {@link ChainObserver}。
  *
  * <p><b>删除测试</b>:删本类 → {@link ChainEngine} 恢复持有
- * {@code CopyOnWriteArrayList<O>} 字段 + add/snapshot 样板(约 30 SLOC 重复)。
+ * {@code CopyOnWriteArrayList<ChainObserver>} 字段 + add/snapshot 样板(约 30 SLOC 重复)。
  * 本 utility 挣得起存在代价(单类 ~60 SLOC 含 Javadoc)。
  *
- * @param <O> observer 类型(由调用方语义决定,当前为 {@code ChainObserver})
  * @see ChainEngine
  */
-public final class ObserverRegistry<O> {
+public final class ObserverRegistry {
 
     /** 内部 list — 启动期单写、运行期多读(COW 弱一致性迭代). */
-    private final List<O> observers = new CopyOnWriteArrayList<>();
+    private final List<ChainObserver> observers = new CopyOnWriteArrayList<>();
 
     /**
      * 注册一个 observer.
@@ -63,7 +62,7 @@ public final class ObserverRegistry<O> {
      * @param observer 待注册的 observer (不为 null)
      * @throws IllegalArgumentException 若 observer 为 null
      */
-    public void add(O observer) {
+    public void add(ChainObserver observer) {
         if (observer == null) {
             throw new IllegalArgumentException("observer must not be null");
         }
@@ -74,11 +73,11 @@ public final class ObserverRegistry<O> {
      * 暴露当前已注册的 observer 列表(只读快照).
      *
      * <p>测试与诊断用;运行期勿修改. 返回的 list 是当前状态的不可变快照 —
-     * 后续的 {@link #add(Object)} 不影响已返回的快照.
+     * 后续的 {@link #add(ChainObserver)} 不影响已返回的快照.
      *
      * @return 不可变 observer 列表快照
      */
-    public List<O> snapshot() {
+    public List<ChainObserver> snapshot() {
         return List.copyOf(observers);
     }
 

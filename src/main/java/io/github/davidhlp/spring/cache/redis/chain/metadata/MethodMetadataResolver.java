@@ -42,7 +42,7 @@ public interface MethodMetadataResolver {
      *
      * @return 当前上下文;若不在作用域内,返回 {@code null}
      */
-    CacheInvocationContext currentContext();
+    MethodSnapshot currentContext();
 
     /**
      * 激活:临时把当前方法的元数据置入本解析器的作用域。

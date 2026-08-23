@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import io.github.davidhlp.spring.cache.redis.cache.CacheOperationResolver;
-import io.github.davidhlp.spring.cache.redis.cache.ResiCacheFeatures;
+import io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver;
+import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
 import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;

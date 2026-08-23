@@ -3,7 +3,7 @@ package io.github.davidhlp.spring.cache.redis.annotation.handler;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.operation.OperationFactory;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributesProjector;
-import io.github.davidhlp.spring.cache.redis.operation.SpringCacheableAdapterFactory;
+import io.github.davidhlp.spring.cache.redis.operation.SpringCacheableAdapter;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -31,7 +31,7 @@ import java.util.function.Function;
  * <ul>
  *   <li>{@code @RedisCacheable} —— 走内联 lambda
  *       ({@code projector.from(a) + RedisCacheableOperation.fromAttributes});</li>
- *   <li>Spring {@code @Cacheable} —— 走 {@link SpringCacheableAdapterFactory}。</li>
+ *   <li>Spring {@code @Cacheable} —— 走 {@link SpringCacheableAdapter}。</li>
  * </ul>
  *
  * <p>两条路径都通过 {@link AbstractAnnotationHandler#registerActionFor(OperationKind)}
@@ -39,7 +39,7 @@ import java.util.function.Function;
  *
  * <p>ResiCache 路径以 lambda 直传 {@link RedisCacheAttributesProjector#from} +
  * {@link RedisCacheableOperation#fromAttributes}。{@link OperationFactory} 接口保留 ——
- * 本类的 ResiCache lambda 与 {@link SpringCacheableAdapterFactory} 在 {@code doRegister}
+ * 本类的 ResiCache lambda 与 {@link SpringCacheableAdapter} 在 {@code doRegister}
  * 处仍是真多态分叉(两种 annotation 来源 → 同一种 operation)。
  *
  * <p>{@code doHandle} 主路径 = 1 行(select + map + register):
@@ -57,13 +57,13 @@ import java.util.function.Function;
 public class CacheableAnnotationHandler extends AbstractAnnotationHandler {
 
     private final RedisCacheAttributesProjector projector;
-    private final SpringCacheableAdapterFactory springCacheableAdapterFactory;
+    private final SpringCacheableAdapter springCacheableAdapterFactory;
 
     public CacheableAnnotationHandler(
             RedisCacheRegister redisCacheRegister,
             KeyGenerator keyGenerator,
             RedisCacheAttributesProjector projector,
-            SpringCacheableAdapterFactory springCacheableAdapterFactory) {
+            SpringCacheableAdapter springCacheableAdapterFactory) {
         super(redisCacheRegister, keyGenerator);
         this.projector = projector;
         this.springCacheableAdapterFactory = springCacheableAdapterFactory;

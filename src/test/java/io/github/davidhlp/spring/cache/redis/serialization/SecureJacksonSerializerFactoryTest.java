@@ -1,7 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.serialization;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>关键 verifying:故意把 whitelist 设为非默认(只含
  * {@code com.example.round11},不含 {@code io.github.davidhlp})。然后试图
  * roundtrip 一个 {@link CachedValue}(@class 为
- * {@code io.github.davidhlp.spring.cache.redis.cache.CachedValue})。
+ * {@code io.github.davidhlp.spring.cache.redis.cache.model.CachedValue})。
  * 如果 factory 真的把 props 穿下去,白名单检查会拒
  * CachedValue(抛 SerializationException);如果 factory 只用默认
  * (即没接 props),roundtrip 会成功。
@@ -42,7 +42,7 @@ class SecureJacksonSerializerFactoryTest {
 
         SecureJacksonRedisSerializer serializer = factory.create(new ObjectMapper(), props);
 
-        // CachedValue 默认类,@class 指向 io.github.davidhlp.spring.cache.redis.cache.CachedValue
+        // CachedValue 默认类,@class 指向 io.github.davidhlp.spring.cache.redis.cache.model.CachedValue
         // 既不在 com.example.round11,也不在 java.lang/java.time/java.math/枚举 java.util 集合内
         // → roundtrip 必须抛白名单 SerializationException
         CachedValue payload = CachedValue.of("payload-value", 60L);

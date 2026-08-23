@@ -5,7 +5,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
@@ -276,18 +276,5 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
             );
             return result != null && result == 1;
         }));
-    }
-
-    /**
-     * 获取提前过期决策（供其他 Handler 使用）
-     *
-     * @param context 缓存上下文
-     * @return 提前过期决策
-     */
-    public static EarlyExpirationDecision getDecision(CacheContext context) {
-        PrefetchDecision prefetch = context.getPrefetchDecision();
-        return prefetch != null && prefetch.decision() != null
-                ? prefetch.decision()
-                : EarlyExpirationDecision.noRefresh();
     }
 }

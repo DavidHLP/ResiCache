@@ -4,11 +4,12 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 /**
- * 责任链控制决策
+ * 责任链控制流决策 — 与 {@code chain/model/} 下的数据型 {@code *Decision} record
+ * (Ttl/Null/Prefetch/EarlyExpiration 不同概念族)正交,重命名以消解词法碰撞。
  * 
- * 明确控制责任链的执行流程，避免隐式终止条件。
+ * <p>明确控制责任链的执行流程，避免隐式终止条件。
  */
-public enum ChainDecision {
+public enum FlowControl {
     /** 继续执行下一个 Handler */
     CONTINUE,
     

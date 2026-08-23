@@ -27,13 +27,6 @@ class RedisProCachePropertiesTest {
         }
 
         @Test
-        @DisplayName("默认启用提前过期")
-        void earlyExpiration_enabledByDefault() {
-            RedisProCacheProperties properties = new RedisProCacheProperties();
-            assertThat(properties.getEarlyExpiration().isEnabled()).isTrue();
-        }
-
-        @Test
         @DisplayName("默认核心线程池大小为 2")
         void earlyExpiration_defaultPoolSize() {
             RedisProCacheProperties properties = new RedisProCacheProperties();

@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.serialization;
+package io.github.davidhlp.spring.cache.redis.serialization.migration;
 
 /**
  * Operator-controlled phases of the legacy serialization migration workflow.

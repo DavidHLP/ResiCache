@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.cache;
+package io.github.davidhlp.spring.cache.redis.cache.model;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

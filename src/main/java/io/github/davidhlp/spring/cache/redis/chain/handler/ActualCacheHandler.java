@@ -4,7 +4,7 @@ import io.github.davidhlp.spring.cache.redis.chain.*;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.RefreshCancellation;
 

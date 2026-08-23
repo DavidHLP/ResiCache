@@ -59,7 +59,7 @@ public class BloomSupport {
      * </ol>
      *
      * @param cacheName 缓存名
-     * @param key       键(已由 {@link io.github.davidhlp.spring.cache.redis.cache.CacheKeys#bloomKey()}
+     * @param key       键(已由 {@link io.github.davidhlp.spring.cache.redis.cache.model.CacheKeys#bloomKey()}
      *                  派生为 actualKey 形态,与 PUT 时 add 同源)
      * @return 是否可能存在
      */

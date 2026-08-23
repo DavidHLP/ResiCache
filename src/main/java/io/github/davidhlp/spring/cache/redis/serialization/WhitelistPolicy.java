@@ -38,7 +38,7 @@ public final class WhitelistPolicy {
      * 默认的允许反序列化包前缀。
      *
      * <p>{@link SecureJacksonRedisSerializer} 默认构造时使用，覆盖 {@code io.github.davidhlp.*}
-     * 下的所有业务类（含 {@code io.github.davidhlp.spring.cache.redis.cache.CachedValue}）。
+     * 下的所有业务类（含 {@code io.github.davidhlp.spring.cache.redis.cache.model.CachedValue}）。
      */
     public static final String DEFAULT_ALLOWED_PACKAGE_PREFIX = "io.github.davidhlp";
 

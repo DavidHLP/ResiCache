@@ -23,7 +23,7 @@ class WhitelistPolicyTest {
     @DisplayName("allows configured package prefix")
     void isClassNameAllowed_configuredPrefix_allowed() {
         assertThat(policy.isClassNameAllowed(
-                "io.github.davidhlp.spring.cache.redis.cache.CachedValue")).isTrue();
+                "io.github.davidhlp.spring.cache.redis.cache.model.CachedValue")).isTrue();
     }
 
     @Test

@@ -1,17 +1,15 @@
-package io.github.davidhlp.spring.cache.redis.operation.eviction;
+package io.github.davidhlp.spring.cache.redis.operation;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Predicate;
 
 @Slf4j
-public class TwoListLRU<K, V> {
+final class TwoListLRU<K, V> {
 
     /** 默认Active List最大容量 */
     private static final int DEFAULT_MAX_ACTIVE_SIZE = 1024;
@@ -61,19 +59,11 @@ public class TwoListLRU<K, V> {
     /** 总淘汰次数 — 使用AtomicLong保证线程安全 */
     private final AtomicLong totalEvictions = new AtomicLong(0);
 
-    @Setter private volatile EvictionCallback<K, V> evictionCallback;
-
-    @Setter private volatile Predicate<V> evictionPredicate;
-
     public TwoListLRU() {
         this(DEFAULT_MAX_ACTIVE_SIZE, DEFAULT_MAX_INACTIVE_SIZE);
     }
 
     public TwoListLRU(int maxActiveSize, int maxInactiveSize) {
-        this(maxActiveSize, maxInactiveSize, null);
-    }
-
-    public TwoListLRU(int maxActiveSize, int maxInactiveSize, Predicate<V> evictionPredicate) {
         if (maxActiveSize <= 0) {
             throw new IllegalArgumentException("maxActiveSize must be positive");
         }
@@ -83,7 +73,6 @@ public class TwoListLRU<K, V> {
 
         this.maxActiveSize = maxActiveSize;
         this.maxInactiveSize = maxInactiveSize;
-        this.evictionPredicate = evictionPredicate;
 
         this.nodeMap = new ConcurrentHashMap<>();
 
@@ -348,26 +337,15 @@ public class TwoListLRU<K, V> {
     }
 
     /**
-     * 查找第一个符合驱逐条件的节点（从最老的开始）
+     * 查找最老的节点（从最老端开始；保留方法名以隔离链表遍历细节）。
      *
      * @param head 链表头哨兵
      * @param tail 链表尾哨兵
-     * @return 符合驱逐条件的节点，如果都受保护则返回null
+     * @return 最老的非哨兵节点；空表返回 null
      */
     private Node<K, V> findEvictableNode(Node<K, V> head, Node<K, V> tail) {
-        final Predicate<V> pred = evictionPredicate;
         Node<K, V> candidate = tail.prev;
-        while (candidate != head) {
-            Node<K, V> prev = candidate.prev;
-            if (pred == null || pred.test(candidate.value)) {
-                return candidate;
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("Skipping protected entry: key={}", candidate.key);
-            }
-            candidate = prev;
-        }
-        return null;
+        return candidate != head ? candidate : null;
     }
 
     /**
@@ -425,12 +403,6 @@ public class TwoListLRU<K, V> {
     private void evictNode(Node<K, V> node) {
         nodeMap.remove(node.key);
         totalEvictions.incrementAndGet();
-
-        // 触发回调
-        EvictionCallback<K, V> callback = evictionCallback;
-        if (callback != null) {
-            callback.onEviction(node.key, node.value);
-        }
     }
 
     /**
@@ -500,23 +472,6 @@ public class TwoListLRU<K, V> {
         repairChainLinks(prev, next);
         node.prev = null;
         node.next = null;
-    }
-
-    /**
-     * 淘汰回调接口
-     *
-     * @param <K> 键类型
-     * @param <V> 值类型
-     */
-    @FunctionalInterface
-    public interface EvictionCallback<K, V> {
-        /**
-         * 当元素被淘汰时调用
-         *
-         * @param key 被淘汰元素的键
-         * @param value 被淘汰元素的值
-         */
-        void onEviction(K key, V value);
     }
 
     /**

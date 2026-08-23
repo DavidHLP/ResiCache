@@ -1,7 +1,10 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserverRegistration;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
+import io.github.davidhlp.spring.cache.redis.chain.observer.ChainDebugLogChainObserver;
+import io.github.davidhlp.spring.cache.redis.chain.observer.ChainTimerChainObserver;
+import io.github.davidhlp.spring.cache.redis.chain.observer.FiredCounterChainObserver;
+import io.github.davidhlp.spring.cache.redis.chain.observer.MDCStampChainObserver;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -11,6 +14,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * 缓存处理器责任链工厂。
@@ -54,15 +58,42 @@ public class CacheHandlerChainFactory {
     private final ChainEngine engine;
 
     /**
-     * 防护纵深 handler 的执行顺序枚举（用于 {@code protection.enabled=false} 时派生 disableName）。
-     * 不含 TTL — TtlHandler 兼担基础 TTL 计算，属于不可禁用的基础缓存契约（禁用会导致永久缓存）。
-     * 从枚举派生而非硬编码字符串，保证短路逻辑与 handler 自报家门同源。
+     * 4 个可禁用防护机制 toggle 单一事实源 — 新增第 5 个机制时仅追加一行。
+     *
+     * <p>注意:不含 TTL — {@code TtlHandler} 兼担基础 TTL 计算,禁用会导致
+     * {@code ActualCacheHandler} 写入无 TTL 永久缓存(数据陈旧 + 内存泄漏)。
+     *
+     * <p>每条 toggle 三要素:order 字段(既是短路枚举又是 disableName 派生源),
+     * getter 字段(per-mechanism 覆盖读取,null = 继承 enabled),
+     * configPath 字段(kebab-case 路径段,仅用于日志)。
      */
-    private static final List<HandlerOrder> PROTECTION_HANDLER_ORDERS = List.of(
-            HandlerOrder.BLOOM_FILTER,
-            HandlerOrder.SYNC_LOCK,
-            HandlerOrder.EARLY_EXPIRATION,
-            HandlerOrder.NULL_VALUE);
+    private static final List<Toggle> PROTECTION_TOGGLES = List.of(
+            new Toggle(HandlerOrder.BLOOM_FILTER,
+                    RedisProCacheProperties.ProtectionProperties::getBloomFilterEnabled,
+                    "bloom-filter"),
+            new Toggle(HandlerOrder.SYNC_LOCK,
+                    RedisProCacheProperties.ProtectionProperties::getSyncLockEnabled,
+                    "sync-lock"),
+            new Toggle(HandlerOrder.EARLY_EXPIRATION,
+                    RedisProCacheProperties.ProtectionProperties::getEarlyExpirationEnabled,
+                    "early-expiration"),
+            new Toggle(HandlerOrder.NULL_VALUE,
+                    RedisProCacheProperties.ProtectionProperties::getNullValueEnabled,
+                    "null-value"));
+
+    /**
+     * 单条 protection 机制 toggle 描述。
+     *
+     * @param order      防护机制对应的 {@link HandlerOrder}
+     * @param getter     从 {@link RedisProCacheProperties.ProtectionProperties} 读取
+     *                   Boolean 字段(null = 继承 enabled,非 null = 单独覆盖)
+     * @param configPath 配置文件中的 kebab-case 路径段(用于日志)
+     */
+    private record Toggle(
+            HandlerOrder order,
+            Function<RedisProCacheProperties.ProtectionProperties, Boolean> getter,
+            String configPath) {
+    }
 
     public CacheHandlerChainFactory(List<CacheHandler> handlers,
                                  RedisProCacheProperties properties,
@@ -99,9 +130,9 @@ public class CacheHandlerChainFactory {
                 return cachedChain;
             }
 
-            // 1) 装配 observer — 委派 seam 类;用户可通过 @Bean ChainEngine 顶替默认
-            //    ChainEngine 并加自定义 observer（未来 @Bean ObjectProvider<ChainObserver>）。
-            ChainObserverRegistration.registerStandardObservers(engine, meterRegistryProvider);
+            // 1) 装配 observer（固定顺序:MDC → DebugLog → Timer → FiredCounter）。
+            //    idempotent 由本方法的单例缓存 miss pattern 保证,首次 miss 后不会再进本块。
+            registerStandardObservers();
 
             // 2) 构建链
             CacheHandlerChain chain = new CacheHandlerChain();
@@ -114,7 +145,7 @@ public class CacheHandlerChainFactory {
             // 3) 收集禁用集合 — 用户自定义 disabled + 总开关 + per-mechanism 覆盖
             // null-safe:测试用 mock/stub 的 properties 可能不设 protection,默认视为开启
             Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
-            ChainProtectionToggleResolver.resolveDisabled(properties, disabled);
+            resolveProtectionDisabled(properties, disabled);
 
             // 按 @HandlerPriority 注解排序
             List<CacheHandler> sortedHandlers = handlers.stream()
@@ -148,10 +179,71 @@ public class CacheHandlerChainFactory {
     }
 
     /**
-     * 注册 4 个标准 observer 到 Engine — 实际逻辑在 {@link ChainObserverRegistration}
-     * seam 类({@code registerStandardObservers});多次 createChain 不会重复注册。
+     * 注册 4 个标准 observer 到 Engine。
+     *
+     * <p>注册顺序固定(MDC → DebugLog → Timer → FiredCounter)。idempotent 性由
+     * {@link #createChain} 的单例缓存 miss pattern 保证,本方法只会在首次 createChain
+     * 时被调用,不会重复向 Engine 追加 observer。
+     *
+     * <p>关于 registry 缺失:
+     * <ul>
+     *   <li>MDCStampChainObserver / ChainDebugLogChainObserver — 无 registry 依赖,直接 new</li>
+     *   <li>ChainTimerChainObserver / FiredCounterChainObserver — 接受 nullable registry,
+     *       内部 lazy 检测,registry 缺失时全 no-op</li>
+     * </ul>
      */
-    private void registerObserversOnce(@SuppressWarnings("unused") ChainEngine engine) {
+    private void registerStandardObservers() {
+        // 1. MDC stamp — 必注册(无 registry 依赖)
+        engine.addObserver(new MDCStampChainObserver());
+
+        // 2. DEBUG log — 必注册(无 registry 依赖)
+        engine.addObserver(new ChainDebugLogChainObserver());
+
+        // 3. Timer — registry 缺失时也注册(observer 内部 no-op);保证 observer 列表
+        //    在 registry 可用前后一致,Engine 调度逻辑无需区分
+        MeterRegistry registry =
+                meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
+        engine.addObserver(new ChainTimerChainObserver(registry));
+
+        // 4. Fired counter — 同上,registry 缺失时内部 no-op
+        engine.addObserver(new FiredCounterChainObserver(registry));
+    }
+
+    /**
+     * 解析 protection 机制禁用集合 — 处理两条独立路径,追加到 {@code disabled} 集合:
+     * <ul>
+     *   <li>总开关 {@code protection.enabled=false} → 全 4 个防护 handler 短路</li>
+     *   <li>per-mechanism 字段为 {@link Boolean#FALSE} → 单独覆盖该机制</li>
+     * </ul>
+     *
+     * <p>输入 {@code disabled} 可含调用方已有的其他禁用项(自定义 handler),本方法
+     * 仅追加,不动既有项。无 protection 配置(测试 mock)时默认视为开启 — 不追加任何禁用项。
+     */
+    private static void resolveProtectionDisabled(RedisProCacheProperties properties, Set<String> disabled) {
+        RedisProCacheProperties.ProtectionProperties protection =
+                properties == null ? null : properties.getProtection();
+        if (protection == null) {
+            return;
+        }
+
+        if (!protection.isEnabled()) {
+            // 总开关关闭:从单一 PROTECTION_TOGGLES 列表派生 4 个 disableName,避免平行列表漂移
+            PROTECTION_TOGGLES.stream()
+                    .map(toggle -> toggle.order().getDisableName())
+                    .forEach(disabled::add);
+            log.info("Protection chain disabled by resi-cache.protection.enabled=false; "
+                    + "protection handlers skipped, TTL preserved (bloom/lock/early-exp/null-value off)");
+        } else {
+            // per-mechanism 覆盖:遍历单一 PROTECTION_TOGGLES 列表,把显式 FALSE 的加到 disabled
+            // Boolean.FALSE.equals(null) → false(null 表示"继承 enabled")
+            for (Toggle toggle : PROTECTION_TOGGLES) {
+                if (Boolean.FALSE.equals(toggle.getter().apply(protection))) {
+                    disabled.add(toggle.order().getDisableName());
+                    log.info("{} disabled by resi-cache.protection.{}.enabled=false",
+                            toggle.order().getDescription(), toggle.configPath());
+                }
+            }
+        }
     }
 
     /**

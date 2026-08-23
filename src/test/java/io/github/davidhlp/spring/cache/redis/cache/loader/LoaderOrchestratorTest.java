@@ -1,9 +1,9 @@
-package io.github.davidhlp.spring.cache.redis.cache;
+package io.github.davidhlp.spring.cache.redis.cache.loader;
 
-import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.BloomShortCircuited;
-import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadFailed;
-import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
-import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.Loaded;
+import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator.BloomShortCircuited;
+import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator.LoadFailed;
+import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator.LoadOutcome;
+import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator.Loaded;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;

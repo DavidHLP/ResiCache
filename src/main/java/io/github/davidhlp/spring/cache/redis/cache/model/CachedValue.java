@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.cache;
+package io.github.davidhlp.spring.cache.redis.cache.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;

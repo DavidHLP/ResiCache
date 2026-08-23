@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.serialization;
 
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

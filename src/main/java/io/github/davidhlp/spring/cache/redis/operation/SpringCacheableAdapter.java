@@ -21,12 +21,12 @@ import java.util.Arrays;
  * 保留为命名 seam。
  */
 @Component
-public class SpringCacheableAdapterFactory
+public class SpringCacheableAdapter
         implements OperationFactory<Cacheable, RedisCacheableOperation> {
 
     private final RedisCacheAttributesProjector projector;
 
-    public SpringCacheableAdapterFactory(RedisCacheAttributesProjector projector) {
+    public SpringCacheableAdapter(RedisCacheAttributesProjector projector) {
         this.projector = projector;
     }
 

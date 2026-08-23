@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.operation;
 
-import io.github.davidhlp.spring.cache.redis.operation.eviction.EvictionStats;
-import io.github.davidhlp.spring.cache.redis.operation.eviction.TwoListLRU;
-
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.interceptor.CacheOperation;
@@ -32,16 +29,12 @@ public class RedisCacheRegister {
 
     /** 缓存操作淘汰策略(直接 TwoListLRU,无策略包装) */
     private final TwoListLRU<String, CacheOperation> operationLru;
-    private final int maxActiveSize;
-    private final int maxInactiveSize;
 
     public RedisCacheRegister() {
         this(2048, 1024);
     }
 
     public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
-        this.maxActiveSize = maxActiveSize;
-        this.maxInactiveSize = maxInactiveSize;
         this.operationLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
     }
 
@@ -74,8 +67,8 @@ public class RedisCacheRegister {
         for (String cacheName : operation.getCacheNames()) {
             String key = buildKey(cacheName, elementKey, kind.tag());
             operationLru.put(key, operation);
-            log.debug("Registered {} operation: cacheName={}, elementKey={}, stats={}",
-                    kind.tag(), cacheName, elementKey, snapshotStats());
+            log.debug("Registered {} operation: cacheName={}, elementKey={}",
+                    kind.tag(), cacheName, elementKey);
         }
     }
 
@@ -103,13 +96,6 @@ public class RedisCacheRegister {
         }
         log.debug("{} operation not found: name={}, elementKey={}", kind.tag(), name, elementKey);
         return null;
-    }
-
-    // ============================ 统计 ============================
-
-    /** 当前淘汰策略的统计快照（封装 {@link EvictionStats#of} 调用） */
-    public EvictionStats snapshotStats() {
-        return EvictionStats.of(operationLru, maxActiveSize, maxInactiveSize);
     }
 
     // ============================ 键构造 ============================

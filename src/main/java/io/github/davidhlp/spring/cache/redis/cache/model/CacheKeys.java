@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.cache;
+package io.github.davidhlp.spring.cache.redis.cache.model;
 
 /**
  * 缓存键派生的单一权威(deep module)。

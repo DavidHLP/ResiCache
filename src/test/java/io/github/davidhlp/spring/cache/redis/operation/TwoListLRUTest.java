@@ -1,12 +1,9 @@
-package io.github.davidhlp.spring.cache.redis.operation.eviction;
+package io.github.davidhlp.spring.cache.redis.operation;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,13 +62,6 @@ class TwoListLRUTest {
             assertThatThrownBy(() -> new TwoListLRU<>(10, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxInactiveSize must be positive");
-        }
-
-        @Test
-        @DisplayName("creates instance with eviction predicate")
-        void constructor_withPredicate_createsInstance() {
-            TwoListLRU<String, String> predicateLru = new TwoListLRU<>(10, 5, k -> false);
-            assertThat(predicateLru).isNotNull();
         }
     }
 
@@ -255,88 +245,6 @@ class TwoListLRUTest {
             assertThat(lru.size()).isZero();
             assertThat(lru.get("key1")).isNull();
             assertThat(lru.get("key2")).isNull();
-        }
-    }
-
-    @Nested
-    @DisplayName("eviction callback tests")
-    class EvictionCallbackTests {
-
-        @Test
-        @DisplayName("eviction callback is invoked on eviction")
-        void evictionCallback_invokedOnEviction() {
-            AtomicBoolean evicted = new AtomicBoolean(false);
-            AtomicInteger evictedCount = new AtomicInteger(0);
-
-            // Use very small sizes to force eviction from inactive list
-            TwoListLRU<String, String> smallLru = new TwoListLRU<>(2, 1);
-            smallLru.setEvictionCallback((key, value) -> {
-                evicted.set(true);
-                evictedCount.incrementAndGet();
-            });
-
-            // Step 1: Fill active list (2 items)
-            smallLru.put("key1", "value1"); // active: [key1]
-            smallLru.put("key2", "value2"); // active: [key2, key1]
-
-            // Step 2: Access key1 to demote it (LRU), then key2 becomes oldest
-            smallLru.get("key1"); // key1 promoted to front, key2 is now oldest in active
-
-            // Step 3: Add more items to force key2 to inactive and fill inactive
-            smallLru.put("key3", "value3"); // active: [key3, key1], key2 demoted to inactive
-            smallLru.put("key4", "value4"); // active full, key1 oldest, demoted to inactive (inactive now has key2, key1)
-
-            // Step 4: Add one more to force eviction from inactive (key2 should be evicted)
-            smallLru.put("key5", "value5"); // inactive full, key2 should be evicted
-
-            // Verify eviction occurred from inactive list
-            assertThat(smallLru.getTotalEvictions()).isGreaterThan(0);
-        }
-
-        @Test
-        @DisplayName("works without eviction callback set")
-        void withoutCallback_worksFine() {
-            lru.setEvictionCallback(null);
-
-            lru.put("key1", "value1");
-            lru.put("key2", "value2");
-            lru.put("key3", "value3");
-            lru.put("key4", "value4"); // Should evict without error
-
-            assertThat(lru.size()).isLessThanOrEqualTo(5);
-        }
-    }
-
-    @Nested
-    @DisplayName("eviction predicate tests")
-    class EvictionPredicateTests {
-
-        @Test
-        @DisplayName("eviction predicate protects matching entries")
-        void evictionPredicate_protectsMatchingEntries() {
-            // Predicate returns true for "protected" values, meaning they should NOT be evicted
-            lru.setEvictionPredicate(value -> value.equals("protected"));
-
-            lru.put("key1", "protected");
-            lru.put("key2", "normal");
-            lru.put("key3", "normal");
-            lru.put("key4", "evict-me");
-
-            // Protected entry should remain, others may be evicted
-            assertThat(lru.get("key1")).isEqualTo("protected");
-        }
-
-        @Test
-        @DisplayName("null predicate evicts all entries")
-        void nullPredicate_evictsAllEntries() {
-            lru.setEvictionPredicate(null);
-
-            lru.put("key1", "value1");
-            lru.put("key2", "value2");
-            lru.put("key3", "value3");
-            lru.put("key4", "value4");
-
-            assertThat(lru.size()).isLessThanOrEqualTo(5);
         }
     }
 

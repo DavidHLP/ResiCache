@@ -23,7 +23,7 @@ import java.lang.reflect.Method;
  * </ul>
  */
 @Slf4j
-public record CacheInvocationContext(
+public record MethodSnapshot(
         Method method,
         Class<?> targetClass,
         AnnotatedElementKey annotatedElementKey) {
@@ -35,11 +35,11 @@ public record CacheInvocationContext(
      * @param targetClass 目标类(原始类,非代理类)
      * @return 不可变上下文
      */
-    public static CacheInvocationContext of(Method method, Class<?> targetClass) {
+    public static MethodSnapshot of(Method method, Class<?> targetClass) {
         if (method == null || targetClass == null) {
             throw new IllegalArgumentException("method and targetClass must be non-null");
         }
-        return new CacheInvocationContext(method, targetClass, new AnnotatedElementKey(method, targetClass));
+        return new MethodSnapshot(method, targetClass, new AnnotatedElementKey(method, targetClass));
     }
 
     /**
@@ -49,13 +49,13 @@ public record CacheInvocationContext(
      * @param key Spring 的 AnnotatedElementKey,可能为 {@code null}
      * @return 上下文,key 为 null 时返回 {@code null}
      */
-    public static CacheInvocationContext of(AnnotatedElementKey key) {
+    public static MethodSnapshot of(AnnotatedElementKey key) {
         Method method = MetadataKeys.extractMethod(key);
         Class<?> targetClass = MetadataKeys.extractTargetClass(key);
         if (method == null || targetClass == null) {
             return null;
         }
-        return new CacheInvocationContext(method, targetClass, key);
+        return new MethodSnapshot(method, targetClass, key);
     }
 
     /**
@@ -64,7 +64,7 @@ public record CacheInvocationContext(
      * @param resolver 方法元数据解析器(可 {@code null})
      * @return 当前上下文的不可变快照,resolver 为 null 或无激活状态时返回 {@code null}
      */
-    public static CacheInvocationContext snapshot(MethodMetadataResolver resolver) {
+    public static MethodSnapshot snapshot(MethodMetadataResolver resolver) {
         if (resolver == null) {
             return null;
         }

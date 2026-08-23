@@ -169,7 +169,7 @@ class SyncLockHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.TERMINATE);
+            assertThat(result.decision()).isEqualTo(FlowControl.TERMINATE);
             assertThat(result.result()).isEqualTo(expectedResult);
             verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
         }
@@ -184,7 +184,7 @@ class SyncLockHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.TERMINATE);
+            assertThat(result.decision()).isEqualTo(FlowControl.TERMINATE);
             verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
         }
 

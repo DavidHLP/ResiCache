@@ -20,10 +20,10 @@ import java.util.List;
  * {@link HandlerResult#decision()} 决定走向：
  *
  * <ul>
- *   <li>{@link ChainDecision#CONTINUE} — 推进到下一个 handler；无下一个则返回当前 result</li>
- *   <li>{@link ChainDecision#SKIP_ALL} — 物化 {@code context.markSkipRemaining()}，
+ *   <li>{@link FlowControl#CONTINUE} — 推进到下一个 handler；无下一个则返回当前 result</li>
+ *   <li>{@link FlowControl#SKIP_ALL} — 物化 {@code context.markSkipRemaining()}，
  *       返回 result，下游 handler 短路（由 beforeNode 检测 skipRemaining 状态）</li>
- *   <li>{@link ChainDecision#TERMINATE} — 直接返回 result</li>
+ *   <li>{@link FlowControl#TERMINATE} — 直接返回 result</li>
  * </ul>
  *
  * <p><b>观测编排</b>：Engine 在链入口调用所有 observer 的
@@ -65,7 +65,7 @@ import java.util.List;
 public class ChainEngine {
 
     /** 注册的 observer 列表 — 委派到 {@link ObserverRegistry} 单一 seam. */
-    private final ObserverRegistry<ChainObserver> observers = new ObserverRegistry<>();
+    private final ObserverRegistry observers = new ObserverRegistry();
 
     /**
      * 当前线程正在执行的 handler 链快照:由 {@link #execute(List, CacheContext)}
@@ -230,7 +230,7 @@ public class ChainEngine {
                 case TERMINATE:
                     return materialize(result);
                 default:
-                    throw new IllegalStateException("Unknown ChainDecision: " + result.decision());
+                    throw new IllegalStateException("Unknown FlowControl: " + result.decision());
             }
         }
         // 空快照（理论由 execute 前置拦截，防御）
@@ -339,11 +339,11 @@ public class ChainEngine {
      */
     private final class ChainLifecycle {
 
-        private final ObserverRegistry<ChainObserver> observers;
+        private final ObserverRegistry observers;
         private final List<CacheHandler> snapshot;
         private final CacheContext context;
 
-        ChainLifecycle(ObserverRegistry<ChainObserver> observers,
+        ChainLifecycle(ObserverRegistry observers,
                        List<CacheHandler> snapshot,
                        CacheContext context) {
             this.observers = observers;

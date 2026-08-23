@@ -1,6 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver;
 import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
 import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
@@ -228,8 +231,8 @@ class RedisProCacheTest extends AbstractRedisIntegrationTest {
          */
         private RedisProCache buildCacheWithBloomAndResolver(
                 io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation returnedOperation) {
-            io.github.davidhlp.spring.cache.redis.cache.CacheOperationResolver operationResolver =
-                    org.mockito.Mockito.mock(io.github.davidhlp.spring.cache.redis.cache.CacheOperationResolver.class);
+            io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver operationResolver =
+                    org.mockito.Mockito.mock(io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver.class);
             when(operationResolver.resolve(eq(NAME))).thenReturn(returnedOperation);
             return new RedisProCache(
                     NAME, realWriter, cacheConfiguration,

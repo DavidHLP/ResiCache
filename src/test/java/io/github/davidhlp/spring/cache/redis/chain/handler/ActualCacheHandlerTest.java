@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.chain.handler;
 
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 import io.github.davidhlp.spring.cache.redis.chain.*;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;

@@ -126,7 +126,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
+            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
             assertThat(result.result()).isEqualTo(CacheResult.success());
             verify(nullValuePolicy, never()).toStoreValue(any(), any());
         }
@@ -140,7 +140,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isNotEqualTo(ChainDecision.SKIP_ALL);
+            assertThat(result.decision()).isNotEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getNullDecision().storeValue()).isEqualTo("NULL_PLACEHOLDER");
         }
 
@@ -171,7 +171,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isNotEqualTo(ChainDecision.SKIP_ALL);
+            assertThat(result.decision()).isNotEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getNullDecision().storeValue()).isEqualTo(storeValue);
         }
 
@@ -183,7 +183,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
 
         @Test
@@ -194,7 +194,7 @@ class NullValueHandlerTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
     }
 
@@ -215,7 +215,7 @@ class NullValueHandlerTest {
             // handler 不主动推进 —— 推进是 engine 的职责
             verify(nextHandler, never()).handle(context);
             // GET 不在 shouldHandle 范围,直接返回 continueChain
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
 
         @Test
@@ -233,7 +233,7 @@ class NullValueHandlerTest {
             HandlerResult result = handler.handle(context);
 
             // doHandle 内 null 路径 → shouldCacheNull=false → skipAll
-            assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
+            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
         }
     }
 }

@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.cache;
+package io.github.davidhlp.spring.cache.redis.cache.loader;
 
 import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;

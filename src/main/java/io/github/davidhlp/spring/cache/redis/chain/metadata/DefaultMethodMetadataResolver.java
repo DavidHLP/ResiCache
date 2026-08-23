@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>写入 API({@link #activateStatic} / {@link #clearStatic})是
  *       <strong>{@code private static}</strong> —— 仅本类
- *       {@link #activate} 与 {@link #restoreKey} 调用;{@link CacheInvocationContext}
+ *       {@link #activate} 与 {@link #restoreKey} 调用;{@link MethodSnapshot}
  *       改走 instance {@link #restoreKey}。ThreadLocal 双写路径消除
  *       (只有 {@code activate()} 这一个公开写入入口)。</li>
  *   <li>读取 API(currentKey/currentMethod/currentTargetClass/currentContext)
@@ -58,8 +58,8 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
     }
 
     @Override
-    public CacheInvocationContext currentContext() {
-        return CacheInvocationContext.of(currentKey());
+    public MethodSnapshot currentContext() {
+        return MethodSnapshot.of(currentKey());
     }
 
     @Override
@@ -80,14 +80,14 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
     }
 
     /**
-     * 实例级 fire-and-forget 写入入口,供 {@link CacheInvocationContext#restore}
+     * 实例级 fire-and-forget 写入入口,供 {@link MethodSnapshot#restore}
      * 在异步边界(commonPool 切线程)调用。
      *
      * <p>区别于 {@link #activate}:本方法<strong>不返回 ScopedActivation</strong>,
      * 不追踪"先前状态";调用方负责在合适的 finally 中调用本类的 {@link #runWithSnapshot}
      * 路径(其内部 finally 会清 ThreadLocal)。
      *
-     * <p>可见性 {@code package-private}:仅 {@link CacheInvocationContext} 在同包内可见,
+     * <p>可见性 {@code package-private}:仅 {@link MethodSnapshot} 在同包内可见,
      * 杜绝外部绕开 {@link #activate} 直接写入 ThreadLocal(消除双写路径)。
      */
     void restoreKey(Method method, Class<?> targetClass) {
@@ -128,7 +128,7 @@ public class DefaultMethodMetadataResolver implements MethodMetadataResolver {
      */
     @Override
     public <T> T runWithSnapshot(Supplier<T> work) {
-        CacheInvocationContext snapshot = CacheInvocationContext.snapshot(this);
+        MethodSnapshot snapshot = MethodSnapshot.snapshot(this);
         boolean restored = false;
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
         boolean mdcRestored = false;

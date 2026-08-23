@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  * <p><strong>公开注解字段签名不变</strong>。新增字段只动 {@link RedisCacheAttributes} +
  * 本投影器 + 1 个 Builder 三处，而非 9 处。
  *
- * <p>Spring 原生 {@code @Cacheable} 由 {@link SpringCacheableAdapterFactory} 内部直接构造，
+ * <p>Spring 原生 {@code @Cacheable} 由 {@link SpringCacheableAdapter} 内部直接构造，
  * 无需投影层。
  *
  * <p><b>seam 收敛</b>：三个 {@code from(annotation)} 公共面之下，22 个共享字段

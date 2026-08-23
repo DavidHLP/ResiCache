@@ -1,10 +1,10 @@
 package io.github.davidhlp.spring.cache.redis.integration;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
-import io.github.davidhlp.spring.cache.redis.serialization.SerializationMigrationEngine;
-import io.github.davidhlp.spring.cache.redis.serialization.SerializationMigrationPhase;
-import io.github.davidhlp.spring.cache.redis.serialization.SerializationMigrationProperties;
-import io.github.davidhlp.spring.cache.redis.serialization.SerializationMigrationReport;
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationEngine;
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationPhase;
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationProperties;
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationReport;
 import io.github.davidhlp.spring.cache.redis.config.SerializationPreFlightProbe;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

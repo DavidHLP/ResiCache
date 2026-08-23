@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.serialization;
+package io.github.davidhlp.spring.cache.redis.serialization.migration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;

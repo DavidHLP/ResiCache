@@ -64,7 +64,7 @@ public class RedisCacheableOperation extends CacheableOperation {
      * 内部决定。
      *
      * <p>本方法<strong>不是</strong> Spring {@code @Cacheable} 适配路径,后者经
-     * {@code SpringCacheableAdapterFactory} 处理(走 hasText 守卫,因
+     * {@code SpringCacheableAdapter} 处理(走 hasText 守卫,因
      * Spring {@code CacheableOperation.Builder} 对 null/空串敏感)。
      */
     public static RedisCacheableOperation fromAttributes(

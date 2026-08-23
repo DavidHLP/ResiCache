@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;

@@ -1,7 +1,8 @@
-package io.github.davidhlp.spring.cache.redis.serialization;
+package io.github.davidhlp.spring.cache.redis.serialization.migration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.Banner;

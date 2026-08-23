@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.redis.cache.RedisCache;

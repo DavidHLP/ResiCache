@@ -2,7 +2,7 @@ package io.github.davidhlp.spring.cache.redis.config;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import io.github.davidhlp.spring.cache.redis.serialization.SerializationMigrationProperties;
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationProperties;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -194,8 +194,6 @@ public class RedisProCacheProperties {
     @Getter
     @Setter
     public static class EarlyExpirationProperties {
-        /** 是否启用提前过期 */
-        private boolean enabled = true;
         /** 核心线程池大小 */
         private int poolSize = 2;
         /** 最大线程池大小 */
@@ -264,11 +262,11 @@ public class RedisProCacheProperties {
      * 但<b>保留 TTL</b>——TtlHandler 兼担基础 TTL 计算,禁用会导致永久缓存。即:关闭后
      * 缓存仍按 TTL 正常过期,只是失去防穿透/击穿/雪崩/热 key 能力。
      *
-     * <p><b>仅启动时生效</b>:责任链单例缓存于首次构建,运行时变更此属性需重启应用。
-     * <b>Blast radius</b>:类级开关只短路防护纵深 handler(布隆/锁/提前过期/空值,经
-     * {@link io.github.davidhlp.spring.cache.redis.chain.ChainProtectionToggleResolver} 解析),
-     * <b>不</b>关闭整个 {@code RedisCacheAutoConfiguration} —— 后者由 {@code resi-cache.enabled}
-     * 门控(见 {@link RedisCacheAutoConfiguration})。TTL handler 不在此开关管辖(兼担基础 TTL 计算)。
+      * <p><b>仅启动时生效</b>:责任链单例缓存于首次构建,运行时变更此属性需重启应用。
+      * <b>Blast radius</b>:类级开关只短路防护纵深 handler(布隆/锁/提前过期/空值,经
+      * {@code CacheHandlerChainFactory.resolveProtectionDisabled} 解析),
+      * <b>不</b>关闭整个 {@code RedisCacheAutoConfiguration} —— 后者由 {@code resi-cache.enabled}
+      * 门控(见 {@link RedisCacheAutoConfiguration})。TTL handler 不在此开关管辖(兼担基础 TTL 计算)。
      */
     @Getter
     @Setter

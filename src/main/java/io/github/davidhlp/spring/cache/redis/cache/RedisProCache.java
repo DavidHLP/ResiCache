@@ -1,8 +1,11 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver;
+import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator;
 import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
 import io.github.davidhlp.spring.cache.redis.cache.metrics.RedisProCacheMetricsRegistry;
-import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
+import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
+import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator.LoadOutcome;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 
 import lombok.extern.slf4j.Slf4j;

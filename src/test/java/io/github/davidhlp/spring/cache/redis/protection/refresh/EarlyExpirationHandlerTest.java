@@ -1,6 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.protection.refresh;
 
-import io.github.davidhlp.spring.cache.redis.cache.CachedValue;
+import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 import io.github.davidhlp.spring.cache.redis.chain.*;
 import io.github.davidhlp.spring.cache.redis.chain.model.*;
 import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
@@ -177,7 +177,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isBetween(1L, 30L);
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(result.result()).isNull();
             verifyNoInteractions(earlyExpirationPolicy);
         }
@@ -192,7 +192,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(60L);
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             // Fast path must not evaluate the policy or inspect the cached value.
             verifyNoInteractions(earlyExpirationPolicy);
         }
@@ -206,7 +206,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
             HandlerResult result = handler.doHandle(context);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isEqualTo(-2L);
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             verifyNoInteractions(earlyExpirationPolicy);
         }
 
@@ -219,7 +219,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
     }
 
@@ -238,7 +238,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(result.result()).isNull();
             assertThat(context.getPrefetchDecision().decision().needsRefresh()).isFalse();
         }
@@ -259,7 +259,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
+            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
             assertThat(context.getPrefetchDecision().decision().needsRefresh()).isTrue();
         }
@@ -280,7 +280,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.SKIP_ALL);
+            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
         }
     }
@@ -299,7 +299,7 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             verify(earlyExpirationExecutor).submit(any(String.class), any(Runnable.class));
         }
 
@@ -313,56 +313,8 @@ class EarlyExpirationHandlerTest extends AbstractRedisIntegrationTest {
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(result.decision()).isEqualTo(ChainDecision.CONTINUE);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(context.getPrefetchDecision().decision().isSync()).isFalse();
-        }
-    }
-
-    @Nested
-    @DisplayName("static getDecision tests")
-    class GetDecisionTests {
-
-        @Test
-        @DisplayName("returns default noRefresh when attribute not set")
-        void getDecision_attributeNotSet_returnsNoRefresh() {
-            CacheInput input = new CacheInput(
-                    CacheOperation.GET,
-                    CACHE_NAME,
-                    REDIS_KEY,
-                    "testKey",
-                    null,
-                    null,
-                    Duration.ofSeconds(60),
-                    null
-            );
-            CacheContext context = new CacheContext(input);
-
-            EarlyExpirationDecision decision = EarlyExpirationHandler.getDecision(context);
-
-            assertThat(decision.needsRefresh()).isFalse();
-            assertThat(decision.isSync()).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns stored decision when attribute is set")
-        void getDecision_attributeSet_returnsStoredDecision() {
-            CacheInput input = new CacheInput(
-                    CacheOperation.GET,
-                    CACHE_NAME,
-                    REDIS_KEY,
-                    "testKey",
-                    null,
-                    null,
-                    Duration.ofSeconds(60),
-                    null
-            );
-            CacheContext context = new CacheContext(input);
-            EarlyExpirationDecision storedDecision = EarlyExpirationDecision.syncRefresh();
-            context.setPrefetchDecision(PrefetchDecision.of(false, null, storedDecision));
-
-            EarlyExpirationDecision decision = EarlyExpirationHandler.getDecision(context);
-
-            assertThat(decision).isEqualTo(storedDecision);
         }
     }
 

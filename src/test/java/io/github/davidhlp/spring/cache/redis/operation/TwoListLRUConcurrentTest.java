@@ -1,4 +1,4 @@
-package io.github.davidhlp.spring.cache.redis.operation.eviction;
+package io.github.davidhlp.spring.cache.redis.operation;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

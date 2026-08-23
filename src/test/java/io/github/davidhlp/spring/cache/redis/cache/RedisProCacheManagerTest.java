@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
