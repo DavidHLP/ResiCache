@@ -38,59 +38,61 @@
 ## Project Structure
 
 ```
-src/main/java/io/github/davidhlp/spring/cache/redis/
-├── annotation/          # @RedisCacheable/Put/Evict/Caching + AnnotationParser/Adapter + OperationSource
-│   └── handler/         #   AnnotationHandler + Abstract + 4 concrete handlers + AnnotationChainEngine
-├── cache/               # Spring integration core: RedisProCache(Manager/Writer), RedisCacheInterceptor,
-│                        #   LoaderOrchestrator, CacheOperationResolver, CacheKeys, CachedValue,
-│                        #   ResiCacheFeatures
-│   └── metrics/         #   CacheMetrics + RedisProCacheMetricsRegistry + RedisProCacheTimers
-├── chain/               # Chain of Responsibility core (root + handler/ + metadata/ + model/ + observer/)
-│   ├── (root)           #   CacheHandler/Chain/Factory, AbstractCacheHandler, ChainEngine (推进引擎),
-│   │                    #   HandlerOrder/Priority, CacheOperation/Result, ChainProtectionToggleResolver
-│   ├── handler/         #   ActualCacheHandler + CacheErrorHandler (terminal Redis execution)
-│   ├── metadata/        #   MethodMetadataResolver(+Default), CacheInvocationContext,
-│   │                    #   ScopedActivation, MetadataKeys
-│   ├── model/           #   CacheInput, CacheContext + 4 *Decision (Null/Ttl/Prefetch/EarlyExpiration)
-│   └── observer/        #   ChainObserver/Registry/Registration + 4 concrete observers
-├── config/              # RedisCacheAutoConfiguration + 4 sibling @Configurations + RedisProCacheProperties (311 LOC),
-│                        #   RedisConnectionConfiguration + RedissonConfiguration + TlsConfigurationValidator,
-│                        #   SerializerWhitelistStartupGuard + SerializationPreFlightProbe + JacksonConfig,
-│                        #   CachingEnablementValidation
-├── protection/          # The 5 resilience mechanisms (each = Handler + Strategy/Support/Config)
-│   ├── avalanche/       #   TtlHandler (300) + TtlPolicy/DefaultTtlPolicy          - TTL jitter, anti-avalanche
-│   ├── bloom/           #   BloomFilterHandler (100) + BloomGate/Support/Rebuilder + Config/HashStrategy
-│   │   └── filter/      #     BloomIFilter + Local/Redis/Hierarchical impls          - anti-penetration
-│   ├── breakdown/       #   SyncLockHandler (200) + SyncSupport/Role + DistributedLockManager + LockManager - anti-breakdown
-│   ├── nullvalue/       #   NullValueHandler (400) + NullValueEncoder + Policy/Default    - null caching
-│   └── refresh/         #   EarlyExpirationHandler (250) + Mode/Policy(+Default) + Scripts + Executor(ThreadPool) + Retry/Metrics - hot key
-├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheAttributes + AttributePopulator + RedisCacheRegister +
-│                        #   OperationKind + OperationFactory + SpringCacheableAdapterFactory + RedisCacheAttributesProjector
-│   └── eviction/        #   TwoListLRU + EvictionStats (RedisCacheRegister's bounded metadata store)
-├── serialization/       # SecureJacksonRedisSerializer + SecureJacksonSerializerFactory + VersionEnvelope +
-│                        #   WhitelistPolicy + SecureNullValueDeserializer + TypeSupport + SerializationException
-└── health/              # RedisCacheHealthIndicator (actuator health)
+ResiCache/
+├── resicache-bench/        # Standalone JMH micro-benchmark module (JMH 1.37, shade fat-jar, 5 benchmark suites)
+└── src/main/java/io/github/davidhlp/spring/cache/redis/
+    ├── annotation/          # @RedisCacheable/Put/Evict/Caching + AnnotationParser/Adapter + OperationSource
+    │   └── handler/         #   AnnotationHandler + Abstract + 4 concrete handlers + AnnotationChainEngine
+    ├── cache/               # Spring integration core: RedisProCache(Manager/Writer), RedisCacheInterceptor
+    │   ├── loader/          #   LoaderOrchestrator, CacheOperationResolver (miss loading orchestration)
+    │   ├── metrics/         #   CacheMetrics + RedisProCacheMetricsRegistry + RedisProCacheTimers
+    │   └── model/           #   CacheKeys, CachedValue, ResiCacheFeatures
+    ├── chain/               # Chain of Responsibility core
+    │   ├── (root)           #   CacheHandler/Chain/Factory, AbstractCacheHandler, ChainEngine (推进引擎),
+    │   │                    #   HandlerOrder/Priority, CacheOperation/Result, FlowControl, HandlerResult
+    │   ├── handler/         #   ActualCacheHandler + CacheErrorHandler (terminal Redis execution & error degradation)
+    │   ├── metadata/        #   MethodMetadataResolver(+Default), MethodSnapshot, ScopedActivation, MetadataKeys
+    │   ├── model/           #   CacheInput, CacheContext + 4 *Decision (Null/Ttl/Prefetch/EarlyExpiration)
+    │   └── observer/        #   ChainObserver + ObserverRegistry + 4 concrete observers (Timer, MDC, Log, Counter)
+    ├── config/              # RedisCacheAutoConfiguration + RedisProCacheProperties + 4 sibling @Configurations,
+    │                        #   RedisConnectionConfiguration + RedissonConfiguration + TlsConfigurationValidator,
+    │                        #   SerializerWhitelistStartupGuard + SerializationPreFlightProbe + JacksonConfig,
+    │                        #   CachingEnablementValidation
+    ├── health/              # RedisCacheHealthIndicator (actuator health)
+    ├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheAttributes + AttributePopulator +
+    │                        #   RedisCacheRegister + OperationKind + SpringCacheableAdapter + RedisCacheAttributesProjector +
+    │                        #   TwoListLRU (bounded operation register LRU store)
+    ├── protection/          # The 5 resilience mechanisms (each = Handler + Strategy/Support/Config)
+    │   ├── avalanche/       #   TtlHandler (300) + TtlPolicy/DefaultTtlPolicy          - TTL jitter, anti-avalanche
+    │   ├── bloom/           #   BloomFilterHandler (100) + BloomGate/Support/Rebuilder + Config/HashStrategy
+    │   │   └── filter/      #     BloomIFilter + Local/Redis/Hierarchical impls          - anti-penetration
+    │   ├── breakdown/       #   SyncLockHandler (200) + SyncSupport/Role + DistributedLockManager + LockManager - anti-breakdown
+    │   ├── nullvalue/       #   NullValueHandler (400) + NullValueEncoder + Policy/Default    - null caching
+    │   └── refresh/         #   EarlyExpirationHandler (250) + Mode/Policy(+Default) + Scripts + Executor(ThreadPool) + Retry/Metrics - hot key
+    └── serialization/       # SecureJacksonRedisSerializer + SecureJacksonSerializerFactory + VersionEnvelope +
+        │                    #   WhitelistPolicy + SecureNullValueDeserializer + TypeSupport + SerializationException
+        └── migration/       #   SerializationMigrationCli + SerializationMigrationEngine + LegacyValueDecoder + Phase/Report/Properties
 ```
 
-> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`holder/`、`factory/`(已并入 `operation/`)。文档始终以实际源码为准。
+> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`holder/`、`operation/eviction/` 子包(已收敛至 `operation/TwoListLRU.java`)。文档始终以实际源码为准。
 
 ### Test Structure
 
 ```
 src/test/java/io/github/davidhlp/spring/cache/redis/
-├── (mirror packages: annotation/{,handler/}, cache/{,metrics/}, chain/{,observer/}, config/,
-│   operation/{,eviction/}, protection/{avalanche,bloom{,filter},breakdown,nullvalue,refresh},
-│   serialization/)              # unit tests mirroring src/main/java structure
+├── (mirror packages: annotation/{,handler/}, cache/{,loader/,metrics/,model/}, chain/{,handler/,observer/}, config/,
+│   operation/, protection/{avalanche,bloom{,filter},breakdown,nullvalue,refresh},
+│   serialization/{,migration/}) # unit tests mirroring src/main/java structure
 ├── integration/                 # ALL Testcontainers-based integration tests + shared scaffolding:
-│   ├── AbstractRedisIntegrationTest  # base class — Redis container + socat forward + @DynamicPropertySource
+│   ├── AbstractRedisIntegrationTest  # base class — Redis container + @DynamicPropertySource
+│   ├── AbstractRedisClusterIntegrationTest # base class — 3-master real Redis Cluster
 │   ├── TestApplication / TestRedisConfiguration   # Spring Boot test entry + @Primary bean mirror
 │   ├── TestCacheService          # @Service stub used by PathCAop* / RedisCacheSemantics ITs
-│   ├── *IntegrationTest.java (6) # BloomFilter / CacheOperations / DistributedLock / KeyResolution /
-│   │                             #   SelectiveMode / SyncSingleFlight — full end-to-end protection scenarios
-│   └── *IT.java (3)              # PathCAopContract / PathCAopAsync / RedisCacheSemantics — AOP contract ITs
+│   ├── *IntegrationTest.java     # BloomFilter / CacheOperations / DistributedLock / KeyResolution /
+│   │                             #   SerializationMigration / SyncSingleFlight — full end-to-end protection scenarios
+│   └── *IT.java                  # RedisClusterSlot / RedisDownFaultInjection / PathCAop* — contract & fault ITs
 └── com/example/domain/          # test fixture for whitelisted custom domain types (serializer interop)
 ```
-
 > 集成测试统一位于 `integration/`。新增集成测试:继承 `AbstractRedisIntegrationTest`,放在同一包内,无需显式 import scaffolding。
 
 ## Key Architecture: Chain of Responsibility

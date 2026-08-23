@@ -62,9 +62,11 @@ via `@HandlerPriority`:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Any handler can set `output.skipRemaining=true` to short-circuit the rest of the
-chain; `PostProcessHandler` callbacks run after the chain completes. Third-party
-handlers can insert by extending the `HandlerOrder` enum.
+Each handler returns a typed `HandlerResult` carrying explicit `FlowControl`
+(`CONTINUE`, `SKIP_ALL`, `TERMINATE`) to govern execution without hidden state.
+Handlers opting into post-processing (e.g. Bloom filter async backfilling)
+override `requiresPostProcess` and `afterChainExecution`. Custom handlers integrate
+by implementing `CacheHandler` and annotating with `@HandlerPriority`.
 
 ## Quick start
 
@@ -330,8 +332,10 @@ Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md).
   **Non-SLA best-effort** — no guaranteed response time, but issues are actively
   addressed.
 - **Contributing**: PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Performance Benchmarks**: JMH baseline results & SLOs — see [PERFORMANCE.md](PERFORMANCE.md).
+- **API Stability Contract**: 0.x vs 1.0 stability guarantees — see [STABILITY.md](STABILITY.md).
+- **Compatibility Matrix**: supported Spring Boot / Java / Redisson lines — see [COMPATIBILITY.md](COMPATIBILITY.md).
 - **Security**: report privately — see [SECURITY.md](SECURITY.md).
-- **Compatibility**: see [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## License
 

@@ -48,7 +48,7 @@ ResiCache 采用 **责任链模式** 实现缓存写入防护。处理器顺序�
 └─────────────────────────────────────────────────────────────┘
 ```
 
-任一 handler 可设置 `output.skipRemaining=true` 短路后续链路；`PostProcessHandler` 在链结束后回调。第三方 handler 可通过扩展 `HandlerOrder` 枚举插队。
+每个 Handler 通过返回包含明确控制决策（`FlowControl.CONTINUE`、`SKIP_ALL`、`TERMINATE`）的 `HandlerResult` 来控制责任链调度；需要后置回填或异步通知的 Handler 重写 `requiresPostProcess` 与 `afterChainExecution` 钩子。自定义 Handler 只需实现 `CacheHandler` 接口并标注 `@HandlerPriority`。
 
 ## 🚀 快速开始
 
@@ -344,9 +344,11 @@ ResiCache **刻意不做**以下能力，避免过度膨胀——请用专业工
 
 - **版本**：v0.0.2 — 语义化版本 < 1.0，API 可能在 minor 版本变更，breaking 项在 [CHANGELOG.md](CHANGELOG.md) 标 ⚠️
 - **维护**：单人维护（[DavidHLP](https://github.com/davidhlp)），**Non-SLA best-effort**——不承诺响应时间，但积极修复 issue
-- **贡献**：欢迎 PR，流程见 [CONTRIBUTING.md](CONTRIBUTING.md)
-- **安全漏洞**：请私有报告，见 [SECURITY.md](SECURITY.md)
-- **兼容矩阵**：见 [COMPATIBILITY.md](COMPATIBILITY.md)
+- **贡献指南**：欢迎 PR，流程见 [CONTRIBUTING.md](CONTRIBUTING.md)
+- **性能实测基准**：JMH 实测数据与 SLO 达标表见 [PERFORMANCE.md](PERFORMANCE.md)
+- **稳定性契约**：0.x 周期兼容与 1.0 毕业指标见 [STABILITY.md](STABILITY.md)
+- **兼容性矩阵**：支持的 Spring Boot / Java / Redisson 版本见 [COMPATIBILITY.md](COMPATIBILITY.md)
+- **安全策略**：漏洞私有报告流程见 [SECURITY.md](SECURITY.md)
 
 ## 📄 License
 
