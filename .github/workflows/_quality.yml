@@ -7,8 +7,11 @@ permissions:
   contents: read
 
 jobs:
+  # Dependency scans and Qodana are advisory until their result aggregation is
+  # wired into the canonical blocking gate. They never represent release
+  # compatibility or contract closure.
   dependency-analysis:
-    name: Dependency Analysis
+    name: "Advisory · Dependency Analysis"
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -28,7 +31,7 @@ jobs:
         continue-on-error: true
 
   qodana:
-    name: Qodana Code Quality
+    name: "Advisory · Qodana Code Quality"
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

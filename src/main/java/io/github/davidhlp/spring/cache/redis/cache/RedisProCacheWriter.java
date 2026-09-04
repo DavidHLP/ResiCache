@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodSnapshot;
 import io.github.davidhlp.spring.cache.redis.cache.model.CacheKeys;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
@@ -10,6 +11,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
 import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
+import org.slf4j.MDC;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,6 +20,7 @@ import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import java.util.Map;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
@@ -77,7 +80,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
 
     @Override
     @Nullable
-    public byte[] get(@NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
+    public byte[] get(
+            @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
         return executeChain(CacheOperation.GET, name, key, null, ttl).getResultBytes();
     }
 
@@ -99,10 +103,13 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @NonNull
     public CompletableFuture<byte[]> retrieve(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        // resolver.runWithSnapshot 在 commonPool 异步线程内 snapshot/restore 方法元数据 + MDC,
-        // 保证链处理器读到正确 context。委派经 CacheOperationResolver.runWithSnapshot 单一 seam。
+        MethodSnapshot snapshot = operationResolver == null ? null : operationResolver.capture();
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
         return CompletableFuture.supplyAsync(
-                () -> operationResolver.runWithSnapshot(() -> get(name, key, ttl)));
+                () -> operationResolver == null
+                        ? get(name, key, ttl)
+                        : operationResolver.runWithSnapshot(
+                                snapshot, mdcSnapshot, () -> get(name, key, ttl)));
     }
 
     /**
@@ -123,7 +130,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
         String redisKey = typeSupport.bytesToString(key);
         String actualKey = extractActualKey(name, redisKey);
 
-        // 反序列化值
+        // 序列化错误在 Redis 链之前保留为 SerializationException,与 Redis failure
+        // taxonomy 分离;链内 Redis failure 由 requireSuccessful 转换。
         Object deserializedValue = typeSupport.deserializeFromBytes(value);
 
         // 构建上下文(带操作配置)—— operation 已传入,直接走 buildContext,跳过 register 查询
@@ -131,8 +139,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 CacheOperation.PUT, name, redisKey, actualKey,
                 value, deserializedValue, ttl, operation, null);
 
-        // 执行责任链（使用缓存的 chain 实例）
-        getChain().execute(context);
+        CacheResult result = getChain().execute(context);
+        requireSuccessful(CacheOperation.PUT, name, redisKey, result);
     }
 
     @Override
@@ -141,7 +149,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        executeChain(CacheOperation.PUT, name, key, value, ttl);
+        CacheResult result = executeChain(CacheOperation.PUT, name, key, value, ttl);
+        requireSuccessful(CacheOperation.PUT, name, key, result);
     }
 
     @Override
@@ -151,12 +160,18 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        // 同 retrieve(),经 operationResolver.runWithSnapshot 透传。
-        return CompletableFuture.runAsync(
-                () -> operationResolver.runWithSnapshot(() -> {
-                    put(name, key, value, ttl);
-                    return null;
-                }));
+        MethodSnapshot snapshot = operationResolver == null ? null : operationResolver.capture();
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+        return CompletableFuture.runAsync(() -> {
+            if (operationResolver == null) {
+                put(name, key, value, ttl);
+                return;
+            }
+            operationResolver.runWithSnapshot(snapshot, mdcSnapshot, () -> {
+                put(name, key, value, ttl);
+                return null;
+            });
+        });
     }
 
     @Override
@@ -166,12 +181,15 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        return executeChain(CacheOperation.PUT_IF_ABSENT, name, key, value, ttl).getResultBytes();
+        CacheResult result = executeChain(CacheOperation.PUT_IF_ABSENT, name, key, value, ttl);
+        requireSuccessful(CacheOperation.PUT_IF_ABSENT, name, key, result);
+        return result.getResultBytes();
     }
 
     @Override
     public void remove(@NonNull String name, @NonNull byte[] key) {
-        executeChain(CacheOperation.REMOVE, name, key, null, null);
+        CacheResult result = executeChain(CacheOperation.REMOVE, name, key, null, null);
+        requireSuccessful(CacheOperation.REMOVE, name, key, result);
     }
 
     @Override
@@ -190,8 +208,8 @@ public class RedisProCacheWriter implements RedisCacheWriter {
                 CacheOperation.CLEAN, name, keyPattern, actualKey,
                 null, null, null, resolveOperation(name), keyPattern);
 
-        // 执行责任链（使用缓存的 chain 实例）
-        getChain().execute(context);
+        CacheResult result = getChain().execute(context);
+        requireSuccessful(CacheOperation.CLEAN, name, keyPattern, result);
     }
 
     @Override
@@ -303,9 +321,9 @@ public class RedisProCacheWriter implements RedisCacheWriter {
      * 同步执行责任链的统一入口(GET/PUT/PUT_IF_ABSENT/REMOVE):封装 key 解析 → 值反序列化 →
      * operation 解析(register 查询)→ 上下文构建 → 链执行。
      *
-     * <p>读路径(GET/PUT_IF_ABSENT)取返回字节;写路径(PUT/REMOVE)忽略返回值。
-     * 带 operation 的 put 重载(operation 已传入,跳过 register 查询)与 clean(传 keyPattern)
-     * 各自直接调 {@link #buildContext},不经此入口 —— 三路共用同一 buildContext seam。
+     * <p>GET / PUT_IF_ABSENT 消费返回字节;PUT / CLEAN 将失败结果转换为 typed
+     * exception;REMOVE 记录失败并继续 best-effort。带 operation 的 put 重载与
+     * clean 各自直接调 {@link #buildContext},不经此入口。
      *
      * @param operation 操作类型
      * @param name 缓存名称
@@ -337,5 +355,33 @@ public class RedisProCacheWriter implements RedisCacheWriter {
      */
     private CacheHandlerChain getChain() {
         return cachedChain;
+    }
+
+    private void requireSuccessful(
+            CacheOperation operation, String cacheName, byte[] key, CacheResult result) {
+        if (!result.isSuccess()) {
+            requireSuccessful(operation, cacheName, typeSupport.bytesToString(key), result);
+        }
+    }
+
+    private void requireSuccessful(
+            CacheOperation operation, String cacheName, String key, CacheResult result) {
+        if (result.isSuccess()) {
+            return;
+        }
+        if (operation == CacheOperation.REMOVE) {
+            log.warn("Cache REMOVE failed; continuing best-effort: cacheName={}, key={}, kind={}, error={}",
+                    cacheName,
+                    key,
+                    result.getFailureKind(),
+                    result.getCause() == null ? null : result.getCause().getMessage());
+            return;
+        }
+        throw new CacheOperationException(
+                operation.name(),
+                result.getFailureKind(),
+                cacheName,
+                key,
+                result.getCause());
     }
 }

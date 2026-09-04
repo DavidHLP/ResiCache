@@ -7,11 +7,10 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheResult 单元测试 — 2 字段 + 4 工厂形态。
+ * CacheResult 单元测试 — 结果状态、诊断元数据和 PIFA 三态。
  *
- * <p>本测试覆盖保留契约:{@code success / resultBytes} 字段、
- * {@code isSuccess / getResultBytes} 读法,以及 {@code miss()} 作为 {@code success()}
- * 语义别名的等价性。
+ * <p>本测试覆盖 success / miss / inserted / existing / failure 工厂、
+ * cause/failure kind/operation 保留，以及 builder 的默认行为。
  */
 @DisplayName("CacheResult Tests")
 class CacheResultTest {
@@ -53,11 +52,23 @@ class CacheResultTest {
         @Test
         @DisplayName("failure() - 创建失败结果")
         void failure_createsFailureResult() {
-            CacheResult result = CacheResult.failure();
+            CacheResult result = CacheResult.failure("PUT", "REDIS", new IllegalStateException("down"));
 
             assertThat(result.isSuccess()).isFalse();
             assertThat(result.getResultBytes()).isNull();
+            assertThat(result.getOperation()).isEqualTo("PUT");
+            assertThat(result.getFailureKind()).isEqualTo("REDIS");
+            assertThat(result.getCause()).isInstanceOf(IllegalStateException.class);
+            assertThat(result.getOutcome()).isEqualTo("FAILURE");
         }
+
+        @Test
+        @DisplayName("inserted and existing outcomes remain distinct")
+        void putIfAbsentOutcomes_areDistinct() {
+            assertThat(CacheResult.inserted().getOutcome()).isEqualTo("INSERTED");
+            assertThat(CacheResult.existing(null).getOutcome()).isEqualTo("EXISTING");
+        }
+
     }
 
     @Nested

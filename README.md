@@ -65,8 +65,11 @@ via `@HandlerPriority`:
 Each handler returns a typed `HandlerResult` carrying explicit `FlowControl`
 (`CONTINUE`, `SKIP_ALL`, `TERMINATE`) to govern execution without hidden state.
 Handlers opting into post-processing (e.g. Bloom filter async backfilling)
-override `requiresPostProcess` and `afterChainExecution`. Custom handlers integrate
-by implementing `CacheHandler` and annotating with `@HandlerPriority`.
+override `requiresPostProcess` and `afterChainExecution`.
+Built-in handlers are registered by the library's explicit auto-configuration
+imports. A host application's custom handler must be a host-scanned
+`@Component` or an application `@Bean`, implement `CacheHandler`, and use
+`@HandlerPriority`; it does not require package scanning of the library.
 
 ## Quick start
 
@@ -134,15 +137,19 @@ public User getUserById(Long id) { ... }
 
 > `@Cacheable` coexists with ResiCache but **gains no protection** — the
 > protection attributes (`useBloomFilter` / `randomTtl` / ...) live only on
-> `@RedisCacheable`. Since v0.0.3, the default `nativeAnnotationMode=SELECTIVE`
-> means plain `@Cacheable` is handled entirely by Spring's native cache
-> infrastructure. Use `@RedisCacheable` for protection.
+> `@RedisCacheable`. In the current unreleased contract, the default
+> `nativeAnnotationMode=SELECTIVE` means plain `@Cacheable` is handled
+> entirely by Spring's native cache infrastructure. Use `@RedisCacheable` for
+> protection.
 
 ## Configuration
 
-All properties use the `resi-cache.*` prefix (bound to `RedisProCacheProperties`).
+Most properties use the `resi-cache.*` prefix and bind to
+`RedisProCacheProperties`; the four `resi-cache.bloom.*` implementation keys
+are explicitly bound by auto-configuration and described in additional
+configuration metadata.
 
-### Master switches (new in v0.0.3)
+### Master switches (current unreleased contract)
 
 ```yaml
 resi-cache:
@@ -158,7 +165,6 @@ resi-cache:
   default-ttl: 30m
   key-prefix: ""
   transaction-aware: false
-  fail-on-spel-error: true
 ```
 
 ### Bloom filter
@@ -166,11 +172,12 @@ resi-cache:
 ```yaml
 resi-cache:
   bloom-filter:
-    enabled: true
-    expected-insertions: 100000
-    false-probability: 0.01
+    rebuild-window-seconds: 30   # post-CLEAR rebuild window (s); 0 = disabled
+  bloom:
+    prefix: "bf:"
+    bit-size: 8388608
+    hash-functions: 3
     hash-cache-size: 10000
-    rebuild-window-seconds: 30   # post-CLEAR rebuild window (s); 0 = disabled (v0.0.x behavior)
 ```
 
 ### Distributed lock
@@ -188,8 +195,9 @@ resi-cache:
 
 ```yaml
 resi-cache:
+  protection:
+    early-expiration-enabled: true  # optional mechanism override
   early-expiration:
-    enabled: true
     pool-size: 2
     max-pool-size: 10
     queue-capacity: 100
@@ -212,7 +220,7 @@ resi-cache:
 > business types (e.g. `com.example.User`), you **must** add your package to
 > `allowed-package-prefixes`, otherwise deserialization throws.
 >
-> **Wildcard form (added in v0.0.3):** any prefix ending in `.*` is a wildcard
+> **Wildcard form (current unreleased):** any prefix ending in `.*` is a wildcard
 > sentinel — it matches the class directly (`com.example.Foo`), all sub-package
 > classes (`com.example.sub.Bar`, `com.example.foo.bar.baz.Qux`, …), and is
 > dot-boundary protected (so `com.example.*` does **not** match `com.exampleX.Foo`).
@@ -294,15 +302,17 @@ invalidator. The two are complementary in scope, not direct substitutes.
 - **`nativeAnnotationMode` defaults to `SELECTIVE`**: plain `@Cacheable` is
   handled entirely by Spring's native cache infrastructure, removing the
   dual-advisor risk. Use `@RedisCacheable` for protection.
-- **No Reactive support** (WebFlux / `Mono` / `Flux`): `RedisCacheInterceptor` is
-  blocking; such methods log an explicit "caching will not take effect" warning.
+- **Cache I/O failure semantics**: GET degrades to a miss and logs the
+  failure; PUT, PUT_IF_ABSENT, and CLEAN throw a typed runtime failure
+  retaining the original cause; REMOVE is observable best-effort and does not
+  throw.
 - **`@CacheEvict(allEntries=true)` (CLEAN) is best-effort, not atomic** — parity
-  with Spring's native `RedisCache.clear` / `DefaultRedisCacheWriter.clean`: it uses
-  a SCAN cursor + batched UNLINK/DEL, so keys written mid-CLEAN may be stranded and
-  the cache is briefly half-deleted on large key sets. Lua/MULTI atomicity is
-  intentionally not used (Redis single-thread O(keyspace) block, Cluster
-  cross-slot). When the Bloom filter is enabled, `rebuild-window-seconds` prevents
-  silent nulls during the post-wipe rebuild.
+  with Spring's native `RedisCache.clear` / `DefaultRedisCacheWriter.clean` —
+  it uses a SCAN cursor + batched UNLINK/DEL, so keys written mid-CLEAN may be
+  stranded and the cache is briefly half-deleted on large key sets. Lua/MULTI
+  atomicity is intentionally not used (Redis single-thread O(keyspace) block,
+  Cluster cross-slot). When the Bloom filter is enabled,
+  `rebuild-window-seconds` prevents silent nulls during the post-wipe rebuild.
 
 ## Not in Scope
 
@@ -317,10 +327,10 @@ ResiCache deliberately omits these to avoid bloat — pair with dedicated tools:
 | Dependency | Version |
 |------------|---------|
 | Spring Boot | 4.0.0 (parent) |
-| Java | 21+ |
+| Java | 21 |
 | Redisson | 3.50.0 (optional) |
 | Caffeine | 3.1.8 |
-| Testcontainers | 1.20.4 (CI Docker compatibility override) |
+| Testcontainers | 1.20.6 |
 
 Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md).
 

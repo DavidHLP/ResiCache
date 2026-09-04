@@ -1,9 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.protection.refresh;
 
 /**
- * 提前过期(early-expiration)模块对外暴露的"取消挂起刷新"seam —— 责任链终端处理器
- * {@code chain.handler.ActualCacheHandler} 在 PUT 写路径上需要取消该 key 可能挂起的异步刷新
- * (否则后台刷新会用旧 DB 读覆盖刚写入的新值),这是 refresh 模块唯一需要跨越包边界的能力。
+ * Refresh 模块向 chain 暴露的最小跨包 cancel seam。
+ * {@code ActualCacheHandler} 在 PUT 写路径上取消挂起刷新，避免旧刷新覆盖新值。
+ * 该接口不是完整 executor SPI，也不是用户 Bean 替换契约。
  *
  * <p><b>为什么单独建接口(深模块 seam)</b>:
  * <ul>
@@ -21,9 +21,9 @@ package io.github.davidhlp.spring.cache.redis.protection.refresh;
  * refresh 实现形状再次泄漏进 chain,测试需重新拖入整个线程池 → 复杂度上升。本 seam 浓缩复杂度。
  *
  * <p><b>依赖方向纪律</b>:本接口由 refresh 模块持有(protection.refresh),被 chain 消费。
- * 这并未引入新的 chain→protection 依赖方向 —— {@code ActualCacheHandler} 此前已直接 import
- * {@code protection.nullvalue.DefaultNullValuePolicy} 与 {@code protection.refresh} 的具体类;
- * 本变更只是把其中一处具体依赖替换为接口,严格更优,不新增反向依赖边。
+ * {@code ActualCacheHandler} 只依赖本接口;提交、重试、清理调度和 shutdown
+ * 仍属于 refresh internal executor,不被伪装成 public submit SPI。
+ * 该类型是包边界实现细节而非用户 Bean 替换契约。
  */
 public interface RefreshCancellation {
 

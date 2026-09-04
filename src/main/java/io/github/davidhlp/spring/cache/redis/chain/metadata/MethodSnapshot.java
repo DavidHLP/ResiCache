@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.chain.metadata;
 
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.expression.AnnotatedElementKey;
 
 import java.lang.reflect.Method;
@@ -22,7 +21,6 @@ import java.lang.reflect.Method;
  *       供异步透传使用</li>
  * </ul>
  */
-@Slf4j
 public record MethodSnapshot(
         Method method,
         Class<?> targetClass,
@@ -72,22 +70,15 @@ public record MethodSnapshot(
     }
 
     /**
-     * 异步透传用:restore 本快照到目标 resolver 的作用域.
-     *
-     * <p>走 {@link DefaultMethodMetadataResolver#restoreKey}(instance,package-private),
-     * 不调静态 {@code activateStatic}。ThreadLocal 双写路径消除。
-     *
-     * @param resolver 目标解析器(为 {@code null} 时不操作)
+     * Restores this snapshot and returns the activation to close in finally.
+     * New callers should use {@link MethodMetadataResolver#runWithSnapshot}.
      */
-    public void restore(MethodMetadataResolver resolver) {
-        if (method == null || targetClass == null) {
-            return;
+    @Deprecated(since = "0.0.3", forRemoval = true)
+    public ScopedActivation restore(MethodMetadataResolver resolver) {
+        if (resolver == null || method == null || targetClass == null) {
+            return null;
         }
-        if (resolver instanceof DefaultMethodMetadataResolver dmrmr) {
-            dmrmr.restoreKey(method, targetClass);
-        } else if (resolver != null) {
-            // Fallback:其他 resolver 实现需自己实现写入路径
-            log.warn("Resolver {} is not DefaultMethodMetadataResolver — restore skipped", resolver.getClass().getName());
-        }
+        return resolver.restore(this);
     }
+
 }

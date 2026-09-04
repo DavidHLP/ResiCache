@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = TestApplication.class)
-@Import(TestRedisConfiguration.class)
+@Import({TestRedisConfiguration.class, SerializationMigrationEngine.class})
 @DisplayName("Serialization Migration Integration Tests")
 class SerializationMigrationIntegrationTest extends AbstractRedisClusterIntegrationTest {
 

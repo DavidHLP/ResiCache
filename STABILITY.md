@@ -21,6 +21,8 @@ a documented migration path (⚠️ BREAKING entry in
 | **Enhancement annotation signatures** | `@RedisCacheable`, `@RedisCachePut`, `@RedisCacheEvict`, `@RedisCaching` | Attribute names, types, and semantics. Adding new attributes is non-breaking. |
 | **Configuration property keys** | `resi-cache.*` namespace under `application.yml` / `application.properties` | Property names and types. Adding new properties is non-breaking. |
 | **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Envelope is the serialization contract — kept, not loosened. |
+| **Extension SPI** | `CacheHandler`, `ChainObserver`, `BloomIFilter`, `LockManager`, `LockManager.LockHandle`, `HandlerPriority` | Implementations must satisfy the documented failure, lifecycle, and thread-safety contracts. |
+| **SPI transitive contract types** | `CacheContext`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.
@@ -31,13 +33,27 @@ line.
 |------|-----------------|---------|
 | **Internal implementation** | Source-level details inside `chain/`, `protection/`, `cache/` | Handler ordering is fixed by `HandlerOrder` enum (gap = 100), but inner algorithm of a specific handler is not contractual |
 | **Default values of properties** | Defaults may be tuned between minor versions | `resi-cache.protection.ttl.jitter-ratio` default may shift toward a better baseline |
-| **Internals package layout** | Sub-package contents under `io.github.davidhlp.spring.cache.redis.*` | New sub-packages, classes may move within the same top-level package |
+| **Unstable package layout** | Contents of internal sub-packages and unstable implementation types under `io.github.davidhlp.spring.cache.redis.*` | Stable annotations, configuration keys, wire format, and SPI signature types listed in §1 are excluded. |
 | **Observability metric names and tags** | Pre-1.0 metric namespace is NOT contractual | A `bloomsift.*` → `resicache.handler.*` rename is allowed pre-1.0 (with ⚠️ BREAKING CHANGELOG) |
 | **Diagnostic warnings and logs** | Message text, log levels for startup probes | "whitelist auto-derived from host app root package" WARN may rephrase |
 | **Behavior defaults** (e.g. protection preset) | When explicitly opted into a new default via ⚠️ BREAKING CHANGELOG entry | `resi-cache.protection.preset=NONE` (v0.0.2) → `=STANDARD` (v0.0.3) is allowed if flagged breaking |
+| **Unstable public implementation and provisional strategy types** | `TtlPolicy`, `NullValuePolicy`, `EarlyExpirationPolicy`, `BloomHashStrategy`, `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, `DefaultLoadFn`, default adapters, and `ThreadPoolEarlyExpirationExecutor` | Public for current source compatibility; not supported extension contracts unless listed in §1. |
 
 If you depend on items in this section, pin to an exact patch version
 (`0.x.y`) and review `CHANGELOG.md` entries on upgrade.
+
+### Accidental public type migration
+
+| Type | Replacement | Deprecation/removal | Impact |
+|---|---|---|---|
+| `MethodMetadataResolver` / `MethodSnapshot` | internal resolver lifecycle via auto-configuration | deprecate after external-usage review; internalize after one minor release | source/binary break for custom resolver implementations |
+| `LoaderOrchestrator` / `LoadOutcome` / `DefaultLoadFn` | `RedisProCache.get(key, loader)` | deprecate after external-usage review; remove after one minor release | callers must use the cache API, not loader callbacks |
+| `CacheContext` / `HandlerResult` / decision records | documented SPI value surface for handler signatures; implementation-only members may evolve | no removal while `CacheHandler`/`ChainObserver` remain supported | extensions use documented fields and flow values |
+| default policy and executor classes | `TtlPolicy`, `NullValuePolicy`, and `EarlyExpirationPolicy` contracts; executor remains internal | no concrete support promise; remove concrete access after replacement evidence | custom code uses policy interfaces, not executor classes |
+
+Removal is not activated solely from local source evidence. A published
+artifact, adopter usage, or external implementation supersedes this default
+plan and changes the migration decision.
 
 ## 3. What will NOT change without a major version bump
 

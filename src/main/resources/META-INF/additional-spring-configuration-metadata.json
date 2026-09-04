@@ -1,0 +1,28 @@
+{
+  "properties": [
+    {
+      "name": "resi-cache.bloom.prefix",
+      "type": "java.lang.String",
+      "defaultValue": "bf:",
+      "description": "Redis key prefix for the Bloom filter."
+    },
+    {
+      "name": "resi-cache.bloom.bit-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 8388608,
+      "description": "Number of bits in the local Bloom filter."
+    },
+    {
+      "name": "resi-cache.bloom.hash-functions",
+      "type": "java.lang.Integer",
+      "defaultValue": 3,
+      "description": "Number of hash functions used by the Bloom filter."
+    },
+    {
+      "name": "resi-cache.bloom.hash-cache-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 10000,
+      "description": "Maximum cached Bloom hash positions."
+    }
+  ]
+}

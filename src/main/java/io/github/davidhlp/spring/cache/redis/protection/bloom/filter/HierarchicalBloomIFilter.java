@@ -2,8 +2,6 @@ package io.github.davidhlp.spring.cache.redis.protection.bloom.filter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Primary;
-import org.springframework.stereotype.Component;
 
 /**
  * JVM + Redis 双层布隆过滤器，优先使用 JVM 过滤结果，必要时回退 Redis。
@@ -23,8 +21,6 @@ import org.springframework.stereotype.Component;
  * </ul>
  */
 @Slf4j
-@Primary
-@Component("hierarchicalBloomFilter")
 public class HierarchicalBloomIFilter implements BloomIFilter {
 
     private final BloomIFilter localFilter;

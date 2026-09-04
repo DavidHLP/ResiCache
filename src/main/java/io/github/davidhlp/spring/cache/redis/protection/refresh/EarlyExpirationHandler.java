@@ -10,6 +10,7 @@ import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Component;
 
@@ -62,11 +63,12 @@ public class EarlyExpirationHandler extends AbstractCacheHandler {
     private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
 
-    public EarlyExpirationHandler(EarlyExpirationPolicy earlyExpirationPolicy,
-                                  ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
-                                  RedisTemplate<String, Object> redisTemplate,
-                                  CacheStatisticsCollector statistics,
-                                  ValueOperations<String, Object> valueOperations) {
+    public EarlyExpirationHandler(
+            EarlyExpirationPolicy earlyExpirationPolicy,
+            ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
+            @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
+            CacheStatisticsCollector statistics,
+            ValueOperations<String, Object> valueOperations) {
         this.earlyExpirationPolicy = earlyExpirationPolicy;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.redisTemplate = redisTemplate;

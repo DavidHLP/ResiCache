@@ -14,8 +14,8 @@ public final class ScopedActivation implements AutoCloseable {
     /**
      * @param restore close() 时执行的恢复动作(通常由 resolver.activate() 内部构造)
      */
-    ScopedActivation(Runnable restore) {
-        this.restore = restore;
+    public ScopedActivation(Runnable restore) {
+        this.restore = java.util.Objects.requireNonNull(restore, "restore must not be null");
     }
 
     @Override

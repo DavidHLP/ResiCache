@@ -8,7 +8,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.NullDecision;
 import io.github.davidhlp.spring.cache.redis.chain.model.PrefetchDecision;
 import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
 import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
-import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValuePolicy;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.RefreshCancellation;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -61,7 +61,7 @@ class ActualCacheHandlerTest extends AbstractRedisIntegrationTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Autowired
-    private DefaultNullValuePolicy nullValuePolicy;
+    private NullValuePolicy nullValuePolicy;
 
     @Mock
     private RefreshCancellation earlyExpirationExecutor;

@@ -79,13 +79,16 @@ public class TestRedisConfiguration {
             @Value("${spring.data.redis.host}") String host,
             @Value("${spring.data.redis.port}") int port) {
         Config config = new Config();
-        String address = "redis://" + host + ":" + port;
+        String scheme = properties.getRedis().isTlsEnabled() ? "rediss://" : "redis://";
+        String address = scheme + host + ":" + port;
 
         RedisProCacheProperties.RedissonProperties redissonProps = properties.getRedisson();
 
         if ("cluster".equalsIgnoreCase(properties.getRedis().getMode())) {
             config.useClusterServers()
-                    .addNodeAddress(properties.getRedis().getClusterNodes().toArray(String[]::new))
+                    .addNodeAddress(properties.getRedis().getClusterNodes().stream()
+                            .map(node -> scheme + node)
+                            .toArray(String[]::new))
                     .setMasterConnectionPoolSize(redissonProps.getConnectionPoolSize())
                     .setMasterConnectionMinimumIdleSize(
                             redissonProps.getConnectionMinimumIdleSize())

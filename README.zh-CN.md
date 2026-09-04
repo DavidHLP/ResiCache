@@ -116,7 +116,7 @@ public User getUserById(Long id) { ... }
 
 ## ⚙️ 配置选项
 
-所有配置前缀为 `resi-cache.*`（绑定 `RedisProCacheProperties`）。
+多数配置绑定到 `RedisProCacheProperties`；四个 `resi-cache.bloom.*` 实现参数由自动配置显式绑定，并由 additional metadata 描述。
 
 ### 全局配置
 
@@ -125,7 +125,6 @@ resi-cache:
   default-ttl: 30m           # 默认 TTL
   key-prefix: ""             # 全局 key 前缀
   transaction-aware: false   # 事务感知缓存
-  fail-on-spel-error: true   # SpEL 求值失败是否抛异常
 ```
 
 ### 布隆过滤器
@@ -133,11 +132,12 @@ resi-cache:
 ```yaml
 resi-cache:
   bloom-filter:
-    enabled: true
-    expected-insertions: 100000   # 预期插入量
-    false-probability: 0.01       # 期望误判率
-    hash-cache-size: 10000        # 本地哈希缓存条目数
-    rebuild-window-seconds: 30    # CLEAN 后布隆重建窗口(秒);0=禁用(旧行为)
+    rebuild-window-seconds: 30    # CLEAN 后布隆重建窗口(秒);0=禁用
+  bloom:
+    prefix: "bf:"
+    bit-size: 8388608
+    hash-functions: 3
+    hash-cache-size: 10000
 ```
 
 ### 分布式锁
@@ -155,8 +155,9 @@ resi-cache:
 
 ```yaml
 resi-cache:
+  protection:
+    early-expiration-enabled: true  # 可选的机制级覆盖
   early-expiration:
-    enabled: true
     pool-size: 2           # 核心线程数
     max-pool-size: 10      # 最大线程数
     queue-capacity: 100    # 队列容量
@@ -192,7 +193,7 @@ resi-cache:
 
 > ⚠️ **白名单默认仅含 `io.github.davidhlp.`**。缓存自定义业务类型（如 `com.example.User`）时，**必须**在 `allowed-package-prefixes` 显式添加你的包名，否则反序列化会抛异常。
 >
-> **通配形式（v0.0.3 新增）**：以 `.*` 结尾的前缀被解释为通配符——匹配直接类（`com.example.Foo`）、所有子包内的类（`com.example.sub.Bar`、`com.example.foo.bar.baz.Qux` …），并以 dot 边界保护（`com.example.*` **不会**误匹配 `com.exampleX.Foo`）。当你想允许整个包子树、无需逐子包列出时使用。
+> **通配形式（当前未发布）**：以 `.*` 结尾的前缀被解释为通配符——匹配直接类（`com.example.Foo`）、所有子包内的类（`com.example.sub.Bar`、`com.example.foo.bar.baz.Qux` …），并以 dot 边界保护（`com.example.*` **不会**误匹配 `com.exampleX.Foo`）。当你想允许整个包子树、无需逐子包列出时使用。
 >
 > ```yaml
 > resi-cache:
@@ -287,13 +288,12 @@ ResiCache 是补齐这 3 项空白的 Redisson 搭档;JetCache 主打多级缓�
 ```
 src/main/java/io/github/davidhlp/spring/cache/redis/
 ├── annotation/          # @RedisCacheable, @RedisCacheEvict, @RedisCachePut, @RedisCaching
-├── annotation/          # Redis 缓存注解、解析器与适配器
 │   └── handler/         #   AnnotationHandler + 注解处理链
 ├── cache/               # RedisProCache, RedisProCacheManager, RedisProCacheWriter, RedisCacheInterceptor
 │   └── metrics/         #   CacheMetrics + Micrometer 注册与计时
 ├── chain/               # 责任链：CacheHandler/Chain/Factory + AbstractCacheHandler
-│   ├── handler/         #   ActualCacheHandler + CacheErrorHandler
-│   ├── model/           #   CacheInput(不可变) / CacheOutput(可变) / CacheContext
+│   ├── handler/          #   ActualCacheHandler + CacheErrorHandler
+│   ├── model/            #   CacheInput / CacheContext + typed decision records
 │   ├── metadata/        #   方法调用元数据解析、作用域与异步快照
 │   └── observer/        #   Observer 契约、注册器与标准实现
 ├── config/              # 自动配置 + RedisProCacheProperties + SecureJackson
@@ -303,8 +303,7 @@ src/main/java/io/github/davidhlp/spring/cache/redis/
 │   ├── breakdown/       #   SyncLockHandler (200) + DistributedLockManager ── 防击穿
 │   ├── nullvalue/       #   NullValueHandler (400) ── 防穿透
 │   └── refresh/         #   EarlyExpirationHandler (250) ── 热 key 保护
-├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheRegister + 工厂
-│   └── eviction/        #   TwoListLRU + EvictionStats
+├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheRegister + TwoListLRU
 ├── serialization/       # SecureJackson / SecureNullValueDeserializer（安全反序列化）
 └── health/              # RedisCacheHealthIndicator
 ```
@@ -318,6 +317,9 @@ v0.0.x 当前已知限制：
 - **序列化白名单默认锁作者包名**：`allowed-package-prefixes` 默认仅 `io.github.davidhlp.`，自定义类型须显式配置（见上文 [序列化安全](#序列化安全)）
 - **双 Advisor 风险已消除**：`nativeAnnotationMode` 默认 `SELECTIVE`——纯 `@Cacheable` 完全走 Spring 原生、不被 ResiCache 接管。需要 FULL 兼容（接管 `@Cacheable`）可显式 `resi-cache.native-annotation-mode=FULL`
 - **不支持 Reactive**（WebFlux / `Mono` / `Flux`）：`RedisCacheInterceptor` 是阻塞式，Reactive 方法不触发缓存
+- **缓存 I/O 失败语义**：GET 降级为 miss 并记录日志；PUT、
+  PUT_IF_ABSENT、CLEAN 抛出带原始 cause 的类型化运行时异常；
+  REMOVE 为可观测 best-effort，不抛异常。
 - **`@CacheEvict(allEntries=true)`（CLEAN）是 best-effort、非原子**：与 Spring 原生 `RedisCache.clear`/`DefaultRedisCacheWriter.clean` 一致，用 SCAN 游标 + 批量 UNLINK/DEL，CLEAN 期间新写入的 key 可能被遗漏，大 key 集时缓存短暂处于半删状态。刻意不用 Lua/MULTI 原子化（Redis 单线程 O(keyspace) 阻塞、Cluster cross-slot）。启用布隆时，`rebuild-window-seconds` 窗口防止擦除后重建期的静默 null。
 
 ## 🚫 Not in Scope
@@ -333,10 +335,10 @@ ResiCache **刻意不做**以下能力，避免过度膨胀——请用专业工
 | 依赖 | 版本 |
 |------|------|
 | Spring Boot | 4.0.0（parent） |
-| Java | 21+ |
+| Java | 21 |
 | Redisson | 3.50.0（optional） |
 | Caffeine | 3.1.8 |
-| Testcontainers | 1.20.4（CI Docker 兼容覆盖） |
+| Testcontainers | 1.20.6 |
 
 完整兼容矩阵见 [COMPATIBILITY.md](COMPATIBILITY.md)。
 

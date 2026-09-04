@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.List;
@@ -24,10 +23,9 @@ import java.util.stream.Collectors;
  * <p>异常处理：所有异常都会被记录并通过 Micrometer 指标监控。
  */
 @Slf4j
-@Component("redisBloomFilter")
 public class RedisBloomIFilter implements BloomIFilter {
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private final RedisTemplate<String, ?> redisTemplate;
     private final BloomFilterConfig config;
     private final BloomHashStrategy hashStrategy;
     private final MeterRegistry meterRegistry;
@@ -38,7 +36,7 @@ public class RedisBloomIFilter implements BloomIFilter {
 
     @Autowired
     public RedisBloomIFilter(
-            RedisTemplate<String, String> redisTemplate,
+            RedisTemplate<String, ?> redisTemplate,
             BloomFilterConfig config,
             BloomHashStrategy hashStrategy,
             @Autowired(required = false) MeterRegistry meterRegistry) {

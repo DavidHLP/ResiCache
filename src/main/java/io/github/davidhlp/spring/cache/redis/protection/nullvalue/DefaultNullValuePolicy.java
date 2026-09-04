@@ -4,7 +4,6 @@ import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Component;
 
 /**
  * 默认空值策略 — 4 个纯决策 / 恒等变换方法,外加 {@code toReturnValue} 委派给
@@ -16,7 +15,6 @@ import org.springframework.stereotype.Component;
  * <p>遵循 Spring 缓存对 null 值的预期处理语义。
  */
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class DefaultNullValuePolicy implements NullValuePolicy {
 

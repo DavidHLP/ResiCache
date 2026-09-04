@@ -2,24 +2,26 @@
 
 ResiCache ships on a **single build line**:
 
-- **`master` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50**.
+- **`main` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 /
+  Redisson 3.50**.
 
-Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backed integration tests).
+CI is configured to run `clean verify -B` on Java 21. Local verification also
+requires JDK 21 and Docker for Testcontainers; this session is not a release
+baseline.
 
-> **Historical context**: Previously `master` carried a `boot3`
-> line (Boot 3.4.13 / Java 17 / Redisson 3.27). The migration to Boot 4
-> merged into `master`; the dual-branch (`master` / `boot4`)
-> strategy is **abandoned**. Boot 3.4 has been OSS-EOL since 2025-12; no `boot3`
-> compatibility line is retained. See `CHANGELOG.md` for migration context.
+> **Historical context**: Previously the repository carried a `boot3` line
+> (Boot 3.4.13 / Java 17 / Redisson 3.27). The migration to Boot 4 merged
+> into the main line; the dual-branch strategy is **abandoned**. Boot 3.x
+> compatibility is not maintained. See `CHANGELOG.md` for migration context.
 
 ## Supported versions
 
-### `master` line — Spring Boot 4.0 (sole line)
+### `main` line — Spring Boot 4.0 (sole line)
 
 | Component | Version | Tested |
 |-----------|---------|--------|
-| Java | 21 | 21 |
-| Spring Boot | 4.0.0 | 4.0.x (full `verify -B`) |
+| Java | 21 | CI |
+| Spring Boot | 4.0.0 | 4.0.x (CI) |
 | Spring Framework | 7.x | (via Boot) |
 | Spring Cache | 7.x | (via Boot) |
 | Spring Data Redis | 4.0.x | (via Boot) |
@@ -29,29 +31,28 @@ Builds pass full `verify -B` (tests + JaCoCo 70%/40% gate + Testcontainers-backe
 
 ## Spring Boot version policy
 
-- **`master` line (sole line)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0 + Spring 7
-  + Java 21 + Redisson 3.50. Build/verify locally with `./mvnw verify -B`
-  (no profile flag needed). Boot 4 is configured directly in `pom.xml` as the
-  sole build line — the historical `boot4`/`boot3` Maven profiles were removed.
+- **`main` line (sole line)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0
+  + Spring 7 + Java 21 + Redisson 3.50. Build/verify with
+  `./mvnw clean verify -B` on JDK 21.
 - **Boot 4 modularization note**: Boot 4 relocated packages
-  (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*`,
+  (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*` and
   `o.s.b.actuate.health.*` → `o.s.b.health.contributor.*`) and SDR 4 renamed
-  `RedisCacheWriter` methods (`remove`→`evict`, `clean`→`clear`). These breaks
-  drove FIRE; all imports are Boot 4-aligned.
-- **CI coverage**: `master` runs full `verify -B` on Java 21 against Boot 4.0
-  via `.github/workflows/ci.yml`. The historical `.github/workflows/ci-boot4.yml`
-  and the `compatibility` job in `ci.yml` have been removed.
-- **Not supported**: Spring Boot 2.x and 3.x. No `boot3` compatibility line is
-  maintained; users on Boot 3.x should remain on ResiCache v0.0.x or migrate.
+  `RedisCacheWriter` methods (`remove`→`evict`, `clean`→`clear`).
+- **Not supported**: Spring Boot 2.x and 3.x. No multi-Boot compatibility line
+  is maintained.
 - **Pre-1.0 caveat**: matrix coverage is best-effort until 1.0.
 
 ## Optional dependencies
 
 | Dependency | Required? | Notes |
 |---|---|---|
-| **Redisson** | Optional | Needed only for the distributed-lock (`sync=true`) protection against cache breakdown. Without it, `sync` degrades to a JVM-internal lock (**single-instance only** — does not coordinate across JVMs). Fully gated by `@ConditionalOnClass(RedissonClient.class)`. |
-| **Micrometer / Actuator** | Optional | Without a `MeterRegistry`, cache metrics are silently skipped. `RedisCacheHealthIndicator` requires Actuator on the classpath. |
-| **Caffeine** | Bundled | Used internally for the local hash cache and bloom-filter bitset. Not exposed as a user-facing multi-level cache (out of scope). |
+| **Redisson** | Optional | Needed for distributed-lock (`sync=true`). Without it, a
+  sync operation fails fast unless `resi-cache.sync-lock.local-only=true` is
+  explicitly configured. |
+| **Micrometer / Actuator** | Optional | Without a `MeterRegistry`, cache metrics
+  are disabled. `RedisCacheHealthIndicator` requires Actuator. |
+| **Caffeine** | Bundled | Used internally for the local hash cache and
+  bloom-filter bitset; not exposed as a multi-level cache. |
 
 ## Serialization compatibility
 
@@ -71,6 +72,11 @@ not require a cache flush.
   will not take effect" warning and bypass ResiCache.
 - **Async methods**: `@Async` cached methods are not supported for sync-lock and
   Bloom-filter enhancements.
+
+- **Cache I/O failures**: GET returns a miss with internal failure metadata;
+  PUT, PUT_IF_ABSENT, and CLEAN fail fast with a typed runtime failure retaining
+  the original cause;
+  REMOVE is observable best-effort.
 - **Transaction-aware caching**: supported, but requires explicit
   `resi-cache.transaction-aware=true`.
 - **Redis Cluster distributed locks**: lock keys are **hash-tag pinned** to the

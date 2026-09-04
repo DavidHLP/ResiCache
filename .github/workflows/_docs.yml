@@ -43,3 +43,6 @@ jobs:
             fi
           done
           echo "OK: All key classes referenced in docs exist in src."
+
+      - name: Validate contract documentation
+        run: bash ./scripts/ci/check-docs-contracts.sh

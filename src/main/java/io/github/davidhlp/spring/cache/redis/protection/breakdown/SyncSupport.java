@@ -118,12 +118,12 @@ public class SyncSupport {
     }
 
     /**
-     * 健康查询:同步锁是否降级到 local-only。
-     * <p>{@code true} = 未显式声明 {@code localOnly=true} 且无分布式锁后端(Redisson 缺失),
-     * 任何 sync=true 操作会实际降级为单 JVM {@code synchronized}。多实例部署下不防击穿 —
-     * 暴露此信号供 {@code RedisCacheHealthIndicator} 级联到 /actuator/health。
+     * 健康查询:同步锁后端是否缺失。{@code true} = 未显式
+     * {@code localOnly=true} 且无分布式锁后端(Redisson 缺失);此时 sync=true
+     * 首次未命中会 fail-fast。暴露此信号供
+     * {@code RedisCacheHealthIndicator} 级联到 /actuator/health。
      *
-     * @return 是否处于 protection.degraded=local-only 状态
+     * @return 是否处于缺失分布式后端且未显式允许 local-only 的状态
      */
     public boolean isDegraded() {
         return !properties.getSyncLock().isLocalOnly()

@@ -12,13 +12,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 在有限的线程池上执行提前过期任务，同时防止每个键的重复提交。
+ * Internal early-expiration executor. The public class is retained for
+ * construction compatibility, but {@link #submit(String, Runnable)} is not a
+ * supported extension seam; cross-package callers receive only
+ * {@link RefreshCancellation#cancel(String)}.
  *
- * <p>装配:本类是 {@code resi-cache.early-expiration.*} 配置兑现的 seam ——
- * 由 {@link io.github.davidhlp.spring.cache.redis.config.RedisProCacheConfiguration#earlyExpirationExecutor}
- * {@code @Bean} 从 {@code RedisProCacheProperties.EarlyExpirationProperties} 读池参数
- * ({@code pool-size}/{@code max-pool-size}/{@code queue-capacity}) 构造；用户可自定义
- * 同类型 bean 顶替（{@code @ConditionalOnMissingBean}）。无参 / 包级构造保留为测试入口。
+ * <p>由自动配置按 {@code resi-cache.early-expiration.*} 构造。提交、重试、清理调度、
+ * shutdown 和失败处理均属于本实现，不新增 public executor interface。
  *
  * <p>内部职责委托给两个协作类：
  * <ul>

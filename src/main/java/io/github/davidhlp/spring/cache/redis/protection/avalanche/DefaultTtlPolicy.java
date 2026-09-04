@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.protection.avalanche;
 
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
@@ -14,7 +13,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p>本类无状态,不持有 {@code Clock};提前过期判定由
  * {@code protection.refresh.DefaultEarlyExpirationPolicy} 承载。
  */
-@Component
 public class DefaultTtlPolicy implements TtlPolicy {
 
     /**

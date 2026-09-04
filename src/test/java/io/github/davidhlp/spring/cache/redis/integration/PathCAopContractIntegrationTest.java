@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("integration-test")
 @Import(TestRedisConfiguration.class)
 @DisplayName("AOP 行为回归契约")
-class PathCAopContractIT extends AbstractRedisIntegrationTest {
+class PathCAopContractIntegrationTest extends AbstractRedisIntegrationTest {
 
     @Autowired
     private TestCacheService cacheService;

@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache.loader;
 
 import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodSnapshot;
 import io.github.davidhlp.spring.cache.redis.operation.OperationKind;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister;
 import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
@@ -9,8 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.expression.AnnotatedElementKey;
 import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Component;
 
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -27,10 +28,9 @@ import java.util.function.Supplier;
  * <p><b>deletion test</b>:删本类 → 两调用方各自重新实现 4 行镜像;ThreadLocal 协议与
  * 日志形式在两处独立漂移。本 seam 挣得起存在代价。
  *
- * <p><b>Spring 装配</b>:{@code @Component} 让 Spring 自动注入
- * {@link MethodMetadataResolver} 与 {@link RedisCacheRegister}(两者本身也是
- * {@code @Component});用户可通过 {@code @Bean @ConditionalOnMissingBean}
- * 顶替本类。
+ * <p><b>Spring 装配</b>:由 {@code RedisProCacheConfiguration} 显式注册并按类型
+ * back-off；内部依赖 {@link MethodMetadataResolver} 与
+ * {@link RedisCacheRegister}。
  *
  * <p><b>线程安全</b>:方法无状态;并发安全由底层 {@link RedisCacheRegister}
  * (内部 {@code TwoListLRU}) 与 {@link MethodMetadataResolver}
@@ -40,7 +40,6 @@ import java.util.function.Supplier;
  * @see RedisProCacheWriter#resolveOperation(String)
  */
 @Slf4j
-@Component
 public class CacheOperationResolver {
 
     private final MethodMetadataResolver methodResolver;
@@ -96,17 +95,29 @@ public class CacheOperationResolver {
     }
 
     /**
-     * 异步边界 ThreadLocal + MDC 快照透传 — 本 seam 的扩展职责。
-     *
-     * <p>{@link RedisProCacheWriter#retrieve} 与 {@code store} 走 commonPool 异步线程,
-     * 异步线程读不到提交线程的 ThreadLocal {@code AnnotatedElementKey} 与 MDC,需经快照透传。
-     *
-     * <p>本方法委派内嵌 resolver;若内嵌 resolver 为 null,fallback 到直接同步执行
-     * (异步语义降级为同步,但行为正确)。
-     *
-     * @param work 要在快照上下文中执行的工作
-     * @param <T>  返回值类型
-     * @return work 的返回值
+     * Captures metadata on the calling thread before work crosses an async boundary.
+     */
+    @Nullable
+    public MethodSnapshot capture() {
+        return methodResolver == null ? null : methodResolver.capture();
+    }
+
+    /**
+     * Runs work with a submitter-thread snapshot and restores worker state in finally.
+     */
+    public <T> T runWithSnapshot(
+            @Nullable MethodSnapshot snapshot,
+            @Nullable Map<String, String> mdcSnapshot,
+            Supplier<T> work) {
+        if (methodResolver == null) {
+            return work.get();
+        }
+        return methodResolver.runWithSnapshot(snapshot, mdcSnapshot, work);
+    }
+
+    /**
+     * Compatibility overload for synchronous callers. Async callers must use
+     * {@link #capture()} before queueing work.
      */
     public <T> T runWithSnapshot(Supplier<T> work) {
         if (methodResolver == null) {

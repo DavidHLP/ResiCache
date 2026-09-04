@@ -10,9 +10,11 @@
 
 ## Checklist
 
-- [ ] `./mvnw clean verify -B` passes locally (including the coverage gate and Checkstyle).
+- [ ] `./mvnw clean verify -B` passes locally (coverage gate).
+- [ ] `./mvnw checkstyle:check -B` passes locally.
 - [ ] New behavior has tests; bug fixes have a regression test.
 - [ ] Integration tests touching Redis extend `AbstractRedisIntegrationTest` (Testcontainers — Docker must be running).
+- [ ] `bash scripts/ci/check-test-names.sh` passes; integration classes do not use `*IT.java`.
 - [ ] No over-engineering: features that belong in [Resilience4j](https://resilience4j.readthedocs.io/) (circuit breaking / rate limiting) or [Caffeine](https://github.com/ben-manes/caffeine) (multi-level caching) are **out of scope** — see README "Not in Scope".
 - [ ] Javadoc on public API; Chinese rationale comments are welcome for design decisions (matching the existing codebase style).
 - [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `ci:`, `chore:`.

@@ -1,46 +1,184 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
+import io.github.davidhlp.spring.cache.redis.annotation.handler.AnnotationChainEngine;
+import io.github.davidhlp.spring.cache.redis.annotation.handler.CachePutAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.annotation.handler.CacheableAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.annotation.handler.CachingAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.annotation.handler.EvictAnnotationHandler;
+import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
+import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter;
 import io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver;
 import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
-import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheWriter;
+import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
-import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
-import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncLockTimeout;
+import io.github.davidhlp.spring.cache.redis.chain.ChainEngine;
+import io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler;
+import io.github.davidhlp.spring.cache.redis.chain.handler.CacheErrorHandler;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.DefaultMethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
+import io.github.davidhlp.spring.cache.redis.operation.RedisCacheAttributesProjector;
+import io.github.davidhlp.spring.cache.redis.operation.SpringCacheableAdapter;
+import io.github.davidhlp.spring.cache.redis.protection.avalanche.DefaultTtlPolicy;
+import io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlHandler;
+import io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlPolicy;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterConfig;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterHandler;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomGate;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomHashStrategy;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomRebuilder;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.MessageDigestBloomHashStrategy;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.HierarchicalBloomIFilter;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.LocalBloomIFilter;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.RedisBloomIFilter;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncLockHandler;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncLockTimeout;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValueEncoder;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValueHandler;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValuePolicy;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.DefaultEarlyExpirationPolicy;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationHandler;
+import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationPolicy;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.ThreadPoolEarlyExpirationExecutor;
-import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer;
 import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
-import io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager;
+import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Clock;
+import java.util.HashMap;
 import java.util.Map;
+
 
 @Slf4j
 @Configuration(proxyBeanMethods = false)
-@ComponentScan(basePackages = "io.github.davidhlp.spring.cache.redis")
+@Import({
+        AnnotationChainEngine.class,
+        CachePutAnnotationHandler.class,
+        CacheableAnnotationHandler.class,
+        CachingAnnotationHandler.class,
+        EvictAnnotationHandler.class,
+        RedisCacheAttributesProjector.class,
+        SpringCacheableAdapter.class,
+        CacheHandlerChain.class,
+        CacheHandlerChainFactory.class,
+        ChainEngine.class,
+        ActualCacheHandler.class,
+        TtlHandler.class,
+        NullValueEncoder.class,
+        NullValueHandler.class,
+        BloomFilterHandler.class,
+        BloomGate.class,
+        BloomRebuilder.class,
+        BloomSupport.class,
+        SyncLockHandler.class,
+        SyncLockTimeout.class,
+        SyncSupport.class,
+        EarlyExpirationHandler.class,
+        SecureJacksonSerializerFactory.class,
+        TypeSupport.class,
+        SerializationPreFlightProbe.class,
+        SerializerWhitelistStartupGuard.class,
+        TlsConfigurationValidator.class
+})
 @EnableConfigurationProperties(RedisProCacheProperties.class)
 public class RedisProCacheConfiguration {
 
     @Bean
+    @ConditionalOnMissingBean(MethodMetadataResolver.class)
+    public MethodMetadataResolver methodMetadataResolver() {
+        return new DefaultMethodMetadataResolver();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(CacheErrorHandler.class)
+    public CacheErrorHandler cacheErrorHandler() {
+        return new CacheErrorHandler();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(CacheOperationResolver.class)
+    public CacheOperationResolver cacheOperationResolver(
+            MethodMetadataResolver methodMetadataResolver,
+            io.github.davidhlp.spring.cache.redis.operation.RedisCacheRegister register) {
+        return new CacheOperationResolver(methodMetadataResolver, register);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BloomFilterConfig.class)
+    public BloomFilterConfig bloomFilterConfig(
+            @Value("${resi-cache.bloom.prefix:bf:}") String keyPrefix,
+            @Value("${resi-cache.bloom.bit-size:8388608}") int bitSize,
+            @Value("${resi-cache.bloom.hash-functions:3}") int hashFunctions,
+            @Value("${resi-cache.bloom.hash-cache-size:10000}") int hashCacheSize) {
+        return new BloomFilterConfig(keyPrefix, bitSize, hashFunctions, hashCacheSize);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BloomHashStrategy.class)
+    public BloomHashStrategy bloomHashStrategy() {
+        return new MessageDigestBloomHashStrategy();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(TtlPolicy.class)
+    public TtlPolicy ttlPolicy() {
+        return new DefaultTtlPolicy();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(NullValuePolicy.class)
+    public NullValuePolicy nullValuePolicy(NullValueEncoder encoder) {
+        return new DefaultNullValuePolicy(encoder);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(EarlyExpirationPolicy.class)
+    public EarlyExpirationPolicy earlyExpirationPolicy(Clock clock) {
+        return new DefaultEarlyExpirationPolicy(clock);
+    }
+
+    /**
+     * Default Bloom implementation is one explicitly composed adapter. A user
+     * supplied BloomIFilter replaces the entire composition by type.
+     */
+    @Bean
+    @ConditionalOnMissingBean(BloomIFilter.class)
+    public BloomIFilter bloomIFilter(
+            @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
+            BloomFilterConfig config,
+            BloomHashStrategy hashStrategy,
+            ObjectProvider<MeterRegistry> meterRegistryProvider) {
+        LocalBloomIFilter local = new LocalBloomIFilter(config, hashStrategy);
+        RedisBloomIFilter remote = new RedisBloomIFilter(
+                redisTemplate, config, hashStrategy, meterRegistryProvider.getIfAvailable());
+        remote.init();
+        return new HierarchicalBloomIFilter(local, remote);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     public RedisProCacheWriter redisProCacheWriter(
-            RedisTemplate<String, Object> redisCacheTemplate,
+            @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisCacheTemplate,
             TypeSupport typeSupport,
             CacheHandlerChainFactory chainFactory,
             CacheStatisticsCollector cacheStatisticsCollector,
@@ -62,7 +200,6 @@ public class RedisProCacheConfiguration {
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             RedisProCacheProperties properties,
             SecureJacksonSerializerFactory serializerFactory) {
-        // 装配走单点 factory,与 RedisConnectionConfiguration 同源。
         SecureJacksonRedisSerializer valueSerializer =
                 serializerFactory.create(objectMapper, properties.getSerializer());
 
@@ -71,7 +208,6 @@ public class RedisProCacheConfiguration {
                 .serializeKeysWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer));
 
-        // 应用全局键前缀
         if (properties.getKeyPrefix() != null && !properties.getKeyPrefix().isEmpty()) {
             config = config.computePrefixWith(cacheName -> properties.getKeyPrefix() + cacheName + "::");
             log.debug("Applied global key prefix: {}", properties.getKeyPrefix());
@@ -92,9 +228,8 @@ public class RedisProCacheConfiguration {
             SyncSupport syncSupport,
             SyncLockTimeout syncLockTimeout,
             RedisProCacheProperties properties) {
-        // 构建 per-cache 配置映射
-        Map<String, RedisCacheConfiguration> initialCacheConfigurations = buildInitialCacheConfigurations(
-                properties, defaultRedisCacheConfiguration);
+        Map<String, RedisCacheConfiguration> initialCacheConfigurations =
+                buildInitialCacheConfigurations(properties, defaultRedisCacheConfiguration);
 
         MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
         if (meterRegistry == null) {
@@ -109,60 +244,46 @@ public class RedisProCacheConfiguration {
                 .syncLockTimeout(syncLockTimeout)
                 .build();
 
-        RedisProCacheManager manager = new RedisProCacheManager(
+        return new RedisProCacheManager(
                 redisProCacheWriter,
                 defaultRedisCacheConfiguration,
                 features,
                 initialCacheConfigurations,
                 properties.isTransactionAware());
-        log.debug("Created RedisProCacheManager with {} initial cache configurations, transactionAware={}",
-                initialCacheConfigurations.size(), properties.isTransactionAware());
-        return manager;
     }
 
-    /**
-     * 根据 properties 中的 caches 配置构建初始缓存配置映射
-     */
     private Map<String, RedisCacheConfiguration> buildInitialCacheConfigurations(
             RedisProCacheProperties properties,
             RedisCacheConfiguration defaultConfig) {
-        Map<String, RedisCacheConfiguration> result = new java.util.HashMap<>();
+        Map<String, RedisCacheConfiguration> result = new HashMap<>();
         if (properties.getCaches() == null || properties.getCaches().isEmpty()) {
             return result;
         }
 
-        for (Map.Entry<String, RedisProCacheProperties.CacheConfig> entry : properties.getCaches().entrySet()) {
+        for (Map.Entry<String, RedisProCacheProperties.CacheConfig> entry
+                : properties.getCaches().entrySet()) {
             String cacheName = entry.getKey();
             RedisProCacheProperties.CacheConfig cacheConfig = entry.getValue();
             RedisCacheConfiguration config = defaultConfig;
 
-            // 应用 per-cache TTL
             if (cacheConfig.getTtl() != null) {
                 config = config.entryTtl(cacheConfig.getTtl());
             }
-
-            // 应用 per-cache 键前缀
             if (cacheConfig.getKeyPrefix() != null && !cacheConfig.getKeyPrefix().isEmpty()) {
                 config = config.computePrefixWith(name -> cacheConfig.getKeyPrefix() + name + "::");
             }
-
-            // 应用 per-cache 空值策略
             if (Boolean.FALSE.equals(cacheConfig.getCacheNullValues())) {
                 config = config.disableCachingNullValues();
             }
 
             result.put(cacheName, config);
-            log.debug("Registered initial cache configuration: cacheName={}, ttl={}, keyPrefix={}",
-                    cacheName, cacheConfig.getTtl(), cacheConfig.getKeyPrefix());
         }
-
         return result;
     }
 
     @Bean
     @ConditionalOnMissingBean(KeyGenerator.class)
     public KeyGenerator keyGenerator() {
-        log.debug("Created SimpleKeyGenerator for cache key generation");
         return new SimpleKeyGenerator();
     }
 
@@ -178,18 +299,12 @@ public class RedisProCacheConfiguration {
         return Clock.systemUTC();
     }
 
-    /**
-     * 提前过期异步刷新执行器:从 {@code resi-cache.early-expiration.*}
-     * 读池参数构造。用户可自定义同类型 bean 顶替（{@code @ConditionalOnMissingBean}）。
-     */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(ThreadPoolEarlyExpirationExecutor.class)
     public ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor(
             RedisProCacheProperties properties,
             ObjectProvider<MeterRegistry> meterRegistryProvider) {
         RedisProCacheProperties.EarlyExpirationProperties ee = properties.getEarlyExpiration();
-        log.info("Creating ThreadPoolEarlyExpirationExecutor: core={}, max={}, queue={}",
-                ee.getPoolSize(), ee.getMaxPoolSize(), ee.getQueueCapacity());
         return new ThreadPoolEarlyExpirationExecutor(
                 ee.getPoolSize(),
                 ee.getMaxPoolSize(),

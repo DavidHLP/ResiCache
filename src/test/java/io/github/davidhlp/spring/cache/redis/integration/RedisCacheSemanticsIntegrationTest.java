@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("integration-test")
 @Import(TestRedisConfiguration.class)
 @DisplayName("Redis Cache Semantics Integration Tests")
-class RedisCacheSemanticsIT extends AbstractRedisIntegrationTest {
+class RedisCacheSemanticsIntegrationTest extends AbstractRedisIntegrationTest {
 
     @Autowired
     private TestCacheService cacheService;

@@ -3,10 +3,9 @@ package io.github.davidhlp.spring.cache.redis.protection.refresh;
 /**
  * 提前过期判定 seam:封装「热点 key 是否应在真正过期前主动刷新」的决策。
  *
- * <p>默认实现 {@link DefaultEarlyExpirationPolicy} 为 Spring {@code @Component};自定义实现声明
- * {@code @Bean} 即可顶替(对齐 {@code TtlPolicy} / {@code NullValuePolicy} / {@code LockManager} /
- * {@code BloomIFilter} 的可替换纪律)。{@code EarlyExpirationHandler} 依赖本接口而非具体类,
- * 使判定可独立测试与替换。
+ * <p>默认实现 {@link DefaultEarlyExpirationPolicy} 由自动配置显式注册;自定义实现声明
+ * {@code @Bean} 即可按类型顶替。{@code EarlyExpirationHandler} 仅依赖本接口,
+ * 而提交、取消和清理由 internal executor 自己负责。
  *
  * <p>本 seam 属 refresh 域;{@code TtlPolicy} 专注雪崩(抖动),两域依赖方向不倒置。
  *

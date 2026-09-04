@@ -17,7 +17,7 @@
 ## Code Style
 
 - **Naming**: Java standard PascalCase for classes, camelCase for methods/fields
-- **Checkstyle**: Enforced via `src/main/resources/checkstyle-custom.xml` (runs on every build)
+- **Checkstyle**: Enforced by `./mvnw checkstyle:check -B`
 - **Lombok**: Used throughout - `@Data`, `@Getter`, `@Setter`, `@Builder`
 - **Javadoc**: Chinese comments explaining design rationale in key classes
 
@@ -32,7 +32,7 @@
 
 - **Dev build**: `./mvnw clean compile`
 - **Full verify**: `./mvnw clean verify -B`
-- **Checkstyle only**: `./mvnw checkstyle:check`
+- **Checkstyle only**: `./mvnw checkstyle:check -B`
 - **Package**: `./mvnw clean package -DskipTests`
 
 ## Project Structure
@@ -43,7 +43,7 @@ ResiCache/
 └── src/main/java/io/github/davidhlp/spring/cache/redis/
     ├── annotation/          # @RedisCacheable/Put/Evict/Caching + AnnotationParser/Adapter + OperationSource
     │   └── handler/         #   AnnotationHandler + Abstract + 4 concrete handlers + AnnotationChainEngine
-    ├── cache/               # Spring integration core: RedisProCache(Manager/Writer), RedisCacheInterceptor
+    ├── cache/               # Spring integration core: RedisProCache(Manager/Writer), RedisCacheInterceptor, internal write-failure exception
     │   ├── loader/          #   LoaderOrchestrator, CacheOperationResolver (miss loading orchestration)
     │   ├── metrics/         #   CacheMetrics + RedisProCacheMetricsRegistry + RedisProCacheTimers
     │   └── model/           #   CacheKeys, CachedValue, ResiCacheFeatures
@@ -83,18 +83,18 @@ src/test/java/io/github/davidhlp/spring/cache/redis/
 ├── (mirror packages: annotation/{,handler/}, cache/{,loader/,metrics/,model/}, chain/{,handler/,observer/}, config/,
 │   operation/, protection/{avalanche,bloom{,filter},breakdown,nullvalue,refresh},
 │   serialization/{,migration/}) # unit tests mirroring src/main/java structure
-├── integration/                 # ALL Testcontainers-based integration tests + shared scaffolding:
+├── integration/                 # shared Testcontainers scaffolding + many integration suites
 │   ├── AbstractRedisIntegrationTest  # base class — Redis container + @DynamicPropertySource
 │   ├── AbstractRedisClusterIntegrationTest # base class — 3-master real Redis Cluster
-│   ├── TestApplication / TestRedisConfiguration   # Spring Boot test entry + @Primary bean mirror
-│   ├── TestCacheService          # @Service stub used by PathCAop* / RedisCacheSemantics ITs
-│   ├── *IntegrationTest.java     # BloomFilter / CacheOperations / DistributedLock / KeyResolution /
-│   │                             #   SerializationMigration / SyncSingleFlight — full end-to-end protection scenarios
-│   └── *IT.java                  # RedisClusterSlot / RedisDownFaultInjection / PathCAop* — contract & fault ITs
-└── com/example/domain/          # test fixture for whitelisted custom domain types (serializer interop)
+│   ├── TestApplication / TestRedisConfiguration   # Spring Boot test entry + test-only @Primary fixtures
+│   ├── TestCacheService          # @Service stub used by integration tests
+│   └── *IntegrationTest.java     # integration suites in this package
+├── cache/, chain/, config/       # additional integration tests mirroring production packages
+└── com/example/domain/           # test fixture for whitelisted custom domain types (serializer interop)
 ```
-> 集成测试统一位于 `integration/`。新增集成测试:继承 `AbstractRedisIntegrationTest`,放在同一包内,无需显式 import scaffolding。
-
+> Redis integration tests may live in the mirrored production package or
+> `integration/`; all use the `*IntegrationTest.java` suffix. The naming guard
+> rejects `*IT.java` and is enforced in local/CI flows.
 ## Key Architecture: Chain of Responsibility
 
 Cache writes go through a chain of handlers (in order):
@@ -112,8 +112,12 @@ Each handler implements `CacheHandler` interface with `handle()` method.
 
 - **Handler ordering**: Defined by `@HandlerPriority(HandlerOrder)` enum in `chain/HandlerOrder.java` (gap=100, single source of truth)
 - **Configuration properties**: Use `@ConfigurationProperties(prefix = "resi-cache")` with nested properties classes
-- **Context passing**: Use `CacheContext` to pass data between handlers (input is immutable, output is mutable)
-- **Strategy replacement**: 策略接口(`BloomIFilter`、`LockManager`)的默认实现均为 Spring `@Component`。自定义实现时声明 `@Bean` 配合 `@ConditionalOnMissingBean` 顶替默认即可。框架核心不依赖 Java ServiceLoader。
+- **Checkstyle**: Runs through the explicit `checkstyle:check` command, not as part of `verify`.
+- **Strategy replacement**: `TtlPolicy`, `NullValuePolicy`, `EarlyExpirationPolicy`,
+  `BloomHashStrategy`, `BloomIFilter`, and `MethodMetadataResolver` defaults are
+  explicit typed Beans with `@ConditionalOnMissingBean`. `CacheHandler` remains
+  a component class registered by the explicit auto-configuration import list;
+  package scanning is not used.
 
 ## Where to Look
 

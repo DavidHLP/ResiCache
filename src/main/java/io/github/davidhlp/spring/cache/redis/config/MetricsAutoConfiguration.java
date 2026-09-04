@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -50,13 +51,14 @@ import org.springframework.data.redis.core.RedisTemplate;
 @Slf4j
 @AutoConfiguration
 @ConditionalOnClass({MeterRegistry.class, HealthIndicator.class})
+@ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)
 @ConditionalOnProperty(prefix = "resi-cache.metrics", name = "enabled", havingValue = "true")
 public class MetricsAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
     public RedisCacheHealthIndicator redisCacheHealthIndicator(
-            RedisTemplate<String, Object> redisTemplate,
+            @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             ObjectProvider<io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport> syncSupportProvider,
             ObjectProvider<RedisProCacheProperties> propertiesProvider) {
         return new RedisCacheHealthIndicator(redisTemplate, syncSupportProvider, propertiesProvider);

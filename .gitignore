@@ -38,6 +38,8 @@
 !STABILITY.md
 !SECURITY.md
 !PERFORMANCE.md
+!docs/
+!docs/adr/
 
 # --- 项目配置 ---
 !.editorconfig

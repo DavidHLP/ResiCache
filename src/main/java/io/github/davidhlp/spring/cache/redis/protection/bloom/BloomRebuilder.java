@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,7 @@ public class BloomRebuilder {
     /** rebuilding 窗口禁用阈值(秒):{@code <=} 此值表示禁用 */
     static final long REBUILD_WINDOW_DISABLED = 0L;
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
     private final long rebuildWindowSeconds;
     private final Cache<String, Boolean> rebuildingCache;
 
@@ -50,9 +51,11 @@ public class BloomRebuilder {
      * @param properties    全局配置(读取 rebuild-window-seconds);可为 null(测试)
      */
     @Autowired
-    public BloomRebuilder(RedisTemplate<String, String> redisTemplate,
-                          @Nullable RedisProCacheProperties properties) {
-        this.redisTemplate = redisTemplate;
+    @SuppressWarnings("unchecked")
+    public BloomRebuilder(
+            @Qualifier("redisCacheTemplate") RedisTemplate<String, ?> redisTemplate,
+            @Nullable RedisProCacheProperties properties) {
+        this.redisTemplate = (RedisTemplate<String, Object>) (RedisTemplate<?, ?>) redisTemplate;
         this.rebuildWindowSeconds = properties == null
                 ? REBUILD_WINDOW_DISABLED
                 : properties.getBloomFilter().getRebuildWindowSeconds();

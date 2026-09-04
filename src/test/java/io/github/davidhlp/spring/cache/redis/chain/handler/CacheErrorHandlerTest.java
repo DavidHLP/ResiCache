@@ -48,7 +48,7 @@ class CacheErrorHandlerTest {
     class StrategyDispatchTests {
 
         @Test
-        @DisplayName("FAIL_FAST returns failure result")
+        @DisplayName("FAIL_FAST returns failure result with original cause")
         void handleException_failFast_returnsFailure() {
             Exception e = createException("Connection refused");
 
@@ -57,6 +57,21 @@ class CacheErrorHandlerTest {
                     CacheErrorHandler.ErrorStrategy.FAIL_FAST);
 
             assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getCause()).isSameAs(e);
+            assertThat(result.getFailureKind()).isEqualTo("REDIS");
+        }
+
+        @Test
+        @DisplayName("FAIL_FAST preserves operation metadata")
+        void handleException_failFast_preservesOperation() {
+            Exception e = createException("Error");
+
+            CacheResult result = handler.handleException(
+                    "PUT", "cache", "key", e,
+                    CacheErrorHandler.ErrorStrategy.FAIL_FAST);
+
+            assertThat(result.getOperation()).isEqualTo("PUT");
+            assertThat(result.getOutcome()).isEqualTo("FAILURE");
         }
 
         @Test
@@ -72,27 +87,31 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("GRACEFUL_DEGRADATION returns miss result")
-        void handleException_gracefulDegradation_returnsMiss() {
+        @DisplayName("GRACEFUL_DEGRADATION returns a miss with failure status")
+        void handleException_gracefulDegradation_returnsFailureMiss() {
             Exception e = createException("Timeout");
 
             CacheResult result = handler.handleException(
                     "GET", "test-cache", "key", e,
                     CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
 
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getResultBytes()).isNull();
+            assertThat(result.getFailureKind()).isEqualTo("REDIS");
+            assertThat(result.getCause()).isSameAs(e);
         }
 
         @Test
-        @DisplayName("SILENT returns miss result")
-        void handleException_silent_returnsMiss() {
+        @DisplayName("SILENT returns an observable best-effort failure")
+        void handleException_silent_returnsFailure() {
             Exception e = createException("Silent error");
 
             CacheResult result = handler.handleException(
                     "REMOVE", "test-cache", "key", e,
                     CacheErrorHandler.ErrorStrategy.SILENT);
 
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getCause()).isSameAs(e);
         }
 
         @Test
@@ -105,8 +124,28 @@ class CacheErrorHandlerTest {
                     CacheErrorHandler.ErrorStrategy.SILENT);
 
             assertThat(result).isNotNull();
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
         }
+
+        @Test
+        @DisplayName("classifies timeout, cancellation, and serialization failures")
+        void handleException_classifiesFailureKinds() {
+            CacheResult timeout = handler.handleException(
+                    "GET", "cache", "key", new java.util.concurrent.TimeoutException("timeout"),
+                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
+            CacheResult cancellation = handler.handleException(
+                    "GET", "cache", "key", new java.util.concurrent.CancellationException("cancelled"),
+                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
+            CacheResult serialization = handler.handleException(
+                    "GET", "cache", "key",
+                    new io.github.davidhlp.spring.cache.redis.serialization.SerializationException("bad"),
+                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
+
+            assertThat(timeout.getFailureKind()).isEqualTo("TIMEOUT");
+            assertThat(cancellation.getFailureKind()).isEqualTo("CANCELLATION");
+            assertThat(serialization.getFailureKind()).isEqualTo("SERIALIZATION");
+        }
+
     }
 
     /**
@@ -116,12 +155,13 @@ class CacheErrorHandlerTest {
      */
     static Stream<Arguments> perOperationStrategies() {
         return Stream.of(
-                Arguments.of(CacheOperation.GET, true),
+                Arguments.of(CacheOperation.GET, false),
                 Arguments.of(CacheOperation.PUT, false),
                 Arguments.of(CacheOperation.PUT_IF_ABSENT, false),
-                Arguments.of(CacheOperation.REMOVE, true),
+                Arguments.of(CacheOperation.REMOVE, false),
                 Arguments.of(CacheOperation.CLEAN, false));
     }
+
 
     @Nested
     @DisplayName("handleError per-operation strategy")
@@ -137,15 +177,16 @@ class CacheErrorHandlerTest {
 
             assertThat(result.isSuccess()).isEqualTo(expectedSuccess);
         }
-
         @Test
-        @DisplayName("GET uses GRACEFUL_DEGRADATION (returns miss, success=true)")
-        void handleError_get_returnsMiss() {
+        @DisplayName("GET uses GRACEFUL_DEGRADATION with failure status")
+        void handleError_get_returnsObservableMiss() {
             Exception e = createException("Redis error");
 
             CacheResult result = handler.handleError(CacheOperation.GET, "test-cache", "key", e);
 
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getResultBytes()).isNull();
+            assertThat(result.getFailureKind()).isEqualTo("REDIS");
         }
 
         @Test
@@ -169,13 +210,15 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("REMOVE uses SILENT (returns miss, success=true)")
-        void handleError_remove_returnsMiss() {
+        @DisplayName("REMOVE uses observable best-effort failure")
+        void handleError_remove_returnsFailureWithoutThrowing() {
             Exception e = createException("Redis error");
 
             CacheResult result = handler.handleError(CacheOperation.REMOVE, "test-cache", "key", e);
 
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getFailureKind()).isEqualTo("REDIS");
+            assertThat(result.getCause()).isSameAs(e);
         }
 
         @Test
@@ -219,23 +262,24 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("SILENT appropriate for REMOVE")
+        @DisplayName("SILENT remains an observable best-effort policy for REMOVE")
         void silent_appropriateForRemoves() {
             Exception e = createException("Error");
 
             CacheResult result = handler.handleError(CacheOperation.REMOVE, "cache", "key", e);
 
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
-        @DisplayName("GRACEFUL_DEGRADATION appropriate for GET")
+        @DisplayName("GRACEFUL_DEGRADATION preserves GET miss and failure status")
         void gracefulDegradation_appropriateForReads() {
             Exception e = createException("Error");
 
             CacheResult result = handler.handleError(CacheOperation.GET, "cache", "key", e);
 
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getResultBytes()).isNull();
         }
     }
 }

@@ -1,7 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.protection.refresh;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 
@@ -13,7 +12,6 @@ import java.time.Clock;
  *
  * <p>{@code Clock} 字段属于 refresh 域自有依赖。
  */
-@Component
 @RequiredArgsConstructor
 public class DefaultEarlyExpirationPolicy implements EarlyExpirationPolicy {
 

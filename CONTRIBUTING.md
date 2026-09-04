@@ -14,14 +14,15 @@ welcome, and the bar below keeps the project healthy.
 
 ## Development setup
 
-Requirements: **JDK 21+** (matches `pom.xml` `<java.version>21</java.version>`),
+Requirements: **JDK 21** (matches `pom.xml` `<java.version>21</java.version>`),
 **Maven 3.x** (the wrapper `./mvnw` is bundled),
 **Docker** (for Testcontainers-based integration tests).
 
 ```bash
-./mvnw clean verify -B      # build + tests + coverage gate + style
-./mvnw checkstyle:check -B  # style only
-./mvnw clean package -DskipTests -B   # quick package, no tests
+./mvnw clean verify -B
+./mvnw checkstyle:check -B
+./mvnw clean package -DskipTests -B
+bash scripts/ci/check-test-names.sh
 ```
 
 The `verify` goal enforces a JaCoCo coverage gate:
@@ -32,10 +33,8 @@ The `verify` goal enforces a JaCoCo coverage gate:
 A PR that drops below these thresholds will fail CI. **If you add code, add
 tests.**
 
-## Pull request checklist
-
-- [ ] `./mvnw clean verify -B` passes locally (including the coverage gate and
-      Checkstyle).
+- [ ] `./mvnw clean verify -B` passes locally (including the coverage gate).
+- [ ] `./mvnw checkstyle:check -B` passes locally.
 - [ ] New behavior has tests; bug fixes have a regression test.
 - [ ] Integration tests touching Redis extend `AbstractRedisIntegrationTest`
       (Testcontainers — Docker must be running).
@@ -68,7 +67,8 @@ rationale and source pointers.
    (extend `AbstractCacheHandler`).
 2. Annotate it `@HandlerPriority(HandlerOrder.YOUR_ORDER)` — `HandlerOrder` is
    the single source of truth for ordering (gap = 100, extend the enum to insert).
-3. Make it a `@Component` so `CacheHandlerChainFactory` auto-discovers it.
+3. Register it in the explicit `@Import` list in
+   `config/RedisProCacheConfiguration`; package scanning is intentionally not used.
 4. Add tests; document the mechanism's design rationale in Javadoc on the
    handler class (matching the existing codebase style).
 
@@ -85,7 +85,8 @@ intent and keep discussions focused on the code.
 
 ResiCache is currently a **single-maintainer project** — all merges, releases,
 and architectural decisions flow through `DavidHLP` (the only committer with
-`CODEOWNERS` write access on `master`).
+`CODEOWNERS` write access on `main`; `master` is retained only where legacy
+workflow references still exist).
 
 **Bus factor: 1** (current). This is honest, not aspirational.
 
@@ -110,14 +111,13 @@ hand-off, not to abandoning the project.
 
 ## Releases & CI infrastructure
 
-CI runs on every push to `master` and every PR via
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml). The composite action
+CI runs on every push to `main` or `master` and every PR via
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
+[`.github/workflows/pr.yml`](.github/workflows/pr.yml). The composite action
 [`.github/actions/setup-jdk-21/action.yml`](.github/actions/setup-jdk-21/action.yml)
-is the single source of truth for `java-version` / `distribution` / Maven
-cache across all three workflows (`ci.yml`, `pr-checks.yml`, `release.yml`).
-**Edit only the composite when bumping the project JDK**; re-introducing
-inline `actions/setup-java@v5` steps re-opens the drift this composite was
-created to close.
+centralizes the JDK distribution and Maven cache configuration. The POM's
+`<java.version>21</java.version>` remains the compiler and Enforcer source of
+truth; CI must keep the action input aligned.
 
 Release-time secrets (`OSSRH_*`, `GPG_*`) are configured at the repository /
 environment level out of band by the maintainer. Do not edit `release.yml`

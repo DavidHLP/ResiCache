@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.DistributedLockManager;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import org.redisson.config.BaseConfig;
 import org.redisson.config.BaseMasterSlaveServersConfig;
 import org.redisson.config.ClusterServersConfig;
@@ -30,8 +32,9 @@ import java.io.IOException;
  * <p>将 Redisson 相关代码隔离到本类、并在<b>类级别</b>加
  * {@code @ConditionalOnClass(RedissonClient.class)},可确保 Redisson 缺失时
  * Spring 用 ASM 读取注解后直接跳过本类——整个类不被加载,从而消除强引用风险。
- * 这使 Redisson 成为真正的可选依赖(仅 {@code sync=true} 防击穿需要它;
- * 缺失时 {@code SyncSupport} 优雅降级为 JVM 内锁)。
+ * 这使 Redisson 成为真正的可选依赖;仅 {@code sync=true} 防击穿需要它。
+ * 缺失时 sync=true 默认运行期 fail-fast,只有显式
+ * {@code resi-cache.sync-lock.local-only=true} 才允许单 JVM 降级。
  */
 @Slf4j
 @Configuration(proxyBeanMethods = false)
@@ -43,6 +46,14 @@ public class RedissonConfiguration {
     public RedissonClient redissonClient(
             DataRedisProperties redisProperties, RedisProCacheProperties properties) {
         return Redisson.create(buildConfig(redisProperties, properties));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(LockManager.class)
+    public LockManager distributedLockManager(
+            RedissonClient redissonClient,
+            RedisProCacheProperties properties) {
+        return new DistributedLockManager(redissonClient, properties);
     }
 
     /**

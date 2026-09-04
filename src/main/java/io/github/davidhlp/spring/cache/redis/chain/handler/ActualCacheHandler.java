@@ -5,12 +5,12 @@ import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
-import io.github.davidhlp.spring.cache.redis.protection.nullvalue.DefaultNullValuePolicy;
+import io.github.davidhlp.spring.cache.redis.protection.nullvalue.NullValuePolicy;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.RefreshCancellation;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.*;
 import org.springframework.lang.Nullable;
@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @HandlerPriority(HandlerOrder.ACTUAL_CACHE)
 public class ActualCacheHandler extends AbstractCacheHandler {
 
@@ -43,9 +42,21 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
-    private final DefaultNullValuePolicy nullValuePolicy;
+    private final NullValuePolicy nullValuePolicy;
     private final RefreshCancellation earlyExpirationExecutor;
     private final CacheErrorHandler errorHandler;
+    public ActualCacheHandler(
+            @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
+            ValueOperations<String, Object> valueOperations,
+            NullValuePolicy nullValuePolicy,
+            @Qualifier("earlyExpirationExecutor") RefreshCancellation earlyExpirationExecutor,
+            CacheErrorHandler errorHandler) {
+        this.redisTemplate = redisTemplate;
+        this.valueOperations = valueOperations;
+        this.nullValuePolicy = nullValuePolicy;
+        this.earlyExpirationExecutor = earlyExpirationExecutor;
+        this.errorHandler = errorHandler;
+    }
 
     @Override
     protected boolean shouldHandle(CacheContext context) {
@@ -196,7 +207,7 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             if (intent.applyPutIfAbsent(valueOperations, context.getRedisKey())) {
                 log.debug("Cache PUT_IF_ABSENT success: cacheName={}, key={}",
                           context.getCacheName(), context.getRedisKey());
-                return CacheResult.success();
+                return CacheResult.inserted();
             }
 
             // SETNX 失败说明 key 已存在，读取当前值返回
@@ -206,10 +217,10 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             if (existingValue != null) {
                 byte[] result = nullValuePolicy.toReturnValue(
                     existingValue.getValue(), context.getCacheName(), context.getRedisKey());
-                return CacheResult.success(result);
+                return CacheResult.existing(result);
             }
 
-            return CacheResult.success();
+            return CacheResult.existing(null);
 
         } catch (Exception e) {
             return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
@@ -253,8 +264,8 @@ public class ActualCacheHandler extends AbstractCacheHandler {
 
         log.debug("Cache CLEAN: cacheName={}, pattern={}", context.getCacheName(), keyPattern);
 
+        AtomicLong totalDeleted = new AtomicLong();
         try {
-            AtomicLong totalDeleted = new AtomicLong();
 
             redisTemplate.execute((RedisCallback<Void>) connection -> {
                 ScanOptions scanOptions = ScanOptions.scanOptions()
@@ -295,7 +306,9 @@ public class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.success();
 
         } catch (Exception e) {
-            return errorHandler.handleError(context.getOperation(), context.getCacheName(), keyPattern, e);
+            String failureKind = totalDeleted.get() > 0 ? "PARTIAL_CLEAN" : "REDIS";
+            return errorHandler.handleError(
+                    context.getOperation(), context.getCacheName(), keyPattern, failureKind, e);
         }
     }
 

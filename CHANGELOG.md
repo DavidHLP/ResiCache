@@ -12,24 +12,34 @@ patch releases.** Breaking changes are marked with ⚠️ in this changelog.
 API stability is only guaranteed from `1.0.0` onward; see
 [`STABILITY.md`](./STABILITY.md) for the contract that defines which
 surfaces are stable in 0.x and which change.
-
-> **Note on the `v1.0` git tag.** A historical `v1.0` tag exists from an
-> early development milestone ("defect remediation complete"). It does
-> **not** denote an API-stable or publicly released version — the actual
-> artifact version has always been `0.0.x`. The tag is kept for history
-> only.
+> No local `v1.0` release tag is treated as an API-stability baseline here.
+> Maven Central publishes `io.github.davidhlp:ResiCache:0.0.2`, but that
+> artifact is from the earlier Boot 3 / Java 17 line. It is usable only for
+> report-only compatibility analysis; a blocking compatibility gate waits for
+> a same-line published artifact with matching tag provenance.
 
 ## [Unreleased] — current development
 
 The project is on a **single build line**: Spring Boot
 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50.0. Dual-branch
-(`master` / `boot4`) is abandoned; Boot 4 is configured directly in
-`pom.xml`. See [`COMPATIBILITY.md`](./COMPATIBILITY.md).
+(`master` / `boot4`) is abandoned; the current build line is `main` and Boot
+4 is configured directly in `pom.xml`. See [`COMPATIBILITY.md`](./COMPATIBILITY.md).
 
 Latest shipped milestones:
 
-### Hardening of the protection chain
-
+### Interface contract closure
+- ⚠️ **Cache failure contract closure** — GET degrades to an observable miss;
+  PUT, PUT_IF_ABSENT, and CLEAN propagate a typed runtime failure retaining the
+  original cause; REMOVE remains observable best-effort. Callers that relied
+  on swallowed write failures must catch the runtime failure or pin the
+  previous 0.x version before migrating.
+- **Explicit auto-configuration** — removed library-root component scanning,
+  added typed default Bean back-off, and made `NullValuePolicy` the shared
+  handler contract.
+- **Async metadata closure** — capture now occurs before queueing work; worker
+  activation restores prior ThreadLocal/MDC state in `finally`.
+- **Integration naming closure** — `*IT` classes use `*IntegrationTest` and
+  Surefire is the only Maven test lifecycle.
 - ⚠️ **Sync without distributed backend fails fast** — `SyncSupport`
   no longer silently degrades to a single-JVM `synchronized` when
   `sync=true` is declared but no `LockManager` bean exists. Set
@@ -52,8 +62,9 @@ Latest shipped milestones:
 
 ### Single-build FIRE M0–M4
 
-- `master` runs Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50
-  on `verify -B` (tests + JaCoCo 70% / 40% gate + Testcontainers ITs).
+- Historical FIRE M0–M4 verification established the Boot 4.0 / SDR 4.0 /
+  Spring 7 / Java 21 / Redisson 3.50 line; current branch is `main`.
+  Release claims still require current CI evidence.
 - Adapter touch-points in source: `RedisCacheWriter.remove` → `evict`,
   `clean` → `clear` (delegating impls), `RedisCacheConfiguration.getTtl()`
   → `getTtlFunction().getTimeToLive(...)`, `RedisCacheManager`
@@ -108,14 +119,14 @@ Latest shipped milestones:
 - `CONTRIBUTING.md` — bus-factor disclosure (Maintainers section; bus
   factor 1 documented); JDK requirement aligned to 21 (matches `pom.xml`).
 - Composite GitHub Action `.github/actions/setup-jdk-21` — single source
-  of truth for JDK + Maven cache across `ci.yml` / `pr-checks.yml` /
-  `release.yml`.
+  for CI/PR JDK distribution and Maven cache. Release intentionally uses its
+  inline setup-java step because deploy credentials require extra inputs.
 - GitHub contributor templates
   (`.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml` +
   `.github/PULL_REQUEST_TEMPLATE.md`); `CODEOWNERS` relocated to
   `.github/`.
 - Versions reconciled across `README.md` / `README.zh-CN.md` /
-  `CLAUDE.md` to **Boot 4.0.0 / Java 21+ /
+  `CLAUDE.md` to **Boot 4.0.0 / Java 21 /
   Redisson 3.50.0 / Caffeine 3.1.8** (was 3.4.13 / 17+ / 3.27.0).
 - **JetCache coverage arithmetic correction** — JetCache
   Issue #269 (TTL jitter) is **closed unimplemented**, so

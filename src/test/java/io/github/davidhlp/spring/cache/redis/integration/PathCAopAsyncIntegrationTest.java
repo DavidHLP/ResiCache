@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("integration-test")
 @Import(TestRedisConfiguration.class)
 @DisplayName("async 路径 + MDC 透传契约")
-class PathCAopAsyncIT extends AbstractRedisIntegrationTest {
+class PathCAopAsyncIntegrationTest extends AbstractRedisIntegrationTest {
 
     private static final String CACHE_NAME = "testCache";
     private static final byte[] KEY = "async-test-key".getBytes();
@@ -57,7 +57,7 @@ class PathCAopAsyncIT extends AbstractRedisIntegrationTest {
         // 仅验证 async 路径 future 正常完成(不抛异常),证明
         // commonPool 异步线程 + withMethodMetadataSnapshot 链路通。
         // (raw byte[] 内容不直接断言 — 跨 SerializeFilter 链的字节比对复杂度高;
-        // sync 路径缓存值内容由 RedisCacheSemanticsIT 覆盖,async 路径逻辑等价)
+        // sync 路径缓存值内容由 RedisCacheSemanticsIntegrationTest 覆盖,async 路径逻辑等价)
         CompletableFuture<byte[]> future = redisProCacheWriter.retrieve(CACHE_NAME, KEY);
 
         // future.get() 不抛异常 + 5s 内完成,证明 async 路径正常工作

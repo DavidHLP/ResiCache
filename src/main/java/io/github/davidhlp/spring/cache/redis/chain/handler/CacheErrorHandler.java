@@ -4,7 +4,6 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
@@ -29,35 +28,18 @@ import java.util.Map;
  * 失去价值 — 真 seam。
  */
 @Slf4j
-@Component
 public class CacheErrorHandler {
 
     /**
-     * 错误处理策略 — CacheResult 返回语义 + 日志级别三元组。
+     * 错误处理策略。FAIL_FAST 由 Writer 转换为 typed exception；另外两种策略仍返回
+     * failure status，区别只在于调用方是否抛出。
      */
     public enum ErrorStrategy {
-        /** 返回失败结果，记录错误日志 */
         FAIL_FAST,
-
-        /** 降级处理，返回 miss，记录警告日志 */
         GRACEFUL_DEGRADATION,
-
-        /** 静默失败，仅记录 debug 日志 */
         SILENT
     }
 
-    /**
-     * per-operation 策略表 — 单一事实源。新增 operation 时追加一行即可，
-     * 无需新增 wrapper 方法。
-     *
-     * <p>设计意图：
-     * <ul>
-     *   <li>GET → GRACEFUL_DEGRADATION：读失败不应阻塞业务，返回 miss 让业务重新加载</li>
-     *   <li>PUT / PUT_IF_ABSENT → FAIL_FAST：写失败表示 Redis 不可用，业务需要感知</li>
-     *   <li>REMOVE → SILENT：删除失败不应影响业务流程</li>
-     *   <li>CLEAN → FAIL_FAST：批量清理失败需要让业务感知</li>
-     * </ul>
-     */
     private static final Map<CacheOperation, ErrorStrategy> STRATEGIES = Map.of(
             CacheOperation.GET, ErrorStrategy.GRACEFUL_DEGRADATION,
             CacheOperation.PUT, ErrorStrategy.FAIL_FAST,
@@ -66,42 +48,34 @@ public class CacheErrorHandler {
             CacheOperation.CLEAN, ErrorStrategy.FAIL_FAST);
 
     /**
-     * 按 operation 调度策略并应用 — 入口方法。
-     *
-     * <p>调用方传入当前 operation，本方法按 {@link #STRATEGIES} 查找策略，
-     * 委派到 {@link #handleException(String, String, String, Exception, ErrorStrategy)}
-     * 应用策略（unknown operation 退化到 FAIL_FAST）。
-     *
-     * @param operation 当前缓存操作（非 null）
-     * @param cacheName 缓存名（用于日志）
-     * @param key       缓存 key / pattern（用于日志）
-     * @param e         异常
-     * @return 按策略生成的 {@link CacheResult}
+     * 按 operation 调度错误策略并保留诊断信息。
      */
     public CacheResult handleError(CacheOperation operation, String cacheName, String key, Exception e) {
-        ErrorStrategy strategy = STRATEGIES.getOrDefault(operation, ErrorStrategy.FAIL_FAST);
-        return handleException(operation.name(), cacheName, key, e, strategy);
+        ErrorStrategy strategy = operation == null
+                ? ErrorStrategy.FAIL_FAST
+                : STRATEGIES.getOrDefault(operation, ErrorStrategy.FAIL_FAST);
+        String operationName = operation == null ? "UNKNOWN" : operation.name();
+        return handleException(operationName, cacheName, key, e, strategy, classify(e));
     }
 
     /**
-     * 应用策略生成结果 — 直接策略调用入口（测试 + 显式策略场景）。
-     *
-     * <p>三条 switch 分支：
-     * <ul>
-     *   <li>FAIL_FAST：log.error + CacheResult.failure()</li>
-     *   <li>GRACEFUL_DEGRADATION：log.warn + CacheResult.miss()</li>
-     *   <li>SILENT：log.debug + CacheResult.miss()</li>
-     * </ul>
-     *
-     * <p>CacheResult.failure() 不携带 exception（零生产读者）；
-     * 异常已在上方 log 记录，此处仅置 success=false。
-     *
-     * @param operation 操作名（字符串，用于日志）
-     * @param cacheName 缓存名（用于日志）
-     * @param key       缓存 key / pattern（用于日志）
-     * @param e         异常
-     * @param strategy  显式策略
-     * @return 按策略生成的 {@link CacheResult}
+     * CLEAN 等调用方需要补充 partial-clean 语义时使用的包内入口。
+     */
+    CacheResult handleError(
+            CacheOperation operation,
+            String cacheName,
+            String key,
+            String failureKind,
+            Exception e) {
+        ErrorStrategy strategy = operation == null
+                ? ErrorStrategy.FAIL_FAST
+                : STRATEGIES.getOrDefault(operation, ErrorStrategy.FAIL_FAST);
+        String operationName = operation == null ? "UNKNOWN" : operation.name();
+        return handleException(operationName, cacheName, key, e, strategy, failureKind);
+    }
+
+    /**
+     * 直接应用指定策略，供测试和显式内部调用使用。
      */
     public CacheResult handleException(
             String operation,
@@ -109,23 +83,47 @@ public class CacheErrorHandler {
             String key,
             Exception e,
             ErrorStrategy strategy) {
+        return handleException(operation, cacheName, key, e, strategy, classify(e));
+    }
 
+    private CacheResult handleException(
+            String operation,
+            String cacheName,
+            String key,
+            Exception e,
+            ErrorStrategy strategy,
+            String failureKind) {
+        CacheResult result = CacheResult.failure(operation, failureKind, e);
         return switch (strategy) {
             case FAIL_FAST -> {
-                log.error("Cache {} failed: cacheName={}, key={}",
-                          operation, cacheName, key, e);
-                yield CacheResult.failure();
+                log.error("Cache {} failed: cacheName={}, key={}, kind={}",
+                        operation, cacheName, key, failureKind, e);
+                yield result;
             }
             case GRACEFUL_DEGRADATION -> {
-                log.warn("Cache {} failed, degrading gracefully: cacheName={}, key={}, error={}",
-                         operation, cacheName, key, e.getMessage());
-                yield CacheResult.miss();
+                log.warn("Cache {} failed, degrading to miss: cacheName={}, key={}, kind={}, error={}",
+                        operation, cacheName, key, failureKind, e.getMessage());
+                yield result;
             }
             case SILENT -> {
-                log.debug("Cache {} failed (silent): cacheName={}, key={}",
-                          operation, cacheName, key, e);
-                yield CacheResult.miss();
+                log.warn("Cache {} failed, best-effort removal continues: cacheName={}, key={}, kind={}, error={}",
+                        operation, cacheName, key, failureKind, e.getMessage());
+                yield result;
             }
         };
+    }
+
+    private String classify(Exception e) {
+        if (e instanceof io.github.davidhlp.spring.cache.redis.serialization.SerializationException) {
+            return "SERIALIZATION";
+        }
+        if (e instanceof java.util.concurrent.CancellationException
+                || e instanceof InterruptedException) {
+            return "CANCELLATION";
+        }
+        if (e instanceof java.util.concurrent.TimeoutException) {
+            return "TIMEOUT";
+        }
+        return "REDIS";
     }
 }

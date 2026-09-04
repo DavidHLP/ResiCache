@@ -5,8 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -22,8 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@code prefix + key} 不变(hash-tag 在非 cluster 下无意义)。
  */
 @Slf4j
-@Component("distributedLockManager")
-@ConditionalOnClass(RedissonClient.class)
 @RequiredArgsConstructor
 public class DistributedLockManager implements LockManager {
 

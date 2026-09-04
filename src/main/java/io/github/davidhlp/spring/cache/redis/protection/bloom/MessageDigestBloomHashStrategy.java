@@ -1,7 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.protection.bloom;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -12,7 +11,6 @@ import java.util.List;
  * 基于消息摘要的双重哈希策略。
  */
 @Slf4j
-@Component
 public class MessageDigestBloomHashStrategy implements BloomHashStrategy {
 
     private static final List<String> BASE_ALGORITHMS = List.of("MD5", "SHA-256");

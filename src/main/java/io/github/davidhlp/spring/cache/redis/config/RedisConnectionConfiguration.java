@@ -18,7 +18,9 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 /**
  * Redis 连接和模板配置.
  *
- * <p>职责:仅负责 {@link RedisTemplate} 与衍生 Operations bean 的装配。
+ * <p>职责:仅负责 ResiCache 的安全 {@link RedisTemplate} 与衍生 Operations
+ * bean 的装配。模板使用专用基础设施名称 {@code redisCacheTemplate},以便与
+ * Spring Boot 可能提供的通用 template 共存；库内消费者统一限定到该模板。
  *
  * <p>本类不持有任何 Redisson 强类型引用——Redisson 配置由
  * {@link RedissonConfiguration}(独立类 + 类级 {@code @ConditionalOnClass})负责,
@@ -65,6 +67,7 @@ public class RedisConnectionConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public HashOperations<String, String, String> hashOperations(
+            @org.springframework.beans.factory.annotation.Qualifier("redisCacheTemplate")
             RedisTemplate<String, Object> redisTemplate) {
         return redisTemplate.opsForHash();
     }
@@ -72,6 +75,7 @@ public class RedisConnectionConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ValueOperations<String, Object> valueOperations(
+            @org.springframework.beans.factory.annotation.Qualifier("redisCacheTemplate")
             RedisTemplate<String, Object> redisTemplate) {
         return redisTemplate.opsForValue();
     }

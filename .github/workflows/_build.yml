@@ -18,6 +18,8 @@ jobs:
 
       - name: Set up JDK 21
         uses: ./.github/actions/setup-jdk-21
+      - name: Validate integration-test naming
+        run: bash ./scripts/ci/check-test-names.sh
 
       - name: Verify Core (Unit & Integration Tests, JaCoCo Gate)
         run: ./mvnw clean verify -B

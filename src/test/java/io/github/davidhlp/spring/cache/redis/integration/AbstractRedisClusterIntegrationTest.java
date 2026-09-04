@@ -45,7 +45,7 @@ public abstract class AbstractRedisClusterIntegrationTest {
             registry.add("spring.data.redis.cluster.nodes[" + propertyIndex + "]",
                     () -> containerIp + ":" + port);
             registry.add("resi-cache.redis.cluster-nodes[" + propertyIndex + "]",
-                    () -> "redis://" + containerIp + ":" + port);
+                    () -> containerIp + ":" + port);
         }
         registry.add("spring.data.redis.host", () -> containerIp);
         registry.add("spring.data.redis.port", () -> FIRST_REDIS_PORT);

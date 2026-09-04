@@ -16,6 +16,13 @@ All measurements were produced by the `resicache-bench` module using JMH 1.37 on
 | JMH Warmup / Measurement | 1-3 iterations × 1 s | JMH Fork: 1 |
 
 ---
+> **Baseline status:** The results below are a historical baseline for the
+> environment recorded above, not a release or SLO certification. A later local
+> smoke run on JDK 21.0.12.1 produced non-comparable values (Bloom hit
+> **4.86M ops/s**, `syncLocalOnly_8threads` **20.8M ops/s**, and chain
+> pass-through **24.8M ops/s**). That run confirms the benchmark executable
+> works; it does not validate or replace this historical table.
+
 
 ## Running the Benchmarks
 

@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.config;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.Bean;
  */
 @Slf4j
 @AutoConfiguration
+@ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)
 public class CachingEnablementValidation {
 
     /**
