@@ -53,7 +53,7 @@ tests.**
 | You're touching... | Start here |
 |---|---|
 | A protection mechanism | `protection/<mechanism>/` + `chain/CacheHandlerChainFactory` |
-| Annotation handling | `handler/` + `annotation/RedisCacheOperationSource` |
+| Annotation handling | `annotation/handler/` + `annotation/RedisCacheOperationSource` |
 | Auto-configuration | `config/RedisCacheAutoConfiguration` + `RedisProCacheProperties` |
 | Serialization | `serialization/SecureJackson*` |
 | Cache core | `cache/RedisProCache`, `RedisProCacheManager`, `RedisProCacheWriter` |

@@ -228,8 +228,7 @@ resi-cache:
     users:
       ttl: 10m
       cache-null-values: true
-      enable-bloom-filter: true
-      enable-early-expiration: false
+      key-prefix: "users:"
 ```
 
 ## 📖 工作原理

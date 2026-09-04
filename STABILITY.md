@@ -32,7 +32,7 @@ line.
 | Area | What may change | Example |
 |------|-----------------|---------|
 | **Internal implementation** | Source-level details inside `chain/`, `protection/`, `cache/` | Handler ordering is fixed by `HandlerOrder` enum (gap = 100), but inner algorithm of a specific handler is not contractual |
-| **Default values of properties** | Defaults may be tuned between minor versions | `resi-cache.protection.ttl.jitter-ratio` default may shift toward a better baseline |
+| **Default values of properties** | Defaults may be tuned between minor versions | `resi-cache.default-ttl` default may shift toward a better baseline |
 | **Unstable package layout** | Contents of internal sub-packages and unstable implementation types under `io.github.davidhlp.spring.cache.redis.*` | Stable annotations, configuration keys, wire format, and SPI signature types listed in §1 are excluded. |
 | **Observability metric names and tags** | Pre-1.0 metric namespace is NOT contractual | A `bloomsift.*` → `resicache.handler.*` rename is allowed pre-1.0 (with ⚠️ BREAKING CHANGELOG) |
 | **Diagnostic warnings and logs** | Message text, log levels for startup probes | "whitelist auto-derived from host app root package" WARN may rephrase |

@@ -25,7 +25,7 @@ The project is on a **single build line**: Spring Boot
 (`master` / `boot4`) is abandoned; the current build line is `main` and Boot
 4 is configured directly in `pom.xml`. See [`COMPATIBILITY.md`](./COMPATIBILITY.md).
 
-Latest shipped milestones:
+Current milestones:
 
 ### Interface contract closure
 - ⚠️ **Cache failure contract closure** — GET degrades to an observable miss;
@@ -71,8 +71,7 @@ Latest shipped milestones:
   constructor arg reorder, Boot 4 package relocations
   (`DataRedisAutoConfiguration` / `DataRedisProperties` /
   `health.contributor`), `redisson-spring-boot-starter` → `redisson` core
-  (the starter hard-references Boot 3 classes), defensive
-  `supportsAsyncRetrieve()=false` shim.
+  (the starter hard-references Boot 3 classes).
 - CI: `.github/workflows/ci-boot4.yml` and the `compatibility` job in
   `  ci.yml` removed; Boot 4 is the sole line.
 

@@ -97,7 +97,7 @@ src/test/java/io/github/davidhlp/spring/cache/redis/
 > rejects `*IT.java` and is enforced in local/CI flows.
 ## Key Architecture: Chain of Responsibility
 
-Cache writes go through a chain of handlers (in order):
+Cache operations that use ResiCache go through a chain of handlers (in order):
 
 1. **BloomFilterHandler** (100) - Checks if key exists in bloom filter, blocks cache penetration
 2. **SyncLockHandler** (200) - Acquires distributed lock, prevents cache breakdown
@@ -128,5 +128,5 @@ Each handler implements `CacheHandler` interface with `handle()` method.
 | Add a new cache protection handler | `protection/<mechanism>/` + implement `CacheHandler`, annotate `@HandlerPriority(HandlerOrder.X)` |
 | Modify annotation processing | `annotation/handler/` + `AnnotationHandler` interface |
 | Change Redis connection config | `config/RedisConnectionConfiguration.java` |
-| Configure behavior | `config/RedisProCacheProperties.java` (311 LOC, `resi-cache.*` prefix) |
+| Configure behavior | `config/RedisProCacheProperties.java` (`resi-cache.*` prefix) |
 | Add integration tests | `AbstractRedisIntegrationTest.java` + Testcontainers |
