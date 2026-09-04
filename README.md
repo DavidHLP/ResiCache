@@ -344,6 +344,8 @@ Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md).
 - **Contributing**: PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Performance Benchmarks**: JMH baseline results & SLOs — see [PERFORMANCE.md](PERFORMANCE.md).
 - **API Stability Contract**: 0.x vs 1.0 stability guarantees — see [STABILITY.md](STABILITY.md).
+- **Architecture Decisions**: accepted decisions and rationale — see
+  [ADR index](docs/adr/README.md).
 - **Compatibility Matrix**: supported Spring Boot / Java / Redisson lines — see [COMPATIBILITY.md](COMPATIBILITY.md).
 - **Security**: report privately — see [SECURITY.md](SECURITY.md).
 

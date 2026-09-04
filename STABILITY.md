@@ -98,5 +98,6 @@ those areas open for tuning.
 - [`CHANGELOG.md`](./CHANGELOG.md) — per-version changelog including
   ⚠️ BREAKING markers.
 
-> Historical architecture decisions live in `git log` (commit bodies capture
-> rationale + alternatives rejected). No wiki ADR prose is consulted.
+> Accepted architecture decisions and their rationale live in the
+> [`docs/adr/`](./docs/adr/README.md) index; Git history records ordinary
+> implementation history and commit-level details.
