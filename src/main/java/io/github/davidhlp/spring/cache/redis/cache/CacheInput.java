@@ -9,6 +9,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.time.Duration;
+import java.util.Arrays;
 import org.springframework.lang.Nullable;
 
 /**
@@ -42,6 +43,10 @@ record CacheInput(
     /** 缓存操作配置 */
     @Nullable CachePolicyView.Source cacheOperation
 ) implements CacheContext.InputView {
+    CacheInput {
+        valueBytes = valueBytes == null ? null : Arrays.copyOf(valueBytes, valueBytes.length);
+    }
+
     public static Builder builder() {
         return new Builder();
     }

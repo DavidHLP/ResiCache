@@ -89,12 +89,16 @@ public class RedisProCache extends RedisCache {
         super(name, cacheWriter, cacheConfiguration);
         this.metricsRegistry = new RedisProCacheMetricsRegistry(features.getMeterRegistry(), name);
         this.operationResolver = features.getOperationResolver();
-        // loader 路径编排器 build — 委派 bloomGate/syncSupport/syncLockTimeout + 1 putAfterLoad 闭包;
-        // orchestrator 与本类解耦,通过闭包 + super 引用完成 cache-specific 操作。
+        // loader 路径编排器 build — protection 依赖 + cache-specific callbacks 一次性绑定;
+        // 生产 get(key, loader) 只需传入 key/loader/operation,不再重复装配 4 个 callback。
         this.loaderOrchestrator = new LoaderOrchestrator(
                 features.getBloomGate(),
                 features.getSyncSupport(),
-                features.getSyncLockTimeout());
+                features.getSyncLockTimeout(),
+                this::deriveRedisKey,
+                this::doubleCheckLookup,
+                (k, v) -> put(k, v),
+                (k, loader) -> defaultLoad(k, loader));
     }
 
     @Override
@@ -134,7 +138,7 @@ public class RedisProCache extends RedisCache {
      * miss counter 自增:bloom 短路 1 次 / 失败路径 1 次 / 成功路径 0 次;异常翻译:
      * RuntimeException 直接抛 / checked Exception 翻译为 RuntimeException。
      *
-     * <p>4 个 callback 一次性 capture 在此处:
+     * <p>4 个 callback 已在构造期绑定到 {@link LoaderOrchestrator};此处不重复组装:
      * <ul>
      *   <li>{@code redisKeyFn} → {@link #deriveRedisKey}(super.createCacheKey) — BloomGate/SyncSupport 用</li>
      *   <li>{@code doubleCheckFn} → {@link #doubleCheckLookup}(super.get) — 锁内双检,绕过 override 不打 metrics</li>
@@ -146,15 +150,7 @@ public class RedisProCache extends RedisCache {
     public <T> T get(Object key, Callable<T> loader) {
         return metricsRegistry.recordGet(() -> {
             RedisCacheableOperation operation = lookupOperation();
-            LoadOutcome<T> outcome = loaderOrchestrator.orchestrate(
-                    getName(),
-                    this::deriveRedisKey,
-                    this::doubleCheckLookup,
-                    (k, v) -> put(k, v),
-                    this::defaultLoad,
-                    loader,
-                    key,
-                    operation);
+            LoadOutcome<T> outcome = loaderOrchestrator.orchestrate(getName(), loader, key, operation);
             return switch (outcome) {
                 case LoaderOrchestrator.BloomShortCircuited<T> ignored -> {
                     metricsRegistry.recordMiss();

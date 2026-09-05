@@ -16,7 +16,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.EarlyExpirationDecision
 import io.github.davidhlp.spring.cache.redis.chain.model.PrefetchDecision;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
@@ -49,19 +48,6 @@ import org.springframework.stereotype.Component;
 class EarlyExpirationHandler extends AbstractCacheHandler {
 
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
-
-    /**
-     * fast-path TTL 阈值:当 Redis 报告的剩余 TTL 仍大于此值时,跳过本 handler 的
-     * 全部逻辑(包括 value GET),让 ActualCacheHandler 走原生一次 GET 完成 hit 处理 —
-     * 把热路径从"early handler GET + actual GET"两次 RTT 降为"actual GET"一次 RTT。
-     *
-     * <p>选 60s 是因为典型缓存 TTL 是 30s~10min,refresh window 通常在剩余最后
-     * 5-30%(<3min);绝对阈值 60s 落在"不会立即需要刷新"的合理边界。比百分比策略
-     * 更简单也更便宜 —— 不需要先 GET CachedValue 拿 totalTtl。
-     *
-     * <p>边界:剩余 TTL <= 60s 时走 GET + policy check,行为对调用方无变化。
-     */
-    static final long FAST_PATH_TTL_SECONDS = 60L;
 
     private final EarlyExpirationPolicy earlyExpirationPolicy;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
@@ -101,26 +87,11 @@ class EarlyExpirationHandler extends AbstractCacheHandler {
 
     @Override
     protected HandlerResult doHandle(CacheContext context) {
-        // fast-path:对剩余 TTL 仍较大的"新鲜"缓存项,跳过本 handler 全部逻辑
-        // (不 GET value、不判定 policy),让 ActualCacheHandler 走原生 GET 完成
-        // hit 处理。把热路径从"early handler GET + actual GET"两次 RTT 降为
-        // "actual GET"一次 RTT。
-        Long remainingTtl = redisTemplate.getExpire(context.getRedisKey(), TimeUnit.SECONDS);
-        // getExpire 返回值约定:
-        //   -2 = key 不存在(没必要 GET,ActualCacheHandler 会自己处理)
-        //   -1 = key 存在但无过期(永不过期 → 不需要早刷新)
-        //   null = Redis 命令失败(防御性:走原 GET 路径,行为字节等价)
-        //   >= 0 = 剩余秒数
-        if (remainingTtl != null && remainingTtl > FAST_PATH_TTL_SECONDS) {
-            return HandlerResult.continueChain();
-        }
-        if (remainingTtl != null && remainingTtl < 0) {
-            // -1 或 -2 都不需要本 handler 工作
-            return HandlerResult.continueChain();
-        }
-
-        // 剩余 TTL 已落入刷新窗口(<=60s) 或 getExpire 失败(走 defensive GET)
-        CachedValue cachedValue = (CachedValue) valueOperations.get(context.getRedisKey());
+        // 必须先取得完整 CachedValue，再按用户配置的比例阈值判断。
+        // 绝对 TTL 快速路径会绕过高 TTL + 高龄缓存的合法刷新窗口，导致
+        // handler 行为与 earlyExpirationThreshold 不一致。
+        Object rawValue = valueOperations.get(context.getRedisKey());
+        CachedValue cachedValue = rawValue instanceof CachedValue cv ? cv : null;
 
         if (cachedValue == null || cachedValue.checkExpired()) {
             // 缓存不存在或已过期，不预取，ActualCacheHandler 走原生 GET 路径
@@ -237,10 +208,14 @@ class EarlyExpirationHandler extends AbstractCacheHandler {
      */
     void performAsyncRefresh(String redisKey, String cacheName, CachedValue capturedValue) {
         try {
-            CachedValue liveValue = (CachedValue) valueOperations.get(redisKey);
-
-            if (liveValue == null) {
+            Object rawLiveValue = valueOperations.get(redisKey);
+            if (rawLiveValue == null) {
                 log.debug("Async early-expiration: key already missing: {}", redisKey);
+                return;
+            }
+            if (!(rawLiveValue instanceof CachedValue liveValue)) {
+                log.debug("Async early-expiration skipped: unsupported cached value type: key={}, type={}",
+                        redisKey, rawLiveValue.getClass().getName());
                 return;
             }
 

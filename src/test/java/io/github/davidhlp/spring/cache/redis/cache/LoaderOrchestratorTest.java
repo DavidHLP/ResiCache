@@ -415,6 +415,25 @@ class LoaderOrchestratorTest {
     class DefaultLoadPathTests {
 
         @Test
+        @DisplayName("bound callback constructor exposes a small production call surface")
+        void boundCallbacks_productionEntryUsesOnlyLoaderAndKey() {
+            LoaderOrchestrator bound = new LoaderOrchestrator(
+                    null,
+                    null,
+                    null,
+                    key -> testRedisKey,
+                    key -> null,
+                    (key, value) -> { },
+                    (key, loader) -> "bound-value");
+
+            LoadOutcome<String> outcome = bound.orchestrate(
+                    "testCache", () -> "unused-loader", "key1", operation(false, false));
+
+            assertThat(outcome).isInstanceOf(Loaded.class);
+            assertThat(((Loaded<String>) outcome).value()).isEqualTo("bound-value");
+        }
+
+        @Test
         @DisplayName("default path returns Loaded with defaultLoadFn result")
         void defaultPath_returnsLoaded() {
             RedisCacheableOperation op = operation(false, false);

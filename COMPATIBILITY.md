@@ -92,8 +92,14 @@ not require a cache flush.
   availability-first — a successful loader value is always returned; a
   write-back failure is logged (redacted, no raw key) and does not override
   the value. Loader failures surface as Spring `Cache.ValueRetrievalException`
-  (type, cause, and loader identity preserved); exception text carries no raw
-  key — the checked-exception wrapper names the cache only.
+  (type and cause preserved; the diagnostic key is reduced to cache name);
+  exception text carries no raw key — the checked-exception wrapper names the
+  cache only.
+- **Refresh metadata**: the version-2 envelope persists the fields required by
+  early-expiration policy and version CAS (`ttl`, `createdTime`, access/visit
+  counters, `expired`, and `version`). `startNanoTime` is process-local and is
+  intentionally reset on deserialization; older payloads without these fields
+  remain readable through the wall-clock fallback.
 - **Bloom CLEAN semantics**: Bloom tracks possible data-source membership,
   not current cache entries. CLEAN preserves existing bits and never uses a
   rebuilding marker or TTL window; false-positives are safe, while loader

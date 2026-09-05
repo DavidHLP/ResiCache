@@ -52,9 +52,10 @@ import org.springframework.lang.Nullable;
  *       local-lock(走 {@code super.get(key, loader)})</li>
  * </ul>
  *
- * <p><b>状态</b>:无可变状态。3 个共享依赖是 Spring 单例 bean,callback 闭包由 {@code RedisProCache}
- * 在构造期一次性 capture(指向 {@code super.get} / {@code this.put} / {@code super.createCacheKey});
- * {@code cacheName} 在每次 orchestrate() 调用传入。
+ * <p><b>状态</b>:无可变状态。3 个共享依赖和 4 个 cache-specific callback 由
+ * {@code RedisProCache} 在构造期一次性绑定(指向 {@code super.get} / {@code this.put} /
+ * {@code super.createCacheKey} / {@code super.get(key, loader)});每次调用只需传入
+ * {@code cacheName}、key、loader 和 operation。
  *
  * <p><b>契约保真</b>:异常翻译、键派生({@link CacheKeys})、{@code -1} 永久缓存哨兵、
  * null-value 缓存等契约逐字保留;caller-side switch 的 metric 自增保证各路径恰好 1 次 miss 计数。
@@ -107,13 +108,69 @@ final class LoaderOrchestrator {
     private final BloomGate bloomGate;
     private final SyncSupport syncSupport;
     private final SyncLockTimeout syncLockTimeout;
+    private final Function<Object, String> boundRedisKeyFn;
+    private final Function<Object, Cache.ValueWrapper> boundDoubleCheckFn;
+    private final BiConsumer<Object, Object> boundPutAfterLoad;
+    private final DefaultLoadFn<Object> boundDefaultLoadFn;
 
     public LoaderOrchestrator(@Nullable BloomGate bloomGate,
                               @Nullable SyncSupport syncSupport,
                               @Nullable SyncLockTimeout syncLockTimeout) {
+        this(bloomGate, syncSupport, syncLockTimeout, null, null, null, null);
+    }
+
+    /**
+     * 生产构造:一次性绑定 cache-specific 回调,隐藏 loader 编排的 callback 组装细节。
+     */
+    LoaderOrchestrator(
+            @Nullable BloomGate bloomGate,
+            @Nullable SyncSupport syncSupport,
+            @Nullable SyncLockTimeout syncLockTimeout,
+            @Nullable Function<Object, String> redisKeyFn,
+            @Nullable Function<Object, Cache.ValueWrapper> doubleCheckFn,
+            @Nullable BiConsumer<Object, Object> putAfterLoad,
+            @Nullable DefaultLoadFn<Object> defaultLoadFn) {
         this.bloomGate = bloomGate;
         this.syncSupport = syncSupport;
         this.syncLockTimeout = syncLockTimeout;
+        this.boundRedisKeyFn = redisKeyFn;
+        this.boundDoubleCheckFn = doubleCheckFn;
+        this.boundPutAfterLoad = putAfterLoad;
+        this.boundDefaultLoadFn = defaultLoadFn;
+    }
+
+    /**
+     * 生产调用入口:使用构造期绑定的 callbacks 执行 loader 路径。
+     *
+     * @param cacheName 缓存名
+     * @param loader    Spring Cache loader
+     * @param key       用户缓存 key
+     * @param operation 方法级缓存 operation,可为 null
+     * @param <T>       加载结果类型
+     * @return 编排结果
+     */
+    @SuppressWarnings("unchecked")
+    <T> LoadOutcome<T> orchestrate(
+            String cacheName,
+            Callable<T> loader,
+            Object key,
+            @Nullable RedisCacheableOperation operation) {
+        if (boundRedisKeyFn == null
+                || boundDoubleCheckFn == null
+                || boundPutAfterLoad == null
+                || boundDefaultLoadFn == null) {
+            throw new IllegalStateException("LoaderOrchestrator callbacks are not bound");
+        }
+        DefaultLoadFn<T> defaultLoadFn = (DefaultLoadFn<T>) (DefaultLoadFn<?>) boundDefaultLoadFn;
+        return orchestrate(
+                cacheName,
+                boundRedisKeyFn,
+                boundDoubleCheckFn,
+                boundPutAfterLoad,
+                defaultLoadFn,
+                loader,
+                key,
+                operation);
     }
 
     /**

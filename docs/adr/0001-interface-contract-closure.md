@@ -392,3 +392,65 @@ cached-chain invariance under property changes.
 
 **Known limitation**: no runtime toggle. **Re-evaluate** only with a real
 hot-update requirement.
+
+## 19. Secure type-id validation across JSON forms
+
+**Context**: Jackson field-level type metadata can arrive as a property or as a
+wrapper array, while the configured global type-property name may differ from
+`@class`. A preflight that checks only one property does not protect every form.
+
+**Decision**: Install the whitelist-backed `PolymorphicTypeValidator` on every
+serializer mapper and run one streaming preflight that checks `@class`, the
+configured type-property, and wrapper-array type ids for the envelope/value
+polymorphic fields before Jackson instantiates a value.
+
+**Consequences**: disallowed type ids fail before object construction; ordinary
+allowed business values and collections retain their existing round-trip shape.
+
+## 20. CachedValue refresh metadata wire contract
+
+**Context**: The envelope carried the business value but Jackson ignored the
+metadata required by early-expiration policy and version CAS.
+
+**Decision**: Persist `ttl`, `createdTime`, `lastAccessTime`, `visitTimes`,
+`expired`, and `version` as explicit fields. Keep `startNanoTime` process-local
+and reset it on deserialization; missing fields in older payloads retain their
+zero/default values and use the wall-clock fallback.
+
+**Consequences**: refresh policy and value-version CAS work across JVMs without
+persisting an invalid monotonic-clock origin.
+
+## 21. Early-expiration value-version CAS
+
+**Context**: The Lua CAS compared the envelope format version (`2`) with the
+cached value version token, so concurrent writes could be accepted or valid
+refreshes rejected for the wrong reason.
+
+**Decision**: Unwrap the envelope and compare `payload.version` (including the
+supported wrapper-array shape) with the expected value-version argument using
+exact string equality. A format-version change is handled by serializer
+compatibility, not by this refresh CAS.
+
+## 22. Policy-driven early expiration
+
+**Context**: An absolute 60-second fast path skipped policy evaluation for long
+TTL entries that were already inside a configured percentage refresh window.
+
+**Decision**: When early expiration is enabled, read the `CachedValue` and let
+`EarlyExpirationPolicy` decide from its TTL, creation time, and configured
+threshold. Reuse the prefetched hit in the actual handler; do not bypass the
+policy using an unrelated absolute threshold.
+
+## 23. Internal context and loader seams
+
+**Context**: `CacheContext` was described as immutable while exposing mutable
+byte arrays, and `RedisProCache` rebuilt four loader callbacks on every call.
+
+**Decision**: Copy byte input at `CacheInput` construction and at the public
+context read. Bind the loader callbacks once in the internal
+`LoaderOrchestrator` constructor; retain the full-parameter overload only for
+internal isolation tests. The engine-only `markSkipRemaining` member remains as
+a compatibility shim until a real external implementation justifies a migration.
+
+**Consequences**: callers receive a smaller production seam and cannot mutate
+chain input bytes; no new public SPI or runtime reconfiguration is introduced.

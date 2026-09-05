@@ -22,9 +22,11 @@ final class EarlyExpirationScripts {
     /**
      * 原子缩短 TTL 的 Lua 脚本(版本 CAS).
      *
-     * <p>语义:{@code GET key},用 cjson 解析出 value 里的 {@code version} 字段,若
-     * 等于 {@code ARGV[1]}(预期版本)则 {@code EXPIRE} 为 {@code ARGV[2]} 秒并返回 1,
-     * 否则返回 0(值已变,放弃缩短).保证「检查 version 未变 → 缩短 TTL」的原子性,
+     * <p>语义:{@code GET key},用 cjson 解析 envelope 的 {@code payload.version}
+     * (缓存值版本),若等于 {@code ARGV[1]}(预期版本)则 {@code EXPIRE} 为
+     * {@code ARGV[2]} 秒并返回 1,否则返回 0(值已变,放弃缩短)。顶层
+     * {@code envelope.version} 是格式版本,不能用于 CAS。保证「检查值 version 未变
+     * → 缩短 TTL」的原子性,
      * 避免异步刷新窗口内值被覆盖后仍缩短 TTL 的竞态.
      *
      * <p>版本 CAS 只传 8 字节(long → string),不把整个 CachedValue 序列化值
@@ -38,7 +40,7 @@ final class EarlyExpirationScripts {
      * <p>参数:
      * <ul>
      *   <li>{@code KEYS[1]} — 目标 redis key</li>
-     *   <li>{@code ARGV[1]} — 预期的 version(ASCII 数字字符串,来自 CachedValue.version)</li>
+     *   <li>{@code ARGV[1]} — 预期的 payload.version(ASCII 数字字符串,来自 CachedValue.version)</li>
      *   <li>{@code ARGV[2]} — 缩短后的 TTL 秒数(刷新宽限期)</li>
      * </ul>
      */
@@ -46,12 +48,19 @@ final class EarlyExpirationScripts {
         "local current = redis.call('get', KEYS[1]) " +
         "if current then " +
         "    local ok, parsed = pcall(cjson.decode, current) " +
-        "    if ok and parsed and parsed.version == nil then " +
-        "        parsed = cjson.decode('{\"version\":0}') " +
-        "    end " +
-        "    if ok and parsed and tostring(parsed.version) == ARGV[1] then " +
-        "        redis.call('expire', KEYS[1], ARGV[2]) " +
-        "        return 1 " +
+        "    if ok and type(parsed) == 'table' then " +
+        "        if type(parsed[2]) == 'table' and parsed[1] ~= nil then " +
+        "            parsed = parsed[2] " +
+        "        end " +
+        "        local payload = parsed.payload " +
+        "        if type(payload) == 'table' and type(payload[2]) == 'table' and payload[1] ~= nil then " +
+        "            payload = payload[2] " +
+        "        end " +
+        "        if type(payload) == 'table' and payload.version ~= nil " +
+        "                and tostring(payload.version) == ARGV[1] then " +
+        "            redis.call('expire', KEYS[1], ARGV[2]) " +
+        "            return 1 " +
+        "        end " +
         "    end " +
         "end " +
         "return 0";

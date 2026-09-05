@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.springframework.lang.Nullable;
 
@@ -19,23 +20,31 @@ import org.springframework.lang.Nullable;
  *
  * <p>序列化兼容性说明：
  * <ul>
- *   <li>v2 版本新增了 startNanoTime 字段</li>
- *   <li>旧缓存数据反序列化时 startNanoTime=0，会自动降级使用 createdTime</li>
- *   <li>value 字段使用 @JsonTypeInfo(Id.CLASS) 保留类型信息，安全性由 validateTypeIds() 校验</li>
- *   <li>字段布局保持稳定：序列化走字段（getter 全 @JsonIgnore），不得随意重组字段结构</li>
+ *   <li>startNanoTime 仅保存当前 JVM 的单调时钟起点，不写入 v2 wire format</li>
+ *   <li>旧缓存数据或跨 JVM 反序列化时 startNanoTime=0，会自动降级使用 createdTime</li>
+ *   <li>value 字段使用 @JsonTypeInfo(Id.CLASS) 保留类型信息，安全性由 serializer 的流式预检校验</li>
+ *   <li>刷新元数据（ttl/createdTime/lastAccessTime/visitTimes/expired/version）按字段持久化；
+ *       startNanoTime 仅是进程内单调时钟，不写入 wire format</li>
  * </ul>
  */
 final class CachedValue {
 
+    @JsonProperty("value")
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
     private Object value;
     private Class<?> type;
+    @JsonProperty("ttl")
     private long ttl;
+    @JsonProperty("createdTime")
     private long createdTime;
     private long startNanoTime;
+    @JsonProperty("lastAccessTime")
     private long lastAccessTime;
+    @JsonProperty("visitTimes")
     private long visitTimes;
+    @JsonProperty("expired")
     private boolean expired;
+    @JsonProperty("version")
     private long version;
 
     /** 仅供 Jackson 反序列化使用 */
@@ -109,12 +118,10 @@ final class CachedValue {
         return type;
     }
 
-    @JsonIgnore
     public long getTtl() {
         return ttl;
     }
 
-    @JsonIgnore
     public long getCreatedTime() {
         return createdTime;
     }
@@ -124,22 +131,18 @@ final class CachedValue {
         return startNanoTime;
     }
 
-    @JsonIgnore
     public long getLastAccessTime() {
         return lastAccessTime;
     }
 
-    @JsonIgnore
     public long getVisitTimes() {
         return visitTimes;
     }
 
-    @JsonIgnore
     public boolean isExpired() {
         return expired;
     }
 
-    @JsonIgnore
     public long getVersion() {
         return version;
     }

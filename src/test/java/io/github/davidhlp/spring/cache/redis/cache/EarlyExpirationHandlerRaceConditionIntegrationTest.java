@@ -257,9 +257,9 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     void atomicLuaScript_preventsRaceBetweenVersionCheckAndTtlShorten() {
         RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
-        // The real serializer emits envelope version 2, which is the wire field
-        // compared by the current Lua script.
-        CachedValue cachedValue = createCachedValue("stable", 60, System.currentTimeMillis(), 2L);
+        // The real serializer emits envelope format version 2 plus a distinct
+        // CachedValue.version token; the Lua script must compare the latter.
+        CachedValue cachedValue = createCachedValue("stable", 60, System.currentTimeMillis(), 42L);
         store(cachedValue, 30);
         when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
         doAnswer(invocation -> {
@@ -270,7 +270,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
 
         handler.doHandle(context);
 
-        assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
+        assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isBetween(1L, 5L);
     }
 
     @Test
@@ -278,8 +278,8 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     void atomicLuaScript_valueChanged_skipsTtlShorten() {
         RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
-        CachedValue capturedValue = createCachedValue("captured", 60, System.currentTimeMillis(), 1L);
-        CachedValue changedValue = createCachedValue("changed", 60, System.currentTimeMillis(), 2L);
+        CachedValue capturedValue = createCachedValue("captured", 60, System.currentTimeMillis(), 42L);
+        CachedValue changedValue = createCachedValue("changed", 60, System.currentTimeMillis(), 43L);
 
         store(capturedValue, 30);
         when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);

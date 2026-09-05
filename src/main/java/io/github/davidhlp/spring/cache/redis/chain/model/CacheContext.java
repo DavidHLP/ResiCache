@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.chain.model;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import java.time.Duration;
+import java.util.Arrays;
 import lombok.Getter;
 
 /**
@@ -120,7 +121,8 @@ public class CacheContext {
     }
 
     public byte[] getValueBytes() {
-        return input.valueBytes();
+        byte[] valueBytes = input.valueBytes();
+        return valueBytes == null ? null : Arrays.copyOf(valueBytes, valueBytes.length);
     }
 
     public Object getDeserializedValue() {

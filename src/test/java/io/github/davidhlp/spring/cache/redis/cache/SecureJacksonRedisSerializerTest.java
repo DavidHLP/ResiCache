@@ -6,6 +6,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -159,19 +160,20 @@ class SecureJacksonRedisSerializerTest {
         }
 
         @Test
-        @DisplayName("roundtrip CachedValue keeps class in whitelist and preserves payload value")
-        void roundtrip_cachedValue_preservesPayloadValue() {
+        @DisplayName("roundtrip CachedValue preserves payload and refresh metadata")
+        void roundtrip_cachedValue_preservesPayloadAndRefreshMetadata() {
             // 铁律 #6：CachedValue(io.github.davidhlp...cache.CachedValue) 与 payload 必须在白名单
             // （默认前缀 io.github.davidhlp 覆盖）。本用例验证 CachedValue 经 envelope 序列化往返后：
             //   1) @class 类型标识在白名单内（不被 validateTypeIds 拒绝 → 不抛 SecurityException）
             //   2) payload value 字段往返保持
             //   3) 反序列化产物仍为 CachedValue 实例
-            // 注意：ttl/version/createdTime 等字段因 CachedValue 的 getter 全 @JsonIgnore、
-            // 默认 PUBLIC_ONLY 字段可见性下不进 JSON（这是 CachedValue 既有设计，与本次挪包无关）。
+            //   4) 刷新所需的 ttl/createdTime/version 元数据往返保持；startNanoTime
+            //      是进程内单调时钟，不跨 JVM 持久化。
             SecureJacksonRedisSerializer serializer =
                 new SecureJacksonRedisSerializer(objectMapper);
 
-            CachedValue original = CachedValue.of("payload-value", 60L);
+            CachedValue original = CachedValue.forTest(
+                    "payload-value", 60L, 1_700_000_000_000L, 42L, false);
             byte[] serialized = serializer.serialize(original);
             Object deserialized = serializer.deserialize(serialized);
 
@@ -179,6 +181,13 @@ class SecureJacksonRedisSerializerTest {
             assertThat(deserialized).isInstanceOf(CachedValue.class);
             CachedValue restored = (CachedValue) deserialized;
             assertThat(restored.getValue()).isEqualTo("payload-value");
+            assertThat(restored.getTtl()).isEqualTo(60L);
+            assertThat(restored.getCreatedTime()).isEqualTo(1_700_000_000_000L);
+            assertThat(restored.getLastAccessTime()).isEqualTo(1_700_000_000_000L);
+            assertThat(restored.getVisitTimes()).isZero();
+            assertThat(restored.getVersion()).isEqualTo(42L);
+            assertThat(restored.getStartNanoTime()).isZero();
+            assertThat(restored.isUsingMonotonicClock()).isFalse();
         }
 
         @Test
@@ -192,6 +201,37 @@ class SecureJacksonRedisSerializerTest {
 
             assertThat(result).isNotNull();
             assertThat(result.length).isGreaterThan(0);
+        }
+
+        @Test
+        @DisplayName("roundtrip allowed ArrayList value preserves collection")
+        void roundtrip_arrayListValue_preservesCollection() {
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
+            List<String> original = new ArrayList<>(List.of("com.example.value", "b"));
+
+            Object restored = serializer.deserialize(serializer.serialize(original));
+
+            assertThat(restored).isEqualTo(original);
+        }
+
+        @Test
+        @DisplayName("legacy CachedValue payload without refresh metadata remains readable")
+        void deserialize_legacyCachedValue_withoutMetadata_remainsReadable() {
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper);
+            String legacyJson = "{\"version\":2,\"payload\":{"
+                + "\"@class\":\"io.github.davidhlp.spring.cache.redis.cache.CachedValue\","
+                + "\"value\":\"legacy-value\"}}";
+
+            Object restored = serializer.deserialize(legacyJson.getBytes(StandardCharsets.UTF_8));
+
+            assertThat(restored).isInstanceOf(CachedValue.class);
+            CachedValue cachedValue = (CachedValue) restored;
+            assertThat(cachedValue.getValue()).isEqualTo("legacy-value");
+            assertThat(cachedValue.getTtl()).isZero();
+            assertThat(cachedValue.getVersion()).isZero();
+            assertThat(cachedValue.isUsingMonotonicClock()).isFalse();
         }
     }
 
@@ -209,11 +249,42 @@ class SecureJacksonRedisSerializerTest {
 
             // 手工构造恶意 envelope：payload 的 @class 指向白名单外的攻击者类型,
             // 模拟攻击者注入 gadget 链。VersionEnvelope.payload 的 @JsonTypeInfo(Id.CLASS)
-            // 会写出 @class,而 deserialize 的 validateTypeIds() 在反序列化前递归校验所有
+            // 会写出 @class,而 deserialize 的流式预检在反序列化前校验所有
             // @class —— 非白名单类型在此被拒绝(防 RCE)。原测试仅 serialize 不 deserialize,
             // 从未走到 validateTypeIds,故即使删除白名单校验也通过(虚假安全感)。
             String maliciousJson = "{\"version\":2,\"payload\":{"
                 + "\"@class\":\"com.attacker.MaliciousGadget\"}}";
+
+            assertThatThrownBy(
+                    () -> serializer.deserialize(maliciousJson.getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(SerializationException.class)
+                .hasMessageContaining("whitelist");
+        }
+
+        @Test
+        @DisplayName("deserialize rejects wrapper-array type ids outside whitelist")
+        void deserialize_rejectsWrapperArrayTypeOutsideWhitelist() {
+            List<String> restrictedPrefixes = List.of("com.notallowed");
+            SecureJacksonRedisSerializer serializer =
+                new SecureJacksonRedisSerializer(objectMapper, restrictedPrefixes);
+
+            String maliciousJson = "{\"version\":2,\"payload\":["
+                + "\"com.attacker.MaliciousGadget\",{}]}";
+
+            assertThatThrownBy(
+                    () -> serializer.deserialize(maliciousJson.getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(SerializationException.class)
+                .hasMessageContaining("whitelist");
+        }
+
+        @Test
+        @DisplayName("deserialize rejects configured type-property ids outside whitelist")
+        void deserialize_rejectsConfiguredTypePropertyOutsideWhitelist() {
+            SecureJacksonRedisSerializer serializer = new SecureJacksonRedisSerializer(
+                    objectMapper, List.of("com.notallowed"), true, "@type", true);
+
+            String maliciousJson = "{\"version\":2,\"payload\":{"
+                + "\"@type\":\"com.attacker.MaliciousGadget\"}}";
 
             assertThatThrownBy(
                     () -> serializer.deserialize(maliciousJson.getBytes(StandardCharsets.UTF_8)))

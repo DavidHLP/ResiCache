@@ -65,6 +65,18 @@ Current milestones:
   the destroy-on-pool-shutdown leak path. TDD: dedicated unit test plus
   Testcontainers IT verifying thread-id reuse after `RedisProCacheManager`
   close.
+- **SecureJackson type-id validation** — whitelist checks now cover field,
+  wrapper-array, and configured type-property forms; the same
+  `PolymorphicTypeValidator` is installed even when global typing is disabled.
+- **CachedValue refresh metadata** — `ttl`, creation/access metadata, expiry
+  state, and value version survive the envelope round-trip; process-local
+  `startNanoTime` remains excluded from the wire format.
+- **Early-expiration CAS** — the Lua script compares the cached value's
+  `payload.version`, not the envelope format version, and policy evaluation no
+  longer bypasses entries solely because their remaining TTL exceeds 60 seconds.
+- **Loader/context seams** — CacheContext byte input is defensively copied and
+  RedisProCache binds loader callbacks once at construction so callers do not
+  reassemble orchestration parameters.
 
 ### Single-build FIRE M0–M4
 

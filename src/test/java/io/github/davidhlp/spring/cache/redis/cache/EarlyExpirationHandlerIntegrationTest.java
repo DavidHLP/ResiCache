@@ -186,23 +186,23 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         }
 
         @Test
-        @DisplayName("continues chain when real remaining TTL > fast-path threshold")
-        void doHandle_fastPath_skipsGet() {
+        @DisplayName("evaluates policy even when real remaining TTL is high")
+        void doHandle_highRemainingTtl_evaluatesPolicy() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             store(createCachedValue(120, System.currentTimeMillis()), 120);
+            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
 
             HandlerResult result = handler.doHandle(context);
 
-            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(60L);
-            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
-            // Fast path must not evaluate the policy or inspect the cached value.
-            verifyNoInteractions(earlyExpirationPolicy);
+            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
+            assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
+            verify(earlyExpirationPolicy).shouldRefresh(anyLong(), anyLong(), anyDouble());
         }
 
         @Test
         @DisplayName("continues chain when the real Redis key is absent")
-        void doHandle_fastPath_ttlMissing_continuesChain() {
+        void doHandle_missingKey_continuesChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
 
@@ -361,6 +361,25 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         }
 
         @Test
+        @DisplayName("returns early when the live serializer value is not a CachedValue")
+        void performAsyncRefresh_rawLiveValue_returnsEarly() {
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
+            RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
+            ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
+            when(mockedValueOperations.get(REDIS_KEY)).thenReturn("legacy-value");
+            EarlyExpirationHandler rawValueHandler = new EarlyExpirationHandler(
+                    earlyExpirationPolicy,
+                    earlyExpirationExecutor,
+                    mockedRedisTemplate,
+                    mock(CacheStatisticsCollector.class),
+                    mockedValueOperations);
+
+            rawValueHandler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+
+            verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
+        }
+
+        @Test
         @DisplayName("returns early when live value is below the grace period")
         void performAsyncRefresh_belowGracePeriod_returnsEarly() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
@@ -377,12 +396,12 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void performAsyncRefresh_casPath_preservesTtl() {
             // The real serializer controls the wire representation; this test
             // asserts the Lua CAS shortened the native TTL to the grace period.
-            // captured 与 live 同 version(2L)→ CAS 比对通过 → Lua 把 Redis TTL 收缩到
+            // captured 与 live 同 value version(42L)→ CAS 比对通过 → Lua 把 Redis TTL 收缩到
             // REFRESH_GRACE_PERIOD_SECONDS(5s)。断言用范围而非精确 5L:真实 Redis 在 Lua
             // 收缩(getExpire 读到 5)与断言读回之间会流逝约 1 秒(读到 4),原 mock 测试
             // 无法暴露此实时消耗。范围 (0, 5] 既证明 CAS 生效(从 30s 收缩到 ≤5s)又容差时钟。
-            CachedValue captured = createCachedValue(60, System.currentTimeMillis(), 2L, false);
-            CachedValue live = createCachedValue(60, System.currentTimeMillis(), 2L, false);
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis(), 42L, false);
+            CachedValue live = createCachedValue(60, System.currentTimeMillis(), 42L, false);
             store(live, 30);
 
             handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
@@ -394,8 +413,8 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         @Test
         @DisplayName("does not shorten real Redis TTL when the value changed")
         void performAsyncRefresh_casReturnsFalse_valueChangedPath() {
-            CachedValue captured = createCachedValue("captured", 60, System.currentTimeMillis(), 1L, false);
-            CachedValue live = createCachedValue("live", 60, System.currentTimeMillis(), 2L, false);
+            CachedValue captured = createCachedValue("captured", 60, System.currentTimeMillis(), 42L, false);
+            CachedValue live = createCachedValue("live", 60, System.currentTimeMillis(), 43L, false);
             store(live, 30);
 
             handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);

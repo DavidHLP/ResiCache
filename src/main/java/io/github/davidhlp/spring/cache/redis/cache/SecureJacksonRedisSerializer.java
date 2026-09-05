@@ -6,7 +6,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.cfg.MapperConfig;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator.TypeMatcher;
@@ -43,6 +42,8 @@ class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
     private final ObjectMapper objectMapper;
     private final boolean failOnUnknownType;
     private final WhitelistPolicy whitelistPolicy;
+    private final String typeProperty;
+    private final boolean polymorphicTypingEnabled;
 
     /**
      * Creates a new SecureJacksonRedisSerializer using the provided ObjectMapper
@@ -80,7 +81,10 @@ class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
                                              String typeProperty,
                                              boolean polymorphicTypingEnabled) {
         this.whitelistPolicy = new WhitelistPolicy(allowedPackagePrefixes);
-        this.objectMapper = createSecureObjectMapper(objectMapper, this.whitelistPolicy, typeProperty, polymorphicTypingEnabled);
+        this.typeProperty = typeProperty == null || typeProperty.isBlank() ? "@class" : typeProperty;
+        this.polymorphicTypingEnabled = polymorphicTypingEnabled;
+        this.objectMapper = createSecureObjectMapper(
+                objectMapper, this.whitelistPolicy, this.typeProperty, polymorphicTypingEnabled);
         this.failOnUnknownType = failOnUnknownType;
     }
 
@@ -99,6 +103,11 @@ class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
                 .build();
 
         ObjectMapper secureObjectMapper = objectMapper.copy();
+        // Field-level @JsonTypeInfo does not use the default-typing switch, so install the
+        // same validator unconditionally as a second runtime guard. The streaming preflight
+        // below remains necessary because wrapper-array ids can be presented before Jackson
+        // resolves the annotated payload type.
+        secureObjectMapper.setPolymorphicTypeValidator(typeValidator);
 
         if (!secureObjectMapper.canSerialize(java.time.LocalDateTime.class)) {
             secureObjectMapper.registerModule(new JavaTimeModule());
@@ -183,79 +192,116 @@ class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
     }
 
     /**
-     * 流式遍历 JSON,验证所有 {@code @class} 字段值在白名单中。失败 fail-fast
+     * 流式遍历 JSON,验证所有配置类型字段值和字段级/数组包装类型标识在白名单中。失败 fail-fast
      * 抛 {@link SerializationException};不构建中间 JsonNode 树,对大 payload
      * 显著降低内存与 GC。
      *
-     * <p>遍历语义:任何 {@code FIELD_NAME} 与 {@code "@class"} 匹配时,下一个 STRING
-     * token 视为 className,委派 {@link WhitelistPolicy#isClassNameAllowed} 判断。
-     * 非匹配字段、子对象、数组继续递归跳过。
+     * <p>遍历语义:任何 {@code FIELD_NAME} 与 {@code "@class"} 或配置的
+     * {@code typeProperty} 匹配时,下一个 STRING token 视为 className。对
+     * {@code VersionEnvelope.payload} / {@code CachedValue.value} 的 wrapper-array
+     * 形式,数组首个 STRING token 同样视为 className。全局多态开启时,所有数组首项
+     * 按同一规则检查。非匹配字段继续递归遍历。
      */
     private void validateTypeIdsStreaming(com.fasterxml.jackson.core.JsonParser parser)
             throws java.io.IOException {
         com.fasterxml.jackson.core.JsonToken token;
-        java.util.Deque<com.fasterxml.jackson.core.JsonStreamContext> stack = new java.util.ArrayDeque<>();
+        java.util.Deque<ArrayFrame> arrays = new java.util.ArrayDeque<>();
         boolean expectingTypeValue = false;
+        String currentFieldName = null;
         while ((token = parser.nextToken()) != null) {
             switch (token) {
-                case START_OBJECT, START_ARRAY -> {
-                    // 进入子结构:推一个 sentinel(用当前 context 即可)以便匹配嵌套 depth
-                    stack.push(parser.getParsingContext());
+                case START_OBJECT -> {
+                    acceptParentArrayValue(arrays, true, null);
+                    expectingTypeValue = false;
                 }
-                case END_OBJECT, END_ARRAY -> {
-                    if (!stack.isEmpty()) {
-                        stack.pop();
+                case END_OBJECT -> expectingTypeValue = false;
+                case START_ARRAY -> {
+                    acceptParentArrayValue(arrays, true, null);
+                    arrays.push(new ArrayFrame(isPolymorphicContainer(currentFieldName)));
+                    expectingTypeValue = false;
+                }
+                case END_ARRAY -> {
+                    if (!arrays.isEmpty()) {
+                        ArrayFrame frame = arrays.pop();
+                        frame.validate(this::rejectIfDisallowed);
                     }
+                    expectingTypeValue = false;
                 }
                 case FIELD_NAME -> {
-                    String fieldName = parser.currentName();
-                    expectingTypeValue = "@class".equals(fieldName);
+                    currentFieldName = parser.currentName();
+                    expectingTypeValue = isTypeProperty(currentFieldName);
                 }
                 case VALUE_STRING -> {
                     if (expectingTypeValue) {
                         String className = parser.getText();
-                        if (!isAllowedClass(className)) {
-                            throw new SerializationException(
-                                    "Type not in deserialization whitelist: " + className
-                                        + ". Add its package to resi-cache.serializer.allowed-package-prefixes.");
-                        }
+                        rejectIfDisallowed(className);
                         expectingTypeValue = false;
                     }
+                    acceptParentArrayValue(arrays, false, parser.getText());
                 }
                 default -> {
                     // 数值/布尔/null token:reset expectingTypeValue
                     expectingTypeValue = false;
+                    acceptParentArrayValue(arrays, false, null);
                 }
             }
         }
     }
 
-    /**
-     * 递归验证 JsonNode 中所有类型标识符是否在白名单中。
-     *
-     * <p>由于 {@code @JsonTypeInfo(use = Id.CLASS)} 会绕过
-     * {@code BasicPolymorphicTypeValidator}，我们在反序列化前手动做二次校验。
-     *
-     * <p><b>注意</b>：本方法硬编码查 {@code "@class"} —— 这是 {@link VersionEnvelope}
-     * 字段级 {@code @JsonTypeInfo} 实际写入的 property 名。{@code typeProperty} 构造
-     * 参数控制的是 ObjectMapper <em>全局</em> {@code setDefaultTyping} 的 property
-     * （仅当 {@code polymorphicTypingEnabled=true} 时生效，覆盖无字段级注解的类），
-     * 是与字段级注解独立的另一条 wire-format 路径 —— 本预检只覆盖字段级路径。
-     */
-    private void validateTypeIds(JsonNode node) {
-        if (node.isObject()) {
-            JsonNode classNode = node.get("@class");
-            if (classNode != null && classNode.isTextual()) {
-                String className = classNode.asText();
-                if (!isAllowedClass(className)) {
-                    throw new SerializationException(
-                            "Type not in deserialization whitelist: " + className
-                                + ". Add its package to resi-cache.serializer.allowed-package-prefixes.");
-                }
+    private boolean isTypeProperty(String fieldName) {
+        return "@class".equals(fieldName) || typeProperty.equals(fieldName);
+    }
+
+    private boolean isPolymorphicContainer(String fieldName) {
+        return polymorphicTypingEnabled || "payload".equals(fieldName) || "value".equals(fieldName);
+    }
+
+    private static void acceptParentArrayValue(
+            java.util.Deque<ArrayFrame> arrays, boolean structured, String text) {
+        if (!arrays.isEmpty()) {
+            arrays.peek().accept(structured, text);
+        }
+    }
+
+    private void rejectIfDisallowed(String className) {
+        if (!isAllowedClass(className)) {
+            throw new SerializationException(
+                    "Type not in deserialization whitelist: " + className
+                            + ". Add its package to resi-cache.serializer.allowed-package-prefixes.");
+        }
+    }
+
+    private static final class ArrayFrame {
+        private final boolean wrapperCandidate;
+        private int elements;
+        private String firstText;
+        private boolean secondStructured;
+
+        private ArrayFrame(boolean wrapperCandidate) {
+            this.wrapperCandidate = wrapperCandidate;
+        }
+
+        private void accept(boolean structured, String text) {
+            if (elements == 0) {
+                firstText = text;
+            } else if (elements == 1) {
+                secondStructured = structured;
             }
-            node.fields().forEachRemaining(entry -> validateTypeIds(entry.getValue()));
-        } else if (node.isArray()) {
-            node.forEach(this::validateTypeIds);
+            elements++;
+        }
+
+        private void validate(java.util.function.Consumer<String> reject) {
+            // A normal business array is not a wrapper when it has more than two
+            // elements. For the two-element shape, require a class-like first
+            // token and a structured second value before treating it as a type id.
+            if (wrapperCandidate && elements == 2 && firstText != null
+                    && secondStructured && looksLikeTypeId(firstText)) {
+                reject.accept(firstText);
+            }
+        }
+
+        private static boolean looksLikeTypeId(String value) {
+            return value.indexOf('.') > 0 || value.startsWith("[");
         }
     }
 
