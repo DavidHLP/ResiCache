@@ -39,8 +39,8 @@ import static org.assertj.core.api.Assertions.fail;
  *   <li>{@code $} nested 类与 {@code package-info} 过滤(不视为独立顶层 public 类型)</li>
  * </ul>
  *
- * <p>目标分类见 docs/plans/resicache-framework-hardening-plan.md Appendix A:
- * KEEP-STABLE(用户/扩展 Interface 与最小传递值)/ KEEP-ENTRY(自动配置与 operator 入口)。
+ * <p>目标分类见 allowlist 文件头部注释与 STABILITY §4(KEEP-STABLE 用户/扩展
+ * Interface 与最小传递值 / KEEP-ENTRY 自动配置与 operator 入口)。
  * 本 Gate 是「公开面收敛」的机器真相 — 文档分类不替代编译可见性。
  */
 @DisplayName("Public Surface Allowlist Gate")

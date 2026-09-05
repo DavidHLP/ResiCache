@@ -366,3 +366,29 @@ names. The wire envelope remains `serialization.VersionEnvelope`, and
 **Verification**: The compiled public surface now exactly equals the 34-entry
 allowlist; the in-progress manifest is empty. `clean verify` passes 916 tests,
 coverage checks, Checkstyle, and Javadoc with zero warnings.
+
+## 18. Protection switch resolution semantics
+
+**Context**: The protection properties Javadoc said "startup-only" in the
+summary but "runtime kill-switch" in per-mechanism entries, and implied a
+per-mechanism `true` could override a global `false`. In reality the handler
+chain is built once at first `createChain()` and global-off disables all four
+protections regardless of per-mechanism values.
+
+**Decision**: Resolution is startup-static. `protection.enabled=false` wins and
+disables every protection; a per-mechanism `false` can only further disable;
+a per-mechanism `true` cannot re-enable from global off; any change requires a
+restart. No dynamic chain rebuild is implemented.
+
+**Alternatives**: Runtime configuration listener with chain rebuild (rejected:
+single cached chain, no hot-update requirement evidence, and rebuild would
+introduce concurrency and metric-registration problems).
+
+**Consequences**: switch behavior is predictable and documented consistently in
+`RedisProCacheProperties`, README, and COMPATIBILITY.
+
+**Test lock**: `CacheHandlerChainFactoryTest` combination tests, including
+cached-chain invariance under property changes.
+
+**Known limitation**: no runtime toggle. **Re-evaluate** only with a real
+hot-update requirement.
