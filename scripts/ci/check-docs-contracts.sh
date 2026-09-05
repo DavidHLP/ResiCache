@@ -28,3 +28,25 @@ for required in \
     exit 1
   fi
 done
+
+# Dead-javadoc-reference gate (Phase 8-A): known-removed/private members must not
+# be {@link}-referenced in main source. Add patterns as members are removed.
+for dead_ref in \
+  'RedisProCache#lookupOperation' \
+  'RedisProCacheWriter#resolveOperation' \
+  'BloomRebuilder'; do
+  if git grep -nF -- "$dead_ref" -- 'src/main/java'; then
+    printf 'Dead javadoc/source reference: %s (member removed/internalized — update the link)\n' "$dead_ref" >&2
+    exit 1
+  fi
+done
+
+# Test resources must describe the same Testcontainers BOM as pom.xml.
+for resource in \
+  src/test/resources/testcontainers.properties \
+  src/test/resources/docker-java.properties; do
+  if grep -nF -- '1.20.4' "$resource"; then
+    printf 'Forbidden stale resource value in %s\n' "$resource" >&2
+    exit 1
+  fi
+done

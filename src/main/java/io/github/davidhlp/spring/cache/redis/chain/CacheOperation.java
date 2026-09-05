@@ -9,7 +9,7 @@ package io.github.davidhlp.spring.cache.redis.chain;
  * <ul>
  *   <li>{@link #isWrite()} — 写路径(PUT / PUT_IF_ABSENT),TtlHandler / NullValueHandler 用</li>
  *   <li>{@link #requiresSyncLock()} — sync-lock 关心的操作(GET / PUT / PUT_IF_ABSENT),SyncLockHandler 用</li>
- *   <li>{@link #requiresBloomPostProcess()} — bloom 后置回填关心的操作(PUT / PUT_IF_ABSENT / CLEAN),BloomFilterHandler 用</li>
+ *   <li>{@link #requiresBloomPostProcess()} — bloom 后置回填关心的操作(PUT / PUT_IF_ABSENT),BloomFilterHandler 用</li>
  * </ul>
  *
  * <p><b>为什么枚举自身承担谓词</b>:操作枚举本身成为谓词源,新增操作时只在本枚举
@@ -49,14 +49,13 @@ public enum CacheOperation {
     }
 
     /**
-     * 是否需要 bloom 过滤器后置回填 — BloomFilterHandler 关心的子集。PUT / PUT_IF_ABSENT
-     * 写入时回填 key;CLEAN 清空时清空整 bloom(布隆不支持精确删除)。{@code GET} /
-     * {@code REMOVE} 不参与:GET 在 doHandle 主路径已用 bloom 短路,REMOVE 不在 bloom
-     * 维护范围内(布隆只防穿透不防击穿/雪崩,失效 bloom 不会导致错误结果,只是失去防护)。
+     * 是否需要 bloom 过滤器后置回填 — BloomFilterHandler 关心的写入子集。PUT / PUT_IF_ABSENT
+     * 成功写入时回填 key。CLEAN 只清缓存数据,不改变 Bloom 集合；{@code GET} /
+     * {@code REMOVE} 不参与。
      *
-     * @return {@code true} 当本操作是 PUT / PUT_IF_ABSENT / CLEAN
+     * @return {@code true} 当本操作是 PUT 或 PUT_IF_ABSENT
      */
     public boolean requiresBloomPostProcess() {
-        return this == PUT || this == PUT_IF_ABSENT || this == CLEAN;
+        return this == PUT || this == PUT_IF_ABSENT;
     }
 }

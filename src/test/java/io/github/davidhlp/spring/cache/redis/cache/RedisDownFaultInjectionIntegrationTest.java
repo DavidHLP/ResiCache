@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.integration.AbstractRedisIntegrationTest;
-import io.github.davidhlp.spring.cache.redis.integration.TestApplication;
-import io.github.davidhlp.spring.cache.redis.integration.TestRedisConfiguration;
+
+
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +14,6 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.test.context.ActiveProfiles;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -36,6 +35,39 @@ class RedisDownFaultInjectionIntegrationTest extends AbstractRedisIntegrationTes
 
     @Autowired
     private RedisProCacheWriter writer;
+
+    @Autowired
+    private org.springframework.cache.CacheManager cacheManager;
+
+    @Test
+    @DisplayName("RedisDown-6: user-level Cache.get(key, loader) returns loader value on write-back failure")
+    void redisDown_userLevelGetLoader_loaderValueSurvives() throws Exception {
+        // 用户级 read-through API:cacheManager.getCache(name).get(key, loader)。
+        // Redis-down:缓存读 graceful miss → loader(业务数据源)成功 → 写回失败。
+        // availability-first:必须返回 loader 值。
+        org.springframework.cache.Cache cache = cacheManager.getCache("testCache");
+        assertThat(cache).isNotNull();
+
+        String value = cache.get("user-level-loader-key", () -> "business-value");
+
+        assertThat(value)
+                .as("用户级 read-through:loader 成功值必须穿透 Redis-down 写回失败返回")
+                .isEqualTo("business-value");
+    }
+
+    @Test
+    @DisplayName("RedisDown-7: user-level loader failure surfaces as ValueRetrievalException")
+    void redisDown_userLevelLoaderFailure_surfaces() {
+        org.springframework.cache.Cache cache = cacheManager.getCache("testCache");
+        assertThat(cache).isNotNull();
+
+        assertThatThrownBy(() -> cache.get("user-level-loader-fail-key", () -> {
+            throw new IllegalStateException("business loader failed");
+        }))
+                .as("loader 失败是用户可见失败,包装为 Spring ValueRetrievalException,不得吞为 null")
+                .isInstanceOf(org.springframework.cache.Cache.ValueRetrievalException.class)
+                .hasRootCauseInstanceOf(IllegalStateException.class);
+    }
 
 
     @Test
@@ -66,6 +98,38 @@ class RedisDownFaultInjectionIntegrationTest extends AbstractRedisIntegrationTes
                 "testCache", "fault-injection-key".getBytes()).get(5, java.util.concurrent.TimeUnit.SECONDS);
 
         assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("RedisDown-4: read-through loader value survives write-back failure (ADR-02)")
+    void redisDown_readThrough_loaderValueSurvivesWriteBackFailure() throws Exception {
+        // 缓存读失败 → miss;loader(业务数据源)成功产出 "loaded-data";写回失败。
+        // availability-first:必须返回 loader 值,不得被缓存写回失败覆盖/丢弃。
+        byte[] result = writer.get(
+                "testCache",
+                "fault-injection-loader-key".getBytes(),
+                () -> "\"loaded-data\"".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                null,
+                false);
+
+        assertThat(result).isNotNull();
+        assertThat(new String(result, java.nio.charset.StandardCharsets.UTF_8))
+                .as("loader 成功值必须穿透写回失败返回")
+                .isEqualTo("\"loaded-data\"");
+    }
+
+    @Test
+    @DisplayName("RedisDown-5: loader failure still surfaces (write-back failure must not mask loader error)")
+    void redisDown_loaderFailure_stillSurfaces() {
+        IllegalStateException loaderBoom = new IllegalStateException("business loader failed");
+        assertThatThrownBy(() -> writer.get(
+                "testCache",
+                "fault-injection-loader-fail-key".getBytes(),
+                () -> { throw loaderBoom; },
+                null,
+                false))
+                .as("loader 失败是用户可见失败,不得被吞或降级为 null")
+                .isSameAs(loaderBoom);
     }
 
     /**

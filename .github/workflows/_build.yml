@@ -41,3 +41,20 @@ jobs:
           name: jacoco-coverage-report
           path: target/site/jacoco/
           retention-days: 7
+
+  unit-test:
+    name: Unit Tests (no Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: ./.github/actions/setup-jdk-21
+
+      - name: Run unit tests without Docker
+        run: ./mvnw -Punit test -B
+        env:
+          DOCKER_HOST: unix:///nonexistent.sock

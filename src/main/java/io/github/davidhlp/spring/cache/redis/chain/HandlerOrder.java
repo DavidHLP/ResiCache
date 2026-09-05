@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-import io.github.davidhlp.spring.cache.redis.chain.model.*;
 
 
 /**
@@ -35,7 +34,7 @@ public enum HandlerOrder {
     /**
      * 配置禁用名称(kebab-case),作为 handler 禁用标识的单一事实源。
      *
-     * <p>{@link io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory} 通过
+     * <p>{@link io.github.davidhlp.spring.cache.redis.cache.CacheHandlerChainFactory} 通过
      * {@code @HandlerPriority} 注解关联的 {@link HandlerOrder} 反查此名称,而非从类名派生——
      * 这样 handler 类重命名不会导致 {@code resi-cache.disabled-handlers} 配置或
      * {@code protection.enabled=false} 短路静默失效。

@@ -365,4 +365,26 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>unit</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration combine.self="override">
+                            <!-- 嵌套测试类是独立 .class 文件(Outer$Nested),名字含
+                                 IntegrationTest 但不以后缀结尾,须用中缀模式排除,
+                                 否则嵌套类单独通过默认 *Tests.java 包含规则被选中。 -->
+                            <excludes>
+                                <exclude>**/*IntegrationTest*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

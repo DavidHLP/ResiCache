@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.chain.model;
 
-import io.github.davidhlp.spring.cache.redis.chain.*;
 
 
 /**

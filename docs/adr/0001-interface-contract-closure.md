@@ -108,12 +108,13 @@ implementation details); use Javadoc alone (rejected because it has no gate).
 **Context**: Root-package component scanning registered defaults and migration
 components implicitly, while concrete injection defeated replacement.
 
-**Decision**: Remove root scanning. Register runtime components through an
-explicit import list and register defaults with typed
-`@ConditionalOnMissingBean`. `NullValuePolicy` is the shared Actual/Null
-handler dependency. Bloom's default is one explicit local-plus-Redis
-composition replaced by one user `BloomIFilter` bean. Redisson lock creation
-remains behind its class-level optional configuration.
+**Decision**: Remove root-package scanning. The public auto-configuration
+scans only the package-private `cache` runtime module (excluding test classes),
+while stable defaults retain typed `@ConditionalOnMissingBean` contracts.
+`NullValuePolicy` is the shared Actual/Null handler dependency. Bloom's default
+is one explicit local-plus-Redis composition replaced by one user `BloomIFilter`
+bean. Redisson lock creation remains behind its class-level optional
+configuration.
 
 **Alternatives**: Keep scanning (rejected because registration is implicit);
 use bean names or `@Primary` as the user override mechanism (rejected because
@@ -122,8 +123,9 @@ qualifiers for the secure Redis template and internal executor are not user
 override mechanisms; they prevent collisions with host-provided generic beans
 while typed conditions govern supported replacements.
 
-**Consequences**: missing defaults are visible in one configuration class;
-migration components are not normal application beans.
+**Consequences**: internal implementation beans are isolated behind one
+package boundary; migration components remain operator-only and are not normal
+application beans.
 
 **Known limitation**: The targeted ApplicationContextRunner and reflection
 checks are green; a broader external-environment matrix remains a CI concern.
@@ -131,23 +133,25 @@ checks are green; a broader external-environment matrix remains a CI concern.
 ## 7. Public API stability
 
 **Context**: The project is pre-1.0 and the current clone has no release tag.
-Maven Central does publish `io.github.davidhlp:ResiCache:0.0.2`, but that
-artifact is from the earlier Spring Boot 3 / Java 17 line, not the current
-Boot 4 / Java 21 line.
+Maven Central publishes `io.github.davidhlp:ResiCache` 0.0.1–0.0.5, 0.0.7,
+and 3.2.4; all of them (verified 2026-09-05 from the published POMs) are
+the earlier Spring Boot 3.2.4 / Java 17 / Redisson 3.17.6 line, not the
+current Boot 4 / Java 21 line. A bounded public search the same date found
+no external consumers of any line (one first-party usage example only;
+private adopters unprovable).
 
 **Decision**: Keep the documented annotation/configuration/wire surfaces
-stable, label implementation types unstable, and deprecate accidental public
-loader/resolver types for one minor release before internalization when no
-external promise is found. Use the signed Central artifact only for a
-report-only compatibility comparison; do not make that cross-line result a
-blocking gate.
+stable and make implementation types package-private in the internal `cache`
+module. The compiled public-surface allowlist is the machine gate; no release,
+binary-compatibility, or old-consumer migration gate is enabled.
 
 **Alternatives**: Treat the old Central artifact as a same-line baseline
 (rejected because its Boot/Java line and provenance do not match); delete types
 immediately (rejected because adopter use is unknown).
 
-**Consequences**: migration is explicit without guessing binary provenance;
-the report-only comparison records the known cross-line breakage.
+**Consequences**: accidental implementation imports fail at compile time and
+the report-only comparison remains out of scope until a matching release is
+requested.
 
 **Known limitation**: A same-line release tag and artifact are still required
 before enabling a blocking Revapi/Japicmp gate. **Re-evaluate** after a
@@ -234,3 +238,131 @@ on cancellation.
 **Known limitation**: Replacing the full executor is not a supported public
 contract. **Re-evaluate** with a second real executor adapter and lifecycle
 contract tests.
+
+## 12. Bloom CLEAN semantics
+
+**Context**: Treating Bloom as a cache-membership index made ordinary CLEAN
+clear bits and depend on a failure-prone rebuilding marker and TTL window.
+
+**Decision**: CLEAN removes cache entries only; it never clears Bloom. Bloom
+represents possible data-source membership, so retained bits can cause only
+false-positives. Rebuilding markers, marker TTLs, and
+`rebuild-window-seconds` are removed.
+
+**Consequences**: CLEAN no longer requires distributed rebuilding state, and
+Bloom or Redis failures fail open so a valid loader remains executable.
+
+**Known limitation**: An explicit data-source Bloom rebuild operation is not
+part of the cache eviction contract.
+
+## 13. Read-through write-back failure contract
+
+**Context**: `get(key, loader)` spans three phases — cache read, loader
+(data source), and cache write-back. Previously the sync path merged loader
+and write-back exceptions into a single `LoadFailed`, and the default path
+(let Spring's `RedisCache.get(key, loader)` drive the writer's 5-arg `get`)
+wrapped a write-back failure so the already-loaded business value was lost or
+turned into a `ValueRetrievalException`.
+
+**Decision**: Availability-first. The loader's successful value is the
+read-through result and is never overridden by a write-back failure:
+
+- **Default path** (`RedisProCacheWriter.get(name, key, supplier, ttl, tti)`):
+  cache read (chain GET) → miss → loader → write-back (chain PUT). Loader
+  exceptions propagate unchanged (Spring wraps into
+  `Cache.ValueRetrievalException`); write-back failures are logged (redacted,
+  no raw key) and the loaded bytes are returned.
+- **Sync path** (`LoaderOrchestrator.performLockedLoad`): double-check →
+  loader → write-back are separate phases. A write-back failure produces
+  `LoadOutcome.LoadedWithWriteBackFailure(value, cause)`; `RedisProCache`
+  logs redacted and returns the value.
+- Explicit `PUT` / `PUT_IF_ABSENT` / `CLEAN` remain fail-fast typed
+  (`CacheOperationException`); `REMOVE` stays observable best-effort.
+
+**Consequences**: cache read failures degrade to miss; a cache write failure
+never discards a successful loader result. Downstream caches may be stale
+until the next write, which is observable only through the (future) failure
+metric and redacted logs.
+
+**Known limitation**: The cache is a derived acceleration layer, not the
+source of truth — eventual consistency after a failed write-back is accepted.
+A per-write retry/backoff policy is not part of this contract.
+
+## 14. Configuration binding validation
+
+**Context**: `RedisProCacheProperties` had only partial local constraints
+(root `@Validated`, `defaultTtl @NotNull`, Redisson `@Min`s). Nested
+properties lacked `@Valid` cascade; numeric fields (thread pools, ports,
+bloom sizes, sync timeout) lacked bounds; cross-field relationships (Redis
+deployment mode → host/cluster/sentinel; `tlsRequired` → `tlsEnabled`) had no
+binding-time check; and bloom parameters bypassed the properties model via
+raw `@Value` reads.
+
+**Decision**: All nested property groups are `@Valid @NotNull` cascaded;
+numeric fields carry Jakarta `@Min`/`@Max` bounds; cross-field rules are a
+class-level `@RedisDeploymentValidator` that binds violations to the concrete
+property node; `resi-cache.bloom.*` moved into `RedisProCacheProperties.Bloom`
+and the `bloomFilterConfig` bean consumes the bound properties instead of
+`@Value`.
+
+**Consequences**: Invalid configuration fails once at binding time with a
+full property path (`resi-cache.bloom.bitSize`, `redis.clusterNodes`,
+`redis.tlsEnabled`), not at first runtime use. Defaults boot clean.
+
+**Known limitation**: The validator runs at `@ConfigurationProperties`
+binding; programmatic `new RedisProCacheProperties()` mutation after bind is
+not re-validated.
+
+## 15. Failure metrics and key privacy
+
+**Context**: Failures were scattered across `CacheErrorHandler`, Bloom and
+read-through paths, counted mainly by logs; WARN/ERROR and exception messages
+carried raw keys.
+
+**Decision**: A single internal `CacheFailureReporter` (not public, not in the
+allowlist) exposes one metric `resicache.cache.failure` tagged only by finite
+enums `operation`, `kind`, `strategy`. `CacheErrorHandler` is the single
+count-once exit for all chain failures. WARN/ERROR and typed exception
+messages omit the raw key; `cacheName` (config-level, low cardinality) is kept
+for correlation. `CacheOperationException` carries no raw-key field/getter.
+
+**Consequences**: GET degrade, write fail-fast, REMOVE best-effort and
+read-through write-back failures are alertable by bounded tags. The Bloom
+filter's own `bloomsift.*` counters and fail-open paths are deliberately
+*not* routed here — fail-open is a successful protection behavior, not a
+cache-operation failure, so reporting it would corrupt degradation alerts.
+
+**Known limitation**: No per-key alerting; correlation relies on MDC
+requestId.
+
+## 16. AOT/native deferred
+
+**Context**: Spring Boot `process-aot` was observed starting the
+`SerializationMigrationCli` rather than the host auto-configuration — not a
+host-config smoke. No `spring-boot-maven-plugin` AOT wiring exists in the pom.
+
+**Decision**: AOT/native-image compatibility is recorded **DEFERRED**
+(non-blocking debt per plan P2-AOT-001). The serialization envelope
+(`{version, payload}` + whitelist) is a known native-image reflection
+surface that would need explicit `RuntimeHints` before GraalVM support is
+claimed.
+
+**Consequences**: No native-image claim in README/STABILITY. Revisit when a
+real native deployment requirement appears.
+
+## 17. Internal runtime module closure
+
+**Context**: The public-surface Gate still accounted for 86 implementation
+types as in-progress because their source packages exposed Spring adapters,
+operation builders, protection policies, metadata, and serializer details.
+
+**Decision**: Move the implementation collaborators into the package-private
+`io.github.davidhlp.spring.cache.redis.cache` runtime module and physically
+co-locate their tests. `RedisCacheAutoConfiguration` scans only that internal
+package (excluding test classes); stable SPI types keep their original package
+names. The wire envelope remains `serialization.VersionEnvelope`, and
+`CacheContext` exposes only `InputView`/`CachePolicyView`.
+
+**Verification**: The compiled public surface now exactly equals the 34-entry
+allowlist; the in-progress manifest is empty. `clean verify` passes 916 tests,
+coverage checks, Checkstyle, and Javadoc with zero warnings.

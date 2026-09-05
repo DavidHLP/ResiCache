@@ -1,1 +1,1 @@
-io.github.davidhlp.spring.cache.redis.integration.DockerApiVersionLauncherSessionListener
+io.github.davidhlp.spring.cache.redis.cache.DockerApiVersionLauncherSessionListener

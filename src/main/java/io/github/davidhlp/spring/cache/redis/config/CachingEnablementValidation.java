@@ -1,7 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import lombok.extern.slf4j.Slf4j;
 
+
+
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;

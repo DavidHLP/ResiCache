@@ -3,7 +3,5 @@
  *
  * <p>提供基于 Redis 的高性能缓存防护注解.
  */
-@NonNullApi
+@org.springframework.lang.NonNullApi
 package io.github.davidhlp.spring.cache.redis.annotation;
-
-import org.springframework.lang.NonNullApi;

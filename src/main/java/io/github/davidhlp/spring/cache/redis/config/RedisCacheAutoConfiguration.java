@@ -1,12 +1,15 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import lombok.extern.slf4j.Slf4j;
 
+
+
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration;
-import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.data.redis.core.RedisOperations;
 
 /**
@@ -21,14 +24,11 @@ import org.springframework.data.redis.core.RedisOperations;
 @AutoConfiguration(after = DataRedisAutoConfiguration.class)
 @ConditionalOnClass({RedisOperations.class})
 @ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)
-@Import({
-    JacksonConfig.class,
-    RedisConnectionConfiguration.class,
-    RedissonConfiguration.class,
-    RedisCacheRegistryConfiguration.class,
-    RedisProxyCachingConfiguration.class,
-    RedisProCacheConfiguration.class
-})
+@ComponentScan(
+        basePackages = "io.github.davidhlp.spring.cache.redis.cache",
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.REGEX,
+                pattern = ".*Test.*"))
 public class RedisCacheAutoConfiguration {
 
 }

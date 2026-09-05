@@ -1,9 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.chain.observer;
 
-import io.github.davidhlp.spring.cache.redis.chain.AbstractCacheHandler;
+
+
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.ChainEngine;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 
@@ -11,8 +11,8 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
  * 责任链推进与观测的注入点.
  *
  * <p>本接口把责任链 advance / per-node / around-chain 各阶段的横切关注点
- * 收口到 default no-op 钩子，让 {@link ChainEngine} 与
- * {@link AbstractCacheHandler} 不再各自承担观测逻辑。Engine 驱动推进时
+ * 收口到 default no-op 钩子，让 {@code ChainEngine} 与
+ * {@code AbstractCacheHandler} 不再各自承担观测逻辑。Engine 驱动推进时
  * 按下列顺序调用各 observer：
  *
  * <ol>

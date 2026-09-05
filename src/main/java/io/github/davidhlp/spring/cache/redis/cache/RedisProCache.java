@@ -1,21 +1,19 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver;
-import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator;
+
+
+
+
+
+
+import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
 import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
-import io.github.davidhlp.spring.cache.redis.cache.metrics.RedisProCacheMetricsRegistry;
-import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
-import io.github.davidhlp.spring.cache.redis.cache.loader.LoaderOrchestrator.LoadOutcome;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
-
+import java.util.concurrent.Callable;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
-
-import java.util.concurrent.Callable;
 
 /**
  * 缓存实例增强 — ResiCache 与 Spring {@code RedisCache} 的扩展点.
@@ -32,7 +30,7 @@ import java.util.concurrent.Callable;
  * </ol>
  *
  * <p><b>设计纪律</b>:本类不直接 import {@code Timer} / {@code Counter} / {@code MeterRegistry} —
- * 全部 metric 关注点由 {@link RedisProCacheMetricsRegistry} 承载。{@link ResiCacheFeatures#getMeterRegistry()}
+ * 全部 metric 关注点由 {@code RedisProCacheMetricsRegistry} 承载；特性值对象仅在构造期透传 registry。
  * 唯一耦合点是构造期把 registry 透传给 registry seam,运行期本类对 Micrometer API 零依赖。
  */
 @Slf4j
@@ -79,11 +77,11 @@ public class RedisProCache extends RedisCache {
      * <p><b>参数契约</b>:
      * <ul>
      *   <li>{@code name / cacheWriter / cacheConfiguration} —— 必传,转发给
-     *       {@link RedisCache#super(String, RedisCacheWriter, RedisCacheConfiguration)}</li>
+     *       {@code super(String, RedisCacheWriter, RedisCacheConfiguration)}</li>
      *   <li>{@code features} —— 可选特性集合(见 {@link ResiCacheFeatures};各字段 null 表示禁用)</li>
      * </ul>
      */
-    public RedisProCache(
+    RedisProCache(
             String name,
             RedisCacheWriter cacheWriter,
             RedisCacheConfiguration cacheConfiguration,
@@ -163,9 +161,20 @@ public class RedisProCache extends RedisCache {
                     yield null;
                 }
                 case LoaderOrchestrator.Loaded<T>(T value) -> value;
+                case LoaderOrchestrator.LoadedWithWriteBackFailure<T>(T value, Throwable writeBackCause) -> {
+                    // ADR-02 availability-first:loader 值必须返回;写回失败仅记录诊断。
+                    // ADR-06 key 隐私:WARN 不打印 cause message/toString(可能嵌 key),
+                    // 只记异常类型链。
+                    log.warn(
+                            "Cache write-back failed after successful load; returning loaded value: "
+                                    + "cacheName={}, failure={}",
+                            getName(),
+                            sanitizedFailure(writeBackCause));
+                    yield value;
+                }
                 case LoaderOrchestrator.LoadFailed<T>(Throwable cause) -> {
                     metricsRegistry.recordMiss();
-                    throw translateFailure(cause, key);
+                    throw translateFailure(cause, getName());
                 }
             };
         });
@@ -196,18 +205,45 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * 失败异常翻译 — 把 orchestrator 透传的 {@link Throwable} 翻译为本方法契约的
-     * {@link RuntimeException}:RuntimeException 直接抛(保留原始栈),
-     * checked Exception 包装为 {@link RuntimeException}。
+     * 写回失败的安全日志描述 —— 不含原始 key / 异常消息(key 隐私 ADR-06)。
      *
-     * <p>{@link Cache.ValueRetrievalException} 是 Spring 抽象层契约
-     * (extends NestedRuntimeException) → RuntimeException,直接抛。
+     * <p>异常 message 可能携带 raw key;默认 WARN 日志只记异常类型链的简单名。
      */
-    private RuntimeException translateFailure(Throwable cause, Object key) {
+    private static String sanitizedFailure(Throwable failure) {
+        if (failure == null) {
+            return "null";
+        }
+        StringBuilder sb = new StringBuilder(failure.getClass().getSimpleName());
+        Throwable cause = failure.getCause();
+        while (cause != null && sb.length() < 160) {
+            sb.append(" <- ").append(cause.getClass().getSimpleName());
+            cause = cause.getCause();
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 失败异常翻译 — 把 orchestrator 透传的 {@link Throwable} 翻译为本方法契约的
+     * {@link RuntimeException}:Spring 构造的 VRE(message 内嵌 raw key)重建为
+     * 同型异常,key 字段以低基数 cacheName 代替(诊断可关联缓存,不泄露 raw key;
+     * loader 参数置 null — Spring 7 不存储 loader,且 loader toString 不可控),
+     * 保留原始 cause;其他 RuntimeException 直接抛(保留原始栈),checked Exception
+     * 包装为 message 仅含 cacheName 的 {@link RuntimeException}。
+     *
+     * <p>包可见:单元测试直接覆盖三条翻译分支与端到端 loader 路径(无容器)。
+     */
+    RuntimeException translateFailure(Throwable cause, String cacheName) {
+        if (cause instanceof Cache.ValueRetrievalException vre) {
+            // ADR-06 key 隐私:重建 VRE,key 位以 cacheName 代替原始 raw key,
+            // 保留类型(Spring 抽象层契约)与原始 cause。
+            return new Cache.ValueRetrievalException(cacheName, null, vre.getCause());
+        }
         if (cause instanceof RuntimeException re) {
             return re;
         }
-        return new RuntimeException("Failed to load cache value for key: " + key, cause);
+        // checked Exception 包装:message 只含低基数 cacheName,不含 raw key;
+        // 原始 cause 保留(不吞异常、不降级为 miss)。
+        return new RuntimeException("Failed to load cache value (cache=" + cacheName + ")", cause);
     }
 
     /**

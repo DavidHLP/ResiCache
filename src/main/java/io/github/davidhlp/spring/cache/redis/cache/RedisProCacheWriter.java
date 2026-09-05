@@ -1,31 +1,27 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.cache.loader.CacheOperationResolver;
-import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodSnapshot;
-import io.github.davidhlp.spring.cache.redis.cache.model.CacheKeys;
-import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChain;
-import io.github.davidhlp.spring.cache.redis.chain.CacheHandlerChainFactory;
+
+
+
+
+
+
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
-import io.github.davidhlp.spring.cache.redis.chain.model.CacheInput;
-import io.github.davidhlp.spring.cache.redis.serialization.TypeSupport;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
-import org.slf4j.MDC;
-
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
-
+import org.slf4j.MDC;
 import org.springframework.data.redis.cache.CacheStatistics;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import java.util.Map;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
-
-import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Redis 增强缓存写入器（基于责任链模式重构）
@@ -36,12 +32,13 @@ import java.util.concurrent.CompletableFuture;
  * <p>责任链顺序： BloomFilterHandler → SyncLockHandler → TtlHandler → NullValueHandler →
  * ActualCacheHandler
  *
- * <p>本类持有单一 {@link CacheOperationResolver} seam —— 消除 {@link #resolveOperation(String)}
- * 与 {@link RedisProCache#lookupOperation()} 的"读 ThreadLocal key → 查 register"镜像协议漂移风险;
+ * <p>本类持有单一 {@link CacheOperationResolver} seam —— 消除两处镜像
+ * "读 ThreadLocal key → 查 register"协议(本类 {@code resolveOperation} 与
+ * {@code RedisProCache} 的 lookup)漂移风险;
  * {@code resolveOperation} 为 1 行委派。
  */
 @Slf4j
-public class RedisProCacheWriter implements RedisCacheWriter {
+class RedisProCacheWriter implements RedisCacheWriter {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
@@ -82,7 +79,74 @@ public class RedisProCacheWriter implements RedisCacheWriter {
     @Nullable
     public byte[] get(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        return executeChain(CacheOperation.GET, name, key, null, ttl).getResultBytes();
+        return executeChain(CacheOperation.GET, name, key, null, ttl).resultBytes();
+    }
+
+    /**
+     * Read-through loader 路径(非 sync)—— availability-first(ADR-02)。
+     *
+     * <p>Spring {@code RedisCache.get(key, loader)} 经本方法实现「先读缓存 → miss 调
+     * loader → 写回」。本 override 取代接口默认实现,把写回失败与 loader 失败分成两个
+     * 相位:
+     * <ol>
+     *   <li><b>缓存读</b>:走链 GET(bloom 短路 / 提前过期 / null round-trip),命中即返回</li>
+     *   <li><b>loader</b>:缓存 miss → {@code loaderSupplier.get()} 调 Spring loader 链
+     *       ({@code loadCacheValue} → 业务 loader);<b>loader 异常原样传播</b>(由
+     *       Spring 包装为 {@code Cache.ValueRetrievalException},调用方可见)</li>
+     *   <li><b>写回</b>:loader 成功后走链 PUT(bloom add / TTL / null-value);写回失败
+     *       只记录 WARN 并<b>返回已加载字节</b>,不覆盖业务值</li>
+     * </ol>
+     *
+     * <p>cacheTti 参数:与既有 ResiCache 行为一致(链 GET 不做 TTI 刷新),命中/未命中
+     * 均按普通读处理;TTI 不在 ResiCache 特性集内。
+     *
+     * @param name          缓存名
+     * @param key           Redis key 字节
+     * @param loaderSupplier loader 字节提供者(Spring 契约;loader 异常在此传播)
+     * @param ttl           TTL
+     * @param cacheTti      是否 time-to-idle(本实现不消费,与既有链语义一致)
+     * @return 缓存命中或 loader 产出的字节;缓存 miss 且 loader 产出 null 时为 null
+     */
+    @Override
+    @Nullable
+    public byte[] get(@NonNull String name, @NonNull byte[] key,
+                      @NonNull Supplier<byte[]> loaderSupplier,
+                      @Nullable Duration ttl, boolean cacheTti) {
+        // 1) 缓存读(链 GET:bloom 短路 / 提前过期均在此生效)
+        byte[] cached = get(name, key, ttl);
+        if (cached != null) {
+            return cached;
+        }
+
+        // 2) loader — 异常原样传播(loader 失败是用户可见失败,不得吞)
+        byte[] loaded = loaderSupplier.get();
+
+        // 3) 写回 — 失败不覆盖 loader 值(ADR-02 availability-first)
+        try {
+            put(name, key, loaded, ttl);
+        } catch (RuntimeException writeBackFailure) {
+            log.warn("Cache write-back failed after successful load; returning loaded value: "
+                            + "cacheName={}, failure={}",
+                    name,
+                    sanitizedFailure(writeBackFailure));
+        }
+        return loaded;
+    }
+
+    /**
+     * 写回失败的安全日志描述 —— 不含原始 key / 异常消息(key 隐私契约)。
+     *
+     * <p>异常 message 可能携带 raw key(如 {@link CacheOperationException} 的消息),
+     * 默认 WARN 日志不得外泄;仅记录异常类型链的简单名。
+     */
+    private static String sanitizedFailure(Throwable failure) {
+        StringBuilder sb = new StringBuilder(failure.getClass().getSimpleName());
+        Throwable cause = failure.getCause();
+        while (cause != null && sb.length() < 160) {
+            sb.append(" <- ").append(cause.getClass().getSimpleName());
+            cause = cause.getCause();
+        }
+        return sb.toString();
     }
 
     @Override
@@ -183,7 +247,7 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable Duration ttl) {
         CacheResult result = executeChain(CacheOperation.PUT_IF_ABSENT, name, key, value, ttl);
         requireSuccessful(CacheOperation.PUT_IF_ABSENT, name, key, result);
-        return result.getResultBytes();
+        return result.resultBytes();
     }
 
     @Override
@@ -370,18 +434,17 @@ public class RedisProCacheWriter implements RedisCacheWriter {
             return;
         }
         if (operation == CacheOperation.REMOVE) {
-            log.warn("Cache REMOVE failed; continuing best-effort: cacheName={}, key={}, kind={}, error={}",
+            log.warn("Cache REMOVE failed; continuing best-effort: cacheName={}, kind={}, cause={}",
                     cacheName,
-                    key,
-                    result.getFailureKind(),
-                    result.getCause() == null ? null : result.getCause().getMessage());
+                    result.failureKind(),
+                    result.cause() == null ? "null" : result.cause().getClass().getSimpleName());
             return;
         }
+        // ADR-07/06:typed 异常不含 raw key(message 亦不含)
         throw new CacheOperationException(
-                operation.name(),
-                result.getFailureKind(),
+                operation,
+                result.failureKind(),
                 cacheName,
-                key,
-                result.getCause());
+                result.cause());
     }
 }

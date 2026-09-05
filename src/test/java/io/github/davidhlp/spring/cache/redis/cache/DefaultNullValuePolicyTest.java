@@ -1,0 +1,184 @@
+package io.github.davidhlp.spring.cache.redis.cache;
+
+
+
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.support.NullValue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * DefaultNullValuePolicy 单元测试 — 纯方法 + {@code toReturnValue} 委派测试。
+ *
+ * <p>P1-API-001-B:策略方法签名不再携带内部 {@code RedisCacheableOperation},
+ * {@code toStoreValue} 接收已从稳定 policy 视图解析的 {@code cacheNullValues} 布尔;
+ * {@code shouldCacheNull} 判定已由 {@code NullValueHandler} 直接读 policy 视图承担,不再单独测试。
+ *
+ * <p>{@code toReturnValue} 的字节生产细节由 {@link NullValueEncoderTest} 覆盖;
+ * 本测试仅验证 {@code DefaultNullValuePolicy} 委派语义。
+ */
+@ExtendWith(MockitoExtension.class)
+@DisplayName("DefaultNullValuePolicy Tests")
+class DefaultNullValuePolicyTest {
+
+    @Mock
+    private NullValueEncoder encoder;
+
+    private DefaultNullValuePolicy policy;
+
+    @BeforeEach
+    void setUp() {
+        policy = new DefaultNullValuePolicy(encoder);
+    }
+
+    @Nested
+    @DisplayName("toStoreValue() Tests")
+    class ToStoreValueTests {
+
+        @Test
+        @DisplayName("returns null when value is null and cacheNullValues is true")
+        void toStoreValue_nullValueAndCacheable_returnsNull() {
+            Object result = policy.toStoreValue(null, true);
+
+            assertThat(result).isNull();
+        }
+
+        @Test
+        @DisplayName("returns null when value is null and cacheNullValues is false (null store, handler skips)")
+        void toStoreValue_nullValueAndNotCacheable_returnsNull() {
+            Object result = policy.toStoreValue(null, false);
+
+            assertThat(result).isNull();
+        }
+
+        @Test
+        @DisplayName("returns original value when non-null regardless of cacheNullValues")
+        void toStoreValue_nonNullValue_returnsOriginal() {
+            Object value = "test-value";
+
+            assertThat(policy.toStoreValue(value, true)).isEqualTo(value);
+            assertThat(policy.toStoreValue(value, false)).isEqualTo(value);
+        }
+    }
+
+    @Nested
+    @DisplayName("fromStoreValue() Tests")
+    class FromStoreValueTests {
+
+        @Test
+        @DisplayName("returns same value as input")
+        void fromStoreValue_returnsSameValue() {
+            Object storeValue = "stored-value";
+
+            Object result = policy.fromStoreValue(storeValue);
+
+            assertThat(result).isEqualTo(storeValue);
+        }
+
+        @Test
+        @DisplayName("returns null when input is null")
+        void fromStoreValue_nullInput_returnsNull() {
+            Object result = policy.fromStoreValue(null);
+
+            assertThat(result).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("isNullValue() Tests")
+    class IsNullValueTests {
+
+        @Test
+        @DisplayName("returns true for null value")
+        void isNullValue_null_returnsTrue() {
+            boolean result = policy.isNullValue(null);
+
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        @DisplayName("returns false for non-null value")
+        void isNullValue_nonNull_returnsFalse() {
+            boolean result = policy.isNullValue("value");
+
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        @DisplayName("returns false for NullValue instance")
+        void isNullValue_nullValueInstance_returnsFalse() {
+            // This tests that NullValue.INSTANCE is not treated specially by isNullValue
+            // The method checks value == null, not value instanceof NullValue
+            boolean result = policy.isNullValue(NullValue.INSTANCE);
+
+            assertThat(result).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("toReturnValue() Tests — delegates to NullValueEncoder")
+    class ToReturnValueTests {
+
+        @Test
+        @DisplayName("forwards null value to encoder and returns encoded bytes")
+        void toReturnValue_nullValue_delegatesToEncoder() {
+            byte[] expectedBytes = new byte[]{1, 2, 3};
+            when(encoder.encodeForReturn(eq(null), eq("test-cache"), eq("key")))
+                    .thenReturn(expectedBytes);
+
+            byte[] result = policy.toReturnValue(null, "test-cache", "key");
+
+            assertThat(result).isEqualTo(expectedBytes);
+            verify(encoder).encodeForReturn(null, "test-cache", "key");
+        }
+
+        @Test
+        @DisplayName("forwards NullValue.INSTANCE to encoder and returns encoded bytes")
+        void toReturnValue_nullValueInstance_delegatesToEncoder() {
+            byte[] expectedBytes = new byte[]{1, 2, 3};
+            when(encoder.encodeForReturn(eq(NullValue.INSTANCE), eq("test-cache"), eq("key")))
+                    .thenReturn(expectedBytes);
+
+            byte[] result = policy.toReturnValue(NullValue.INSTANCE, "test-cache", "key");
+
+            assertThat(result).isEqualTo(expectedBytes);
+            verify(encoder).encodeForReturn(NullValue.INSTANCE, "test-cache", "key");
+        }
+
+        @Test
+        @DisplayName("forwards non-null value to encoder and returns encoded bytes")
+        void toReturnValue_nonNull_delegatesToEncoder() {
+            Object value = "test-value";
+            byte[] expectedBytes = new byte[]{4, 5, 6};
+            when(encoder.encodeForReturn(eq(value), eq("test-cache"), eq("key")))
+                    .thenReturn(expectedBytes);
+
+            byte[] result = policy.toReturnValue(value, "test-cache", "key");
+
+            assertThat(result).isEqualTo(expectedBytes);
+            verify(encoder).encodeForReturn(value, "test-cache", "key");
+        }
+
+        @Test
+        @DisplayName("forwards arbitrary values to encoder with all three args")
+        void toReturnValue_arbitraryValue_delegatesToEncoder() {
+            byte[] expectedBytes = new byte[]{9, 9, 9};
+            when(encoder.encodeForReturn(any(), any(), any())).thenReturn(expectedBytes);
+
+            byte[] result = policy.toReturnValue("x", "test-cache", "key");
+
+            assertThat(result).isEqualTo(expectedBytes);
+            verify(encoder).encodeForReturn("x", "test-cache", "key");
+        }
+    }
+}

@@ -1,19 +1,14 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import io.github.davidhlp.spring.cache.redis.health.RedisCacheHealthIndicator;
+
+
+
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Bean;
-
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.boot.health.contributor.HealthIndicator;
 
 /**
  * Metrics auto-configuration for Redis cache monitoring.
@@ -46,7 +41,7 @@ import org.springframework.data.redis.core.RedisTemplate;
  *     enabled: true   # 显式开启 — 注册 RedisCacheHealthIndicator + 启用 Timer/Counter
  * }</pre>
  *
- * <p>The health indicator can be overridden by the user via a custom {@link Bean} definition.
+ * <p>The health indicator can be overridden by the user via a custom {@code @Bean} definition.
  */
 @Slf4j
 @AutoConfiguration
@@ -54,13 +49,4 @@ import org.springframework.data.redis.core.RedisTemplate;
 @ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)
 @ConditionalOnProperty(prefix = "resi-cache.metrics", name = "enabled", havingValue = "true")
 public class MetricsAutoConfiguration {
-
-    @Bean
-    @ConditionalOnMissingBean
-    public RedisCacheHealthIndicator redisCacheHealthIndicator(
-            @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
-            ObjectProvider<io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport> syncSupportProvider,
-            ObjectProvider<RedisProCacheProperties> propertiesProvider) {
-        return new RedisCacheHealthIndicator(redisTemplate, syncSupportProvider, propertiesProvider);
-    }
 }

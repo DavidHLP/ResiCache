@@ -1,16 +1,13 @@
 /**
  * Redis缓存配置包.
  *
- * <p>本包按照单一职责原则组织配置类：
+ * <p>本包仅承载稳定自动配置/属性入口：
  * <ul>
  *   <li>RedisCacheAutoConfiguration - 主配置入口</li>
- *   <li>RedisConnectionConfiguration - 连接和模板配置</li>
- *   <li>RedisProCacheConfiguration - 缓存核心组件配置</li>
- *   <li>RedisCacheRegistryConfiguration - 注册器配置</li>
- *   <li>RedisProxyCachingConfiguration - 代理拦截器配置</li>
+ *   <li>RedisProCacheProperties - {@code resi-cache.*} 配置契约</li>
+ *   <li>MetricsAutoConfiguration / CachingEnablementValidation - 可选入口</li>
  * </ul>
+ * <p>具体装配类位于 package-private {@code cache} runtime。
  */
-@NonNullApi
+@org.springframework.lang.NonNullApi
 package io.github.davidhlp.spring.cache.redis.config;
-
-import org.springframework.lang.NonNullApi;

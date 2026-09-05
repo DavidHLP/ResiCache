@@ -1,18 +1,20 @@
 package io.github.davidhlp.spring.cache.redis.serialization.migration;
 
+
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
-import io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.Banner;
 import org.springframework.boot.WebApplicationType;
-import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.FilterType;
 
 /**
  * Standalone operator entry point for serialization migration.
@@ -41,8 +43,8 @@ public final class SerializationMigrationCli {
                                 + "io.github.davidhlp.spring.cache.redis.config."
                                 + "RedisCacheAutoConfiguration")
                 .run(args)) {
-            SerializationMigrationReport report =
-                    context.getBean(SerializationMigrationEngine.class).migrate();
+            SerializationMigrationReport report = context
+                    .getBean(SerializationMigrationRunner.class).migrate();
             if (report.failed() > 0) {
                 throw new IllegalStateException(
                         "Serialization migration completed with rejected/failed keys: "
@@ -55,12 +57,22 @@ public final class SerializationMigrationCli {
     @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration
     @EnableConfigurationProperties(RedisProCacheProperties.class)
-    @Import({SecureJacksonSerializerFactory.class, SerializationMigrationEngine.class})
+    @ComponentScan(
+            basePackages = "io.github.davidhlp.spring.cache.redis.cache",
+            useDefaultFilters = false,
+            includeFilters = @ComponentScan.Filter(
+                    type = FilterType.REGEX,
+                    pattern = ".*(SerializationMigrationEngine|SecureJacksonSerializerFactory)"))
     static class CliConfiguration {
         @Bean
         @ConditionalOnMissingBean(ObjectMapper.class)
         ObjectMapper objectMapper() {
             return new ObjectMapper();
         }
+    }
+
+    /** Stable operator seam implemented by the internal migration engine. */
+    public interface SerializationMigrationRunner {
+        SerializationMigrationReport migrate();
     }
 }

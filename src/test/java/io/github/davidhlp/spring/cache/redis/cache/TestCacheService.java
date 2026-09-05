@@ -1,0 +1,143 @@
+package io.github.davidhlp.spring.cache.redis.cache;
+
+
+
+
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+
+/**
+ * Test service for annotation-level cache integration tests.
+ * Each method is designed to verify a specific Spring Cache contract behavior.
+ */
+@Service
+public class TestCacheService {
+
+    private final AtomicInteger callCount = new AtomicInteger(0);
+
+    public void reset() {
+        callCount.set(0);
+    }
+
+    public int getCallCount() {
+        return callCount.get();
+    }
+
+    @RedisCacheable(cacheNames = "testCache", key = "#id")
+    public String getById(Long id) {
+        callCount.incrementAndGet();
+        return "value-" + id;
+    }
+
+    @RedisCacheable(cacheNames = "testCache", key = "#id", ttl = 120)
+    public String getByIdWithTtl(Long id) {
+        callCount.incrementAndGet();
+        return "ttl-value-" + id;
+    }
+
+    @RedisCacheable(cacheNames = "testCache", key = "#id", condition = "#id > 0")
+    public String getByIdWithCondition(Long id) {
+        callCount.incrementAndGet();
+        return "conditional-" + id;
+    }
+
+    @RedisCacheable(cacheNames = "testCache", key = "#id", unless = "#result == null")
+    public String getByIdWithUnless(Long id) {
+        callCount.incrementAndGet();
+        return id > 0 ? "unless-value-" + id : null;
+    }
+
+    @RedisCachePut(cacheNames = "testCache", key = "#id")
+    public String putById(Long id, String value) {
+        callCount.incrementAndGet();
+        return value;
+    }
+
+    @RedisCacheEvict(cacheNames = "testCache", allEntries = true)
+    public void evictAll() {
+        // 纯缓存维护操作 — 不计入 loader 调用计数(callCount 只统计业务加载)
+    }
+
+    /**
+     * CLEAN(allEntries) + useBloomFilter —— ADR-01 场景契约。
+     *
+     * <p>与普通 CLEAN 相同(注解使用方仍需显式开启 bloom 才会触发
+     * {@code BloomFilterHandler});本方法用于验证 CLEAN 即便启用 bloom
+     * 也只清缓存、不触碰布隆集合。
+     */
+    @RedisCacheEvict(cacheNames = "testCache", allEntries = true, useBloomFilter = true)
+    public void evictAllWithBloom() {
+        // 纯缓存维护操作 — 不计入 loader 调用计数
+    }
+
+    @RedisCacheEvict(cacheNames = "testCache", key = "#id")
+    public void evictById(Long id) {
+        // 纯缓存维护操作 — 不计入 loader 调用计数
+    }
+
+    @RedisCacheEvict(cacheNames = "testCache", key = "#id", useBloomFilter = true)
+    public void evictByIdWithBloom(Long id) {
+        // 纯缓存维护操作 — 不计入 loader 调用计数
+    }
+
+    @RedisCaching(
+            redisCacheable = {
+                    @RedisCacheable(cacheNames = "cache1", key = "#id"),
+                    @RedisCacheable(cacheNames = "cache2", key = "#id")
+            },
+            redisCacheEvict = {
+                    @RedisCacheEvict(cacheNames = "cache3", key = "#id")
+            }
+    )
+    public String multiCacheOperation(Long id) {
+        callCount.incrementAndGet();
+        return "multi-" + id;
+    }
+
+    @RedisCacheable(cacheNames = "testCache", key = "#id", cacheNullValues = true)
+    public String getByIdWithNullCache(Long id) {
+        callCount.incrementAndGet();
+        return id > 0 ? "null-cache-value-" + id : null;
+    }
+
+    @RedisCacheable(cacheNames = "testCache", key = "#id", useBloomFilter = true)
+    public String getByIdWithBloomFilter(Long id) {
+        callCount.incrementAndGet();
+        return "bloom-value-" + id;
+    }
+
+    @RedisCacheable(cacheNames = "testCache", key = "#id", sync = true)
+    public String getByIdWithSync(Long id) {
+        callCount.incrementAndGet();
+        return "sync-value-" + id;
+    }
+
+    /**
+     * sync + useBloomFilter 同时开启 —— 键漂移回归契约。
+     *
+     * <p>loader 路径 bloom 前置短路必须用 actualKey(经 CacheKeys)查询,与链层
+     * {@code BloomFilterHandler.add} 同源。键漂移(用 createCacheKey 带前缀)会使
+     * 预热后的查询静默返回 null,违反 @Cacheable。
+     */
+    @RedisCacheable(cacheNames = "testCache", key = "#id", sync = true, useBloomFilter = true)
+    public String getByIdWithSyncAndBloom(Long id) {
+        callCount.incrementAndGet();
+        return "sync-bloom-" + id;
+    }
+
+    /**
+     * 纯 Spring 原生 {@link Cacheable} —— 不带任何 ResiCache 特性(useBloomFilter/sync/ttl)。
+     * 用于验证 ResiCache 链对 Spring 原生 @Cacheable 也正常工作
+     * (纯 @Cacheable 通过 ResiCache CacheManager 走链,而不是被绕开)。
+     */
+    @Cacheable(cacheNames = "testCache", key = "#id")
+    public String getByIdWithPureSpring(Long id) {
+        callCount.incrementAndGet();
+        return "pure-" + id;
+    }
+}

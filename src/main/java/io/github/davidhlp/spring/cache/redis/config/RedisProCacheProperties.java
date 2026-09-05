@@ -1,19 +1,23 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
+
+
+
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationProperties;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationProperties;
-import lombok.Getter;
-import lombok.Setter;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.validation.annotation.Validated;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * ResiCache 配置属性类
@@ -22,18 +26,15 @@ import java.util.concurrent.TimeUnit;
  * <pre>
  * resi-cache:
  *   default-ttl: 30m
- *   bloom-filter:
- *     rebuild-window-seconds: 30
  *   early-expiration:
  *     pool-size: 2
  *     max-pool-size: 10
  *     queue-capacity: 100
  * </pre>
  *
- * <p>注:布隆过滤器的启用/关闭由 {@code resi-cache.protection.bloom-filter-enabled} 控制
- * (见 {@link ProtectionProperties});布隆实际参数
- * (bit-size / hash-functions / hash-cache-size)由 {@code resi-cache.bloom.*} 经
- * {@link io.github.davidhlp.spring.cache.redis.protection.bloom.BloomFilterConfig} 读取。
+ * <p>P1-CONFIG-001:所有 nested properties 均带 {@code @Valid @NotNull}(绑定期 cascade
+ * 校验),数值字段带 Jakarta 约束;跨字段关系(redis mode/sentinel/cluster/tls)由类级
+ * validator 承担并把 violation 绑定到具体 property node。非法配置在绑定完成时一次性失败。
  */
 @Getter
 @Setter
@@ -51,22 +52,34 @@ public class RedisProCacheProperties {
     /** 全局缓存键前缀 */
     private String keyPrefix = "";
 
-    /** 布隆过滤器配置 */
-    private BloomFilterProperties bloomFilter = new BloomFilterProperties();
+    /** 布隆过滤器参数(resi-cache.bloom.*) */
+    @Valid
+    @NotNull
+    private BloomProperties bloom = new BloomProperties();
 
     /** 提前过期配置 */
+    @Valid
+    @NotNull
     private EarlyExpirationProperties earlyExpiration = new EarlyExpirationProperties();
 
     /** 同步锁配置 */
+    @Valid
+    @NotNull
     private SyncLockProperties syncLock = new SyncLockProperties();
 
     /** Redisson 连接池配置 */
+    @Valid
+    @NotNull
     private RedissonProperties redisson = new RedissonProperties();
 
     /** Redis 部署配置 */
+    @Valid
+    @NotNull
     private RedisDeploymentProperties redis = new RedisDeploymentProperties();
 
     /** 序列化器配置 */
+    @Valid
+    @NotNull
     private SerializerProperties serializer = new SerializerProperties();
 
     /** 按缓存名称细粒度配置 */
@@ -79,6 +92,8 @@ public class RedisProCacheProperties {
     private NativeAnnotationMode nativeAnnotationMode = NativeAnnotationMode.SELECTIVE;
 
     /** 防护链总开关配置(resi-cache.protection.*) */
+    @Valid
+    @NotNull
     private ProtectionProperties protection = new ProtectionProperties();
 
     /**
@@ -91,6 +106,32 @@ public class RedisProCacheProperties {
         NONE,
         /** 仅当同时存在 ResiCache 注解时才转换 */
         SELECTIVE
+    }
+
+    /**
+     * 布隆过滤器参数(resi-cache.bloom.*)。
+     *
+     * <p>P1-CONFIG-001:把原先经 {@code @Value} 散读的 {@code resi-cache.bloom.*}
+     * 收口到 properties 统一模型,启动期一次性校验。
+     */
+    @Getter
+    @Setter
+    public static class BloomProperties {
+        /** Redis 布隆位图 key 前缀 */
+        private String prefix = "bf:";
+
+        /** 位图大小(bits) */
+        @Min(1)
+        private int bitSize = 8_388_608;
+
+        /** hash 函数个数 */
+        @Min(1)
+        @Max(32)
+        private int hashFunctions = 3;
+
+        /** hash 位置本地缓存上限 */
+        @Min(1)
+        private int hashCacheSize = 10_000;
     }
 
     /**
@@ -125,29 +166,39 @@ public class RedisProCacheProperties {
         /** 启动期序列化 pre-flight 探测(guide §115):采样 N keys 检测非 envelope → WARN。默认关闭(opt-in;扫描 Redis 是启动副作用)。 */
         private boolean probeEnabled = false;
         /** pre-flight 探测的采样 key 数上限(默认 100)。 */
+        @Min(1)
         private int probeSampleSize = 100;
         /** operator CLI migration workflow settings; never auto-executed at application startup. */
+        @Valid
+        @NotNull
         private SerializationMigrationProperties migration =
                 new SerializationMigrationProperties();
     }
 
     /**
      * Redis deployment configuration.
+     *
+     * <p>跨字段关系(mode 决定 host/port vs clusterNodes vs sentinelNodes;tlsRequired
+     * 依赖 tlsEnabled)由 {@link RedisDeploymentValidator} 类级校验,违规绑定到具体字段。
      */
     @Getter
     @Setter
+    @RedisDeploymentValidator
     public static class RedisDeploymentProperties {
         /** 部署模式: single, cluster, sentinel */
         private String mode = "single";
         /** 主机地址（单节点模式） */
         private String host = "localhost";
         /** 端口（单节点模式） */
+        @Min(1)
+        @Max(65535)
         private int port = 6379;
         /** 用户名（ACL） */
         private String username;
         /** 密码 */
         private String password;
         /** 数据库索引 */
+        @Min(0)
         private int database = 0;
         /** 是否启用 TLS */
         private boolean tlsEnabled = false;
@@ -167,38 +218,18 @@ public class RedisProCacheProperties {
         private String redissonConfigPath;
     }
 
-    @Getter
-    @Setter
-    public static class BloomFilterProperties {
-        /**
-         * CLEAN 后布隆过滤器的 rebuilding 窗口(秒)。默认 {@code 30};{@code 0} = 禁用。
-         *
-         * <p>问题:CLEAN({@code @CacheEvict(allEntries=true)})清空布隆后,
-         * 空布隆对所有 key 判定 {@code mightContain=false},导致后续 GET 在
-         * {@code RedisProCache.get(key, loader)} 的前置短路处<b>静默返回 null</b>
-         * (既不查缓存也不调 loader),违反 Spring {@code @Cacheable}"miss 即调 loader
-         * 返回真实值"的契约 —— 是数据正确性缺陷而非 DB 击穿(loader 未被调用)。
-         *
-         * <p>启用后,{@link io.github.davidhlp.spring.cache.redis.protection.bloom.BloomSupport#clear}
-         * 清空过滤器的同时在 Redis 写入一个 per-cacheName 的 rebuilding 标志(TTL=本窗口),
-         * 期间 {@code mightContain} <b>fail-open</b>(一律返回 true),让请求越过 bloom 短路、
-         * 走正常 sync 锁 + loader 路径,返回 DB 真实值并由 PUT 回填重建布隆。窗口由 Redis
-         * TTL 自动结束,无需猜测重建 key 数量。标志走 Redis 以保证 Cluster 多实例一致
-         * (容忍秒级 local 缓存延迟)。
-         *
-         * <p>{@code 0} 禁用 = 不开启 fail-open 窗口,保留静默 null 缺陷。
-         */
-        private long rebuildWindowSeconds = 30;
-    }
 
     @Getter
     @Setter
     public static class EarlyExpirationProperties {
         /** 核心线程池大小 */
+        @Min(1)
         private int poolSize = 2;
         /** 最大线程池大小 */
+        @Min(1)
         private int maxPoolSize = 10;
         /** 队列容量 */
+        @Min(1)
         private int queueCapacity = 100;
     }
 
@@ -206,8 +237,10 @@ public class RedisProCacheProperties {
     @Setter
     public static class SyncLockProperties {
         /** 同步锁超时时间 */
+        @Min(0)
         private long timeout = 3000;
         /** 超时时间单位 */
+        @NotNull
         private TimeUnit unit = TimeUnit.MILLISECONDS;
         /** 锁键前缀 */
         private String prefix = "cache:lock:";
@@ -224,7 +257,7 @@ public class RedisProCacheProperties {
          * 此时仍保证 JVM 内线程互斥,但 ResiCache 会发出 {@code protection.degraded=local-only}
          * 告警使安全属性可观测。
          *
-         * @see io.github.davidhlp.spring.cache.redis.protection.breakdown.SyncSupport
+         * @see io.github.davidhlp.spring.cache.redis.cache.SyncSupport
          */
         private boolean localOnly = false;
     }
@@ -275,9 +308,12 @@ public class RedisProCacheProperties {
         private boolean enabled = true;
 
         /**
-         * per-mechanism 运行时 kill-switch(分项覆盖)。
+         * per-mechanism 启动时静态覆盖(分项开关)。
          * <p>每个字段 {@code null} = 继承 {@link #enabled} 总开关;非 {@code null}
-         * = 单独覆盖该机制。便于只关某个机制(例如生产故障时关闭布隆但保留锁)。
+         * = 启动时静态覆盖该机制。总开关为 {@code false} 时分项 {@code true} 不能
+         * 重新启用(总开关优先);分项 {@code false} 只能进一步关闭对应机制。
+         * <p><b>仅启动时生效</b>:责任链单例缓存于首次 {@code createChain} 构建,
+         * 修改配置需重启应用,不存在运行时热更新或链重建。
          * <p>对应 handler: bloom-filter / sync-lock / early-expiration / null-value。
          * <p>TTL 不在此列(TtlHandler 兼担基础 TTL 计算,关闭会导致永久缓存,见
          * {@code CacheHandlerChainFactory} 注释)。

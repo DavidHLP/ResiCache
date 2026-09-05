@@ -1,0 +1,308 @@
+package io.github.davidhlp.spring.cache.redis.cache;
+
+
+
+
+
+
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.lang.NonNull;
+
+/**
+ * Internal early-expiration executor. The public class is retained for
+ * construction compatibility, but {@link #submit(String, Runnable)} is not a
+ * supported extension seam; cross-package callers receive only
+ * {@link RefreshCancellation#cancel(String)}.
+ *
+ * <p>由自动配置按 {@code resi-cache.early-expiration.*} 构造。提交、重试、清理调度、
+ * shutdown 和失败处理均属于本实现，不新增 public executor interface。
+ *
+ * <p>内部职责委托给两个协作类：
+ * <ul>
+ *   <li>{@link RefreshRetryPolicy} —— 同步重试循环（纯函数，独立可测）</li>
+ *   <li>{@link RefreshTaskMetrics} —— Micrometer 指标注册与计数（无锁）</li>
+ * </ul>
+ * 去重提交（{@code inFlight} + {@code executorService}）与生命周期（清理调度、shutdown）
+ * 因与反射可见的 {@code executorService}/{@code cleanupScheduler} 字段（测试断言用）紧耦合而保留在此。
+ *
+ * <p>失败的任务由 {@link RefreshRetryPolicy} 自动重试，最多 {@value RefreshRetryPolicy#MAX_RETRY_COUNT} 次。
+ */
+@Slf4j
+class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
+
+    private final ExecutorService executorService;
+    private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
+    private static final String THREAD_NAME_PREFIX = "early-expiration-";
+
+    /** 独立调度器用于定期清理已完成任务 */
+    private final ScheduledExecutorService cleanupScheduler;
+
+    /** 清理间隔（毫秒） */
+    private final long cleanupIntervalMs;
+
+    private final RefreshRetryPolicy retryPolicy;
+    private final RefreshTaskMetrics metrics;
+
+    /**
+     * 默认构造函数（测试 / 无配置 fallback）：硬编码 {@code 2/10/100} 池参数。
+     *
+     * <p>生产装配走 {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCacheConfiguration#earlyExpirationExecutor}
+     * {@code @Bean}，从 {@code resi-cache.early-expiration.*} properties 读池参数。
+     */
+    public ThreadPoolEarlyExpirationExecutor() {
+        this(2, 10, 100, null);
+    }
+
+    /**
+     * 配置化构造（生产 {@code @Bean} 主路径）：用 {@code resi-cache.early-expiration}
+     * 池参数创建线程池。
+     *
+     * @param corePoolSize   核心线程数
+     * @param maxPoolSize    最大线程数
+     * @param queueCapacity  任务队列容量
+     * @param meterRegistry  Micrometer registry（可选，为 {@code null} 时不注册指标）
+     */
+    public ThreadPoolEarlyExpirationExecutor(int corePoolSize, int maxPoolSize, int queueCapacity, MeterRegistry meterRegistry) {
+        this(createExecutor(corePoolSize, maxPoolSize, queueCapacity),
+             new ConcurrentHashMap<>(), meterRegistry, 30_000L);
+    }
+
+    /**
+     * 构造函数，允许注入自定义的执行器服务和进行中的任务映射（测试主路径：直接控制
+     * {@code ExecutorService} / {@code inFlight} / 清理周期，绕开配置化构造）。
+     *
+     * @param executorService 线程池执行器服务
+     * @param inFlight        正在进行中的任务映射
+     * @param meterRegistry   Micrometer meter注册表（可选，为null时不注册指标）
+     * @param cleanupIntervalMs 清理调度器周期（毫秒）
+     */
+    ThreadPoolEarlyExpirationExecutor(
+            ExecutorService executorService,
+            ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
+            MeterRegistry meterRegistry,
+            long cleanupIntervalMs) {
+        this.executorService = executorService;
+        this.inFlight = inFlight;
+        this.cleanupIntervalMs = cleanupIntervalMs;
+        this.retryPolicy = new RefreshRetryPolicy();
+
+        // 创建独立的清理调度器
+        this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "early-expiration-cleanup");
+            t.setDaemon(true);
+            return t;
+        });
+
+        try {
+            // 初始化 Micrometer 指标（注册逻辑收敛于 RefreshTaskMetrics）
+            this.metrics = new RefreshTaskMetrics(meterRegistry, inFlight, executorService);
+            // 从实际 executor 读取打印，避免日志撒谎
+            String poolDesc = (executorService instanceof ThreadPoolExecutor tpe)
+                    ? "core=" + tpe.getCorePoolSize() + ", max=" + tpe.getMaximumPoolSize()
+                    : executorService.getClass().getSimpleName();
+            log.info("ThreadPoolEarlyExpirationExecutor initialized: {}, maxRetries={}",
+                    poolDesc, RefreshRetryPolicy.MAX_RETRY_COUNT);
+        } catch (RuntimeException e) {
+            // 初始化失败时，确保清理已创建的资源
+            cleanupScheduler.shutdownNow();
+            executorService.shutdownNow();
+            throw e;
+        }
+    }
+
+    /**
+     * 创建线程池执行器（池容量由调用方传入）。
+     *
+     * @param corePoolSize   核心线程数
+     * @param maxPoolSize    最大线程数
+     * @param queueCapacity  任务队列容量
+     * @return 配置好的线程池执行器
+     */
+    private static ExecutorService createExecutor(int corePoolSize, int maxPoolSize, int queueCapacity) {
+        return new ThreadPoolExecutor(
+                corePoolSize,
+                maxPoolSize,
+                60L,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(queueCapacity),
+                new EarlyExpirationThreadFactory(),
+                new ThreadPoolExecutor.CallerRunsPolicy());
+    }
+
+    /**
+     * 提交一个提前过期任务到执行器中
+     * 如果给定键的任务已经在执行中，则跳过提交
+     *
+     * @param key  与提前过期任务关联的键
+     * @param task 要执行的提前过期任务
+     */
+    public void submit(String key, Runnable task) {
+        if (key == null || task == null) {
+            return;
+        }
+        AtomicBoolean scheduled = new AtomicBoolean(false);
+
+        CompletableFuture<Void> future =
+                inFlight.computeIfAbsent(
+                        key,
+                        k -> {
+                            scheduled.set(true);
+                            CompletableFuture<Void> created =
+                                    CompletableFuture.runAsync(
+                                            () -> retryPolicy.executeWithRetry(k, task),
+                                            executorService);
+
+                            created.whenComplete(
+                                    (result, throwable) -> {
+                                        inFlight.remove(k, created);
+                                        metrics.recordCompleted();
+                                        if (throwable != null) {
+                                            log.error("Async early-expiration failed after all retries for key: {}", k, throwable);
+                                        }
+                                    });
+                            return created;
+                        });
+
+        if (scheduled.get()) {
+            metrics.recordSubmitted();
+        }
+        if (!scheduled.get() && !future.isDone()) {
+            log.debug("Key {} is already being refreshed, skipping", key);
+        }
+    }
+
+    /**
+     * 取消与给定键关联的提前过期任务
+     *
+     * @param key 要取消的提前过期任务的键
+     */
+    @Override
+    public void cancel(String key) {
+        if (key == null) {
+            return;
+        }
+        CompletableFuture<Void> future = inFlight.remove(key);
+        if (future != null) {
+            metrics.recordCancelled();
+            boolean cancelled = future.cancel(true);
+            log.debug(
+                    "Cancelled async early-expiration for key: {} (cancelled={}, done={})",
+                    key,
+                    cancelled,
+                    future.isDone());
+        }
+    }
+
+    /**
+     * 获取线程池的统计信息
+     *
+     * @return 包含活动线程数、池大小、队列大小和已完成任务数的字符串
+     */
+    public String getStats() {
+        if (executorService instanceof ThreadPoolExecutor tpe) {
+            return String.format(
+                    "EarlyExpirationThreadPool[active=%d, poolSize=%d, queueSize=%d, completed=%d]",
+                    tpe.getActiveCount(),
+                    tpe.getPoolSize(),
+                    tpe.getQueue().size(),
+                    tpe.getCompletedTaskCount());
+        }
+        return "EarlyExpirationThreadPool[unknown]";
+    }
+
+    /**
+     * 启动定期清理调度器
+     */
+    @PostConstruct
+    public void initCleanupScheduler() {
+        cleanupScheduler.scheduleAtFixedRate(
+                this::cleanFinished,
+                cleanupIntervalMs,
+                cleanupIntervalMs,
+                TimeUnit.MILLISECONDS);
+        log.info("Pre-refresh cleanup scheduler started with interval={}ms", cleanupIntervalMs);
+    }
+
+    /**
+     * 获取当前正在进行的提前过期任务数量
+     *
+     * @return 正在进行的任务数量
+     */
+    public int getActiveCount() {
+        return inFlight.size();
+    }
+
+    /**
+     * 清理已完成的任务，从进行中的映射中移除已完成的任务
+     */
+    private void cleanFinished() {
+        inFlight.entrySet().removeIf(e -> e.getValue() != null && e.getValue().isDone());
+    }
+
+    /**
+     * 关闭执行器，释放所有资源
+     * 此方法在应用关闭时自动调用
+     */
+    @PreDestroy
+    public void shutdown() {
+        log.info("Shutting down early-expiration executor thread pool...");
+        shutdownGracefully(cleanupScheduler, 5, "Pre-refresh cleanup scheduler");
+        shutdownGracefully(executorService, 10, "Pre-refresh executor");
+    }
+
+    /**
+     * 优雅关闭单个 ExecutorService：先 {@code shutdown()} 拒收新任务，等待已有任务在
+     * {@code timeoutSeconds} 内结束；超时则 {@code shutdownNow()} 强制中断，中断期间同样强制关闭。
+     *
+     * <p>收敛自 {@link #shutdown()} 中 {@code cleanupScheduler} 与 {@code executorService} 两段
+     * 逐字重复的关闭样板（仅超时阈值与日志名称不同）——优雅关闭策略变更现只改本方法一处，
+     * 不再两处同步维护（locality）。两段调用 byte-for-byte 行为等价：{@code cleanupScheduler}
+     * 走 5s + "Pre-refresh cleanup scheduler"，{@code executorService} 走 10s + "Pre-refresh executor"。
+     *
+     * @param executor       待关闭的执行器
+     * @param timeoutSeconds 优雅等待超时（秒）
+     * @param name           日志中标识该执行器的名称
+     */
+    private void shutdownGracefully(ExecutorService executor, long timeoutSeconds, String name) {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                log.warn("{} did not terminate gracefully, forced shutdown", name);
+            } else {
+                log.info("{} shut down successfully", name);
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+            log.error("{} shutdown interrupted", name, e);
+        }
+    }
+
+    /**
+     * 为提前过期线程创建命名线程的工厂类
+     */
+    private static final class EarlyExpirationThreadFactory implements ThreadFactory {
+        private final AtomicInteger threadNumber = new AtomicInteger(1);
+
+        /**
+         * 创建一个新的提前过期线程
+         *
+         * @param r 线程要执行的任务
+         * @return 配置好的线程实例
+         */
+        @Override
+        public Thread newThread(@NonNull Runnable r) {
+            Thread thread = new Thread(r, THREAD_NAME_PREFIX + threadNumber.getAndIncrement());
+            thread.setDaemon(true);
+            thread.setPriority(Thread.NORM_PRIORITY);
+            return thread;
+        }
+    }
+}

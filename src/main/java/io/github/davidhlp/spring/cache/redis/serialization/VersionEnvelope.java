@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.serialization;
 
+
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -37,7 +38,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class VersionEnvelope {
+class VersionEnvelope {
 
     /** 序列化格式版本号 */
     private int version;

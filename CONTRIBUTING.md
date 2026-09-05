@@ -20,10 +20,15 @@ Requirements: **JDK 21** (matches `pom.xml` `<java.version>21</java.version>`),
 
 ```bash
 ./mvnw clean verify -B
+./mvnw -Punit test -B
 ./mvnw checkstyle:check -B
 ./mvnw clean package -DskipTests -B
 bash scripts/ci/check-test-names.sh
 ```
+
+`./mvnw -Punit test -B` is the no-Docker daily path. It does not verify real
+Redis/Cluster behavior and is not a release gate; `./mvnw clean verify -B`
+remains the full Redis proof.
 
 The `verify` goal enforces a JaCoCo coverage gate:
 
@@ -52,8 +57,8 @@ tests.**
 
 | You're touching... | Start here |
 |---|---|
-| A protection mechanism | `protection/<mechanism>/` + `chain/CacheHandlerChainFactory` |
-| Annotation handling | `annotation/handler/` + `annotation/RedisCacheOperationSource` |
+| A protection mechanism | internal `cache/` runtime + `chain/CacheHandlerChainFactory` |
+| Annotation handling | internal `cache/` annotation pipeline |
 | Auto-configuration | `config/RedisCacheAutoConfiguration` + `RedisProCacheProperties` |
 | Serialization | `serialization/SecureJackson*` |
 | Cache core | `cache/RedisProCache`, `RedisProCacheManager`, `RedisProCacheWriter` |
@@ -63,14 +68,23 @@ rationale and source pointers.
 
 ## Adding a protection handler
 
-1. Create a class under `protection/<your-mechanism>/` implementing `CacheHandler`
+1. Create a class in the internal `cache/` runtime implementing `CacheHandler`
    (extend `AbstractCacheHandler`).
 2. Annotate it `@HandlerPriority(HandlerOrder.YOUR_ORDER)` — `HandlerOrder` is
    the single source of truth for ordering (gap = 100, extend the enum to insert).
-3. Register it in the explicit `@Import` list in
-   `config/RedisProCacheConfiguration`; package scanning is intentionally not used.
+3. Annotate it `@Component` — the internal `cache/` runtime package is the
+   only package `RedisCacheAutoConfiguration` scans (test classes excluded);
+   no root-package scan is used. Internal `@Configuration` classes inside
+   `cache/` are picked up by the same internal-only scan.
 4. Add tests; document the mechanism's design rationale in Javadoc on the
    handler class (matching the existing codebase style).
+
+The full extension protocol (non-null `HandlerResult`, `FlowControl`
+semantics, post-process isolation, observer hook order, scope tokens,
+thread safety, nested public type classification) is normative in
+[`STABILITY.md`](./STABILITY.md) §4; the nested public type list is pinned
+by `src/test/resources/allowlist/public-surface-nested.txt` and
+`PublicSurfaceContractTest`.
 
 See [CLAUDE.md](CLAUDE.md) § Key Architecture: Chain of Responsibility for the
 handler-ordering model, and the `protection/` packages for worked examples of

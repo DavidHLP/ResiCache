@@ -66,10 +66,11 @@ Each handler returns a typed `HandlerResult` carrying explicit `FlowControl`
 (`CONTINUE`, `SKIP_ALL`, `TERMINATE`) to govern execution without hidden state.
 Handlers opting into post-processing (e.g. Bloom filter async backfilling)
 override `requiresPostProcess` and `afterChainExecution`.
-Built-in handlers are registered by the library's explicit auto-configuration
-imports. A host application's custom handler must be a host-scanned
-`@Component` or an application `@Bean`, implement `CacheHandler`, and use
-`@HandlerPriority`; it does not require package scanning of the library.
+Built-in handlers are registered by the library's auto-configuration, which
+scans only the library-internal `cache` runtime package. A host application's
+custom handler must be a host-scanned `@Component` or an application `@Bean`,
+implement `CacheHandler`, and use `@HandlerPriority`; the library's internal
+scan does not see host packages.
 
 ## Quick start
 
@@ -82,6 +83,10 @@ imports. A host application's custom handler must be a host-scanned
     <version>0.0.2</version>
 </dependency>
 ```
+
+> The `0.0.2` artifact on Maven Central is the **earlier Boot 3 / Java 17
+> line** (verified 2026-09-05). The current Boot 4 / Java 21 line has no
+> published artifact yet; the coordinate above is the planned one.
 
 ### 2. Configure Redis
 
@@ -155,8 +160,17 @@ configuration metadata.
 resi-cache:
   enabled: true                 # master kill-switch; false disables ResiCache entirely
   protection:
-    enabled: true               # false skips bloom/lock/early-exp/null-value; TTL preserved (startup-only)
+    enabled: true               # false skips bloom/lock/early-exp/null-value; TTL preserved
+    bloom-filter-enabled: null  # per-mechanism overrides, resolved once at startup:
+    sync-lock-enabled: null     #   null inherits the total switch; false disables that
+    early-expiration-enabled: null # mechanism only; true cannot re-enable a mechanism
+    null-value-enabled: null    #   when the total switch is false. Restart to apply.
 ```
+
+Protection toggles are **startup-only**: the handler chain is built once and
+cached; per-mechanism `true` cannot override a `false` total switch, and
+changing protection configuration requires an application restart. TTL and
+the actual-cache handler always remain.
 
 ### Global
 
@@ -171,8 +185,6 @@ resi-cache:
 
 ```yaml
 resi-cache:
-  bloom-filter:
-    rebuild-window-seconds: 30   # post-CLEAR rebuild window (s); 0 = disabled
   bloom:
     prefix: "bf:"
     bit-size: 8388608
@@ -305,14 +317,18 @@ invalidator. The two are complementary in scope, not direct substitutes.
 - **Cache I/O failure semantics**: GET degrades to a miss and logs the
   failure; PUT, PUT_IF_ABSENT, and CLEAN throw a typed runtime failure
   retaining the original cause; REMOVE is observable best-effort and does not
-  throw.
+  throw. **Read-through (`get(key, loader)`) is availability-first**: the
+  loader's successful value is always returned — a cache write-back failure
+  after a successful load is logged (redacted) and never overrides the value;
+  loader failures still surface as Spring `Cache.ValueRetrievalException`.
 - **`@CacheEvict(allEntries=true)` (CLEAN) is best-effort, not atomic** — parity
   with Spring's native `RedisCache.clear` / `DefaultRedisCacheWriter.clean` —
   it uses a SCAN cursor + batched UNLINK/DEL, so keys written mid-CLEAN may be
   stranded and the cache is briefly half-deleted on large key sets. Lua/MULTI
   atomicity is intentionally not used (Redis single-thread O(keyspace) block,
-  Cluster cross-slot). When the Bloom filter is enabled,
-  `rebuild-window-seconds` prevents silent nulls during the post-wipe rebuild.
+  Cluster cross-slot). Bloom is a data-source existence hint: CLEAN removes
+  cache entries but preserves existing Bloom bits, so it can only introduce
+  false-positives and never block a valid loader with a false-negative.
 
 ## Not in Scope
 

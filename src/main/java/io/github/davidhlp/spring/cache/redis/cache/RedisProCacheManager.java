@@ -1,15 +1,17 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.cache.model.ResiCacheFeatures;
-import lombok.extern.slf4j.Slf4j;
 
+
+
+
+
+import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
-
-import java.util.Map;
 
 @Slf4j
 public class RedisProCacheManager extends RedisCacheManager {
@@ -34,7 +36,7 @@ public class RedisProCacheManager extends RedisCacheManager {
      *   <li>{@code transactionAware} —— 必传(默认 {@code false})</li>
      * </ul>
      */
-    public RedisProCacheManager(
+    RedisProCacheManager(
             RedisProCacheWriter cacheWriter,
             RedisCacheConfiguration defaultCacheConfiguration,
             ResiCacheFeatures features,

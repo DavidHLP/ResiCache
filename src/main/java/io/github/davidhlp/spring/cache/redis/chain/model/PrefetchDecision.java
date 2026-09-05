@@ -1,11 +1,12 @@
 package io.github.davidhlp.spring.cache.redis.chain.model;
 
-import io.github.davidhlp.spring.cache.redis.cache.model.CachedValue;
+
+
 import org.springframework.lang.Nullable;
 
 /**
- * 预取/提前过期决策 — {@link io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationHandler}
- * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler} 读取的
+ * 预取/提前过期决策 — {@link io.github.davidhlp.spring.cache.redis.cache.EarlyExpirationHandler}
+ * 写入、由 {@link io.github.davidhlp.spring.cache.redis.cache.ActualCacheHandler} 读取的
  * 类型化跨 handler 消息.
  *
  * <p>三个字段皆是 {@code EarlyExpirationHandler} 同一次 GET 预取 + 判定的产物,
@@ -25,7 +26,7 @@ import org.springframework.lang.Nullable;
  */
 public record PrefetchDecision(
         boolean earlyExpirationSkipped,
-        @Nullable CachedValue prefetchedValue,
+        @Nullable Object prefetchedValue,
         @Nullable EarlyExpirationDecision decision) {
 
     /** 无预取(EarlyExpirationHandler 未触发或缓存未命中)。 */
@@ -40,7 +41,7 @@ public record PrefetchDecision(
 
     /** 完整决策形态。 */
     public static PrefetchDecision of(boolean earlyExpirationSkipped,
-                                      @Nullable CachedValue prefetchedValue,
+                                      @Nullable Object prefetchedValue,
                                       @Nullable EarlyExpirationDecision decision) {
         return new PrefetchDecision(earlyExpirationSkipped, prefetchedValue, decision);
     }

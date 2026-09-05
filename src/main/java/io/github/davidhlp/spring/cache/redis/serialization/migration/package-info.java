@@ -2,14 +2,15 @@
  * Operator-only serialization migration CLI tool — a deep module separate from the runtime
  * serializer. Entry point: {@link io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli#main}.
  *
- * <p>The 6 files in this package form one self-contained subsystem: a 4-phase workflow
+ * <p>The operator contract in this package defines the 4-phase workflow
  * ({@link io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationPhase}),
- * an engine that scans Redis and rewrites legacy bytes into the current
+ * immutable properties/report types, and the CLI. The scanning engine lives in
+ * the package-private {@code cache} runtime and rewrites legacy bytes into the current
  * {@code io.github.davidhlp.spring.cache.redis.serialization.VersionEnvelope} format, the
  * decoder that accepts pre-whitelist legacy values, an immutable report, and the standalone
  * Spring Boot CLI bootstrap. The only touchpoint with the runtime serializer is the shared
- * {@link io.github.davidhlp.spring.cache.redis.serialization.WhitelistPolicy} (parent package)
- * and {@link io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonSerializerFactory}
+ * {@link io.github.davidhlp.spring.cache.redis.cache.WhitelistPolicy} (parent package)
+ * and {@link io.github.davidhlp.spring.cache.redis.cache.SecureJacksonSerializerFactory}
  * (constructed by {@code SerializationMigrationEngine} to round-trip envelope values).
  *
  * <p>Operator invocation (see {@code SerializationMigrationCli} Javadoc for full flags):

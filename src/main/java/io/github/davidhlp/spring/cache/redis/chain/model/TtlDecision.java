@@ -1,8 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.chain.model;
 
 /**
- * TTL 决策 — {@link io.github.davidhlp.spring.cache.redis.protection.avalanche.TtlHandler}
- * 写入、由 {@link io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler} 读取的
+ * TTL 决策 — {@link io.github.davidhlp.spring.cache.redis.cache.TtlHandler}
+ * 写入、由 {@link io.github.davidhlp.spring.cache.redis.cache.ActualCacheHandler} 读取的
  * 类型化跨 handler 消息。
  *
  * <p><b>不变式</b>：

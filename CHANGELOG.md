@@ -13,10 +13,12 @@ API stability is only guaranteed from `1.0.0` onward; see
 [`STABILITY.md`](./STABILITY.md) for the contract that defines which
 surfaces are stable in 0.x and which change.
 > No local `v1.0` release tag is treated as an API-stability baseline here.
-> Maven Central publishes `io.github.davidhlp:ResiCache:0.0.2`, but that
-> artifact is from the earlier Boot 3 / Java 17 line. It is usable only for
-> report-only compatibility analysis; a blocking compatibility gate waits for
-> a same-line published artifact with matching tag provenance.
+> Maven Central publishes `io.github.davidhlp:ResiCache` 0.0.1–0.0.5, 0.0.7,
+> and 3.2.4, but every version (verified 2026-09-05 from the published
+> POMs) is from the earlier Boot 3.2.4 / Java 17 / Redisson 3.17.6 line.
+> They are usable only for report-only compatibility analysis; no Boot 4 /
+> Java 21 artifact exists yet, so a blocking compatibility gate waits for a
+> same-line published artifact with matching tag provenance.
 
 ## [Unreleased] — current development
 
@@ -45,12 +47,16 @@ Current milestones:
   `sync=true` is declared but no `LockManager` bean exists. Set
   `resi-cache.sync-lock.local-only=true` for explicit single-instance
   degradation.
-- **Bloom filter CLEAR rebuilding window** — after
-  `@CacheEvict(allEntries=true)`, `BloomSupport.clear` opens a Redis-backed
-  rebuilding window (per-cacheName, TTL = `rebuild-window-seconds`,
-  default `30`; `0` = disabled) during which `mightContain` fails open to
-  the loader. Fixes the silent-null defect where empty-filter misses
-  short-circuited the loader contract.
+- ⚠️ **Bloom CLEAN semantics** — ordinary cache eviction no longer clears the
+   Bloom filter or relies on a rebuilding marker/TTL window. Bloom bits describe
+   possible data-source membership, so retained bits can only create
+   false-positives; valid loader calls are not blocked by false-negatives.
+- ⚠️ **Read-through is availability-first** — `get(key, loader)` (default and
+   sync paths) always returns a successful loader value; a cache write-back
+   failure after a successful load is logged (redacted, no raw key) and never
+   overrides the value. Loader failures still surface as Spring
+   `Cache.ValueRetrievalException`. Explicit PUT/PUT_IF_ABSENT/CLEAN remain
+   fail-fast typed.
 - **Redis Cluster distributed-lock hash-tag pinning** —
   `DistributedLockManager` ensures the lock key lands in the same Redis
   Cluster slot as the cache key (via `{...}` hash-tag), so the lock and

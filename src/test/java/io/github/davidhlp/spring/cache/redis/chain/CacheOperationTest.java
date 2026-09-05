@@ -1,11 +1,13 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
+
+
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -60,13 +62,13 @@ class CacheOperationTest {
     class RequiresBloomPostProcessTests {
 
         @ParameterizedTest(name = "{0} should not require bloom post-process")
-        @EnumSource(value = CacheOperation.class, names = {"GET", "REMOVE"})
+        @EnumSource(value = CacheOperation.class, names = {"GET", "REMOVE", "CLEAN"})
         void nonBloomPostOperations_returnFalse(CacheOperation op) {
             assertThat(op.requiresBloomPostProcess()).isFalse();
         }
 
         @ParameterizedTest(name = "{0} should require bloom post-process")
-        @EnumSource(value = CacheOperation.class, names = {"PUT", "PUT_IF_ABSENT", "CLEAN"})
+        @EnumSource(value = CacheOperation.class, names = {"PUT", "PUT_IF_ABSENT"})
         void bloomPostOperations_returnTrue(CacheOperation op) {
             assertThat(op.requiresBloomPostProcess()).isTrue();
         }
@@ -98,11 +100,11 @@ class CacheOperationTest {
         }
 
         @Test
-        @DisplayName("CLEAN is in requiresBloomPostProcess() but not in isWrite() / requiresSyncLock()")
-        void clean_isBloomPostOnly() {
+        @DisplayName("CLEAN is not a Bloom post-process operation")
+        void clean_doesNotTouchBloom() {
             assertThat(CacheOperation.CLEAN.isWrite()).isFalse();
             assertThat(CacheOperation.CLEAN.requiresSyncLock()).isFalse();
-            assertThat(CacheOperation.CLEAN.requiresBloomPostProcess()).isTrue();
+            assertThat(CacheOperation.CLEAN.requiresBloomPostProcess()).isFalse();
         }
 
         @Test

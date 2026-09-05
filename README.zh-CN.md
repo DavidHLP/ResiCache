@@ -62,6 +62,8 @@ ResiCache 采用 **责任链模式** 实现缓存写入防护。处理器顺序�
 </dependency>
 ```
 
+> Maven Central 上的 `0.0.2` 是**早期 Boot 3 / Java 17 构建**（2026-09-05 已核实：Central 全部版本均属旧线）。当前 Boot 4 / Java 21 构建线尚未发布产物，上述坐标为规划坐标。
+
 ### 2. 配置 Redis
 
 ```yaml
@@ -118,6 +120,22 @@ public User getUserById(Long id) { ... }
 
 多数配置绑定到 `RedisProCacheProperties`；四个 `resi-cache.bloom.*` 实现参数由自动配置显式绑定，并由 additional metadata 描述。
 
+### 总开关（当前未发布契约）
+
+```yaml
+resi-cache:
+  enabled: true                 # 主开关；false 完全禁用 ResiCache
+  protection:
+    enabled: true               # false 跳过 bloom/lock/early-exp/null-value；TTL 保留
+    bloom-filter-enabled: null  # 机制级覆盖，启动时静态解析：
+    sync-lock-enabled: null     #   null 继承总开关；false 只关闭该机制；总开关为
+    early-expiration-enabled: null # false 时分项 true 不能重新启用。修改配置需重启。
+    null-value-enabled: null
+```
+
+防护开关**仅启动时生效**：责任链单例在首次构建时缓存；分项 `true` 无法覆盖总开关
+`false`；修改防护配置需重启应用。TTL 与 ActualCache 始终保留。
+
 ### 全局配置
 
 ```yaml
@@ -131,8 +149,6 @@ resi-cache:
 
 ```yaml
 resi-cache:
-  bloom-filter:
-    rebuild-window-seconds: 30    # CLEAN 后布隆重建窗口(秒);0=禁用
   bloom:
     prefix: "bf:"
     bit-size: 8388608
@@ -156,7 +172,7 @@ resi-cache:
 ```yaml
 resi-cache:
   protection:
-    early-expiration-enabled: true  # 可选的机制级覆盖
+    early-expiration-enabled: true  # 可选的机制级覆盖(仅启动时生效;null 继承总开关)
   early-expiration:
     pool-size: 2           # 核心线程数
     max-pool-size: 10      # 最大线程数
@@ -287,24 +303,11 @@ ResiCache 是补齐这 3 项空白的 Redisson 搭档;JetCache 主打多级缓�
 ```
 src/main/java/io/github/davidhlp/spring/cache/redis/
 ├── annotation/          # @RedisCacheable, @RedisCacheEvict, @RedisCachePut, @RedisCaching
-│   └── handler/         #   AnnotationHandler + 注解处理链
-├── cache/               # RedisProCache, RedisProCacheManager, RedisProCacheWriter, RedisCacheInterceptor
-│   └── metrics/         #   CacheMetrics + Micrometer 注册与计时
-├── chain/               # 责任链：CacheHandler/Chain/Factory + AbstractCacheHandler
-│   ├── handler/          #   ActualCacheHandler + CacheErrorHandler
-│   ├── model/            #   CacheInput / CacheContext + typed decision records
-│   ├── metadata/        #   方法调用元数据解析、作用域与异步快照
-│   └── observer/        #   Observer 契约、注册器与标准实现
-├── config/              # 自动配置 + RedisProCacheProperties + SecureJackson
-├── protection/          # 五大防护机制
-│   ├── avalanche/       #   TtlHandler (300) ── 防雪崩
-│   ├── bloom/           #   BloomFilterHandler (100) + filter/(Local/Redis/Hierarchical)
-│   ├── breakdown/       #   SyncLockHandler (200) + DistributedLockManager ── 防击穿
-│   ├── nullvalue/       #   NullValueHandler (400) ── 防穿透
-│   └── refresh/         #   EarlyExpirationHandler (250) ── 热 key 保护
-├── operation/           # RedisCacheable/Put/Evict Operation + RedisCacheRegister + TwoListLRU
-├── serialization/       # SecureJackson / SecureNullValueDeserializer（安全反序列化）
-└── health/              # RedisCacheHealthIndicator
+├── cache/               # package-private runtime：AOP、责任链、防护、操作、序列化与装配
+├── chain/               # 稳定 CacheHandler/Operation/Result 契约与决策视图
+├── config/              # 自动配置、RedisProCacheProperties 与 metrics 入口
+├── protection/          # 稳定 BloomIFilter、LockManager、EarlyExpirationMode 契约
+└── serialization/       # SerializationException、迁移 operator 契约与 wire envelope
 ```
 
 ## ⚠️ Known Limitations / 已知限制
@@ -318,8 +321,10 @@ v0.0.x 当前已知限制：
 - **不支持 Reactive**（WebFlux / `Mono` / `Flux`）：`RedisCacheInterceptor` 是阻塞式，Reactive 方法不触发缓存
 - **缓存 I/O 失败语义**：GET 降级为 miss 并记录日志；PUT、
   PUT_IF_ABSENT、CLEAN 抛出带原始 cause 的类型化运行时异常；
-  REMOVE 为可观测 best-effort，不抛异常。
-- **`@CacheEvict(allEntries=true)`（CLEAN）是 best-effort、非原子**：与 Spring 原生 `RedisCache.clear`/`DefaultRedisCacheWriter.clean` 一致，用 SCAN 游标 + 批量 UNLINK/DEL，CLEAN 期间新写入的 key 可能被遗漏，大 key 集时缓存短暂处于半删状态。刻意不用 Lua/MULTI 原子化（Redis 单线程 O(keyspace) 阻塞、Cluster cross-slot）。启用布隆时，`rebuild-window-seconds` 窗口防止擦除后重建期的静默 null。
+  REMOVE 为可观测 best-effort，不抛异常。**read-through（`get(key, loader)`）可用性优先**：
+  loader 成功值必定返回——写回失败仅记录（脱敏）日志、不覆盖该值；
+  loader 失败仍以 Spring `Cache.ValueRetrievalException` 呈现。
+- **`@CacheEvict(allEntries=true)`（CLEAN）是 best-effort、非原子**：与 Spring 原生 `RedisCache.clear`/`DefaultRedisCacheWriter.clean` 一致，用 SCAN 游标 + 批量 UNLINK/DEL，CLEAN 期间新写入的 key 可能被遗漏，大 key 集时缓存短暂处于半删状态。刻意不用 Lua/MULTI 原子化（Redis 单线程 O(keyspace) 阻塞、Cluster cross-slot）。Bloom 表示数据源可能存在；CLEAN 只清缓存、保留旧 bits，因此只允许 false-positive，不会制造阻止 loader 的 false-negative。
 
 ## 🚫 Not in Scope
 

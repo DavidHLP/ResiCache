@@ -5,7 +5,7 @@ package com.example.domain;
  * (默认 {@code io.github.davidhlp})内,用于验证
  * {@code resi-cache.serializer.allowed-package-prefixes} 在
  * {@code RedisConnectionConfiguration#redisCacheTemplate} 实例化的
- * {@link io.github.davidhlp.spring.cache.redis.serialization.SecureJacksonRedisSerializer}
+ * {@link io.github.davidhlp.spring.cache.redis.cache.SecureJacksonRedisSerializer}
  * 上是否被真正尊重。
  *
  * <p>字段保持简单(Jackson 无参构造 + 基本 getter/setter)以保证 roundtrip 行为

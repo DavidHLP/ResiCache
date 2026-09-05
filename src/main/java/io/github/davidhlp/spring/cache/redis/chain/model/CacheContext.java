@@ -1,11 +1,11 @@
 package io.github.davidhlp.spring.cache.redis.chain.model;
 
-import io.github.davidhlp.spring.cache.redis.chain.*;
-import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.operation.RedisCacheableOperation;
-import lombok.Getter;
 
+
+
+import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import java.time.Duration;
+import lombok.Getter;
 
 /**
  * 缓存操作上下文 — 组合输入 + 类型化 handler 间消息 + 引擎控制流标记.
@@ -39,9 +39,20 @@ import java.time.Duration;
  */
 public class CacheContext {
 
-    /** 输入参数（不可变）。 */
-    @Getter
-    private final CacheInput input;
+    /** Stable input view; the concrete record remains an internal implementation detail. */
+    public interface InputView {
+        CacheOperation operation();
+        String cacheName();
+        String redisKey();
+        String actualKey();
+        byte[] valueBytes();
+        Object deserializedValue();
+        Duration ttl();
+        CachePolicyView policy();
+    }
+
+    /** 输入参数（不可变）。P1-API-001-B:不暴露 {@code CacheInput} — 只经定向 accessor 读。 */
+    private final InputView input;
 
     /**
      * TTL 决策 — 由 {@code TtlHandler.doHandle} 写入、
@@ -86,7 +97,7 @@ public class CacheContext {
      */
     private boolean skipRemaining = false;
 
-    public CacheContext(CacheInput input) {
+    public CacheContext(InputView input) {
         this.input = input;
     }
 
@@ -120,8 +131,15 @@ public class CacheContext {
         return input.ttl();
     }
 
-    public RedisCacheableOperation getCacheOperation() {
-        return input.cacheOperation();
+    /**
+     * 方法级缓存策略稳定视图 — 由内部 {@code RedisCacheableOperation} 派生。
+     *
+     * <p>P1-API-001-B:稳定 {@link io.github.davidhlp.spring.cache.redis.chain.CacheHandler}
+     * 读取 {@link CachePolicyView}(ttl/randomTtl/variance/useBloomFilter/sync/…),不再
+     * 依赖内部 operation 类型。{@code cacheOperation} 为 null 时返回 {@link CachePolicyView#NONE}。
+     */
+    public CachePolicyView policy() {
+        return input.policy();
     }
 
     // ==================== 控制流（skipRemaining） ====================
@@ -138,7 +156,7 @@ public class CacheContext {
 
     // ==================== 静态工厂方法 ====================
 
-    public static CacheContext of(CacheInput input) {
+    public static CacheContext of(InputView input) {
         return new CacheContext(input);
     }
 }

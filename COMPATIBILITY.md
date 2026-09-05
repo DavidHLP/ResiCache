@@ -13,6 +13,11 @@ baseline.
 > (Boot 3.4.13 / Java 17 / Redisson 3.27). The migration to Boot 4 merged
 > into the main line; the dual-branch strategy is **abandoned**. Boot 3.x
 > compatibility is not maintained. See `CHANGELOG.md` for migration context.
+>
+> Verified 2026-09-05: every Maven Central version (0.0.1–0.0.5, 0.0.7,
+> 3.2.4) is the earlier Boot 3.2.4 / Java 17 line; no Boot 4 artifact is
+> published yet. A bounded public adopter search on the same date found no
+> external consumers of any line (private adopters remain unprovable).
 
 ## Supported versions
 
@@ -77,6 +82,27 @@ not require a cache flush.
   PUT, PUT_IF_ABSENT, and CLEAN fail fast with a typed runtime failure retaining
   the original cause;
   REMOVE is observable best-effort.
+- **Protection switch lifecycle**: `resi-cache.protection.*` is resolved once
+  at chain creation (startup). `protection.enabled=false` disables
+  bloom/sync-lock/early-expiration/null-value and keeps TTL/ActualCache; a
+  per-mechanism `false` disables only that mechanism; a per-mechanism `true`
+  cannot re-enable a mechanism when the total switch is `false`; changing
+  protection configuration requires a restart (no runtime refresh).
+- **Read-through write-back failures**: `get(key, loader)` is
+  availability-first — a successful loader value is always returned; a
+  write-back failure is logged (redacted, no raw key) and does not override
+  the value. Loader failures surface as Spring `Cache.ValueRetrievalException`
+  (type, cause, and loader identity preserved); exception text carries no raw
+  key — the checked-exception wrapper names the cache only.
+- **Bloom CLEAN semantics**: Bloom tracks possible data-source membership,
+  not current cache entries. CLEAN preserves existing bits and never uses a
+  rebuilding marker or TTL window; false-positives are safe, while loader
+  execution must not be blocked by a Bloom false-negative.
+- **User `CacheManager` opt-out**: defining your own `CacheManager` bean backs
+  off the library's `RedisProCacheManager` and, with it, the ResiCache
+  annotation proxy (`redisCacheAdvisor`/`redisCacheInterceptor`); your Spring
+  Cache setup stays in charge and startup does not fail. Supplying your own
+  `RedisProCacheManager` (a public class) keeps the library proxy active.
 - **Transaction-aware caching**: supported, but requires explicit
   `resi-cache.transaction-aware=true`.
 - **Redis Cluster distributed locks**: lock keys are **hash-tag pinned** to the

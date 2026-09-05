@@ -1,12 +1,14 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+
+
+
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
-
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -48,25 +50,6 @@ class RedisProCachePropertiesTest {
         }
     }
 
-    @Nested
-    @DisplayName("布隆过滤器配置")
-    class BloomFilterPropertiesTests {
-
-        @Test
-        @DisplayName("默认重建窗口为 30 秒")
-        void defaultRebuildWindowSeconds() {
-            RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            assertThat(bloomFilter.getRebuildWindowSeconds()).isEqualTo(30L);
-        }
-
-        @Test
-        @DisplayName("设置重建窗口")
-        void setRebuildWindowSeconds_changesValue() {
-            RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            bloomFilter.setRebuildWindowSeconds(60L);
-            assertThat(bloomFilter.getRebuildWindowSeconds()).isEqualTo(60L);
-        }
-    }
 
     @Nested
     @DisplayName("提前过期配置")
@@ -214,16 +197,6 @@ class RedisProCachePropertiesTest {
             assertThat(properties.getDisabledHandlers()).containsExactly("early-expiration");
         }
 
-        @Test
-        @DisplayName("设置布隆过滤器配置")
-        void setBloomFilter_changesConfig() {
-            RedisProCacheProperties properties = new RedisProCacheProperties();
-            RedisProCacheProperties.BloomFilterProperties bloomFilter = new RedisProCacheProperties.BloomFilterProperties();
-            bloomFilter.setRebuildWindowSeconds(60L);
-            properties.setBloomFilter(bloomFilter);
-
-            assertThat(properties.getBloomFilter().getRebuildWindowSeconds()).isEqualTo(60L);
-        }
 
         @Test
         @DisplayName("设置提前过期配置")

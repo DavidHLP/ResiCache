@@ -37,7 +37,7 @@ line.
 | **Observability metric names and tags** | Pre-1.0 metric namespace is NOT contractual | A `bloomsift.*` → `resicache.handler.*` rename is allowed pre-1.0 (with ⚠️ BREAKING CHANGELOG) |
 | **Diagnostic warnings and logs** | Message text, log levels for startup probes | "whitelist auto-derived from host app root package" WARN may rephrase |
 | **Behavior defaults** (e.g. protection preset) | When explicitly opted into a new default via ⚠️ BREAKING CHANGELOG entry | `resi-cache.protection.preset=NONE` (v0.0.2) → `=STANDARD` (v0.0.3) is allowed if flagged breaking |
-| **Unstable public implementation and provisional strategy types** | `TtlPolicy`, `NullValuePolicy`, `EarlyExpirationPolicy`, `BloomHashStrategy`, `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, `DefaultLoadFn`, default adapters, and `ThreadPoolEarlyExpirationExecutor` | Public for current source compatibility; not supported extension contracts unless listed in §1. |
+| **Internal implementation types** | `TtlPolicy`, `NullValuePolicy`, `EarlyExpirationPolicy`, `BloomHashStrategy`, `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, `DefaultLoadFn`, default adapters, and `ThreadPoolEarlyExpirationExecutor` | Package-private collaborators under the internal `cache` module; not importable extension contracts. |
 
 If you depend on items in this section, pin to an exact patch version
 (`0.x.y`) and review `CHANGELOG.md` entries on upgrade.
@@ -46,10 +46,10 @@ If you depend on items in this section, pin to an exact patch version
 
 | Type | Replacement | Deprecation/removal | Impact |
 |---|---|---|---|
-| `MethodMetadataResolver` / `MethodSnapshot` | internal resolver lifecycle via auto-configuration | deprecate after external-usage review; internalize after one minor release | source/binary break for custom resolver implementations |
-| `LoaderOrchestrator` / `LoadOutcome` / `DefaultLoadFn` | `RedisProCache.get(key, loader)` | deprecate after external-usage review; remove after one minor release | callers must use the cache API, not loader callbacks |
+| `MethodMetadataResolver` / `MethodSnapshot` | internal resolver lifecycle via auto-configuration | internalized in the Phase 4 cache module | source/binary break for custom resolver implementations |
+| `LoaderOrchestrator` / `LoadOutcome` / `DefaultLoadFn` | `RedisProCache.get(key, loader)` | internalized in the Phase 4 cache module | callers must use the cache API, not loader callbacks |
 | `CacheContext` / `HandlerResult` / decision records | documented SPI value surface for handler signatures; implementation-only members may evolve | no removal while `CacheHandler`/`ChainObserver` remain supported | extensions use documented fields and flow values |
-| default policy and executor classes | `TtlPolicy`, `NullValuePolicy`, and `EarlyExpirationPolicy` contracts; executor remains internal | no concrete support promise; remove concrete access after replacement evidence | custom code uses policy interfaces, not executor classes |
+| default policy and executor classes | documented stable SPI only; concrete policies/executors remain internal | internalized in the Phase 4 cache module | custom code uses stable interfaces, not implementation classes |
 
 Removal is not activated solely from local source evidence. A published
 artifact, adopter usage, or external implementation supersedes this default
@@ -65,7 +65,81 @@ plan and changes the migration decision.
 These are the absolute minimum a downstream user needs to upgrade between
 0.x patch versions without code changes.
 
-## 4. 1.0 graduation (forward markers — pre-1.0)
+## 4. Extension SPI protocol (`CacheHandler` / `ChainObserver`)
+
+Implementing the documented SPI means agreeing to the following protocol.
+The engine enforces the machine-checkable parts; the rest is the contract a
+custom implementation must satisfy.
+
+### Handlers
+
+1. **Non-null result**: `handle(context)` MUST return a non-null
+   `HandlerResult`. The engine rejects `null` with
+   `IllegalStateException("CacheHandler returned null HandlerResult: <class>")`
+   — never an opaque NPE.
+2. **FlowControl semantics**: `CONTINUE` advances to the next handler (a
+   `null` result field at chain end materializes to `success()`); `TERMINATE`
+   ends the chain and returns the carried result; `SKIP_ALL` ends the chain,
+   returns the carried result, and sets the engine-only
+   `skipRemaining` marker so no further handler runs.
+3. **Post-process**: only handlers whose `requiresPostProcess(context)`
+   returns `true` get `afterChainExecution(context, result)` after the main
+   chain completes. Exceptions thrown there are caught and logged by the
+   engine; they never alter the main-chain result.
+4. **Ordering**: `@HandlerPriority(HandlerOrder.X)` is the single source of
+   truth (gap = 100). Unannotated handlers sort last.
+5. **Thread safety**: one handler instance is shared across concurrent
+   executions; keep per-call state out of fields (use `CacheContext`).
+
+### Observers
+
+1. **Hook order** per chain execution: `onChainStart` → per node
+   [`onNodeStart` → `beforeNode` → `handler.handle` → `afterNode` →
+   `onNodeEnd`] → `onChainEnd`. Multiple observers run in registration
+   (`@Order`) order for every hook.
+2. **Scope tokens**: each `on*Start` returns a per-call token the engine
+   pairs back to the same observer's `on*End` in a `finally` block (on
+   handler exception `onNodeEnd` receives a `null` result — recover the
+   token, do not fabricate decisions). Tokens carry per-call state; observers
+   must be thread-safe and stateless between calls.
+3. **Exception isolation**: observer hook failures are caught and logged by
+   the engine; they never change chain control flow.
+
+### Context
+
+- `CacheContext` exposes a read-only `InputView` (operation, cacheName,
+  redisKey, actualKey, valueBytes, deserializedValue, ttl, policy) plus the
+  typed decisions (`TtlDecision`, `NullDecision`, `PrefetchDecision`,
+  `keyPattern`) that named producer handlers write and `ActualCacheHandler`
+  reads. Custom handlers SHOULD read only; writing decisions is reserved for
+  the documented producer/consumer pairs.
+- `markSkipRemaining()` is engine-only state materialized from `SKIP_ALL`;
+  custom handlers must not call it.
+- `byte[]` values cross the SPI by defensive copy (`CacheResult.resultBytes()`);
+  do not mutate arrays handed to you and do not rely on retaining them.
+
+### Nested public type classification
+
+The machine gate (`public-surface-nested.txt` +
+`PublicSurfaceContractTest`) pins this list. Classification:
+
+| Nested public type | Class | Notes |
+|---|---|---|
+| `CacheResult.Outcome` / `FailureKind` | user | stable value semantics |
+| `CacheContext.InputView` | user | read-only input view for handlers/tests |
+| `CachePolicyView.Source` | implementation | adapter interface implemented by internal operation models; public only so internals can implement it — do not use from host code |
+| `RedisProCacheProperties.*` (9 nested classes) | user | configuration binding surface |
+| `CachingEnablementValidation.CachingEnabledValidator` | operator | health/startup probe |
+| `RedisDeploymentValidator$RedisDeploymentChecks` | implementation | internal validation payload |
+| `LockManager.LockHandle` | extension | stable lock handle (§1) |
+| `SerializationException.EnvelopeCodec` | operator | envelope helpers for migration tooling |
+| `SerializationMigrationCli$SerializationMigrationRunner`, `SerializationMigrationProperties$LegacySerializer` | operator | migration CLI surface |
+| `cache.*$*` (Builder/Scope/Strategy/Outcome records etc.) | implementation | outer classes are package-private internals — not reachable from host code |
+
+Removing or renaming an `extension`/`user` entry is a ⚠️ BREAKING change;
+`implementation` entries may be internalized without a major bump.
+
+## 5. 1.0 graduation (forward markers — pre-1.0)
 
 Graduation to 1.0 is a pre-1.0 milestone not yet reached. The markers below
 describe *what 1.0 will mean* and are aspirational until the `1.0.0` tag is cut:
@@ -80,20 +154,27 @@ describe *what 1.0 will mean* and are aspirational until the `1.0.0` tag is cut:
 4. **Bus factor** — a named successor or a documented succession plan
    (see [`CONTRIBUTING.md`](./CONTRIBUTING.md) → *Maintainers & bus factor*).
 
-When 1.0 ships, items in §2 (internals, defaults, metric names) become
-**locked** — any change is a new major version (2.0). Until then, §2 keeps
-those areas open for tuning.
+When 1.0 ships, only the **caller-observable contracts** — §1 plus the §3
+minimum (annotation attributes, `resi-cache.*` keys, wire envelope,
+documented SPI behavior, typed failure semantics) — become **locked**;
+changing one is a new major version. Items in §2 (internals, defaults,
+metric names, log wording) stay minor-version evolvable in 1.x, flagged
+with a ⚠️ BREAKING CHANGELOG entry when a caller-visible behavior changes.
+Metric names lock only when a named metric/label contract with migration
+notes is published in `COMPATIBILITY.md`.
 
-## 5. How to read this document
+## 6. How to read this document
 
 - Pin to **exact `0.x.y`** versions if you depend on §2 behavior.
 - Pin to **`0.x`** (minor-flexible) if you depend only on §1 + §3.
-- Pin to **`1.x`** (or migrate when it lands) if you want SemVer
-  guarantees on metric names, log messages, and behavior defaults.
+- At **`1.x`**, SemVer major bumps protect only the §1 + §3
+  caller-observable contracts above. Metric names, log messages, and
+  behavior defaults remain minor-version evolvable (§2) unless a bounded
+  metric/label contract with migration notes is published.
 
 ---
 
-## 6. References
+## 7. References
 
 - [`CHANGELOG.md`](./CHANGELOG.md) — per-version changelog including
   ⚠️ BREAKING markers.

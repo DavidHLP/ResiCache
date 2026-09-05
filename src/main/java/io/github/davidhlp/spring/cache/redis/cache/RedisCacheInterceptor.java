@@ -1,8 +1,10 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.chain.metadata.MethodMetadataResolver;
-import io.github.davidhlp.spring.cache.redis.chain.metadata.ScopedActivation;
-import io.github.davidhlp.spring.cache.redis.annotation.handler.AnnotationChainEngine;
+
+
+
+
+import java.lang.reflect.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInvocation;
 import org.springframework.cache.CacheManager;
@@ -10,8 +12,6 @@ import org.springframework.cache.interceptor.CacheInterceptor;
 import org.springframework.cache.interceptor.CacheOperationSource;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.lang.Nullable;
-
-import java.lang.reflect.Method;
 
 /**
  * ResiCache 缓存拦截器 —— 单一 advice seam。
@@ -40,7 +40,7 @@ import java.lang.reflect.Method;
  * setter 落位后调用 {@code afterPropertiesSet()}。
  */
 @Slf4j
-public class RedisCacheInterceptor extends CacheInterceptor {
+class RedisCacheInterceptor extends CacheInterceptor {
 
     /** 注解解析责任链推进引擎 */
     private final AnnotationChainEngine annotationChainEngine;

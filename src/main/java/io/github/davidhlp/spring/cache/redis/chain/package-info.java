@@ -21,7 +21,7 @@
  *     ↓
  * 5. NullValueHandler         - 空值处理
  *     ↓
- * 6. {@link io.github.davidhlp.spring.cache.redis.chain.handler.ActualCacheHandler}
+ * 6. {@link io.github.davidhlp.spring.cache.redis.cache.ActualCacheHandler}
  *                              - 实际缓存操作
  *     ↓
  * CacheResult
@@ -33,7 +33,7 @@
  *   <li><b>AbstractCacheHandler</b>：抽象处理器，handle 退化为
  *       {@code shouldHandle ? doHandle : continueChain}（链推进由 Engine 承担）</li>
  *   <li><b>CacheHandlerChain</b>：责任链 facade —— 维护 handler 列表 + 委派
- *       {@code execute} 到 {@link io.github.davidhlp.spring.cache.redis.chain.ChainEngine}</li>
+ *       {@code execute} 到 {@link io.github.davidhlp.spring.cache.redis.cache.ChainEngine}</li>
  *   <li><b>CacheHandlerChainFactory</b>：责任链工厂 —— 自动发现 + 排序 + 过滤 +
  *       装配 + 注册 4 个标准 {@link io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver}</li>
  *   <li><b>ChainEngine</b>：责任链推进引擎 —— 节点推进 + decision switch +
@@ -74,5 +74,3 @@
  * @since 2.0
  */
 package io.github.davidhlp.spring.cache.redis.chain;
-
-import io.github.davidhlp.spring.cache.redis.chain.model.*;
