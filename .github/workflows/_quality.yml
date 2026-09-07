@@ -41,15 +41,19 @@ jobs:
 
       - name: Qodana Scan
         uses: JetBrains/qodana-action@v2025.3
+        # Qodana requires a license token; PRs from forks and repos without the
+        # secret configured cannot run a real scan. Skip cleanly instead of
+        # failing the step (which would surface an error annotation on every run).
+        if: ${{ secrets.QODANA_TOKEN != '' }}
         with:
           cache-dir: .qodana/cache
           use-caches: true
+          results-dir: ./qodana/report
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-        continue-on-error: true
 
       - name: Upload Qodana Report
-        if: always()
+        if: ${{ always() && secrets.QODANA_TOKEN != '' }}
         uses: actions/upload-artifact@v5
         with:
           name: qodana-report

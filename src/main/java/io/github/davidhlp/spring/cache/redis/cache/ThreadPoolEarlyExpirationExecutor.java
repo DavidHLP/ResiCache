@@ -173,6 +173,14 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
                             return created;
                         });
 
+        // Close the publication race: a task that completed inline (before the
+        // future was published) had its whenComplete remove run too early and
+        // the done future just landed in the map — drop it now so it is not
+        // counted as in-flight work.
+        if (future.isDone()) {
+            inFlight.remove(key, future);
+        }
+
         if (scheduled.get()) {
             metrics.recordSubmitted();
         }
