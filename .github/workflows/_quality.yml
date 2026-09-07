@@ -52,6 +52,10 @@ jobs:
       - name: Qodana Scan
         if: env.QODANA_TOKEN != ''
         uses: JetBrains/qodana-action@v2025.3
+        # Advisory by design (see job comment): a scan failure - e.g. an invalid
+        # or expired QODANA_TOKEN declined by Qodana Cloud - must not fail the
+        # pipeline gate. Fix the token in repo secrets to get a real scan.
+        continue-on-error: true
         with:
           cache-dir: .qodana/cache
           use-caches: true
