@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * ThreadPoolEarlyExpirationExecutor 单元测试
@@ -268,7 +269,11 @@ class ThreadPoolEarlyExpirationExecutorTest {
             assertThat(cleanupScheduler.isShutdown()).isTrue();
             assertThat(executorService.isTerminated()).isTrue();
             assertThat(cleanupScheduler.isTerminated()).isTrue();
-            assertThat(testExecutor.getActiveCount()).isEqualTo(0);
+            // The finished task stays in the inFlight map until the periodic
+            // cleanup cycle removes it; poll briefly for that instead of
+            // asserting an instant 0 (shutdown races the cleanup tick).
+            await().atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(testExecutor.getActiveCount()).isEqualTo(0));
         }
     }
 
