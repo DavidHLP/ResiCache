@@ -2,9 +2,19 @@ name: "Reusable · Quality"
 
 on:
   workflow_call:
+    inputs:
+      qodana-enabled:
+        description: >-
+          Opt-in flag for the Qodana scan. Set to 'true' (repo/org variable
+          QODANA_ENABLED, or explicit caller input) only when a valid
+          QODANA_TOKEN secret is configured; otherwise the scan is skipped so
+          an absent/declined token cannot produce error annotations.
+        required: false
+        type: boolean
+        default: false
     secrets:
       QODANA_TOKEN:
-        description: "Qodana license token (optional; scan skips when absent)"
+        description: "Qodana license token (only used when qodana-enabled is true)"
         required: false
 
 permissions:
@@ -39,10 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # Qodana requires a license token; PRs from forks and repos without the
-      # secret configured cannot run a real scan. Steps gate on this env var
-      # (secrets cannot be referenced directly in step if-expressions) and the
-      # caller passes the secret explicitly via its workflow_call.
+      # Qodana requires a valid license token. Scans run only when the caller
+      # opts in via the qodana-enabled input AND the token is present; a
+      # missing/declined token then skips cleanly instead of failing the step.
       QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
     steps:
@@ -50,12 +59,8 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Qodana Scan
-        if: env.QODANA_TOKEN != ''
+        if: ${{ inputs.qodana-enabled && env.QODANA_TOKEN != '' }}
         uses: JetBrains/qodana-action@v2025.3
-        # Advisory by design (see job comment): a scan failure - e.g. an invalid
-        # or expired QODANA_TOKEN declined by Qodana Cloud - must not fail the
-        # pipeline gate. Fix the token in repo secrets to get a real scan.
-        continue-on-error: true
         with:
           cache-dir: .qodana/cache
           use-caches: true
@@ -64,7 +69,7 @@ jobs:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
       - name: Upload Qodana Report
-        if: ${{ always() && env.QODANA_TOKEN != '' }}
+        if: ${{ always() && inputs.qodana-enabled && env.QODANA_TOKEN != '' }}
         uses: actions/upload-artifact@v5
         with:
           name: qodana-report
