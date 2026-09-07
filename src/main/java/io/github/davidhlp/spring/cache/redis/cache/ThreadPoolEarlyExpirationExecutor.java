@@ -148,6 +148,10 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         }
         AtomicBoolean scheduled = new AtomicBoolean(false);
 
+        // If the key's previous run already finished (done future lingering until
+        // the cleanup tick), drop it so the new submit actually schedules.
+        inFlight.computeIfPresent(key, (k, existing) -> existing.isDone() ? null : existing);
+
         CompletableFuture<Void> future =
                 inFlight.computeIfAbsent(
                         key,
@@ -254,6 +258,12 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         log.info("Shutting down early-expiration executor thread pool...");
         shutdownGracefully(cleanupScheduler, 5, "Pre-refresh cleanup scheduler");
         shutdownGracefully(executorService, 10, "Pre-refresh executor");
+        // After both pools are down no completion callback can still run and no
+        // cleanup tick will fire again; drop whatever completed futures are left
+        // so getActiveCount()/inFlight reflect the terminated state. (A stale
+        // done entry can survive shutdown because the remove in whenComplete may
+        // have run before computeIfAbsent published the future.)
+        inFlight.entrySet().removeIf(e -> e.getValue() == null || e.getValue().isDone());
     }
 
     /**
