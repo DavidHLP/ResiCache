@@ -24,6 +24,7 @@ import org.springframework.data.redis.serializer.SerializationException;
 /**
  * Decodes legacy values without relaxing ResiCache's type whitelist.
  */
+@SuppressWarnings("removal")
 final class LegacyValueDecoder {
 
     private static final int JAVA_STREAM_MAGIC = 0xACED;
@@ -53,7 +54,6 @@ final class LegacyValueDecoder {
         // Jackson-2 based serializer (Spring Data Redis <= 4.x line). The
         // replacement GenericJacksonJsonRedisSerializer targets Jackson 3
         // (tools.jackson), so it cannot deserialize these payloads.
-        @SuppressWarnings("removal")
         GenericJackson2JsonRedisSerializer legacy = new GenericJackson2JsonRedisSerializer(legacyMapper);
         GenericJackson2JsonRedisSerializer.registerNullValueSerializer(legacyMapper, "@class");
         this.genericJackson = legacy;

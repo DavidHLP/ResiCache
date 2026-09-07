@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("LegacyValueDecoder")
+@SuppressWarnings("removal")
 class LegacyValueDecoderTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -29,7 +30,6 @@ class LegacyValueDecoderTest {
     void genericJackson_decodesAllowedValue() {
         // Intentional: produces payloads in the legacy Jackson-2 format that the
         // decoder must read; the Jackson-3 replacement cannot emit it.
-        @SuppressWarnings("removal")
         var serializer = new GenericJackson2JsonRedisSerializer();
         byte[] bytes = serializer.serialize("legacy-json");
 
