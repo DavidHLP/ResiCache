@@ -2,6 +2,10 @@ name: "Reusable · Quality"
 
 on:
   workflow_call:
+    secrets:
+      QODANA_TOKEN:
+        description: "Qodana license token (optional; scan skips when absent)"
+        required: false
 
 permissions:
   contents: read
