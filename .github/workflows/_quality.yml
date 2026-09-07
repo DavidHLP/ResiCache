@@ -34,17 +34,20 @@ jobs:
     name: "Advisory · Qodana Code Quality"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Qodana requires a license token; PRs from forks and repos without the
+      # secret configured cannot run a real scan. Steps gate on this env var
+      # (secrets cannot be referenced directly in step if-expressions) and the
+      # caller passes the secret explicitly via its workflow_call.
+      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Qodana Scan
+        if: env.QODANA_TOKEN != ''
         uses: JetBrains/qodana-action@v2025.3
-        # Qodana requires a license token; PRs from forks and repos without the
-        # secret configured cannot run a real scan. Skip cleanly instead of
-        # failing the step (which would surface an error annotation on every run).
-        if: ${{ secrets.QODANA_TOKEN != '' }}
         with:
           cache-dir: .qodana/cache
           use-caches: true
@@ -53,7 +56,7 @@ jobs:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
       - name: Upload Qodana Report
-        if: ${{ always() && secrets.QODANA_TOKEN != '' }}
+        if: ${{ always() && env.QODANA_TOKEN != '' }}
         uses: actions/upload-artifact@v5
         with:
           name: qodana-report

@@ -60,6 +60,9 @@ jobs:
   quality:
     name: "1.3 Quality"
     uses: ./.github/workflows/_quality.yml
+    with: {}
+    secrets:
+      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
   # =========================================================================
   # Stage 2: Core Build & Integration Tests
