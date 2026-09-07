@@ -169,26 +169,26 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("remove() Tests")
+    @DisplayName("evict() Tests")
     class RemoveTests {
 
         @Test
-        @DisplayName("remove deletes the key from Redis (real chain REMOVE)")
+        @DisplayName("evict deletes the key from Redis (real chain REMOVE)")
         void remove_deletesKey() {
             valueOperations.set(REDIS_KEY, CachedValue.of("v", 60));
 
-            writer.remove(NAME, KEY);
+            writer.evict(NAME, KEY);
 
             assertThat(redisTemplate.hasKey(REDIS_KEY)).isFalse();
         }
     }
 
     @Nested
-    @DisplayName("clean() Tests")
+    @DisplayName("clear() Tests")
     class CleanTests {
 
         @Test
-        @DisplayName("clean removes all keys matching the pattern (real SCAN + UNLINK/DEL)")
+        @DisplayName("clear removes all keys matching the pattern (real SCAN + UNLINK/DEL)")
         void clean_removesMatchingKeys() {
             // 预置多个匹配前缀的 key
             valueOperations.set("testCache::a", CachedValue.of("a", 60));
@@ -196,7 +196,7 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
             valueOperations.set("other::c", CachedValue.of("c", 60));
 
             byte[] pattern = "testCache::*".getBytes(StandardCharsets.UTF_8);
-            writer.clean(NAME, pattern);
+            writer.clear(NAME, pattern);
 
             // 真实:匹配前缀的 key 被批量删除,不匹配的保留(原版断言 ctx.getKeyPattern(),
             // 此处验证其副作用 —— 正确的 key 被清除)

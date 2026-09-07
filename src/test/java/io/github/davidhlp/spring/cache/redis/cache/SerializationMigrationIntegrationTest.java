@@ -26,6 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(classes = TestApplication.class)
 @Import({TestRedisConfiguration.class, SerializationMigrationEngine.class})
 @DisplayName("Serialization Migration Integration Tests")
+// Intentional: produces legacy Jackson-2 payloads that the migration engine
+// must read; the Jackson-3 replacement serializer cannot emit that format.
+@SuppressWarnings("removal")
 class SerializationMigrationIntegrationTest extends AbstractRedisClusterIntegrationTest {
 
     private static final byte[] JSON_KEY = bytes("migration:json");

@@ -161,7 +161,7 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
 
             cache.clear();
 
-            // 真实:clear → writer.clean 批量删除匹配前缀的 key
+            // 真实:clear → writer.clear 批量删除匹配前缀的 key
             assertThat(redisTemplate.hasKey("testCache::a")).isFalse();
             assertThat(redisTemplate.hasKey("testCache::b")).isFalse();
         }

@@ -94,7 +94,7 @@ class RedisProCacheWriterFailureTest {
         IllegalStateException cause = new IllegalStateException("redis down");
         when(chain.execute(any())).thenReturn(CacheResult.failure(CacheOperation.CLEAN, CacheResult.FailureKind.REDIS, cause));
 
-        assertThatThrownBy(() -> writer.clean("cache", "cache::*".getBytes()))
+        assertThatThrownBy(() -> writer.clear("cache", "cache::*".getBytes()))
                 .isInstanceOf(CacheOperationException.class)
                 .hasCauseReference(cause);
     }
@@ -104,7 +104,7 @@ class RedisProCacheWriterFailureTest {
         IllegalStateException cause = new IllegalStateException("redis down");
         when(chain.execute(any())).thenReturn(CacheResult.failure(CacheOperation.REMOVE, CacheResult.FailureKind.REDIS, cause));
 
-        assertThatCode(() -> writer.remove("cache", "key".getBytes())).doesNotThrowAnyException();
+        assertThatCode(() -> writer.evict("cache", "key".getBytes())).doesNotThrowAnyException();
     }
 
     @Test

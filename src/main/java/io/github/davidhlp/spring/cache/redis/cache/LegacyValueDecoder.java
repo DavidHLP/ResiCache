@@ -49,8 +49,14 @@ final class LegacyValueDecoder {
                 .build();
         legacyMapper.activateDefaultTypingAsProperty(
                 validator, ObjectMapper.DefaultTyping.EVERYTHING, "@class");
+        // Intentional: this decoder exists to read values written by the legacy
+        // Jackson-2 based serializer (Spring Data Redis <= 4.x line). The
+        // replacement GenericJacksonJsonRedisSerializer targets Jackson 3
+        // (tools.jackson), so it cannot deserialize these payloads.
+        @SuppressWarnings("removal")
+        GenericJackson2JsonRedisSerializer legacy = new GenericJackson2JsonRedisSerializer(legacyMapper);
         GenericJackson2JsonRedisSerializer.registerNullValueSerializer(legacyMapper, "@class");
-        this.genericJackson = new GenericJackson2JsonRedisSerializer(legacyMapper);
+        this.genericJackson = legacy;
     }
 
     Object decode(byte[] bytes, SerializationMigrationProperties.LegacySerializer serializer) {

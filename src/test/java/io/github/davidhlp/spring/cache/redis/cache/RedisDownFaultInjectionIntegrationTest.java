@@ -85,7 +85,7 @@ class RedisDownFaultInjectionIntegrationTest extends AbstractRedisIntegrationTes
     @Test
     @DisplayName("RedisDown-3: CLEAN fails fast and remains observable")
     void redisDown_clean_failsFast() {
-        assertThatThrownBy(() -> writer.clean(
+        assertThatThrownBy(() -> writer.clear(
                 "testCache", "fault-injection-clean-pattern".getBytes()))
                 .isInstanceOf(CacheOperationException.class)
                 .hasCauseInstanceOf(Exception.class);
