@@ -1,0 +1,34 @@
+COMPATIBILITY.md
+  h_77173abe25c3ff 102
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  h_77173abe25c3ff 40
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 4-5,14-15,17-18,21,37,81,83-85,96-102,104-115,121,123-124,128-137
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandlerSemanticCounterTest.java
+  h_77173abe25c3ff 201
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationAopBehaviorMatrixTest.java
+  h_77173abe25c3ff 20,24,45-53,57,84-85,106-107,120-127,159-163,170
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationPolicySnapshotTest.java
+  h_77173abe25c3ff 1-70
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyRefreshTest.java
+  h_77173abe25c3ff 1-100
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegisterAgreementTest.java
+  h_77173abe25c3ff 1-80
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheLoadPathTest.java
+  h_77173abe25c3ff 32,68,72-75,78,91-93,144-147,156-158,235-236,238-240,243-248,250-253,264-268,270-284,286-306,309-318
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandlerTest.java
+  h_77173abe25c3ff 346
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/TtlHandlerTest.java
+  h_77173abe25c3ff 146-157,179-189,191-197,199-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b4b58c861b4947c837d5acbad71714e606d83862",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
