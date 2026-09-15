@@ -1,0 +1,15 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationClassLevelPolicyTest.java
+  h_77173abe25c3ff 1-23,35-65
+  h_77173abe25c3ff 24-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7ed910db500d15232d00abfcb0aeecb9b87fe7ad",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
