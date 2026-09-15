@@ -1,0 +1,39 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandlerSemanticCounterTest.java
+  h_77173abe25c3ff 8-9,18,70-89,191-203
+  h_77173abe25c3ff 40,60
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandler.java
+  h_77173abe25c3ff 15,59,65,80-81,106-110,113-114
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandlerTest.java
+  h_77173abe25c3ff 16,49-50,59-60,86-90,176-246
+  h_77173abe25c3ff 337-338,340-343,345,347
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandler.java
+  h_77173abe25c3ff 24-25,37-39,52-60,169-170,174-176,205-207
+  h_77173abe25c3ff 182-183,199-200,210,212-214,220
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandler.java
+  h_77173abe25c3ff 11,72
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterHandler.java
+  h_77173abe25c3ff 8,62
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandler.java
+  h_77173abe25c3ff 7,60
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/NullValueHandler.java
+  h_77173abe25c3ff 7,63
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlHandler.java
+  h_77173abe25c3ff 8,65
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactoryTest.java
+  h_77173abe25c3ff 8,421
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainTest.java
+  h_77173abe25c3ff 8,300
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngineTest.java
+  h_77173abe25c3ff 123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e6001b2678a1ec38831929b11dd3b565649fb729",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
