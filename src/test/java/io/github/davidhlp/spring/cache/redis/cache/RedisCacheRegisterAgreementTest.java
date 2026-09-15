@@ -2,11 +2,14 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import java.lang.reflect.Method;
 import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.context.expression.AnnotatedElementKey;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.when;
 
 /**
@@ -58,6 +61,42 @@ class RedisCacheRegisterAgreementTest {
         assertThat(chain.execute(firstMethod, new AgreementService(), new Object[]{"id"})).isEmpty();
         assertThat(resolver.resolve("cache-a", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
                 .isNull();
+    }
+
+    @Test
+    @DisplayName("direct fallback registration merges snapshots containing native operations")
+    void directRegistration_mergesForeignOperationTypes() throws Exception {
+        RedisCacheRegister register = new RedisCacheRegister(8, 4);
+        Method method = AgreementService.class.getMethod("first", String.class);
+        CacheableOperation.Builder springBuilder = new CacheableOperation.Builder();
+        springBuilder.setName("native");
+        springBuilder.setCacheNames("cache-a");
+        CacheableOperation springOperation = springBuilder.build();
+        RedisCacheableOperation previousOperation = RedisCacheableOperation.builder()
+                .name("previous")
+                .cacheNames("cache-a")
+                .ttl(1)
+                .build();
+        RedisCacheableOperation newestOperation = RedisCacheableOperation.builder()
+                .name("newest")
+                .cacheNames("cache-a")
+                .ttl(2)
+                .build();
+        register.registerSnapshot(method, AgreementService.class,
+                new AnnotationParser.ParsedAnnotations(
+                        List.of(springOperation, previousOperation),
+                        List.of(previousOperation)));
+
+        assertThatCode(() -> register.register(
+                method, AgreementService.class, newestOperation, OperationKind.CACHEABLE))
+                .doesNotThrowAnyException();
+
+        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, AgreementService.class);
+        RedisCacheableOperation resolved = register.get(
+                "cache-a", elementKey, OperationKind.CACHEABLE);
+        assertThat(resolved).isSameAs(newestOperation);
+        assertThat(register.getSnapshot(method, AgreementService.class).operations())
+                .containsExactly(springOperation, newestOperation);
     }
 
     static class AgreementService {

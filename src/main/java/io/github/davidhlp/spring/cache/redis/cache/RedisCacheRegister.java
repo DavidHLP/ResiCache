@@ -57,20 +57,6 @@ class RedisCacheRegister {
         return snapshot;
     }
 
-    private OperationKind operationKind(CacheOperation operation) {
-        if (operation instanceof RedisCacheableOperation) {
-            return OperationKind.CACHEABLE;
-        }
-        if (operation instanceof RedisCachePutOperation) {
-            return OperationKind.CACHE_PUT;
-        }
-        if (operation instanceof RedisCacheEvictOperation) {
-            return OperationKind.CACHE_EVICT;
-        }
-        throw new IllegalArgumentException(
-                "Unsupported policy operation: " + operation.getClass().getName());
-    }
-
     private String buildSnapshotKey(AnnotatedElementKey elementKey) {
         return "SNAPSHOT:" + elementKey;
     }
@@ -102,12 +88,12 @@ class RedisCacheRegister {
             policies.addAll(existing.policyOperations());
         }
         policies.removeIf(existingOperation ->
-                operationKind(existingOperation) == kind
+                kind.operationType().isInstance(existingOperation)
                         && existingOperation.getCacheNames().stream()
                         .anyMatch(operation.getCacheNames()::contains));
         policies.add(operation);
         operations.removeIf(existingOperation ->
-                operationKind(existingOperation) == kind
+                kind.operationType().isInstance(existingOperation)
                         && existingOperation.getCacheNames().stream()
                         .anyMatch(operation.getCacheNames()::contains));
         operations.add(operation);
