@@ -58,9 +58,43 @@ class RedisCacheRegisterAgreementTest {
         register.registerSnapshot(fourthMethod, AgreementService.class,
                 new AnnotationParser.ParsedAnnotations(List.of(), List.of()));
 
-        assertThat(chain.execute(firstMethod, new AgreementService(), new Object[]{"id"})).isEmpty();
+        assertThat(chain.execute(firstMethod, new AgreementService(), new Object[]{"id"}))
+                .singleElement().isSameAs(firstOperation);
         assertThat(resolver.resolve("cache-a", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
-                .isNull();
+                .isSameAs(firstOperation);
+    }
+
+    @Test
+    @DisplayName("snapshots remain resolvable after registrations beyond the historical capacity")
+    void snapshotRemainsResolvableAfterFurtherRegistrations() throws Exception {
+        RedisCacheRegister register = new RedisCacheRegister(1, 1);
+        Method anchorMethod = AgreementService.class.getMethod("first", String.class);
+        Method secondMethod = AgreementService.class.getMethod("second", String.class);
+        Method thirdMethod = AgreementService.class.getMethod("third", String.class);
+        RedisCacheableOperation anchorOperation = RedisCacheableOperation.builder()
+                .name("anchor")
+                .cacheNames("anchor-cache")
+                .ttl(321)
+                .build();
+        register.registerSnapshot(anchorMethod, AgreementService.class,
+                new AnnotationParser.ParsedAnnotations(List.of(anchorOperation), List.of(anchorOperation)));
+
+        for (int i = 0; i < 100; i++) {
+            Method method = i % 2 == 0 ? secondMethod : thirdMethod;
+            RedisCacheableOperation operation = RedisCacheableOperation.builder()
+                    .name("churn-" + i)
+                    .cacheNames("churn-cache-" + i)
+                    .build();
+            register.registerSnapshot(method, AgreementService.class,
+                    new AnnotationParser.ParsedAnnotations(List.of(operation), List.of(operation)));
+        }
+
+        AnnotatedElementKey anchorKey = new AnnotatedElementKey(anchorMethod, AgreementService.class);
+        assertThat(register.getSnapshot(anchorMethod, AgreementService.class))
+                .isNotNull();
+        RedisCacheableOperation resolved = register.get(
+                "anchor-cache", anchorKey, OperationKind.CACHEABLE);
+        assertThat(resolved).isSameAs(anchorOperation);
     }
 
     @Test
