@@ -1,0 +1,26 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractAnnotationHandler.java
+  h_77173abe25c3ff 66,70,86,105
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationChainEngine.java
+  h_77173abe25c3ff 12,47-48,51,53-59,61,90-98
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  h_77173abe25c3ff 15,42-56,58,60-62,68-75,81-82,88-89,95-97,99-101,103-105,109-160
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheOperationSource.java
+  h_77173abe25c3ff 9,14,44,52-64,66,69-74,99-100,108-111
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 34,42-87
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractAnnotationHandlerTest.java
+  h_77173abe25c3ff 59
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationAopBehaviorMatrixTest.java
+  h_77173abe25c3ff 45,49-51,160-175,177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bbe2be263475f40efdd311c121d584ba6bda23b5",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
