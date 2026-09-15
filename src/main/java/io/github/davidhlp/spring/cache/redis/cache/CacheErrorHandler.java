@@ -58,6 +58,24 @@ class CacheErrorHandler {
             CacheOperation.CLEAN, ErrorStrategy.FAIL_FAST);
 
     /**
+     * 查询某 operation 的错误策略 —— {@link #STRATEGIES} 的唯一读取点。
+     *
+     * <p>package-private static:策略是 operation 的静态知识(表本身即 static),调用方
+     * 只需策略、不需要本类的日志/指标副作用时直接读表 ——
+     * {@link RedisProCacheWriter#requireSuccessful} 据此决定 FAIL_FAST 抛出 vs 其余记录并继续,
+     * 不再自行硬编码「哪个 operation 只 WARN」。指标上报仍只发生在
+     * {@link #handleError}(即链内唯一失败出口),本方法不产生任何副作用。
+     *
+     * @param operation 操作类型(null → FAIL_FAST,保守)
+     * @return 该 operation 的错误策略
+     */
+    static ErrorStrategy strategyFor(CacheOperation operation) {
+        return operation == null
+                ? ErrorStrategy.FAIL_FAST
+                : STRATEGIES.getOrDefault(operation, ErrorStrategy.FAIL_FAST);
+    }
+
+    /**
      * 统一失败指标上报(ADR-06)— null 表示未装配(测试/registry 缺失 → no-op)。
      * 每个失败事件在此唯一出口上报一次,不重复计数。
      */
@@ -76,10 +94,7 @@ class CacheErrorHandler {
      * 按 operation 调度错误策略并保留诊断信息(typed kind)。
      */
     public CacheResult handleError(CacheOperation operation, String cacheName, String key, Exception e) {
-        ErrorStrategy strategy = operation == null
-                ? ErrorStrategy.FAIL_FAST
-                : STRATEGIES.getOrDefault(operation, ErrorStrategy.FAIL_FAST);
-        return handleException(operation, cacheName, key, e, strategy, classify(e));
+        return handleException(operation, cacheName, key, e, strategyFor(operation), classify(e));
     }
 
     /**
@@ -91,10 +106,7 @@ class CacheErrorHandler {
             String key,
             FailureKind failureKind,
             Exception e) {
-        ErrorStrategy strategy = operation == null
-                ? ErrorStrategy.FAIL_FAST
-                : STRATEGIES.getOrDefault(operation, ErrorStrategy.FAIL_FAST);
-        return handleException(operation, cacheName, key, e, strategy, failureKind);
+        return handleException(operation, cacheName, key, e, strategyFor(operation), failureKind);
     }
 
     /**

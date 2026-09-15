@@ -160,6 +160,21 @@ class CacheErrorHandlerTest {
     @DisplayName("handleError per-operation strategy")
     class PerOperationStrategyTests {
 
+        @Test
+        @DisplayName("strategyFor is the single read point of the strategy table")
+        void strategyFor_exposesTheTableWithoutSideEffects() {
+            assertThat(CacheErrorHandler.strategyFor(CacheOperation.GET))
+                    .isEqualTo(CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
+            assertThat(CacheErrorHandler.strategyFor(CacheOperation.REMOVE))
+                    .as("REMOVE 的 SILENT 是 writer '只 WARN 不抛' 的唯一来源")
+                    .isEqualTo(CacheErrorHandler.ErrorStrategy.SILENT);
+            assertThat(CacheErrorHandler.strategyFor(CacheOperation.PUT))
+                    .isEqualTo(CacheErrorHandler.ErrorStrategy.FAIL_FAST);
+            assertThat(CacheErrorHandler.strategyFor(null))
+                    .as("null operation 保守判 FAIL_FAST")
+                    .isEqualTo(CacheErrorHandler.ErrorStrategy.FAIL_FAST);
+        }
+
         @ParameterizedTest(name = "{0} → success={1}")
         @MethodSource("io.github.davidhlp.spring.cache.redis.cache.CacheErrorHandlerTest#perOperationStrategies")
         @DisplayName("dispatches STRATEGIES map to handleException correctly")

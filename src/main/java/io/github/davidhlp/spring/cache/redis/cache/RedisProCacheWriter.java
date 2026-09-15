@@ -366,11 +366,14 @@ class RedisProCacheWriter implements RedisCacheWriter {
         if (result.isSuccess()) {
             return;
         }
-        if (operation == CacheOperation.REMOVE) {
-            log.warn("Cache REMOVE failed; continuing best-effort: cacheName={}, kind={}, cause={}",
+        // FAIL_FAST 之外的策略(REMOVE 的 SILENT / GET 的 GRACEFUL)只记录并继续 ——
+        // 由 CacheErrorHandler 的策略表单一裁定,本类不再硬编码「哪个 operation 只 WARN」。
+        if (CacheErrorHandler.strategyFor(operation) != CacheErrorHandler.ErrorStrategy.FAIL_FAST) {
+            log.warn("Cache {} failed; continuing best-effort: cacheName={}, kind={}, cause={}",
+                    operation,
                     cacheName,
                     result.failureKind(),
-                    result.cause() == null ? "null" : result.cause().getClass().getSimpleName());
+                    FailureDiagnostics.sanitizedFailure(result.cause()));
             return;
         }
         // ADR-07/06:typed 异常不含 raw key(message 亦不含)
