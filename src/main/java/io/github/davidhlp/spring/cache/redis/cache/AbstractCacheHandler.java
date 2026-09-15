@@ -6,6 +6,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.micrometer.core.instrument.Counter;
@@ -43,8 +44,10 @@ import lombok.extern.slf4j.Slf4j;
  * <p>Engine 调用本方法拿 {@link HandlerResult}，其 {@code driveChain} 负责
  * decision switch + 节点间推进。
  *
- * <p><b>子类不应自行推进链</b>：链推进完全交给 Engine。例外场景（如
- * {@code SyncLockHandler} 锁内推进）请改用 {@code ChainEngine#executeChainFragment}。
+ * <p><b>子类不应自行推进链</b>：链推进完全交给 Engine。需要在自身临界区内推进剩余链的
+ * handler(如 {@code SyncLockHandler} 锁内推进)override
+ * {@link #doHandle(CacheContext, ChainContinuation)},使用引擎交出的
+ * {@link ChainContinuation} 句柄 —— 不再依赖任何从 handler 反查 Engine 的隐式通道。
  */
 @Getter
 @Slf4j
@@ -166,6 +169,18 @@ abstract class AbstractCacheHandler implements CacheHandler {
     }
 
     /**
+     * Engine 实际调用的节点入口 —— 携带 {@link ChainContinuation} 的形态。
+     *
+     * <p>与单参 {@link #handle(CacheContext)} 同样的 shouldHandle 闸门,区别只是把推进句柄
+     * 透传给 {@link #doHandle(CacheContext, ChainContinuation)};后者默认忽略句柄、委派单参
+     * {@link #doHandle(CacheContext)} —— 不需要嵌套推进的子类零改动。
+     */
+    @Override
+    public HandlerResult handle(CacheContext context, ChainContinuation next) {
+        return shouldHandle(context) ? doHandle(context, next) : HandlerResult.continueChain();
+    }
+
+    /**
      * 判断当前处理器是否应该处理此操作。
      *
      * @param context 缓存上下文
@@ -183,12 +198,27 @@ abstract class AbstractCacheHandler implements CacheHandler {
      * </ul>
      *
      * <p>子类 doHandle <strong>不应</strong>自行推进链；链推进由 {@link ChainEngine}
-     * 统一驱动。例外场景（如 {@code SyncLockHandler} 锁内推进剩余链）请改用
-     * {@link ChainEngine#executeChainFragment(CacheContext, CacheHandler)}（传 {@code this}，
-     * Engine 按 snapshot {@code indexOf} 定位其后继）。
+     * 统一驱动。需要在自身临界区内推进剩余链的 handler(如 {@code SyncLockHandler} 锁内推进)
+     * override 二参形态 {@link #doHandle(CacheContext, ChainContinuation)}。
      *
      * @param context 缓存上下文
      * @return HandlerResult 包含决策和结果
      */
     protected abstract HandlerResult doHandle(CacheContext context);
+
+    /**
+     * 执行实际处理逻辑的嵌套推进形态 —— 默认忽略 {@code next},委派
+     * {@link #doHandle(CacheContext)}。
+     *
+     * <p>需要「在自己的临界区内跑完剩余链」的 handler override 本方法,把
+     * {@link ChainContinuation#advance()} 放进临界区(如分布式锁 lambda),再以
+     * {@link HandlerResult#terminate(CacheResult)} 结束本节点。
+     *
+     * @param context 缓存上下文
+     * @param next    本节点之后剩余链的推进句柄;仅当次调用有效,至多推进一次
+     * @return HandlerResult 包含决策和结果
+     */
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
+        return doHandle(context);
+    }
 }

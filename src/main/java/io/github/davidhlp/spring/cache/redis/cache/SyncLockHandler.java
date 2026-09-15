@@ -6,13 +6,13 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
@@ -22,17 +22,16 @@ import org.springframework.util.Assert;
  * <p>职责：
  * <ul>
  *   <li>判断是否需要加锁</li>
- *   <li>如需加锁，在锁内通过 {@link ChainEngine#executeChainFragment} 推进剩余链</li>
+ *   <li>如需加锁，在锁内用引擎交出的 {@link ChainContinuation} 推进剩余链</li>
  *   <li>锁逻辑完全集中在此 Handler，ActualCacheHandler 不处理锁</li>
  * </ul>
  *
- * <p>锁内片段推进走 Engine 统一协议({@code engine.executeChainFragment(ctx, this)},
- * 按 snapshot {@code indexOf(this) + 1} 定位后继):
+ * <p>锁内推进走引擎显式交出的推进句柄({@code next.advance()}):
  * <ul>
  *   <li>perNode 观测(DEBUG log / fired counter)照常触发;aroundChain 观测
  *       (MDC stamp / Timer record)由外层 execute 唯一负责,锁内不重复打点</li>
- *   <li>handler 不依赖自身在链中的 next 引用;fragment 按 {@code indexOf(this) + 1}
- *       定位后继,不会再回到本 handler 自身</li>
+ *   <li>句柄由 Engine 按<b>本节点在快照中的位置</b>构造,handler 不反查引擎、不依赖自身
+ *       在链中的 next 引用,不会再回到本 handler 自身</li>
  *   <li>锁内行为与主链一致</li>
  * </ul>
  *
@@ -47,22 +46,6 @@ class SyncLockHandler extends AbstractCacheHandler {
     private final SyncSupport syncSupport;
 
     private final SyncLockTimeout syncLockTimeout;
-
-    /** 推进引擎 — 由 Spring 注入（{@code @Autowired} 字段注入），锁内片段推进用
-     * {@link ChainEngine#executeChainFragment}。测试可通过 {@link #setEngine(ChainEngine)}
-     * 显式注入。 */
-    @Autowired
-    private ChainEngine engine;
-
-    /**
-     * 测试用 setter — 显式注入 ChainEngine 避免 {@code @Autowired} 反射依赖。
-     * 生产环境由 Spring 容器自动注入。
-     *
-     * @param engine 推进引擎（不为 null）
-     */
-    void setEngine(ChainEngine engine) {
-        this.engine = engine;
-    }
 
     public SyncLockHandler(SyncSupport syncSupport,
                            SyncLockTimeout syncLockTimeout) {
@@ -90,8 +73,27 @@ class SyncLockHandler extends AbstractCacheHandler {
         return context.getOperation().requiresSyncLock();
     }
 
+    /**
+     * 单参形态不在本 handler 支持范围 —— 锁内推进必须有引擎交出的
+     * {@link ChainContinuation}。引擎始终经
+     * {@link #doHandle(CacheContext, ChainContinuation)} 调用本节点,故此处只在「handler
+     * 被脱离责任链直接调用」时命中:直接拒绝,而不是静默地只跑半个链。
+     */
     @Override
     protected HandlerResult doHandle(CacheContext context) {
+        throw new IllegalStateException(
+                "SyncLockHandler requires a ChainContinuation; it must run inside the handler chain");
+    }
+
+    /**
+     * 锁内推进形态 — 与 {@link #doHandle(CacheContext)} 同一决策链,区别是剩余链在
+     * 分布式锁内由引擎交出的 {@link ChainContinuation} 推进。
+     *
+     * <p>引擎经 {@code handle(ctx, next)} 调用本方法;{@code next} 在构造期已绑定本节点在
+     * 快照中的位置,故推进起点不再依赖 {@code indexOf(this)} 反查,也不需要任何 ThreadLocal。
+     */
+    @Override
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         // check-first → resolve-on-demand:check 失败直接 continueChain,避免 builder 分配。
         CachePolicyView policy = context.policy();
         if (!policy.sync()) {
@@ -111,11 +113,11 @@ class SyncLockHandler extends AbstractCacheHandler {
         // 分布式锁成功获取事件计数
         safeIncrementSemantic();
 
-        // 在锁内执行后续 Handler — 委派给 Engine 统一推进(perNode 观测照常,
+        // 在锁内执行后续 Handler — 用引擎交出的推进句柄驱动(perNode 观测照常,
         // aroundChain 观测由外层 execute 唯一负责,锁内不重复打点)
         CacheResult result = syncSupport.executeSync(
             lockKey,
-            () -> engine.executeChainFragment(context, this),
+            next::advance,
             timeout
         );
 

@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
@@ -185,34 +186,81 @@ class ChainEngineTest {
         }
 
         @Test
-        @DisplayName("executeChainFragment:不调 aroundChain 钩子,只调 perNode(推进 from 之后)")
-        void executeFragment_skipsAroundChain() {
+        @DisplayName("continuation:handler 用引擎交出的句柄推进剩余链,aroundChain 观测不重复")
+        void continuation_advancesRemainderWithoutDuplicatingAroundChain() {
             RecordingObserver observer = new RecordingObserver();
             engine.addObserver(observer);
-            // executeChainFragment 语义为「推进 from 之后的剩余链」(不含 from 本身)
-            // h0 作 fragment 发起者(模拟 SyncLockHandler 锁内传 this),h1/h2 是其后继
-            CacheHandler h0 = new RecordingHandler("h0", HandlerResult.continueChain());
-            CacheHandler h1 = new RecordingHandler("h1", HandlerResult.continueChain());
-            CacheHandler h2 = new RecordingHandler("h2", HandlerResult.continueWith(CacheResult.success()));
+            List<String> visits = new ArrayList<>();
+            // h0 在自身处理期间推进剩余链 —— 模拟 SyncLockHandler 锁内推进
+            CacheHandler h0 = new ContinuationHandler("h0", visits);
+            CacheHandler h1 = new RecordingHandler("h1", visits, HandlerResult.continueChain());
+            CacheHandler h2 = new RecordingHandler("h2", visits, HandlerResult.continueWith(CacheResult.success()));
             installChain(h0, h1, h2);
 
-            // fragment 隐式从 ThreadLocal 读快照 — 直接用 test helper 设入
-            // (绕开 execute 避免触发 aroundChain 观测,正是本测试要验证 fragment 不触发它们)
-            engine.setCurrentSnapshotForTest(snapshot);
-            try {
-                CacheResult result = engine.executeChainFragment(newCtx(), h0);
+            CacheResult result = engine.execute(snapshot, newCtx());
 
-                assertThat(result.isSuccess()).isTrue();
-                // aroundChain 未触发(fragment 不应 stamp MDC / record Timer)
-                assertThat(observer.events).containsExactly(
-                        "onNodeStart", "beforeNode", "afterNode", "onNodeEnd",
-                        "onNodeStart", "beforeNode", "afterNode", "onNodeEnd");
-            } finally {
-                engine.clearCurrentSnapshotForTest();
-            }
+            assertThat(result.isSuccess()).isTrue();
+            // 剩余链在 h0 的处理窗口内跑完(锁内推进语义)
+            assertThat(visits).containsExactly("h0-in", "h1", "h2", "h0-out");
+            // 后继节点照常触发 perNode 观测;aroundChain 仅由外层 execute 配对一次,
+            // 嵌套推进不重复 stamp / record
+            assertThat(observer.events).containsExactly(
+                    "onChainStart",
+                    "onNodeStart", "beforeNode",                                   // h0 进入
+                    "onNodeStart", "beforeNode", "afterNode", "onNodeEnd",          // h1(嵌套)
+                    "onNodeStart", "beforeNode", "afterNode", "onNodeEnd",          // h2(嵌套)
+                    "afterNode", "onNodeEnd",                                       // h0 退出
+                    "onChainEnd");
         }
 
         @Test
+        @DisplayName("continuation:同一句柄推进两次 → IllegalStateException(防重复执行后继)")
+        void continuation_secondAdvance_throws() {
+            List<String> visits = new ArrayList<>();
+            CacheHandler h0 = new CacheHandler() {
+                @Override
+                public HandlerResult handle(CacheContext context) {
+                    throw new AssertionError("engine must call the 2-arg form");
+                }
+
+                @Override
+                public HandlerResult handle(CacheContext context, ChainContinuation next) {
+                    next.advance();
+                    return HandlerResult.terminate(next.advance());
+                }
+            };
+            installChain(h0, new RecordingHandler("h1", visits, HandlerResult.continueChain()));
+
+            assertThatThrownBy(() -> engine.execute(snapshot, newCtx()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("more than once");
+            assertThat(visits).containsExactly("h1");
+        }
+
+        @Test
+        @DisplayName("continuation:链尾节点的句柄推进 → success(无后继)")
+        void continuation_lastNode_advanceReturnsSuccess() {
+            CacheHandler[] tail = new CacheHandler[1];
+            List<String> visits = new ArrayList<>();
+            tail[0] = new CacheHandler() {
+                @Override
+                public HandlerResult handle(CacheContext context) {
+                    throw new AssertionError("engine must call the 2-arg form");
+                }
+
+                @Override
+                public HandlerResult handle(CacheContext context, ChainContinuation next) {
+                    CacheResult remainder = next.advance();
+                    visits.add("remainder-success=" + remainder.isSuccess());
+                    return HandlerResult.continueChain();
+                }
+            };
+            installChain(tail[0]);
+
+            engine.execute(snapshot, newCtx());
+
+            assertThat(visits).containsExactly("remainder-success=true");
+        }
         @DisplayName("handler 异常时 onNodeEnd 仍配对且 result 为 null")
         void handlerThrows_nodeScopeStillCloses() {
             NodeTokenRecordingObserver observer = new NodeTokenRecordingObserver();
@@ -380,22 +428,35 @@ class ChainEngineTest {
                     .hasMessageContaining(nullReturning.getClass().getName());
         }
 
-        @Test
-        @DisplayName("executeChainFragment(from=null) → 返回 success,不调任何 observer")
-        void executeFragment_fromNull_returnsSuccess() {
-            // 用真实 observer 录制替代 mock —— onChainStart 返回 Object 后
-            // mock + times(0) 验证语义混乱(详见 ObserverTests 注释)
-            RecordingObserver observer = new RecordingObserver();
-            engine.addObserver(observer);
-
-            CacheResult result = engine.executeChainFragment(newCtx(), null);
-
-            assertThat(result.isSuccess()).isTrue();
-            assertThat(observer.events).isEmpty();  // 任何钩子都不应被调
-        }
     }
 
-    // ==================== 测试用 handler 实现 ====================
+    /**
+     * 在自身处理期间推进剩余链的 handler —— 模拟 {@code SyncLockHandler} 锁内推进。
+     * 只实现二参入口:引擎必须把推进句柄交给 handler,而不是让 handler 反查引擎。
+     */
+    static class ContinuationHandler implements CacheHandler {
+        private final String name;
+        private final List<String> visitLog;
+
+        ContinuationHandler(String name, List<String> visitLog) {
+            this.name = name;
+            this.visitLog = visitLog;
+        }
+
+        @Override
+        public HandlerResult handle(CacheContext context) {
+            throw new AssertionError("engine must call the 2-arg form");
+        }
+
+        @Override
+        public HandlerResult handle(CacheContext context,
+                                    ChainContinuation next) {
+            visitLog.add(name + "-in");
+            CacheResult remainder = next.advance();
+            visitLog.add(name + "-out");
+            return HandlerResult.terminate(remainder);
+        }
+    }
 
     static class RecordingHandler implements CacheHandler {
         private final String name;

@@ -89,6 +89,17 @@ Current milestones:
   lock acquire/release, `SyncRole` leader/follower failures, the async
   early-expiration retry path, chain post-processing, and the migration
   engine's fingerprint helper (now one implementation).
+- **Nested chain advancement is explicit (SPI addition, compatible)** —
+  `CacheHandler` gains `default HandlerResult handle(CacheContext,
+  ChainContinuation next)`; the default ignores `next` and delegates to
+  `handle(context)`, so existing implementations need no change (the
+  external-consumer gate compiles and runs an unmodified implementation, and
+  now also one that uses the new hook). A handler can run the remainder of the
+  chain inside its own critical section — this is how `sync=true` executes
+  inside the distributed lock — which previously required reaching back into
+  the engine through a static `ThreadLocal` snapshot and an `indexOf(this)`
+  lookup. That machinery, plus the two test-only setters and the handler's
+  engine field, is deleted; the engine now holds no static state.
 
 ### Single-build FIRE M0–M4
 

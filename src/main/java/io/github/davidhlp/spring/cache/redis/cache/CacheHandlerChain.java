@@ -10,8 +10,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 /**
  * 责任链管理器 — thin facade,链结构单一真理源。
@@ -31,20 +29,17 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <p><b>快照归属</b>:链 list 单一真理源收敛在本 facade 上;Engine 通过
- * {@link ChainEngine#execute(List, CacheContext)} 接收快照参数,与
- * {@link ChainEngine#executeChainFragment(CacheContext, CacheHandler)} 共享
- * ThreadLocal 隐式快照(由 {@code execute} entry 设入,finally 清出)。
+ * {@link ChainEngine#execute(List, CacheContext)} 接收快照参数,并把「当前节点之后」的
+ * 子链以 {@code ChainContinuation} 形态交给正在执行的 handler。
  *
- * <p><b>back-compat 兜底</b>：保留无参构造（{@code @Autowired} 注入 Engine），
- * 用户若需自定义 ChainEngine（如额外加 observer），声明
- * {@code @Bean @ConditionalOnMissingBean ChainEngine} 顶替默认即可。
+ * <p><b>装配</b>:Engine 经构造期注入(本类是内部装配件,由
+ * {@link CacheHandlerChainFactory} 在 {@code createChain()} 中构造,不是独立 Spring bean)。
  *
  * <p><b>facade 存在代价（删除测试）</b>：删掉本类 → 用户需在
  * {@code RedisProCacheWriter} 与测试中直接持 {@link ChainEngine} 引用，复杂度
  * 重现且失去"facade 维护链结构 / engine 推进链"职责分层。本 facade 挣得起存在代价。
  */
 @Slf4j
-@Component
 class CacheHandlerChain {
 
     /**
@@ -66,20 +61,10 @@ class CacheHandlerChain {
      */
     private final Object chainGuard = new Object();
 
-    /** 推进引擎 — 由 Spring 注入（{@code @Autowired} 字段注入避免构造重排耦合）。 */
-    @Autowired
-    private ChainEngine engine;
+    /** 推进引擎 — 构造期注入（本类由工厂构造，非 Spring bean）。 */
+    private final ChainEngine engine;
 
-    public CacheHandlerChain() {
-        // engine 字段由 Spring 注入；测试可直接 new ChainEngine() 后 setter 注入
-    }
-
-    /**
-     * 测试 / 自定义装配用 setter。运行期由 Spring 通过 {@code @Autowired} 注入。
-     *
-     * @param engine 推进引擎（不为 null）
-     */
-    void setEngine(ChainEngine engine) {
+    CacheHandlerChain(ChainEngine engine) {
         this.engine = engine;
     }
 
@@ -104,9 +89,8 @@ class CacheHandlerChain {
      * 执行责任链 — 委派给 {@link ChainEngine#execute(List, CacheContext)}（无锁）。
      *
      * <p>本 facade 在 synchronized 块内一次性拍 {@code List.copyOf(handlers)} 快照,
-     * 快照交给 Engine;Engine 在 try/finally 内把它推到 ThreadLocal(供
-     * {@code executeChainFragment} 读),execute 返回前清出。Engine 完全不持
-     * list 状态。
+     * 快照交给 Engine;Engine 完全不持 list 状态,节点嵌套推进以
+     * {@code ChainContinuation} 形态交回 handler(见 {@code CacheHandler})。
      *
      * @param context 缓存上下文
      * @return 处理结果

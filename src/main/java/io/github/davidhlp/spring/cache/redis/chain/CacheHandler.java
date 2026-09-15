@@ -22,6 +22,11 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
  * Handler 通过 override {@code requiresPostProcess} 返回 {@code true} 声明参与
  * post-process；不 override 则不参与。走类型化的 {@code requiresPostProcess} hook,
  * 无需 seam 边界 {@code instanceof} type check。
+ *
+ * <p><b>嵌套推进（可选能力）</b>：引擎每个节点调用
+ * {@link #handle(CacheContext, ChainContinuation)}。默认实现忽略句柄并委派单参
+ * {@link #handle(CacheContext)} —— 现有实现无需改动。需要「在自身临界区内推进剩余链」的
+ * handler(如分布式锁内跑完后续保护)override 二参形态即可，见 {@link ChainContinuation}。
  */
 public interface CacheHandler {
 
@@ -32,6 +37,21 @@ public interface CacheHandler {
      * @return HandlerResult 包含决策和结果
      */
     HandlerResult handle(CacheContext context);
+
+    /**
+     * 节点处理入口(引擎实际调用) —— 携带 {@link ChainContinuation} 的形态。
+     *
+     * <p>默认实现忽略句柄,委派 {@link #handle(CacheContext)}：不关心嵌套推进的 handler
+     * (含全部已有实现)无需 override。需要嵌套推进的 handler override 本方法,并在临界区内
+     * 调用 {@link ChainContinuation#advance()}。
+     *
+     * @param context 缓存上下文
+     * @param next    本节点之后剩余链的推进句柄;仅当次调用有效,至多推进一次
+     * @return HandlerResult 包含决策和结果
+     */
+    default HandlerResult handle(CacheContext context, ChainContinuation next) {
+        return handle(context);
+    }
 
     /**
      * 是否参与 post-process — 隐式 opt-in 由本方法的 override 表达。
