@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
@@ -14,9 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -100,7 +96,7 @@ class NullValueHandlerTest {
 
         @Test
         void doHandle_nullValue_cacheable_continuesWithNullStoreValue() {
-            CacheContext context = createContext(CacheOperation.PUT, null);
+            CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT, null);
             when(cacheOperation.isCacheNullValues()).thenReturn(true);
 
 
@@ -128,12 +124,10 @@ class NullValueHandlerTest {
 
         @Test
         void handle_getOperation_returnsContinueChainWithoutAdvancing() {
-            CacheHandler nextHandler = mock(CacheHandler.class);
             CacheContext context = createContext(CacheOperation.GET, "value");
 
             HandlerResult result = handler.handle(context);
 
-            verify(nextHandler, never()).handle(context);
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
 

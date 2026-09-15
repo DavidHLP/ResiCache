@@ -41,7 +41,7 @@ class SecureNullValueDeserializerTest {
 
         assertThatThrownBy(() -> SecureNullValueDeserializer.deserializeNullValue(serializedString))
                 .isInstanceOf(SecurityException.class)
-                .hasMessageContaining("only NullValue is permitted");
+                .hasMessageContaining("expected NullValue but got java.lang.String");
     }
 
     @Test
