@@ -13,8 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,11 +22,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class RedisProCacheWriterFailureTest {
 
-    @Mock
-    private RedisTemplate<String, Object> redisTemplate;
-
-    @Mock
-    private ValueOperations<String, Object> valueOperations;
 
     @Mock
     private CacheStatisticsCollector statistics;
@@ -49,7 +42,7 @@ class RedisProCacheWriterFailureTest {
         when(chainFactory.createChain()).thenReturn(chain);
         when(typeSupport.bytesToString(any())).thenReturn("cache::key");
         writer = new RedisProCacheWriter(
-                redisTemplate, valueOperations, statistics, typeSupport, chainFactory, null);
+                statistics, typeSupport, chainFactory, null);
     }
 
     @Test

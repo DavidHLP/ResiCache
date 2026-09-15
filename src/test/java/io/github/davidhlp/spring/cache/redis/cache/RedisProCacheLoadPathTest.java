@@ -26,8 +26,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,11 +43,6 @@ import static org.mockito.Mockito.when;
 @DisplayName("RedisProCache 统一 load 协议")
 class RedisProCacheLoadPathTest {
 
-    @Mock
-    private RedisTemplate<String, Object> redisTemplate;
-
-    @Mock
-    private ValueOperations<String, Object> valueOperations;
 
     @Mock
     private CacheStatisticsCollector statistics;
@@ -152,8 +145,6 @@ class RedisProCacheLoadPathTest {
                     new IllegalStateException("redis put failed for key " + SENTINEL_KEY));
         });
         return new RedisProCacheWriter(
-                redisTemplate,
-                valueOperations,
                 statistics,
                 typeSupport,
                 chainFactory,

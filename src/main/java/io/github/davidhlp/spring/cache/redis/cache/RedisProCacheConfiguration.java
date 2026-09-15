@@ -179,14 +179,11 @@ class RedisProCacheConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public RedisProCacheWriter redisProCacheWriter(
-            @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisCacheTemplate,
             TypeSupport typeSupport,
             CacheHandlerChainFactory chainFactory,
             CacheStatisticsCollector cacheStatisticsCollector,
             CacheOperationResolver operationResolver) {
         RedisProCacheWriter writer = new RedisProCacheWriter(
-                redisCacheTemplate,
-                redisCacheTemplate.opsForValue(),
                 cacheStatisticsCollector,
                 typeSupport,
                 chainFactory,
