@@ -63,17 +63,11 @@ abstract class AbstractAnnotationHandler extends AnnotationHandler {
     }
 
     /**
-     * 注册动作的函数式接口 —— 带 {@link OperationKind} 参数,对齐
-     * {@link RedisCacheRegister#register(Method, Class, CacheOperation, OperationKind)}
-     * 的 4 参 seam 签名。
-     *
-     * <p>调用方在 4 个具体 handler 中以 lambda 形式提供(如
-     * {@code (m, c, op) -> register.register(m, c, op, OperationKind.CACHEABLE)}),
-     * kind 在编译期固定,运行期无漂移风险。
+     * 注册动作的函数式接口 —— 仅传递元素与已构造 operation。
      */
     @FunctionalInterface
     protected interface RegisterAction<O> {
-        void register(Method method, Class<?> targetClass, O operation, OperationKind kind);
+        void register(Method method, Class<?> targetClass, O operation);
     }
 
     /**
@@ -89,7 +83,7 @@ abstract class AbstractAnnotationHandler extends AnnotationHandler {
      * <p>消除每个具体 handler 各自的 lambda boilerplate,统一收敛到基类工厂。
      */
     protected <O extends CacheOperation> RegisterAction<O> registerActionFor(OperationKind kind) {
-        return (method, targetClass, operation, k) ->
+        return (method, targetClass, operation) ->
                 redisCacheRegister.register(method, targetClass, operation, kind);
     }
 
@@ -108,7 +102,7 @@ abstract class AbstractAnnotationHandler extends AnnotationHandler {
             String key = generateKey(target, method, args, keyExpression);
             O operation = factory.create(method, annotation, key);
             Class<?> targetClass = target != null ? target.getClass() : null;
-            registerAction.register(method, targetClass, operation, null);
+            registerAction.register(method, targetClass, operation);
             log.debug("Registered {} operation: {} with key: {} for caches: {}",
                     logTag, method.getName(), key, String.join(",", operation.getCacheNames()));
             return operation;

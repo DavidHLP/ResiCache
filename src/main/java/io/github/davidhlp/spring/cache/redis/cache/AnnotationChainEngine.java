@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.stereotype.Component;
 
@@ -43,11 +44,21 @@ import org.springframework.stereotype.Component;
 @Component
 class AnnotationChainEngine {
 
-    /** 注入的所有 AnnotationHandler 实现(Spring 自动按 List 注入 4 个具体 handler) */
+    /** 注解元素解析后的不可变策略快照 */
+    private final RedisCacheRegister redisCacheRegister;
     private final List<AnnotationHandler> handlers;
 
+    /** 供直接单测使用的 handler-only 构造入口 */
     public AnnotationChainEngine(List<AnnotationHandler> handlers) {
+        this(handlers, null);
+    }
+
+    @Autowired
+    public AnnotationChainEngine(
+            List<AnnotationHandler> handlers,
+            RedisCacheRegister redisCacheRegister) {
         this.handlers = List.copyOf(handlers);
+        this.redisCacheRegister = redisCacheRegister;
         log.debug("AnnotationChainEngine initialized with {} handlers: {}",
                 this.handlers.size(),
                 this.handlers.stream().map(h -> h.getClass().getSimpleName()).toList());
@@ -76,8 +87,15 @@ class AnnotationChainEngine {
         if (method == null) {
             throw new IllegalArgumentException("method must not be null");
         }
-        // 防御性:args 允许 null(无参方法),target 允许 null(静态方法工具调用)
-        // 但本 seam 期望 target 非 null(对应拦截器契约),只做 args null 兜底
+        if (redisCacheRegister != null) {
+            Class<?> targetClass = target != null ? target.getClass() : method.getDeclaringClass();
+            AnnotationParser.ParsedAnnotations snapshot =
+                    redisCacheRegister.getSnapshot(method, targetClass);
+            return snapshot == null
+                    ? Collections.emptyList()
+                    : snapshot.policyOperations();
+        }
+        // handler-only fallback is retained for direct unit tests.
         Object[] safeArgs = args != null ? args : new Object[0];
 
         // 直接遍历 handlers — per-handler 异常隔离即可。

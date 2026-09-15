@@ -42,19 +42,13 @@ class AnnotationAopBehaviorMatrixTest {
     @BeforeEach
     void setUp() {
         register = new RedisCacheRegister(32, 8);
-        KeyGenerator keyGenerator = Mockito.mock(KeyGenerator.class);
-        when(keyGenerator.generate(any(), any(), any())).thenReturn("generated-key");
-        RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
-        SpringCacheableAdapter springAdapter = Mockito.mock(SpringCacheableAdapter.class);
-        annotationChainEngine = new AnnotationChainEngine(List.of(
-                new CacheableAnnotationHandler(register, keyGenerator, projector, springAdapter),
-                new EvictAnnotationHandler(register, keyGenerator, projector),
-                new CachePutAnnotationHandler(register, keyGenerator, projector),
-                new CachingAnnotationHandler(register, keyGenerator, projector)));
+        annotationChainEngine = new AnnotationChainEngine(List.of(), register);
         metadataResolver = Mockito.mock(MethodMetadataResolver.class);
         resolver = new CacheOperationResolver(metadataResolver, register);
         operationSource = new RedisCacheOperationSource(
-                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE);
+                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE,
+                new AnnotationParser(),
+                register);
     }
 
     @Test
@@ -163,11 +157,27 @@ class AnnotationAopBehaviorMatrixTest {
                 .containsExactly(CacheableOperation.class, CacheEvictOperation.class, CachePutOperation.class);
     }
 
+    @Test
+    @DisplayName("operation source populates one reusable snapshot per element")
+    void operationSourcePopulatesOneSnapshotPerElement() throws Exception {
+        Method method = method("read");
+
+        operationSource.getCacheOperations(method, Matrix.class);
+        AnnotationParser.ParsedAnnotations first = register.getSnapshot(method, Matrix.class);
+        operationSource.getCacheOperations(method, Matrix.class);
+        AnnotationParser.ParsedAnnotations second = register.getSnapshot(method, Matrix.class);
+
+        assertThat(first).isNotNull().isSameAs(second);
+        when(metadataResolver.currentKey()).thenReturn(new AnnotatedElementKey(method, Matrix.class));
+        assertThat(annotationChainEngine.execute(method, new Matrix(), new Object[0]).get(0))
+                .isSameAs(first.policyOperations().get(0));
+    }
+
     private List<CacheOperation> execute(Method method) {
+        operationSource.getCacheOperations(method, Matrix.class);
         when(metadataResolver.currentKey()).thenReturn(new AnnotatedElementKey(method, Matrix.class));
         return annotationChainEngine.execute(method, new Matrix(), new Object[]{"id"});
     }
-
     private CachePolicyView.Source resolve(
             String cacheName, io.github.davidhlp.spring.cache.redis.chain.CacheOperation operation) {
         return resolver.resolve(cacheName, operation);

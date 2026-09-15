@@ -30,8 +30,8 @@ import org.springframework.context.expression.AnnotatedElementKey;
 @Slf4j
 class RedisCacheRegister {
 
-    /** 缓存操作淘汰策略(直接 TwoListLRU,无策略包装) */
     private final TwoListLRU<String, CacheOperation> operationLru;
+    private final TwoListLRU<String, AnnotationParser.ParsedAnnotations> snapshotLru;
 
     public RedisCacheRegister() {
         this(2048, 1024);
@@ -39,6 +39,52 @@ class RedisCacheRegister {
 
     public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
         this.operationLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
+        this.snapshotLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
+    }
+
+    /**
+     * Registers the immutable parse result for an annotated element and its policy namespaces.
+     */
+    public void registerSnapshot(
+            Method method,
+            Class<?> targetClass,
+            AnnotationParser.ParsedAnnotations snapshot) {
+        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
+        snapshotLru.put(buildSnapshotKey(elementKey), snapshot);
+        for (CacheOperation operation : snapshot.policyOperations()) {
+            register(method, targetClass, operation, operationKind(operation));
+        }
+    }
+
+    /**
+     * Returns the parse result shared by the Spring source and annotation chain.
+     */
+    public AnnotationParser.ParsedAnnotations getSnapshot(Method method, Class<?> targetClass) {
+        AnnotationParser.ParsedAnnotations snapshot = snapshotLru.get(
+                buildSnapshotKey(new AnnotatedElementKey(method, targetClass)));
+        if (snapshot == null && targetClass != method.getDeclaringClass()) {
+            snapshot = snapshotLru.get(buildSnapshotKey(
+                    new AnnotatedElementKey(method, method.getDeclaringClass())));
+        }
+        return snapshot;
+    }
+
+    private OperationKind operationKind(CacheOperation operation) {
+        if (operation instanceof RedisCacheableOperation) {
+            return OperationKind.CACHEABLE;
+        }
+        if (operation instanceof RedisCachePutOperation) {
+            return OperationKind.CACHE_PUT;
+        }
+        if (operation instanceof RedisCacheEvictOperation) {
+            return OperationKind.CACHE_EVICT;
+        }
+        throw new IllegalArgumentException(
+                "Unsupported policy operation: " + operation.getClass().getName());
+    }
+
+    private String buildSnapshotKey(AnnotatedElementKey elementKey) {
+        return "SNAPSHOT:" + elementKey;
     }
 
     // ============================ 注册（单一 seam）============================
