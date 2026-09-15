@@ -1,0 +1,51 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/NullValueHandlerTest.java
+  h_77173abe25c3ff 130,144,157,175,187,198
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandlerIntegrationTest.java
+  h_77173abe25c3ff 9,183,199,212,226,245,266,287,306,320,339
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandlerTest.java
+  h_77173abe25c3ff 16,49-50,59-60,86-90,176-246,337-338,340-343,345,347
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/NullValueHandler.java
+  h_77173abe25c3ff 7,64
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngineTest.java
+  h_77173abe25c3ff 123
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlHandler.java
+  h_77173abe25c3ff 8,66
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterHandlerTest.java
+  h_77173abe25c3ff 137,149,165,175,185,330,369
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/TtlHandlerTest.java
+  h_77173abe25c3ff 10,175,188,200,217,230,247,260,278,297
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterHandler.java
+  h_77173abe25c3ff 8,10,63
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandlerSemanticCounterTest.java
+  h_77173abe25c3ff 8-9,18,40,60,70-89,191-203
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainTest.java
+  h_77173abe25c3ff 9,301
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandler.java
+  h_77173abe25c3ff 11,73
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandlerIntegrationTest.java
+  h_77173abe25c3ff 142,160,174,186,202,220,239,255,275,293,312,331,347,364,378,382,385
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactoryTest.java
+  h_77173abe25c3ff 9,422
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandler.java
+  h_77173abe25c3ff 15,59,65,80-81,106-110,113-114
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterFalsePositiveTest.java
+  h_77173abe25c3ff 76,89
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandlerRaceConditionIntegrationTest.java
+  h_77173abe25c3ff 9,157,209,244,246,248,272,295
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandler.java
+  h_77173abe25c3ff 7,61
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandler.java
+  h_77173abe25c3ff 24-25,37-39,53-60,169-170,174-176,182-183,200,202-204,210
+  h_77173abe25c3ff 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f95b837a6ef189b5bd6380edf52d69269463263d",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
