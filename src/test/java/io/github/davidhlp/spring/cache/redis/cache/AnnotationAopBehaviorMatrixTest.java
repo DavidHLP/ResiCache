@@ -116,6 +116,7 @@ class AnnotationAopBehaviorMatrixTest {
     @DisplayName("read declaration wins write-back policy when read and put coexist")
     void readDeclarationWinsWriteBackPolicy() throws Exception {
         Method method = method("readThrough");
+        List<CacheOperation> chainOperations = execute(method);
 
         assertThat(chainOperations).hasSize(2);
         assertThat(chainOperations).extracting(CacheOperation::getCacheNames)
