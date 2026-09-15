@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
@@ -62,7 +63,7 @@ class TtlHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected HandlerResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         calculateTtl(context);
         // 继续执行后续 Handler
         return HandlerResult.continueChain();

@@ -4,6 +4,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
@@ -57,7 +58,7 @@ class EarlyExpirationHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected HandlerResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         EarlyRefresh.Evaluation evaluation = earlyRefresh.evaluate(context);
         if (evaluation == null) {
             // 缓存不存在或已过期:不预取,后续节点走原生 GET 路径

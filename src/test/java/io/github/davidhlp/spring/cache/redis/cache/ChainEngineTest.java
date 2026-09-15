@@ -120,7 +120,7 @@ class ChainEngineTest {
                 @Override
                 protected boolean shouldHandle(CacheContext context) { return true; }
                 @Override
-                protected HandlerResult doHandle(CacheContext context) {
+                protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
                     nextCalled.set(true);
                     return HandlerResult.continueChain();
                 }

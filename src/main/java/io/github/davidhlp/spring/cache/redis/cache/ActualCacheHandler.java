@@ -8,6 +8,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
@@ -69,7 +70,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected HandlerResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(context.getOperation(), "Cache operation must not be null");
 

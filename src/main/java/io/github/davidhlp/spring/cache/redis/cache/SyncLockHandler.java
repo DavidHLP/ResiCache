@@ -12,6 +12,7 @@ import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
@@ -55,13 +56,13 @@ class SyncLockHandler extends AbstractCacheHandler {
     }
 
     /**
-     * 语义 counter 元数据声明:分布式锁成功获取事件计数(sync=true 缓存操作进入临界区)。
+     * 语义 counter 元数据声明:同步锁成功进入受保护临界区的事件计数。
      */
     @Override
     protected CounterMetadata semanticCounter() {
         return new CounterMetadata(
                 "resicache.handler.sync.lock.acquired",
-                "Distributed lock acquired (sync=true cache operation entered critical section)");
+                "Sync lock acquired (sync=true operation entered protected critical section)");
     }
 
     @Override
@@ -74,21 +75,10 @@ class SyncLockHandler extends AbstractCacheHandler {
         return context.getOperation().requiresSyncLock();
     }
 
-    /**
-     * 单参形态不在本 handler 支持范围 —— 锁内推进必须有引擎交出的
-     * {@link ChainContinuation}。引擎始终经
-     * {@link #doHandle(CacheContext, ChainContinuation)} 调用本节点,故此处只在「handler
-     * 被脱离责任链直接调用」时命中:直接拒绝,而不是静默地只跑半个链。
-     */
-    @Override
-    protected HandlerResult doHandle(CacheContext context) {
-        throw new IllegalStateException(
-                "SyncLockHandler requires a ChainContinuation; it must run inside the handler chain");
-    }
 
     /**
-     * 锁内推进形态 — 与 {@link #doHandle(CacheContext)} 同一决策链,区别是剩余链在
-     * 分布式锁内由引擎交出的 {@link ChainContinuation} 推进。
+     * 锁内推进形态 — 与基类单参入口同一决策链,区别是剩余链在分布式锁内由引擎交出的
+     * {@link ChainContinuation} 推进。
      *
      * <p>引擎经 {@code handle(ctx, next)} 调用本方法;{@code next} 在构造期已绑定本节点在
      * 快照中的位置,故推进起点不再依赖 {@code indexOf(this)} 反查,也不需要任何 ThreadLocal。
@@ -111,15 +101,17 @@ class SyncLockHandler extends AbstractCacheHandler {
         log.debug("Executing with sync lock: cacheName={}, key={}, timeout={}s",
                   context.getCacheName(), lockKey, timeout);
 
-        // 分布式锁成功获取事件计数
-        safeIncrementSemantic();
-
         // 在锁内执行后续 Handler — 用引擎交出的推进句柄驱动(perNode 观测照常,
         // aroundChain 观测由外层 execute 唯一负责,锁内不重复打点)。
+        // 计数位于 work lambda 内:只有实际持有同步锁并执行本次工作的 leader 才计数。
+        Supplier<CacheResult> work = () -> {
+            safeIncrementSemantic();
+            return next.advance();
+        };
         // 写路径走独占执行:写不能 join 他线程的 single-flight 结果(否则本笔写被静默丢弃)。
         CacheResult result = context.getOperation().isWrite()
-                ? syncSupport.executeExclusive(lockKey, next::advance, timeout)
-                : syncSupport.executeSync(lockKey, next::advance, timeout);
+                ? syncSupport.executeExclusive(lockKey, work, timeout)
+                : syncSupport.executeSync(lockKey, work, timeout);
 
         // 锁内执行完成,终止链
         return HandlerResult.terminate(result);

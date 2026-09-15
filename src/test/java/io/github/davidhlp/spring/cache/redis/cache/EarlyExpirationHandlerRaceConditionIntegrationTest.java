@@ -6,6 +6,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import java.time.Duration;
@@ -153,7 +154,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
         }).when(earlyExpirationExecutor).submit(eq(REDIS_KEY), any(Runnable.class));
 
         // First call observes the real TTL/value and schedules the refresh.
-        handler.doHandle(context);
+        handler.doHandle(context, CacheResult::success);
         assertThat(refreshStarted.await(5, TimeUnit.SECONDS)).isTrue();
 
         // Evict the real Redis key while the refresh task is paused.
@@ -205,7 +206,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
             return null;
         }).when(earlyExpirationExecutor).submit(eq(REDIS_KEY), any(Runnable.class));
 
-        handler.doHandle(context);
+        handler.doHandle(context, CacheResult::success);
 
         // User puts a newer value into real Redis while async refresh is pending.
         assertThat(refreshStarted.await(5, TimeUnit.SECONDS)).isTrue();
@@ -240,11 +241,11 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
         }).when(earlyExpirationExecutor).submit(anyString(), any(Runnable.class));
 
         store(cachedValue1, 30);
-        handler.doHandle(context1);
+        handler.doHandle(context1, CacheResult::success);
         store(cachedValue2, 30);
-        handler.doHandle(context2);
+        handler.doHandle(context2, CacheResult::success);
         store(cachedValue3, 30);
-        handler.doHandle(context3);
+        handler.doHandle(context3, CacheResult::success);
 
         assertThat(allRefreshesSubmitted.await(5, TimeUnit.SECONDS)).isTrue();
         CachedValue actual = (CachedValue) valueOperations.get(REDIS_KEY);
@@ -268,7 +269,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
             return null;
         }).when(earlyExpirationExecutor).submit(eq(REDIS_KEY), any(Runnable.class));
 
-        handler.doHandle(context);
+        handler.doHandle(context, CacheResult::success);
 
         assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isBetween(1L, 5L);
     }
@@ -291,7 +292,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
             return null;
         }).when(earlyExpirationExecutor).submit(eq(REDIS_KEY), any(Runnable.class));
 
-        handler.doHandle(context);
+        handler.doHandle(context, CacheResult::success);
 
         CachedValue actual = (CachedValue) valueOperations.get(REDIS_KEY);
         assertThat(actual.getValue()).isEqualTo("changed");

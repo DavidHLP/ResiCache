@@ -7,6 +7,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
@@ -171,7 +172,7 @@ class TtlHandlerTest {
             when(ttlPolicy.calculateFinalTtl(eq(120L), eq(true), eq(0.1f))).thenReturn(130L);
             CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(130L);
@@ -184,7 +185,7 @@ class TtlHandlerTest {
             when(ttlPolicy.calculateFinalTtl(anyLong(), anyBoolean(), anyFloat())).thenReturn(60L);
             CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
         }
@@ -196,7 +197,7 @@ class TtlHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30), cacheOperation);
             when(ttlPolicy.shouldApply(any(Duration.class))).thenReturn(true);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             // Should fall through to use parameter TTL instead
         }
@@ -213,7 +214,7 @@ class TtlHandlerTest {
             when(ttlPolicy.shouldApply(Duration.ofSeconds(30))).thenReturn(true);
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30), cacheOperation);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(30L);
@@ -226,7 +227,7 @@ class TtlHandlerTest {
             when(ttlPolicy.shouldApply(Duration.ofSeconds(60))).thenReturn(true);
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(60), cacheOperation);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
         }
@@ -243,7 +244,7 @@ class TtlHandlerTest {
             when(ttlPolicy.shouldApply(Duration.ofSeconds(-1))).thenReturn(false);
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(-1), cacheOperation);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
@@ -256,7 +257,7 @@ class TtlHandlerTest {
             when(ttlPolicy.shouldApply(any(Duration.class))).thenReturn(false);
             CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
@@ -274,7 +275,7 @@ class TtlHandlerTest {
             when(ttlPolicy.shouldApply(Duration.ofSeconds(60))).thenReturn(true);
             CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             // Default TTL is 60 seconds
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
@@ -293,7 +294,7 @@ class TtlHandlerTest {
             when(ttlPolicy.calculateFinalTtl(anyLong(), anyBoolean(), anyFloat())).thenReturn(120L);
             CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
         }

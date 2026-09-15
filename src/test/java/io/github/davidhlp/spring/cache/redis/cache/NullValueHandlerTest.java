@@ -127,7 +127,7 @@ class NullValueHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, null);
             when(cacheOperation.isCacheNullValues()).thenReturn(false);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
             assertThat(result.result()).isEqualTo(CacheResult.success());
@@ -141,7 +141,7 @@ class NullValueHandlerTest {
             when(cacheOperation.isCacheNullValues()).thenReturn(true);
             when(nullValuePolicy.toStoreValue(eq(null), eq(true))).thenReturn("NULL_PLACEHOLDER");
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isNotEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getNullDecision().storeValue()).isEqualTo("NULL_PLACEHOLDER");
@@ -154,7 +154,7 @@ class NullValueHandlerTest {
             when(cacheOperation.isCacheNullValues()).thenReturn(true);
             when(nullValuePolicy.toStoreValue(eq(null), eq(true))).thenReturn("NULL_PLACEHOLDER");
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getNullDecision().storeValue()).isEqualTo("NULL_PLACEHOLDER");
         }
@@ -172,7 +172,7 @@ class NullValueHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, originalValue);
             when(nullValuePolicy.toStoreValue(eq(originalValue), anyBoolean())).thenReturn(storeValue);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isNotEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getNullDecision().storeValue()).isEqualTo(storeValue);
@@ -184,7 +184,7 @@ class NullValueHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, "value");
             when(nullValuePolicy.toStoreValue(any(), anyBoolean())).thenReturn("value");
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
@@ -195,7 +195,7 @@ class NullValueHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT, "value");
             when(nullValuePolicy.toStoreValue(any(), anyBoolean())).thenReturn("value");
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
