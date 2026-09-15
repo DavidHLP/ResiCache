@@ -66,7 +66,7 @@ class RedisCacheRegisterTest {
         }
 
         @Test
-        @DisplayName("constructor with custom sizes creates register with custom eviction strategy")
+        @DisplayName("historical sized constructor accepts positive compatibility values")
         void customSizes_createsSuccessfully() {
             register = new RedisCacheRegister(100, 50);
 

@@ -34,7 +34,7 @@ import org.springframework.lang.Nullable;
  * {@link RedisCacheRegister}。
  *
  * <p><b>线程安全</b>:方法无状态;并发安全由底层 {@link RedisCacheRegister}
- * (内部 {@code TwoListLRU}) 与 {@link MethodMetadataResolver}
+ * (内部 concurrent map) 与 {@link MethodMetadataResolver}
  * (ThreadLocal 隔离) 保证。
  *
  * @see io.github.davidhlp.spring.cache.redis.cache.RedisProCache

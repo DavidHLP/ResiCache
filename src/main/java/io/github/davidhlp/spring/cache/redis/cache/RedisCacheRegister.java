@@ -2,8 +2,13 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.context.expression.AnnotatedElementKey;
 
@@ -12,25 +17,34 @@ import org.springframework.context.expression.AnnotatedElementKey;
  *
  * <p>Spring operation source 在元素解析阶段写入一个不可变
  * {@link AnnotationParser.ParsedAnnotations} 快照。annotation chain 与策略查询都从
- * 这份快照读取，避免独立索引在淘汰后出现两侧不一致。
+ * 这份快照读取，避免 chain 与 resolver 各自维护索引导致两侧不一致。
  *
- * <p><b>查找键</b> = {@code SNAPSHOT:<elementKey>}，由
- * {@link #buildSnapshotKey(AnnotatedElementKey)} 统一构造。operation 自身的
+ * <p><b>查找键</b> = {@link AnnotatedElementKey} method/target pair. operation 自身的
  * {@code key} 字段(SpEL/字面量)是运行时缓存键的来源,与这里的注册查找键无关。
- *
- * <p>本类<em>直接</em>绑定 {@link TwoListLRU},无中间策略包装。
  */
 @Slf4j
 class RedisCacheRegister {
 
-    private final TwoListLRU<String, AnnotationParser.ParsedAnnotations> snapshotLru;
+    private final Map<AnnotatedElementKey, AnnotationParser.ParsedAnnotations> snapshotsByElement =
+            new ConcurrentHashMap<>();
 
     public RedisCacheRegister() {
-        this(2048, 1024);
     }
 
+    /**
+     * Retains the historical constructor shape used by direct tests. Snapshot lifetime is
+     * intentionally unbounded because it mirrors Spring's memoized operation source.
+     *
+     * @param maxActiveSize ignored compatibility parameter
+     * @param maxInactiveSize ignored compatibility parameter
+     */
     public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
-        this.snapshotLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
+        if (maxActiveSize <= 0) {
+            throw new IllegalArgumentException("maxActiveSize must be positive");
+        }
+        if (maxInactiveSize <= 0) {
+            throw new IllegalArgumentException("maxInactiveSize must be positive");
+        }
     }
 
     /**
@@ -41,24 +55,61 @@ class RedisCacheRegister {
             Class<?> targetClass,
             AnnotationParser.ParsedAnnotations snapshot) {
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        snapshotLru.put(buildSnapshotKey(elementKey), snapshot);
+        snapshotsByElement.put(elementKey, snapshot);
     }
 
     /**
      * Returns the parse result shared by the Spring source and annotation chain.
      */
     public AnnotationParser.ParsedAnnotations getSnapshot(Method method, Class<?> targetClass) {
-        AnnotationParser.ParsedAnnotations snapshot = snapshotLru.get(
-                buildSnapshotKey(new AnnotatedElementKey(method, targetClass)));
-        if (snapshot == null && targetClass != method.getDeclaringClass()) {
-            snapshot = snapshotLru.get(buildSnapshotKey(
-                    new AnnotatedElementKey(method, method.getDeclaringClass())));
+        AnnotationParser.ParsedAnnotations snapshot = findSnapshot(method, targetClass);
+        Method specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
+        if (snapshot == null && !specificMethod.equals(method)) {
+            snapshot = findSnapshot(specificMethod, targetClass);
+        }
+        if (snapshot == null) {
+            snapshot = findInterfaceSnapshot(specificMethod, targetClass, new HashSet<>());
         }
         return snapshot;
     }
 
-    private String buildSnapshotKey(AnnotatedElementKey elementKey) {
-        return "SNAPSHOT:" + elementKey;
+    private AnnotationParser.ParsedAnnotations findSnapshot(Method method, Class<?> targetClass) {
+        AnnotationParser.ParsedAnnotations snapshot = snapshotsByElement.get(
+                new AnnotatedElementKey(method, targetClass));
+        if (snapshot == null) {
+            snapshot = snapshotsByElement.get(
+                    new AnnotatedElementKey(method, method.getDeclaringClass()));
+        }
+        return snapshot;
+    }
+
+    private AnnotationParser.ParsedAnnotations findInterfaceSnapshot(
+            Method method, Class<?> targetClass, Set<Class<?>> visited) {
+        Class<?> type = targetClass;
+        while (type != null) {
+            for (Class<?> interfaceType : type.getInterfaces()) {
+                if (!visited.add(interfaceType)) {
+                    continue;
+                }
+                try {
+                    Method interfaceMethod = interfaceType.getMethod(
+                            method.getName(), method.getParameterTypes());
+                    AnnotationParser.ParsedAnnotations snapshot =
+                            findSnapshot(interfaceMethod, targetClass);
+                    if (snapshot != null) {
+                        return snapshot;
+                    }
+                    snapshot = findInterfaceSnapshot(interfaceMethod, interfaceType, visited);
+                    if (snapshot != null) {
+                        return snapshot;
+                    }
+                } catch (NoSuchMethodException ignored) {
+                    // Continue searching inherited interfaces.
+                }
+            }
+            type = type.getSuperclass();
+        }
+        return null;
     }
 
     // ============================ 注册（单一 seam）============================
@@ -79,8 +130,7 @@ class RedisCacheRegister {
             return;
         }
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        String key = buildSnapshotKey(elementKey);
-        AnnotationParser.ParsedAnnotations existing = snapshotLru.get(key);
+        AnnotationParser.ParsedAnnotations existing = snapshotsByElement.get(elementKey);
         List<CacheOperation> operations = new ArrayList<>();
         List<CacheOperation> policies = new ArrayList<>();
         if (existing != null) {
@@ -97,7 +147,7 @@ class RedisCacheRegister {
                         && existingOperation.getCacheNames().stream()
                         .anyMatch(operation.getCacheNames()::contains));
         operations.add(operation);
-        snapshotLru.put(key,
+        snapshotsByElement.put(elementKey,
                 new AnnotationParser.ParsedAnnotations(operations, policies));
     }
 
@@ -106,12 +156,15 @@ class RedisCacheRegister {
     /**
      * 查询一个缓存操作 —— 从元素快照按 kind + cacheName 过滤。
      *
-     * <p>类型不匹配或未命中视为未命中,返回 {@code null};同一 kind/cacheName 的多次注册
-     * 保持旧 LRU 的覆盖语义,返回最新 operation。
+     * <p>类型不匹配或未命中视为未命中;同一 kind/cacheName 的多次注册
+     * 保持覆盖语义,返回最新 operation。
      */
     @SuppressWarnings("unchecked")
     public <O extends CacheOperation> O get(String name, AnnotatedElementKey elementKey, OperationKind kind) {
-        AnnotationParser.ParsedAnnotations snapshot = snapshotLru.get(buildSnapshotKey(elementKey));
+        Method method = MetadataKeys.extractMethod(elementKey);
+        Class<?> targetClass = MetadataKeys.extractTargetClass(elementKey);
+        AnnotationParser.ParsedAnnotations snapshot =
+                method == null || targetClass == null ? null : getSnapshot(method, targetClass);
         if (snapshot != null) {
             List<CacheOperation> policies = snapshot.policyOperations();
             for (int i = policies.size() - 1; i >= 0; i--) {
