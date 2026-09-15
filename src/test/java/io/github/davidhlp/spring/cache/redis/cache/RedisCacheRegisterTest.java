@@ -64,15 +64,8 @@ class RedisCacheRegisterTest {
 
             assertThat(register).isNotNull();
         }
-
-        @Test
-        @DisplayName("historical sized constructor accepts positive compatibility values")
-        void customSizes_createsSuccessfully() {
-            register = new RedisCacheRegister(100, 50);
-
-            assertThat(register).isNotNull();
-        }
     }
+
 
     @Nested
     @DisplayName("register(CACHEABLE) Tests")
@@ -80,7 +73,7 @@ class RedisCacheRegisterTest {
 
         @BeforeEach
         void setUp() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
         }
 
         @Test
@@ -144,7 +137,7 @@ class RedisCacheRegisterTest {
 
         @BeforeEach
         void setUp() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
         }
 
         @Test
@@ -208,7 +201,7 @@ class RedisCacheRegisterTest {
 
         @BeforeEach
         void setUp() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
         }
 
         @Test
@@ -256,7 +249,7 @@ class RedisCacheRegisterTest {
 
         @BeforeEach
         void setUp() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
         }
 
         @Test
@@ -304,7 +297,7 @@ class RedisCacheRegisterTest {
 
         @BeforeEach
         void setUp() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
         }
 
         @Test
@@ -337,7 +330,7 @@ class RedisCacheRegisterTest {
 
         @BeforeEach
         void setUp() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
         }
 
         @Test
@@ -413,7 +406,7 @@ class RedisCacheRegisterTest {
 
         @BeforeEach
         void setUp() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
         }
 
         @Test
@@ -440,7 +433,7 @@ class RedisCacheRegisterTest {
         @Test
         @DisplayName("operations with special characters in cache name are handled")
         void operationWithSpecialChars_handledCorrectly() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
 
             RedisCacheableOperation operation = RedisCacheableOperation.builder()
                     .name("testOperation")
@@ -458,7 +451,7 @@ class RedisCacheRegisterTest {
         @Test
         @DisplayName("multiple registrations of different operations increments internal size")
         void multipleRegistrations_incrementsSize() {
-            register = new RedisCacheRegister(100, 50);
+            register = new RedisCacheRegister();
 
             for (int i = 0; i < 10; i++) {
                 RedisCacheableOperation operation = RedisCacheableOperation.builder()

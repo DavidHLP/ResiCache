@@ -22,7 +22,7 @@ class AnnotationPolicySnapshotTest {
     @Test
     @DisplayName("operation source parses an element once and both readers reuse its snapshot")
     void operationSourceParsesElementOnceAndReadersReuseSnapshot() throws Exception {
-        RedisCacheRegister register = new RedisCacheRegister(8, 4);
+        RedisCacheRegister register = new RedisCacheRegister();
         CountingAnnotationParser parser = new CountingAnnotationParser();
         RedisCacheOperationSource source = new RedisCacheOperationSource(
                 RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, parser, register);

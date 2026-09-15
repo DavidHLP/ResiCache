@@ -21,7 +21,7 @@ class RedisCacheRegisterAgreementTest {
     @Test
     @DisplayName("multi-cache policy churn cannot make chain and resolver disagree")
     void multiCachePolicyChurn_keepsReadersInAgreement() throws Exception {
-        RedisCacheRegister register = new RedisCacheRegister(1, 1);
+        RedisCacheRegister register = new RedisCacheRegister();
         Method firstMethod = AgreementService.class.getMethod("first", String.class);
         Method secondMethod = AgreementService.class.getMethod("second", String.class);
         Method thirdMethod = AgreementService.class.getMethod("third", String.class);
@@ -65,9 +65,9 @@ class RedisCacheRegisterAgreementTest {
     }
 
     @Test
-    @DisplayName("snapshots remain resolvable after registrations beyond the compatibility capacity")
+    @DisplayName("snapshots remain resolvable after further registrations")
     void snapshotRemainsResolvableAfterFurtherRegistrations() throws Exception {
-        RedisCacheRegister register = new RedisCacheRegister(1, 1);
+        RedisCacheRegister register = new RedisCacheRegister();
         Method anchorMethod = AgreementService.class.getMethod("first", String.class);
         Method secondMethod = AgreementService.class.getMethod("second", String.class);
         Method thirdMethod = AgreementService.class.getMethod("third", String.class);
@@ -100,7 +100,7 @@ class RedisCacheRegisterAgreementTest {
     @Test
     @DisplayName("direct fallback registration merges snapshots containing native operations")
     void directRegistration_mergesForeignOperationTypes() throws Exception {
-        RedisCacheRegister register = new RedisCacheRegister(8, 4);
+        RedisCacheRegister register = new RedisCacheRegister();
         Method method = AgreementService.class.getMethod("first", String.class);
         CacheableOperation.Builder springBuilder = new CacheableOperation.Builder();
         springBuilder.setName("native");

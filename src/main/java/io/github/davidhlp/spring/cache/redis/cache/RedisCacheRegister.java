@@ -32,22 +32,6 @@ class RedisCacheRegister {
     }
 
     /**
-     * Retains the historical constructor shape used by direct tests. Snapshot lifetime is
-     * intentionally unbounded because it mirrors Spring's memoized operation source.
-     *
-     * @param maxActiveSize ignored compatibility parameter
-     * @param maxInactiveSize ignored compatibility parameter
-     */
-    public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
-        if (maxActiveSize <= 0) {
-            throw new IllegalArgumentException("maxActiveSize must be positive");
-        }
-        if (maxInactiveSize <= 0) {
-            throw new IllegalArgumentException("maxInactiveSize must be positive");
-        }
-    }
-
-    /**
      * Registers the immutable parse result for an annotated element.
      */
     public void registerSnapshot(
