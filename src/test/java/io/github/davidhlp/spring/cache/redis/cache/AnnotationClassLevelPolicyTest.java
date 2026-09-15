@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.cache.interceptor.CacheOperation;
+import org.springframework.cache.interceptor.CachePutOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,11 +53,14 @@ class AnnotationClassLevelPolicyTest {
         List<CacheOperation> chainOperations = chain.execute(
                 method, new ClassAnnotatedService(), new Object[]{"id"});
 
-        assertThat(classOperations).singleElement().isInstanceOf(CacheableOperation.class);
+        assertThat(classOperations).extracting(Object::getClass)
+                .containsExactly(CacheableOperation.class, CachePutOperation.class);
         assertThat(chainOperations).isEmpty();
     }
 
     @RedisCacheable(cacheNames = "class-cache", key = "#id", ttl = 99,
+            useBloomFilter = true, sync = true, cacheNullValues = true)
+    @RedisCachePut(cacheNames = "class-put", key = "#id", ttl = 33,
             useBloomFilter = true, sync = true, cacheNullValues = true)
     static class ClassAnnotatedService {
         public String find(String id) {
