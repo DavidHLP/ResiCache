@@ -1,0 +1,14 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationAopBehaviorMatrixTest.java
+  h_77173abe25c3ff 119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5029bf0e9a0109af787bcc43740446dc1146670",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
