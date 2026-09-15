@@ -36,9 +36,9 @@ import static org.mockito.Mockito.when;
  * <p><b>转换边界:</b>
  * <ul>
  *   <li>Redis I/O 协作者(RedisTemplate / ValueOperations)→ 真实 bean(happy-path 场景)。</li>
- *   <li>非 Redis 协作者({@link RefreshCancellation}.cancel 异步刷新取消、{@link CacheErrorHandler}
- *       故障注入)→ 保留 mock:cancel 是非 Redis 副作用验证;errorHandler 测的是 try/catch→
- *       handleError 的接线逻辑。这些不是假阳性(假阳性是伪造 happy-path 的 Redis 行为)。</li>
+ *   <li>非 Redis 协作者({@link RefreshCancellation}.cancel 与 {@link CacheErrorHandler})
+ *       保留 mock 以隔离异步刷新和异常注入;测试通过 handler 返回的 {@link HandlerResult}
+ *       及真实 Redis 状态断言可观察结果。</li>
  *   <li>故障注入异常路径(Redis I/O 抛异常 → errorHandler):真实 Redis 无法模拟"抛异常",
  *       故为这些测试单独构造带 mock I/O 的 handler 实例,保留异常处理分支覆盖。</li>
  * </ul>
