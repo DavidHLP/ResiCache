@@ -288,7 +288,8 @@ final class LoaderOrchestrator {
      *   <li><b>write-back</b>:loader 成功(无论 null 与否)后
      *       {@link BiConsumer#accept 写回}(由 RedisCache 配置处理 null-value 缓存契约);
      *       写回失败 → 抛 {@link WriteBackFailureException}(携带已加载值),由
-     *       {@link #executeLoad} 翻译为 {@link LoadedWithWriteBackFailure},不覆盖业务值</li>
+     *       {@link #executeLoad} 翻译为 {@link LoadedWithWriteBackFailure},不覆盖业务值。
+     *       {@link IllegalArgumentException}(null 缓存未启用等配置错误)不在此列,原样上抛</li>
      * </ol>
      */
     @SuppressWarnings("unchecked")
@@ -311,9 +312,13 @@ final class LoaderOrchestrator {
             throw new Cache.ValueRetrievalException(key, loader, ex);
         }
 
-        // 写回 — 失败时保留 loader 值,以 WriteBackFailureException 冒泡(不吞、不覆盖)
+        // 写回 — 失败时保留 loader 值,以 WriteBackFailureException 冒泡(不吞、不覆盖)。
+        // IllegalArgumentException 例外:那是配置错误(如 disableCachingNullValues() 下 loader
+        // 返回 null),不是「缓存写回失败」,降级成 WARN + 返回值会让错误配置静默 —— 原样抛出。
         try {
             putAfterLoad.accept(key, loaded);
+        } catch (IllegalArgumentException configError) {
+            throw configError;
         } catch (RuntimeException ex) {
             throw new WriteBackFailureException(loaded, ex);
         }

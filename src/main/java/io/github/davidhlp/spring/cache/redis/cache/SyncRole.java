@@ -138,11 +138,23 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                 failure = new IllegalStateException(
                         "Thread interrupted while acquiring distributed lock: keyFingerprint="
                                 + FailureDiagnostics.keyFingerprint(key), e);
+            } catch (final Throwable t) {
+                // Error 等非 RuntimeException:必须记账后再放行,否则 finally 里
+                // completeExceptionally(null) 会抛 NPE 顶掉原始错误,并跳过下面的清理
+                // (reentrantKeys 泄漏 → 该线程此后对该 key 永远走 fast-path 绕过分布式锁)。
+                failure = new IllegalStateException(
+                        "Distributed-lock work failed: keyFingerprint="
+                                + FailureDiagnostics.keyFingerprint(key), t);
+                if (t instanceof Error error) {
+                    throw error;
+                }
             } finally {
                 if (success) {
                     mine.complete(value);
                 } else {
-                    mine.completeExceptionally(failure);
+                    // failure 理论上必非 null(上面已覆盖全部退出路径);兜底避免 NPE 顶掉原始错误
+                    mine.completeExceptionally(failure != null ? failure
+                            : new IllegalStateException("Single-flight leader aborted before completing"));
                 }
                 reentrantKeys.get().remove(key);
                 // 只移除自己发布的 future,避免误删后一个 leader

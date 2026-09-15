@@ -274,10 +274,14 @@ runs it inside `SyncSupport`'s distributed lock.
   primitive → miss → loader → write-back through `RedisProCache.put`) and the
   same tolerance rule. It no longer delegates to Spring's
   `RedisCache.get(key, loader)`, so its write-back carries the same put
-  metrics as the sync path and cannot drift from it. `RedisProCacheWriter`
-  therefore no longer overrides the 5-arg `get`; Spring's own default is
-  unreachable from any production entry point, and the writer is
-  package-private.
+  metrics as the sync path and cannot drift from it.
+  `RedisProCacheWriter` keeps its own 5-arg `get` with the same tolerance,
+  because `Cache.getNativeCache()` is public and hands callers the writer
+  directly — Spring's interface default would discard the loaded bytes.
+- **Configuration errors are not write-back failures**: an
+  `IllegalArgumentException` from the write-back (for example a loader that
+  returns `null` while null caching is disabled) propagates instead of
+  degrading to a warn-and-return, so the misconfiguration is not silent.
 - **Sync path**: `SyncSupport.executeSync` wraps the same `performLoad`, so
   followers share the leader's outcome — including a write-back failure.
 - Loader exceptions propagate as `Cache.ValueRetrievalException` in both
@@ -294,7 +298,10 @@ redacted logs.
 
 **Known limitation**: The cache is a derived acceleration layer, not the
 source of truth — eventual consistency after a failed write-back is accepted.
-A per-write retry/backoff policy is not part of this contract.
+A per-write retry/backoff policy is not part of this contract. The async
+`Cache.retrieve(key, supplier)` entry point is outside this contract: it
+writes back through `store(...)` and completes its future exceptionally on a
+write-back failure.
 
 ## 14. Configuration binding validation
 
@@ -343,7 +350,11 @@ fingerprint rule covers lock acquisition/release, `SyncRole` leader/follower
 failures (logs *and* their `IllegalStateException`/`RuntimeException`
 messages), the async early-expiration retry path, and chain post-processing.
 `DEBUG`/`INFO` sites are outside this rule — they are the tracing channel the
-fingerprint correlates back to.
+fingerprint correlates back to. Throwables follow the same rule: a WARN/ERROR
+line renders the exception **type chain** (`FailureDiagnostics.sanitizedFailure`)
+and the full stack goes to DEBUG, because exception messages can embed the key
+(`Cache.ValueRetrievalException` states it verbatim) and SLF4J prints the
+stack with the message.
 
 **Consequences**: GET degrade, write fail-fast, REMOVE best-effort and
 read-through write-back failures are alertable by bounded tags. The Bloom
@@ -489,20 +500,31 @@ it.
 **Decision**: Resolve the namespace from the chain-side operation
 (`OperationKind.forCacheOperation`, an exhaustive switch): GET reads the
 `@RedisCacheable` declaration, PUT / PUT_IF_ABSENT read `@RedisCachePut`, and
-REMOVE / CLEAN read `@RedisCacheEvict` (eviction metadata carries no chain-side
-policy, so it resolves to "no method-level policy"). A write that finds nothing
-in its own namespace falls back to `CACHEABLE`, because a read-through
-write-back is the write side of a `@RedisCacheable` method and must keep that
-method's policy. When a method declares both, the write side takes the
-`@RedisCachePut` declaration — one annotation, one meaning.
+REMOVE / CLEAN have no policy namespace at all, so no lookup is attempted.
+
+The read declaration wins whenever the method has one: read-through write-back
+is part of the read operation and must keep that method's `ttl`,
+`cacheNullValues` and Bloom declaration rather than picking up the write
+annotation's defaults. `@RedisCachePut` therefore supplies policy only for
+methods that are write-only. Distinguishing "the write-back of a read" from "an
+explicit put" inside the chain is not possible — both reach the writer as
+`CacheOperation.PUT` — so one of the two has to be the method's policy, and the
+read side is the one that also governs the cache entry's lifetime.
+
+Writes inside the lock take `SyncSupport.executeExclusive` rather than the
+single-flight `executeSync`: a write must never join another request's
+in-flight result, because the joining thread would then skip its own work and
+still report success.
 
 The chain consumes the stable `CachePolicyView.Source` rather than the internal
 operation classes, and `RedisProCacheWriter`'s five-argument `put` (whose only
 caller was a test) is deleted.
 
-**Consequences**: every declared attribute now reaches the chain for the
-operation it was declared on. Methods that declare both `@RedisCacheable` and
-`@RedisCachePut` with different TTLs now apply the write-side TTL to writes.
+**Consequences**: a method annotated only with `@RedisCachePut` now honours its
+`ttl`, `useBloomFilter`, `sync`, `cacheNullValues` and early-expiration
+attributes — including `ttl()`, whose annotation default is 60 seconds and
+therefore now applies where the cache-level TTL used to. Methods that declare
+both annotations are unchanged from before this decision.
 
 **Known limitation**: the annotations are still parsed twice — once by the
 Spring cache-operation source for the AOP operations, once per invocation by

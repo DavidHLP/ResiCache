@@ -238,6 +238,32 @@ class ChainEngineTest {
         }
 
         @Test
+        @DisplayName("continuation:推进后仍返回 CONTINUE → 协议异常(否则后继会跑第二遍)")
+        void continuation_advanceThenContinue_isRejected() {
+            List<String> visits = new ArrayList<>();
+            CacheHandler offending = new CacheHandler() {
+                @Override
+                public HandlerResult handle(CacheContext context) {
+                    throw new AssertionError("engine must call the 2-arg form");
+                }
+
+                @Override
+                public HandlerResult handle(CacheContext context, ChainContinuation next) {
+                    next.advance();
+                    return HandlerResult.continueChain();
+                }
+            };
+            installChain(offending, new RecordingHandler("h1", visits, HandlerResult.continueChain()));
+
+            assertThatThrownBy(() -> engine.execute(snapshot, newCtx()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("returned CONTINUE");
+            assertThat(visits)
+                    .as("后继只跑一次(第二次由协议异常挡下)")
+                    .containsExactly("h1");
+        }
+
+        @Test
         @DisplayName("continuation:链尾节点的句柄推进 → success(无后继)")
         void continuation_lastNode_advanceReturnsSuccess() {
             CacheHandler[] tail = new CacheHandler[1];
@@ -252,7 +278,8 @@ class ChainEngineTest {
                 public HandlerResult handle(CacheContext context, ChainContinuation next) {
                     CacheResult remainder = next.advance();
                     visits.add("remainder-success=" + remainder.isSuccess());
-                    return HandlerResult.continueChain();
+                    // 推进后必须以 TERMINATE 收尾(引擎拒绝 advance-then-CONTINUE)
+                    return HandlerResult.terminate(remainder);
                 }
             };
             installChain(tail[0]);
@@ -261,6 +288,8 @@ class ChainEngineTest {
 
             assertThat(visits).containsExactly("remainder-success=true");
         }
+
+        @Test
         @DisplayName("handler 异常时 onNodeEnd 仍配对且 result 为 null")
         void handlerThrows_nodeScopeStillCloses() {
             NodeTokenRecordingObserver observer = new NodeTokenRecordingObserver();

@@ -100,6 +100,40 @@ class RedisDownFaultInjectionIntegrationTest extends AbstractRedisIntegrationTes
         assertThat(result).isNull();
     }
 
+    @Test
+    @DisplayName("RedisDown-4: writer-level read-through keeps the loaded bytes on write-back failure (ADR-02)")
+    void redisDown_writerReadThrough_loaderValueSurvivesWriteBackFailure() {
+        // writer 级入口(getNativeCache() 可达):缓存读 miss → loader 成功 → 写回失败。
+        // availability-first:必须返回 loader 值,不得被写回失败覆盖。
+        byte[] result = writer.get(
+                "testCache",
+                "fault-injection-loader-key".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                () -> "\"loaded-data\"".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                null,
+                false);
+
+        assertThat(result).isNotNull();
+        assertThat(new String(result, java.nio.charset.StandardCharsets.UTF_8))
+                .as("loader 成功值必须穿透写回失败返回")
+                .isEqualTo("\"loaded-data\"");
+    }
+
+    @Test
+    @DisplayName("RedisDown-5: writer-level loader failure still surfaces")
+    void redisDown_writerLoaderFailure_stillSurfaces() {
+        IllegalStateException loaderBoom = new IllegalStateException("business loader failed");
+        assertThatThrownBy(() -> writer.get(
+                "testCache",
+                "fault-injection-loader-fail-key".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                () -> {
+                    throw loaderBoom;
+                },
+                null,
+                false))
+                .as("loader 失败是用户可见失败,不得被吞或降级为 null")
+                .isSameAs(loaderBoom);
+    }
+
     /**
      * 故障注入测试用 Redis 不可达配置。
      * <p>用 {@code @Primary} 覆盖 {@link RedisConnectionFactory} bean — 启动时

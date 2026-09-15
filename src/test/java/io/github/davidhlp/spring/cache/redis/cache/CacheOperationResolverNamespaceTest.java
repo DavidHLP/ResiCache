@@ -99,23 +99,27 @@ class CacheOperationResolverNamespaceTest {
     }
 
     @Test
-    @DisplayName("同方法两种声明时,写侧取 @RedisCachePut(一种注解一种含义)")
-    void bothDeclarations_writeTakesPutDeclaration() {
+    @DisplayName("同方法两种声明时,读侧声明优先 —— 读穿透写回不得被写侧默认值改写")
+    void bothDeclarations_readDeclarationWins() {
         register.register(method(), CacheOperationResolverNamespaceTest.class, cacheable(300),
                 OperationKind.CACHEABLE);
         register.register(method(), CacheOperationResolverNamespaceTest.class, put(60),
                 OperationKind.CACHE_PUT);
 
         assertThat(resolver.resolve(CACHE, CacheOperation.GET).getTtl()).isEqualTo(300L);
-        assertThat(resolver.resolve(CACHE, CacheOperation.PUT).getTtl()).isEqualTo(60L);
+        assertThat(resolver.resolve(CACHE, CacheOperation.PUT).getTtl())
+                .as("写回是读操作的一部分:沿用 @RedisCacheable 的 ttl / cacheNullValues")
+                .isEqualTo(300L);
     }
 
     @Test
-    @DisplayName("REMOVE/CLEAN 无策略可解析(驱逐元数据不携带 chain 侧策略)")
+    @DisplayName("REMOVE/CLEAN 无策略命名空间(不查,也不回退到写侧)")
     void evictOperations_resolveNothing() {
         register.register(method(), CacheOperationResolverNamespaceTest.class, put(60),
                 OperationKind.CACHE_PUT);
 
+        assertThat(OperationKind.forCacheOperation(CacheOperation.REMOVE)).isNull();
+        assertThat(OperationKind.forCacheOperation(CacheOperation.CLEAN)).isNull();
         assertThat(resolver.resolve(CACHE, CacheOperation.REMOVE)).isNull();
         assertThat(resolver.resolve(CACHE, CacheOperation.CLEAN)).isNull();
     }

@@ -78,7 +78,10 @@ class DistributedLockManager implements LockManager {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             // ADR-0001 §15 key 隐私:ERROR 与异常 message 均不带 raw key
-            log.error("Interrupted while waiting for distributed lock: keyFingerprint={}",
+            log.error("Interrupted while waiting for distributed lock: keyFingerprint={}, cause={}",
+                    FailureDiagnostics.keyFingerprint(key),
+                    FailureDiagnostics.sanitizedFailure(e));
+            log.debug("Distributed lock wait interrupted detail: keyFingerprint={}",
                     FailureDiagnostics.keyFingerprint(key), e);
             throw new RuntimeException("Interrupted while waiting for distributed lock: keyFingerprint="
                     + FailureDiagnostics.keyFingerprint(key), e);
@@ -176,8 +179,12 @@ class DistributedLockManager implements LockManager {
                 } catch (Exception e) {
                     if (attempt == MAX_UNLOCK_RETRIES) {
                         // ADR-0001 §15 key 隐私:ERROR/WARN 只带 keyFingerprint
-                        log.error("Failed to release distributed lock after {} attempts: keyFingerprint={}",
+                        log.error("Failed to release distributed lock after {} attempts: "
+                                        + "keyFingerprint={}, cause={}",
                                 MAX_UNLOCK_RETRIES,
+                                FailureDiagnostics.keyFingerprint(key),
+                                FailureDiagnostics.sanitizedFailure(e));
+                        log.debug("Distributed lock release failure detail: keyFingerprint={}",
                                 FailureDiagnostics.keyFingerprint(key), e);
                         return;
                     }
@@ -189,8 +196,9 @@ class DistributedLockManager implements LockManager {
                         Thread.sleep(UNLOCK_RETRY_INTERVAL_MS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.error("Interrupted while retrying lock release: keyFingerprint={}",
-                                FailureDiagnostics.keyFingerprint(key), ie);
+                        log.error("Interrupted while retrying lock release: keyFingerprint={}, cause={}",
+                                FailureDiagnostics.keyFingerprint(key),
+                                FailureDiagnostics.sanitizedFailure(ie));
                         return;
                     }
                 }

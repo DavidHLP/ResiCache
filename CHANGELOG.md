@@ -89,13 +89,25 @@ Current milestones:
   lock acquire/release, `SyncRole` leader/follower failures, the async
   early-expiration retry path, chain post-processing, and the migration
   engine's fingerprint helper (now one implementation).
-- ⚠️ **`@RedisCachePut` / `@RedisCacheEvict` metadata now resolves** — the chain
-  used to read only the `@RedisCacheable` namespace, so a method annotated only
-  with `@RedisCachePut` ran without its `ttl`, `useBloomFilter`, `sync`,
-  `cacheNullValues` and early-expiration attributes. Each operation now reads
-  its own declaration, with a write-side fallback to the `@RedisCacheable`
-  declaration so read-through write-backs keep the read method's policy. A
-  method declaring both now applies the `@RedisCachePut` TTL to writes.
+- ⚠️ **`@RedisCachePut` metadata now resolves** — the chain used to read only
+  the `@RedisCacheable` namespace, so a method annotated only with
+  `@RedisCachePut` ran without its `ttl`, `useBloomFilter`, `sync`,
+  `cacheNullValues` and early-expiration attributes (a writer that never filled
+  the Bloom filter could leave a Bloom-enabled reader judging the key
+  "definitely missing"). Write-only methods now honour their own declaration —
+  including `ttl()`, whose annotation default is 60 seconds, so such a method's
+  entries now expire after 60s where the cache-level TTL used to apply. A
+  method that also declares `@RedisCacheable` keeps using the read-side
+  declaration, because the read-through write-back is part of the read
+  operation.
+- **Concurrent writes are no longer merged** — a write inside the distributed
+  lock takes an exclusive path instead of single-flight: joining another
+  request's in-flight result would skip this request's write while still
+  reporting success. Reads keep the single-flight behaviour.
+- **WARN/ERROR render exception types, not stacks** — the redaction rule now
+  covers throwables too (a stack trace prints its message, and
+  `Cache.ValueRetrievalException` embeds the raw key); the full stack stays at
+  DEBUG.
 - **One early-refresh module** — the read → decision → schedule → TTL-shortening
   CAS cycle moved out of the chain handler into `EarlyRefresh`.
   `EarlyExpirationHandler` is now a thin chain adapter: it asks the module for

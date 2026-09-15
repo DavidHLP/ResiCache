@@ -489,6 +489,30 @@ class LoaderOrchestratorTest {
         }
 
         @Test
+        @DisplayName("写回抛 IllegalArgumentException(配置错误) → 原样上抛,不降级为写回失败")
+        void writeBackConfigurationError_propagates() {
+            RedisCacheableOperation op = operation(false, false);
+            IllegalArgumentException misconfiguration = new IllegalArgumentException(
+                    "Cache 'testCache' does not allow 'null' values");
+
+            LoadOutcome<String> outcome = orchestrator.orchestrate(
+                    "testCache",
+                    key -> testRedisKey,
+                    k -> null,
+                    (k, v) -> {
+                        throw misconfiguration;
+                    },
+                    () -> null,
+                    "key1",
+                    op);
+
+            assertThat(outcome)
+                    .as("null 缓存未启用是配置错误,必须走 LoadFailed(调用方上抛),不是写回容错")
+                    .isInstanceOf(LoadFailed.class);
+            assertThat(((LoadFailed<String>) outcome).cause()).isSameAs(misconfiguration);
+        }
+
+        @Test
         @DisplayName("write-back fails after loader success → LoadedWithWriteBackFailure (ADR-02 同 sync 路径)")
         void writeBackFails_defaultPathReturnsLoadedWithWriteBackFailure() {
             RedisCacheableOperation op = operation(false, false);
