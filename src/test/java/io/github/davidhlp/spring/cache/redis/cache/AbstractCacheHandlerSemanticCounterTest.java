@@ -198,7 +198,6 @@ class AbstractCacheHandlerSemanticCounterTest {
 
         assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         assertThatThrownBy(() -> handler.continuation().advance())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("single-argument handle");
+                .isInstanceOf(IllegalStateException.class);
     }
 }

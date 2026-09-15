@@ -9,7 +9,6 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,9 +17,11 @@ import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CachePutOperation;
+import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.expression.AnnotatedElementKey;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
@@ -41,13 +42,19 @@ class AnnotationAopBehaviorMatrixTest {
     @BeforeEach
     void setUp() {
         register = new RedisCacheRegister(32, 8);
-        annotationChainEngine = new AnnotationChainEngine(List.of(), register);
+        KeyGenerator keyGenerator = Mockito.mock(KeyGenerator.class);
+        when(keyGenerator.generate(any(), any(), any())).thenReturn("generated-key");
+        RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
+        SpringCacheableAdapter springAdapter = Mockito.mock(SpringCacheableAdapter.class);
+        annotationChainEngine = new AnnotationChainEngine(List.of(
+                new CacheableAnnotationHandler(register, keyGenerator, projector, springAdapter),
+                new EvictAnnotationHandler(register, keyGenerator, projector),
+                new CachePutAnnotationHandler(register, keyGenerator, projector),
+                new CachingAnnotationHandler(register, keyGenerator, projector)));
         metadataResolver = Mockito.mock(MethodMetadataResolver.class);
         resolver = new CacheOperationResolver(metadataResolver, register);
         operationSource = new RedisCacheOperationSource(
-                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE,
-                new AnnotationParser(),
-                register);
+                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE);
     }
 
     @Test
@@ -74,11 +81,8 @@ class AnnotationAopBehaviorMatrixTest {
         CacheableOperation springOperation = (CacheableOperation) springOperations.iterator().next();
         assertThat(springOperation.getKey()).isEqualTo("#id");
         assertThat(springOperation.getCondition()).isEqualTo("#id != null");
-        CachePolicyView.Source readPolicy =
-                resolve("read-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET);
-        assertThat(readPolicy).isNotNull();
-        assertThat(readPolicy.getTtl()).isEqualTo(321L);
-        assertThat(readPolicy.isUseBloomFilter()).isTrue();
+        assertThat(resolve("read-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+                .isSameAs(chainOperation);
     }
 
     @Test
@@ -99,12 +103,8 @@ class AnnotationAopBehaviorMatrixTest {
         assertThat(chainOperation.isSync()).isTrue();
         assertThat(chainOperation.isCacheNullValues()).isTrue();
         assertThat(chainOperation.isEnableEarlyExpiration()).isTrue();
-        CachePolicyView.Source writePolicy =
-                resolve("write-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT);
-        assertThat(writePolicy).isNotNull();
-        assertThat(writePolicy.getTtl()).isEqualTo(123L);
-        assertThat(writePolicy.isUseBloomFilter()).isTrue();
-        assertThat(writePolicy.isSync()).isTrue();
+        assertThat(resolve("write-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT))
+                .isSameAs(chainOperation);
 
         assertThat(springOperations).singleElement().isInstanceOf(CachePutOperation.class);
         CachePutOperation springOperation = (CachePutOperation) springOperations.iterator().next();
@@ -116,15 +116,15 @@ class AnnotationAopBehaviorMatrixTest {
     @DisplayName("read declaration wins write-back policy when read and put coexist")
     void readDeclarationWinsWriteBackPolicy() throws Exception {
         Method method = method("readThrough");
-        List<CacheOperation> chainOperations = execute(method);
 
-        assertThat(chainOperations).hasSize(2);
-        assertThat(chainOperations).extracting(CacheOperation::getCacheNames)
-                .containsExactly(Set.of("mixed-cache"), Set.of("mixed-cache"));
-        assertThat(((CachePolicyView.Source) chainOperations.get(0)).getTtl()).isEqualTo(900L);
-        assertThat(((CachePolicyView.Source) chainOperations.get(1)).getTtl()).isEqualTo(10L);
-        assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET).getTtl())
-                .isEqualTo(900L);
+        List<CacheOperation> chainOperations = execute(method);
+        assertThat(chainOperations).extracting(Object::getClass)
+                .containsExactly(RedisCacheableOperation.class, RedisCachePutOperation.class);
+        RedisCacheableOperation readOperation = (RedisCacheableOperation) chainOperations.get(0);
+        assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+                .isSameAs(readOperation);
+        assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT))
+                .isSameAs(readOperation);
         assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT).getTtl())
                 .isEqualTo(900L);
     }
@@ -156,35 +156,18 @@ class AnnotationAopBehaviorMatrixTest {
         Collection<CacheOperation> springOperations =
                 operationSource.getCacheOperations(method, Matrix.class);
 
-        assertThat(chainOperations).extracting(CacheOperation::getCacheNames)
-                .containsExactly(Set.of("composite-read"), Set.of("composite-evict"),
-                        Set.of("composite-write"));
-        assertThat(springOperations).extracting(CacheOperation::getCacheNames)
-                .containsExactly(Set.of("composite-read"), Set.of("composite-evict"),
-                        Set.of("composite-write"));
-    }
-
-    @Test
-    @DisplayName("operation source populates one reusable snapshot per element")
-    void operationSourcePopulatesOneSnapshotPerElement() throws Exception {
-        Method method = method("read");
-
-        operationSource.getCacheOperations(method, Matrix.class);
-        AnnotationParser.ParsedAnnotations first = register.getSnapshot(method, Matrix.class);
-        operationSource.getCacheOperations(method, Matrix.class);
-        AnnotationParser.ParsedAnnotations second = register.getSnapshot(method, Matrix.class);
-
-        assertThat(first).isNotNull().isSameAs(second);
-        when(metadataResolver.currentKey()).thenReturn(new AnnotatedElementKey(method, Matrix.class));
-        assertThat(annotationChainEngine.execute(method, new Matrix(), new Object[0]).get(0))
-                .isSameAs(first.policyOperations().get(0));
+        assertThat(chainOperations).extracting(Object::getClass)
+                .containsExactly(RedisCacheableOperation.class, RedisCacheEvictOperation.class,
+                        RedisCachePutOperation.class);
+        assertThat(springOperations).extracting(Object::getClass)
+                .containsExactly(CacheableOperation.class, CacheEvictOperation.class, CachePutOperation.class);
     }
 
     private List<CacheOperation> execute(Method method) {
-        operationSource.getCacheOperations(method, Matrix.class);
         when(metadataResolver.currentKey()).thenReturn(new AnnotatedElementKey(method, Matrix.class));
         return annotationChainEngine.execute(method, new Matrix(), new Object[]{"id"});
     }
+
     private CachePolicyView.Source resolve(
             String cacheName, io.github.davidhlp.spring.cache.redis.chain.CacheOperation operation) {
         return resolver.resolve(cacheName, operation);

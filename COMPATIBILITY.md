@@ -99,6 +99,7 @@ not require a cache flush.
   intentionally ignores `cacheTti`; native reads do not refresh TTL because
   refresh-on-read would add write amplification. Use ordinary TTL semantics on
   this low-level SPI path.
+- **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; this behavior is unchanged from `main`.
 - **Refresh metadata**: the version-2 envelope persists the fields required by
   early-expiration policy and version CAS (`ttl`, `createdTime`, access/visit
   counters, `expired`, and `version`). `startNanoTime` is process-local and is
