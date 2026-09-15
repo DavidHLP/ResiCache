@@ -95,6 +95,10 @@ not require a cache flush.
   (type and cause preserved; the diagnostic key is reduced to cache name);
   exception text carries no raw key — the checked-exception wrapper names the
   cache only.
+- **Native writer time-to-idle reads**: `RedisCacheWriter.get(..., cacheTti)`
+  intentionally ignores `cacheTti`; native reads do not refresh TTL because
+  refresh-on-read would add write amplification. Use ordinary TTL semantics on
+  this low-level SPI path.
 - **Refresh metadata**: the version-2 envelope persists the fields required by
   early-expiration policy and version CAS (`ttl`, `createdTime`, access/visit
   counters, `expired`, and `version`). `startNanoTime` is process-local and is
