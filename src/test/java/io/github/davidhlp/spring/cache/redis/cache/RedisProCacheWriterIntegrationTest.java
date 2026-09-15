@@ -113,20 +113,13 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
         }
 
         @Test
-        @DisplayName("put with operation persists value (operation config flows through chain)")
-        void put_withOperation_persistsValue() {
+        @DisplayName("put persists the value through the chain (SDR entry point)")
+        void put_persistsValue() {
             byte[] value = typeSupport.serializeToBytes("value");
-            Duration ttl = Duration.ofSeconds(60);
-            RedisCacheableOperation operation = RedisCacheableOperation.builder()
-                    .name("testMethod")
-                    .cacheNames(NAME)
-                    .key("key1")
-                    .build();
 
-            writer.put(NAME, KEY, value, ttl, operation);
+            writer.put(NAME, KEY, value, Duration.ofSeconds(60));
 
-            // 真实:operation 配置经链生效,值持久化(原版断言 ctx.getCacheOperation()==operation,
-            // 此处验证其副作用 —— 值确实落盘)
+            // 真实:写入经链落盘;CachedValue 包装携带 ttl/createdTime 供提前过期使用
             assertThat(redisTemplate.hasKey(REDIS_KEY)).isTrue();
             Object stored = valueOperations.get(REDIS_KEY);
             assertThat(stored).isInstanceOf(CachedValue.class);

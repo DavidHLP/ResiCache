@@ -49,4 +49,27 @@ enum OperationKind {
     public Class<? extends CacheOperation> operationType() {
         return operationType;
     }
+
+    /**
+     * 链侧操作 → 注册命名空间 —— {@code register} 查询的唯一映射点。
+     *
+     * <p>exhaustive {@code switch}(无 default)使新增 {@link CacheOperation} 时编译期失败,
+     * 而不是运行期静默解析不出策略。
+     *
+     * <p>{@link CacheOperation#REMOVE} / {@link CacheOperation#CLEAN} 映射到
+     * {@link #CACHE_EVICT}:驱逐元数据不含 chain 侧策略(无 TTL 写入、无 bloom 回填),
+     * 查询结果按「无方法级策略」处理。
+     *
+     * @param operation 链侧操作类型({@code chain.CacheOperation},与本文件已 import 的
+     *                  Spring {@code CacheOperation} 同名,故用全限定名)
+     * @return 该操作应查询的注册命名空间
+     */
+    public static OperationKind forCacheOperation(
+            io.github.davidhlp.spring.cache.redis.chain.CacheOperation operation) {
+        return switch (operation) {
+            case GET -> CACHEABLE;
+            case PUT, PUT_IF_ABSENT -> CACHE_PUT;
+            case REMOVE, CLEAN -> CACHE_EVICT;
+        };
+    }
 }

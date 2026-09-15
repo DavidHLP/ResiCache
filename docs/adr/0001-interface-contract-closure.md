@@ -474,3 +474,38 @@ a compatibility shim until a real external implementation justifies a migration.
 
 **Consequences**: callers receive a smaller production seam and cannot mutate
 chain input bytes; no new public SPI or runtime reconfiguration is introduced.
+
+## 24. Per-operation policy resolution
+
+**Context**: The chain asked `RedisCacheRegister` for one namespace only
+(`CACHEABLE`). `@RedisCachePut` and `@RedisCacheEvict` declarations were
+registered but never read back, so a method annotated only with
+`@RedisCachePut` silently ran without its `ttl`, `useBloomFilter`, `sync`,
+`cacheNullValues` or early-expiration attributes — a write that never filled
+the Bloom filter could then be judged "definitely missing" by a reader that
+enabled Bloom, and the read would answer from nothing until a loader refilled
+it.
+
+**Decision**: Resolve the namespace from the chain-side operation
+(`OperationKind.forCacheOperation`, an exhaustive switch): GET reads the
+`@RedisCacheable` declaration, PUT / PUT_IF_ABSENT read `@RedisCachePut`, and
+REMOVE / CLEAN read `@RedisCacheEvict` (eviction metadata carries no chain-side
+policy, so it resolves to "no method-level policy"). A write that finds nothing
+in its own namespace falls back to `CACHEABLE`, because a read-through
+write-back is the write side of a `@RedisCacheable` method and must keep that
+method's policy. When a method declares both, the write side takes the
+`@RedisCachePut` declaration — one annotation, one meaning.
+
+The chain consumes the stable `CachePolicyView.Source` rather than the internal
+operation classes, and `RedisProCacheWriter`'s five-argument `put` (whose only
+caller was a test) is deleted.
+
+**Consequences**: every declared attribute now reaches the chain for the
+operation it was declared on. Methods that declare both `@RedisCacheable` and
+`@RedisCachePut` with different TTLs now apply the write-side TTL to writes.
+
+**Known limitation**: the annotations are still parsed twice — once by the
+Spring cache-operation source for the AOP operations, once per invocation by
+the annotation chain engine that feeds the register. Merging those into one
+parse per element key is a separate change with its own AOP-behavior risk; the
+register is written per invocation and read per invocation meanwhile.

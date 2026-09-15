@@ -8,6 +8,8 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
 import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
+import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.util.concurrent.Callable;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
@@ -43,7 +45,7 @@ public class RedisProCache extends RedisCache {
      */
     private final RedisProCacheMetricsRegistry metricsRegistry;
 
-    /** 方法级 operation 元数据解析器 — 仅 lookupOperation 使用;null 时关闭元数据查找。 */
+    /** 方法级策略解析器 — 仅 lookupPolicy 使用;null 时关闭元数据查找。 */
     private final CacheOperationResolver operationResolver;
 
     /**
@@ -149,7 +151,7 @@ public class RedisProCache extends RedisCache {
     @Override
     public <T> T get(Object key, Callable<T> loader) {
         return metricsRegistry.recordGet(() -> {
-            RedisCacheableOperation operation = lookupOperation();
+            CachePolicyView.Source operation = lookupPolicy();
             LoadOutcome<T> outcome = loaderOrchestrator.orchestrate(getName(), loader, key, operation);
             return switch (outcome) {
                 case LoaderOrchestrator.BloomShortCircuited<T> ignored -> {
@@ -217,13 +219,19 @@ public class RedisProCache extends RedisCache {
     }
 
     /**
-     * 查找当前方法的缓存操作元数据 —— 1 行委派。
+     * 查找当前方法在本 cache 上的策略视图 —— 1 行委派。
      *
-     * <p>委派 {@link CacheOperationResolver#resolve(String)}。{@code operationResolver}
-     * 为 null 时直接返回 null(测试场景关闭元数据查找)。
+     * <p>委派 {@link CacheOperationResolver#resolve(String, CacheOperation)}:loader 路径
+     * 恒为 GET 操作,故查 {@code @RedisCacheable} 命名空间。{@code operationResolver} 为 null
+     * 时直接返回 null(测试场景关闭元数据查找)。
+     *
+     * <p>返回稳定 {@link CachePolicyView.Source} 而非内部 operation 类型:链侧需要的只是
+     * 策略字段(ttl / bloom / sync / …)。
      */
-    private RedisCacheableOperation lookupOperation() {
-        return operationResolver == null ? null : operationResolver.resolve(getName());
+    private CachePolicyView.Source lookupPolicy() {
+        return operationResolver == null
+                ? null
+                : operationResolver.resolve(getName(), CacheOperation.GET);
     }
 
     @Override

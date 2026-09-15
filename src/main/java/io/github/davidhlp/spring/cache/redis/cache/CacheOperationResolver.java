@@ -5,6 +5,8 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.util.Map;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
@@ -18,10 +20,11 @@ import org.springframework.lang.Nullable;
  *
  * <p><b>problem</b>:"读 ThreadLocal AnnotatedElementKey → 查 RedisCacheRegister"协议若在
  * {@code RedisProCache} 与 {@code RedisProCacheWriter} 各持一份,两处 4 行近镜像任一写错
- * (null-safe 漏检查、log tag 漂移、key derivation 不一致),另一边静默失效。
+ * (null-safe 漏检查、log tag 漂移、查询命名空间不一致),另一边静默失效。
  *
  * <p><b>solution</b>:本类把"读 ThreadLocal key → 查 register"协议收口到单一 seam,
- * 两个调用方简化为 {@code resolver.resolve(cacheName)},null-safe + 日志在一处。
+ * 两个调用方简化为 {@code resolver.resolve(cacheName, operation)},null-safe + 命名空间
+ * 选择 + 日志在一处。
  *
  * <p><b>deletion test</b>:删本类 → 两调用方各自重新实现 4 行镜像;ThreadLocal 协议与
  * 日志形式在两处独立漂移。本 seam 挣得起存在代价。
@@ -68,28 +71,51 @@ class CacheOperationResolver {
      *   <li>查 register;未命中 → 记 debug 日志,返回 null</li>
      * </ol>
      *
+     * <p>按<b>当前链侧操作</b>选择注册命名空间(见 {@link OperationKind#forCacheOperation}):
+     * GET 查 {@code @RedisCacheable},PUT / PUT_IF_ABSENT 查 {@code @RedisCachePut},
+     * REMOVE / CLEAN 查 {@code @RedisCacheEvict}。写路径在自身命名空间未命中时回退查
+     * CACHEABLE —— 读穿透的写回由 {@code @RedisCacheable} 方法承担,其写侧没有独立的
+     * {@code @RedisCachePut} 声明,回退保证该场景策略不丢。
+     *
      * @param cacheName 缓存名(由调用方解析为 {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCache#getName()}
      *                   或 Spring Cache 抽象传入)
-     * @return 命中的 {@link RedisCacheableOperation};未命中返回 null
+     * @param operation 当前链侧操作类型(决定查询哪个命名空间)
+     * @return 命中的方法级策略视图;未命中返回 null
      */
     @Nullable
-    public RedisCacheableOperation resolve(@Nullable String cacheName) {
-        if (methodResolver == null) {
+    public CachePolicyView.Source resolve(@Nullable String cacheName, CacheOperation operation) {
+        if (methodResolver == null || register == null) {
             return null;
         }
         AnnotatedElementKey key = methodResolver.currentKey();
         if (key == null) {
             return null;
         }
-        if (register == null) {
-            return null;
+
+        CachePolicyView.Source resolved = lookup(cacheName, key,
+                OperationKind.forCacheOperation(operation));
+        if (resolved == null && operation.isWrite()) {
+            // 读穿透写回:@RedisCacheable 方法的写侧策略来自读侧声明
+            resolved = lookup(cacheName, key, OperationKind.CACHEABLE);
         }
-        RedisCacheableOperation operation = register.get(cacheName, key, OperationKind.CACHEABLE);
-        if (operation == null) {
-            log.debug("No metadata resolved for cacheName={}, elementKey={}",
-                    cacheName, key);
+
+        if (resolved == null) {
+            log.debug("No metadata resolved for cacheName={}, elementKey={}, operation={}",
+                    cacheName, key, operation);
         }
-        return operation;
+        return resolved;
+    }
+
+    /**
+     * 单次命名空间查询 —— 未命中或类型不实现 {@link CachePolicyView.Source}(如驱逐操作)
+     * 时返回 null。
+     */
+    @Nullable
+    private CachePolicyView.Source lookup(String cacheName, AnnotatedElementKey key,
+                                          OperationKind kind) {
+        org.springframework.cache.interceptor.CacheOperation registered =
+                register.get(cacheName, key, kind);
+        return registered instanceof CachePolicyView.Source source ? source : null;
     }
 
     /**

@@ -9,6 +9,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -118,37 +119,6 @@ class RedisProCacheWriter implements RedisCacheWriter {
                                 snapshot, mdcSnapshot, () -> get(name, key, ttl)));
     }
 
-    /**
-     * 带操作配置的 put 方法（从 RedisProCache 调用）
-     *
-     * @param name 缓存名称
-     * @param key 缓存key
-     * @param value 缓存值
-     * @param ttl TTL
-     * @param operation 缓存操作配置
-     */
-    public void put(
-            @NonNull String name,
-            @NonNull byte[] key,
-            @NonNull byte[] value,
-            @Nullable Duration ttl,
-            @NonNull RedisCacheableOperation operation) {
-        String redisKey = typeSupport.bytesToString(key);
-        String actualKey = extractActualKey(name, redisKey);
-
-        // 序列化错误在 Redis 链之前保留为 SerializationException,与 Redis failure
-        // taxonomy 分离;链内 Redis failure 由 requireSuccessful 转换。
-        Object deserializedValue = typeSupport.deserializeFromBytes(value);
-
-        // 构建上下文(带操作配置)—— operation 已传入,直接走 buildContext,跳过 register 查询
-        CacheContext context = buildContext(
-                CacheOperation.PUT, name, redisKey, actualKey,
-                value, deserializedValue, ttl, operation, null);
-
-        CacheResult result = getChain().execute(context);
-        requireSuccessful(CacheOperation.PUT, name, redisKey, result);
-    }
-
     @Override
     public void put(
             @NonNull String name,
@@ -210,7 +180,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
         // 构建上下文 —— keyPattern 前置进 buildContext,避免后置 mutate
         CacheContext context = buildContext(
                 CacheOperation.CLEAN, name, keyPattern, actualKey,
-                null, null, null, resolveOperation(name), keyPattern);
+                null, null, null, resolveOperation(name, CacheOperation.CLEAN), keyPattern);
 
         CacheResult result = getChain().execute(context);
         requireSuccessful(CacheOperation.CLEAN, name, keyPattern, result);
@@ -243,17 +213,18 @@ class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 解析方法级 operation 配置(布隆/同步锁/TTL/空值等)—— 1 行委派。
+     * 解析方法级策略(布隆/同步锁/TTL/空值等)—— 1 行委派。
      *
      * <p>委派 {@link CacheOperationResolver#resolve(String)};{@code operationResolver} 为 null
      * 时直接返回 null(测试场景关闭元数据查找)。
      *
      * @param cacheName 缓存名称
-     * @return 命中的 operation;无元数据或未命中返回 null
+     * @param operation 当前链侧操作(决定查询的注册命名空间)
+     * @return 命中的策略视图;无元数据或未命中返回 null
      */
     @Nullable
-    private RedisCacheableOperation resolveOperation(@NonNull String cacheName) {
-        return operationResolver == null ? null : operationResolver.resolve(cacheName);
+    private CachePolicyView.Source resolveOperation(@NonNull String cacheName, CacheOperation operation) {
+        return operationResolver == null ? null : operationResolver.resolve(cacheName, operation);
     }
 
     /**
@@ -271,7 +242,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
      * @param valueBytes 值字节数组(读路径/REMOVE/CLEAN 为 null)
      * @param deserializedValue 反序列化后的值(同上为 null)
      * @param ttl TTL
-     * @param cacheOperation 已解析的方法级 operation 配置(可为 null)
+     * @param cacheOperation 已解析的方法级策略视图(可为 null)
      * @param keyPattern CLEAN 的键模式(非 CLEAN 传 null)
      * @return 缓存上下文
      */
@@ -283,7 +254,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable byte[] valueBytes,
             @Nullable Object deserializedValue,
             @Nullable Duration ttl,
-            @Nullable RedisCacheableOperation cacheOperation,
+            @Nullable CachePolicyView.Source cacheOperation,
             @Nullable String keyPattern) {
 
         CacheContext context = CacheContext.of(CacheInput.builder()
@@ -341,7 +312,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
                 valueBytes != null ? typeSupport.deserializeFromBytes(valueBytes) : null;
         CacheContext context = buildContext(
                 operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl,
-                resolveOperation(name), null);
+                resolveOperation(name, operation), null);
         return getChain().execute(context);
     }
 
