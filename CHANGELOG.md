@@ -77,6 +77,18 @@ Current milestones:
 - **Loader/context seams** — CacheContext byte input is defensively copied and
   RedisProCache binds loader callbacks once at construction so callers do not
   reassemble orchestration parameters.
+- **One read-through load protocol** — the default (non-sync) loader path no
+  longer delegates to Spring's `RedisCache.get(key, loader)`; both loader
+  paths run `LoaderOrchestrator.performLoad` (cache read → loader → write-back)
+  and share one tolerance rule. The default path's write-back now carries the
+  same put metrics as the sync path. Failing write-backs are still logged
+  redacted and never override the loaded value.
+- **Key privacy in failure diagnostics** — WARN/ERROR logs and typed exception
+  messages omit the raw key (ADR-0001 §15); where no `cacheName` is available
+  they carry `FailureDiagnostics.keyFingerprint` instead. Covers distributed
+  lock acquire/release, `SyncRole` leader/follower failures, the async
+  early-expiration retry path, chain post-processing, and the migration
+  engine's fingerprint helper (now one implementation).
 
 ### Single-build FIRE M0–M4
 

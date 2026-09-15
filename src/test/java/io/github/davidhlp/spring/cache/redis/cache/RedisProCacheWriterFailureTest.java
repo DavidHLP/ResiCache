@@ -107,45 +107,4 @@ class RedisProCacheWriterFailureTest {
         assertThatCode(() -> writer.evict("cache", "key".getBytes())).doesNotThrowAnyException();
     }
 
-    @Test
-    void loaderPath_writeBackFailure_returnsLoadedBytesAvailabilityFirst() {
-        // cache miss → loader 成功 → 写回(链 PUT)失败。ADR-02:必须返回 loader 值。
-        when(chain.execute(any()))
-                .thenReturn(CacheResult.miss())   // GET:miss → loader
-                .thenReturn(CacheResult.failure(CacheOperation.PUT, CacheResult.FailureKind.REDIS, new IllegalStateException("redis down"))); // PUT:失败
-
-        byte[] loaded = "loaded".getBytes();
-        byte[] result = writer.get(
-                "cache", "key".getBytes(), () -> loaded, Duration.ofSeconds(1), false);
-
-        assertThat(result)
-                .as("loader 值必须穿透写回失败返回(availability-first)")
-                .isSameAs(loaded);
-    }
-
-    @Test
-    void loaderPath_loaderFailure_propagates() {
-        // cache miss → loader 抛异常 → 异常必须原样传播(不得吞/降级)
-        when(chain.execute(any())).thenReturn(CacheResult.miss());
-
-        IllegalStateException boom = new IllegalStateException("business loader failed");
-        assertThatThrownBy(() -> writer.get(
-                "cache", "key".getBytes(),
-                () -> { throw boom; },
-                Duration.ofSeconds(1), false))
-                .isSameAs(boom);
-    }
-
-    @Test
-    void loaderPath_cacheHit_returnsCachedBytesWithoutLoading() {
-        // 缓存命中 → 直接返回缓存字节,loader 不被调用
-        when(chain.execute(any())).thenReturn(CacheResult.success("cached".getBytes()));
-
-        byte[] result = writer.get(
-                "cache", "key".getBytes(),
-                () -> { throw new AssertionError("loader must not run on cache hit"); },
-                Duration.ofSeconds(1), false);
-
-        assertThat(result).isEqualTo("cached".getBytes());
-    }
 }

@@ -5,7 +5,6 @@ cache.BuilderPopulator$TextField
 cache.CacheErrorHandler$ErrorStrategy
 cache.CacheInput$Builder
 cache.LoaderOrchestrator$BloomShortCircuited
-cache.LoaderOrchestrator$DefaultLoadFn
 cache.LoaderOrchestrator$LoadFailed
 cache.LoaderOrchestrator$LoadOutcome
 cache.LoaderOrchestrator$Loaded

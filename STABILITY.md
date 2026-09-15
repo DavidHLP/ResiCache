@@ -37,7 +37,7 @@ line.
 | **Observability metric names and tags** | Pre-1.0 metric namespace is NOT contractual | A `bloomsift.*` → `resicache.handler.*` rename is allowed pre-1.0 (with ⚠️ BREAKING CHANGELOG) |
 | **Diagnostic warnings and logs** | Message text, log levels for startup probes | "whitelist auto-derived from host app root package" WARN may rephrase |
 | **Behavior defaults** (e.g. protection preset) | When explicitly opted into a new default via ⚠️ BREAKING CHANGELOG entry | `resi-cache.protection.preset=NONE` (v0.0.2) → `=STANDARD` (v0.0.3) is allowed if flagged breaking |
-| **Internal implementation types** | `TtlPolicy`, `NullValuePolicy`, `EarlyExpirationPolicy`, `BloomHashStrategy`, `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, `DefaultLoadFn`, default adapters, and `ThreadPoolEarlyExpirationExecutor` | Package-private collaborators under the internal `cache` module; not importable extension contracts. |
+| **Internal implementation types** | `TtlPolicy`, `NullValuePolicy`, `EarlyExpirationPolicy`, `BloomHashStrategy`, `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, default adapters, and `ThreadPoolEarlyExpirationExecutor` | Package-private collaborators under the internal `cache` module; not importable extension contracts. |
 
 If you depend on items in this section, pin to an exact patch version
 (`0.x.y`) and review `CHANGELOG.md` entries on upgrade.
@@ -47,7 +47,7 @@ If you depend on items in this section, pin to an exact patch version
 | Type | Replacement | Deprecation/removal | Impact |
 |---|---|---|---|
 | `MethodMetadataResolver` / `MethodSnapshot` | internal resolver lifecycle via auto-configuration | internalized in the Phase 4 cache module | source/binary break for custom resolver implementations |
-| `LoaderOrchestrator` / `LoadOutcome` / `DefaultLoadFn` | `RedisProCache.get(key, loader)` | internalized in the Phase 4 cache module | callers must use the cache API, not loader callbacks |
+| `LoaderOrchestrator` / `LoadOutcome` (and the former `DefaultLoadFn`) | `RedisProCache.get(key, loader)` | internalized in the Phase 4 cache module | callers must use the cache API, not loader callbacks |
 | `CacheContext` / `HandlerResult` / decision records | documented SPI value surface for handler signatures; implementation-only members may evolve | no removal while `CacheHandler`/`ChainObserver` remain supported | extensions use documented fields and flow values |
 | default policy and executor classes | documented stable SPI only; concrete policies/executors remain internal | internalized in the Phase 4 cache module | custom code uses stable interfaces, not implementation classes |
 

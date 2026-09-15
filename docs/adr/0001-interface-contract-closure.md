@@ -264,25 +264,32 @@ and write-back exceptions into a single `LoadFailed`, and the default path
 wrapped a write-back failure so the already-loaded business value was lost or
 turned into a `ValueRetrievalException`.
 
-**Decision**: Availability-first. The loader's successful value is the
-read-through result and is never overridden by a write-back failure:
+**Decision**: Availability-first, and one protocol. `LoaderOrchestrator`
+owns the whole read → load → write-back cycle in `performLoad`; both loader
+paths call it, and the only difference between them is that the sync path
+runs it inside `SyncSupport`'s distributed lock.
 
-- **Default path** (`RedisProCacheWriter.get(name, key, supplier, ttl, tti)`):
-  cache read (chain GET) → miss → loader → write-back (chain PUT). Loader
-  exceptions propagate unchanged (Spring wraps into
-  `Cache.ValueRetrievalException`); write-back failures are logged (redacted,
-  no raw key) and the loaded bytes are returned.
-- **Sync path** (`LoaderOrchestrator.performLockedLoad`): double-check →
-  loader → write-back are separate phases. A write-back failure produces
-  `LoadOutcome.LoadedWithWriteBackFailure(value, cause)`; `RedisProCache`
-  logs redacted and returns the value.
+- **Default path**: same `performLoad` (chain read via the cache read
+  primitive → miss → loader → write-back through `RedisProCache.put`) and the
+  same tolerance rule. It no longer delegates to Spring's
+  `RedisCache.get(key, loader)`, so its write-back carries the same put
+  metrics as the sync path and cannot drift from it. `RedisProCacheWriter`
+  therefore no longer overrides the 5-arg `get`; Spring's own default is
+  unreachable from any production entry point, and the writer is
+  package-private.
+- **Sync path**: `SyncSupport.executeSync` wraps the same `performLoad`, so
+  followers share the leader's outcome — including a write-back failure.
+- Loader exceptions propagate as `Cache.ValueRetrievalException` in both
+  paths; a write-back failure produces
+  `LoadOutcome.LoadedWithWriteBackFailure(value, cause)`, which
+  `RedisProCache` logs redacted (no raw key) and answers with the value.
 - Explicit `PUT` / `PUT_IF_ABSENT` / `CLEAN` remain fail-fast typed
   (`CacheOperationException`); `REMOVE` stays observable best-effort.
 
 **Consequences**: cache read failures degrade to miss; a cache write failure
 never discards a successful loader result. Downstream caches may be stale
-until the next write, which is observable only through the (future) failure
-metric and redacted logs.
+until the next write, which is observable through the failure metric and
+redacted logs.
 
 **Known limitation**: The cache is a derived acceleration layer, not the
 source of truth — eventual consistency after a failed write-back is accepted.
