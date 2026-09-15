@@ -8,7 +8,6 @@ import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
