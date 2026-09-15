@@ -256,7 +256,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
     /**
      * 解析方法级策略(布隆/同步锁/TTL/空值等)—— 1 行委派。
      *
-     * <p>委派 {@link CacheOperationResolver#resolve(String)};{@code operationResolver} 为 null
+     * <p>委派 {@link CacheOperationResolver#resolve(String, CacheOperation)};{@code operationResolver} 为 null
      * 时直接返回 null(测试场景关闭元数据查找)。
      *
      * @param cacheName 缓存名称

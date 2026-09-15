@@ -148,6 +148,57 @@ class SyncSupportSingleFlightTest {
     }
 
     @Test
+    @DisplayName("executeExclusive:local-only 并发写按 key 串行,每笔工作都保留")
+    void executeExclusive_localOnly_serializesConcurrentWrites() throws Exception {
+        properties.getSyncLock().setLocalOnly(true);
+        SyncSupport support = new SyncSupport(List.of(), properties);
+
+        int n = 4;
+        ExecutorService ex = Executors.newFixedThreadPool(n);
+        CountDownLatch done = new CountDownLatch(n);
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        ConcurrentLinkedQueue<String> written = new ConcurrentLinkedQueue<>();
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger maxActive = new AtomicInteger();
+
+        for (int i = 0; i < n; i++) {
+            final String value = "local-v" + i;
+            ex.submit(() -> {
+                try {
+                    written.add(support.executeExclusive("local-write-key", () -> {
+                        int current = active.incrementAndGet();
+                        maxActive.updateAndGet(max -> Math.max(max, current));
+                        firstEntered.countDown();
+                        try {
+                            if (current == 1) {
+                                await(releaseFirst);
+                            }
+                            return value;
+                        } finally {
+                            active.decrementAndGet();
+                        }
+                    }, 10));
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        assertThat(firstEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        try {
+            Thread.sleep(200);
+            assertThat(maxActive).as("local-only writes must be mutually exclusive").hasValue(1);
+        } finally {
+            releaseFirst.countDown();
+        }
+
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+        ex.shutdown();
+        assertThat(written).hasSize(n);
+    }
+
+    @Test
     @DisplayName("executeExclusive:同线程重入走 fast-path,不二次取锁(不死锁)")
     void executeExclusive_reentrant_runsInline() throws Exception {
         when(lockManager.tryAcquire(anyString(), anyLong()))

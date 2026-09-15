@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
  *
  * <p><b>推进协议</b>：Engine 接收有序的 {@link CacheHandler} 快照（由
  * {@link CacheHandlerChain#execute(CacheContext)} 在 synchronized 块内一次性拍出），
- * 按顺序调用每个 handler 的 {@code handle(ctx)}；handler 返回的
+ * 按顺序调用每个 handler 的 {@code handle(ctx, continuation)}；handler 返回的
  * {@link HandlerResult#decision()} 决定走向：
  *
  * <ul>
@@ -34,7 +34,7 @@ import org.springframework.stereotype.Component;
  * <p><b>观测编排</b>：Engine 在链入口调用所有 observer 的
  * {@link ChainObserver#onChainStart(CacheContext)}，节点前后调用
  * {@link ChainObserver#beforeNode}/{@link ChainObserver#afterNode}，
- * 链出口调用 {@link ChainObserver#onChainEnd(CacheContext, CacheResult)}。
+ * 链出口调用 {@link ChainObserver#onChainEnd(CacheContext, Object, CacheResult)}。
  * Observer 实现以 default no-op 形式提供（见 {@link ChainObserver}），
  * Engine 自身不感知 MDC / Timer / Counter / DEBUG log 等具体关注点 —
  * 新增观测维度只需新增 observer,Engine / handler 零修改。
@@ -339,8 +339,8 @@ class ChainEngine {
      *   <li>private final 嵌套类(非 static)— 不暴露给外部(只服务 ChainEngine.execute
      *       一处);非 static 因需调外部 instance method {@code driveChain},持 outer
      *       reference 是 locality 提升而非泄漏</li>
-     *   <li>onChainEnd 传入 {@code CacheResult.success()} 硬编码 — observer 当前
-     *       不读 result 字段;若未来 observer 需要 mainResult,需独立评估</li>
+ *   <li>onChainEnd 传入 driveChain + post-process 后的 {@code mainResult},保证
+ *       observer 看到与 execute 返回值一致的最终结果</li>
      *   <li>run() 无参(不返回 mainResult 后再由 caller 收 mainResult),避免与 caller
      *       形成 split-knowledge</li>
      * </ul>
@@ -396,13 +396,10 @@ class ChainEngine {
                     runPostProcess(mainResult);
                 }
             } finally {
-                // onChainEnd 传 hardcoded CacheResult.success() 而非 mainResult:
-                // observer 当前不读 result 字段,observably 字节等价。若未来 observer
-                // 需要 mainResult,需独立评估。
                 for (int i = 0; i < observerList.size(); i++) {
                     ChainObserver o = observerList.get(i);
                     try {
-                        o.onChainEnd(context, scopeTokens[i], CacheResult.success());
+                        o.onChainEnd(context, scopeTokens[i], mainResult);
                     } catch (Exception ex) {
                         log.error("Observer {} onChainEnd failed: {}",
                                 o.getClass().getSimpleName(), ex.toString(), ex);

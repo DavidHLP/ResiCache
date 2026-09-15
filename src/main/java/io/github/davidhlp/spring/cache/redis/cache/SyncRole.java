@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 
@@ -89,6 +90,7 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
      *   <li>{@code properties} — 读 sync-lock.local-only 降级开关</li>
      *   <li>{@code inFlight} — single-flight 注册表,finally 中按 value 匹配移除避免误删后一个 leader</li>
      *   <li>{@code reentrantKeys} — ThreadLocal 标记本线程已持有 leader 身份(防 future 不可重入陷阱)</li>
+     *   <li>{@code localOnlyTails} — local-only 模式下读写共用的 per-key 串行队列</li>
      * </ul>
      */
     @Slf4j
@@ -102,6 +104,7 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
         private final RedisProCacheProperties properties;
         private final ConcurrentMap<String, CompletableFuture<Object>> inFlight;
         private final ThreadLocal<java.util.Set<String>> reentrantKeys;
+        private final ConcurrentMap<String, CompletableFuture<Void>> localOnlyTails;
 
         Leader(String key,
                long timeoutSeconds,
@@ -110,7 +113,8 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                List<LockManager> distributedManagers,
                RedisProCacheProperties properties,
                ConcurrentMap<String, CompletableFuture<Object>> inFlight,
-               ThreadLocal<java.util.Set<String>> reentrantKeys) {
+               ThreadLocal<java.util.Set<String>> reentrantKeys,
+               ConcurrentMap<String, CompletableFuture<Void>> localOnlyTails) {
             this.key = key;
             this.timeoutSeconds = timeoutSeconds;
             this.loader = loader;
@@ -119,6 +123,7 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
             this.properties = properties;
             this.inFlight = inFlight;
             this.reentrantKeys = reentrantKeys;
+            this.localOnlyTails = localOnlyTails;
         }
 
         @Override
@@ -207,7 +212,7 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                 log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
                         + "已按 local-only=true 降级为单 JVM 同步 (keyFingerprint={})",
                         FailureDiagnostics.keyFingerprint(key));
-                return loader.get();
+                return executeLocalOnly(loader);
             }
             // fail-fast:绝不静默退化为单 JVM。多实例下单 JVM synchronized 无法防击穿,
             // 标榜分布式却单机是最坏失败模式 —— 必须让用户立刻看见。
@@ -217,6 +222,28 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                             + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
                             + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
                             + " [keyFingerprint=" + FailureDiagnostics.keyFingerprint(key) + "]");
+        }
+
+        /**
+         * local-only 模式下让读 leader 与写调用共享同一个 per-key 串行队列。
+         * {@code current} 完成后再按 value 移除，避免后继调用被误删；失败也必须放行后继。
+         */
+        private T executeLocalOnly(Supplier<T> loader) {
+            AtomicReference<CompletableFuture<Void>> predecessorRef = new AtomicReference<>();
+            CompletableFuture<Void> current = localOnlyTails.compute(key, (ignored, predecessor) -> {
+                predecessorRef.set(predecessor);
+                return new CompletableFuture<>();
+            });
+            CompletableFuture<Void> predecessor = predecessorRef.get();
+            if (predecessor != null) {
+                predecessor.join();
+            }
+            try {
+                return loader.get();
+            } finally {
+                current.complete(null);
+                localOnlyTails.remove(key, current);
+            }
         }
 
         /**
@@ -242,7 +269,9 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                     try {
                         handle.close();
                     } catch (Exception e) {
-                        log.error("Failed to release distributed lock", e);
+                        log.error("Failed to release distributed lock: failure={}",
+                                FailureDiagnostics.sanitizedFailure(e));
+                        log.debug("Distributed lock release failure detail", e);
                     }
                 }
             }

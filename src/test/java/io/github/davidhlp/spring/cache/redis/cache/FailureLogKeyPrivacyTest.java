@@ -287,6 +287,38 @@ class FailureLogKeyPrivacyTest {
         }
     }
 
+    @Test
+    @DisplayName("SyncRole:锁释放失败 ERROR 只含异常类型链,不含 raw key 或异常 message")
+    void syncRole_lockReleaseFailure_sanitizesError() {
+        ListAppender<ILoggingEvent> captured = attach(SyncRoleLeaderLogger.NAME);
+        try {
+            LockManager releasingFailure = new LockManager() {
+                @Override
+                public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) {
+                    return Optional.of(() -> {
+                        throw new IllegalStateException("release failed for key " + SECRET_KEY);
+                    });
+                }
+
+                @Override
+                public int getOrder() {
+                    return 0;
+                }
+            };
+
+            SyncSupport support = new SyncSupport(List.of(releasingFailure),
+                    new RedisProCacheProperties());
+
+            assertThat(support.executeSync(SECRET_KEY, () -> "v", 5)).isEqualTo("v");
+            assertThat(warnAndErrorText(captured))
+                    .contains("Failed to release distributed lock")
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain("release failed for key");
+        } finally {
+            detach(SyncRoleLeaderLogger.NAME, captured);
+        }
+    }
+
     /** SyncRole.Leader 的 logger 名(嵌套类在包外不可直接引用,避免测试依赖其可见性)。 */
     private static final class SyncRoleLeaderLogger {
         static final String NAME = SyncRole.class.getName() + "$Leader";

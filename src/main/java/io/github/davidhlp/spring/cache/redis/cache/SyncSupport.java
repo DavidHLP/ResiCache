@@ -74,6 +74,12 @@ class SyncSupport {
     private final ConcurrentMap<String, CompletableFuture<Object>> inFlight = new ConcurrentHashMap<>();
 
     /**
+     * local-only 模式的 per-key 串行尾部。读 leader 与写调用共用此队列，保持单 JVM
+     * 降级与分布式锁路径相同的读写互斥语义。
+     */
+    private final ConcurrentMap<String, CompletableFuture<Void>> localOnlyTails = new ConcurrentHashMap<>();
+
+    /**
      * 当前线程已持有 leader 身份的 key 集合 — 用于 future 不可重入场景下的重入检测。
      * chain 内 {@code SyncLockHandler} 嵌套重入 {@code executeSync}(同 key)时,
      * fast-path 直接跑 loader(等价 {@code synchronized} 可重入,且省去二次分布式锁往返)。
@@ -180,7 +186,7 @@ class SyncSupport {
         // 复用 Leader 的获锁 / fail-fast / local-only / lease 逻辑,但 future 不发布到 inFlight ——
         // 其他线程无从 join,只能各自排队拿锁后执行自己的工作。
         return new SyncRole.Leader<>(key, timeoutSeconds, work, new CompletableFuture<>(),
-                distributedManagers, properties, inFlight, reentrantKeys).run();
+                distributedManagers, properties, inFlight, reentrantKeys, localOnlyTails).run();
     }
 
     /**
@@ -205,7 +211,7 @@ class SyncSupport {
         CompletableFuture<Object> existing = inFlight.putIfAbsent(key, mine);
         if (existing == null) {
             return new SyncRole.Leader<>(key, timeoutSeconds, loader, mine,
-                    distributedManagers, properties, inFlight, reentrantKeys);
+                    distributedManagers, properties, inFlight, reentrantKeys, localOnlyTails);
         }
         return new SyncRole.Follower<>(key, existing, timeoutSeconds);
     }
