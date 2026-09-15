@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **项目状态：早期（v0.0.2）· Non-SLA best-effort · 单人维护**
-> 生产采用前请务必先读 [⚠️ Known Limitations](#-known-limitations--已知限制)。
+> 生产采用前请务必先读 [⚠️ Known Limitations](README.md#known-limitations)。
 
 ## 这是什么
 

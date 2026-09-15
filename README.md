@@ -45,7 +45,7 @@ capabilities via **`@RedisCacheable` enhancement annotations** and a
 
 ## Architecture
 
-ResiCache uses a **responsibility chain** for cache-write protection. Handler
+ResiCache uses a **responsibility chain** for cache-operation protection. Handler
 ordering is defined in a single source of truth, the `HandlerOrder` enum, bound
 via `@HandlerPriority`:
 

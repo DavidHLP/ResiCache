@@ -100,6 +100,10 @@ not require a cache flush.
   counters, `expired`, and `version`). `startNanoTime` is process-local and is
   intentionally reset on deserialization; older payloads without these fields
   remain readable through the wall-clock fallback.
+- **Early-expiration decision boundary**: TTL shortening compares the cached
+  value's exact `payload.version`; the envelope `version` is format metadata,
+  not the CAS token. Policy evaluation uses the configured TTL/threshold and
+  has no unrelated absolute 60-second bypass.
 - **Bloom CLEAN semantics**: Bloom tracks possible data-source membership,
   not current cache entries. CLEAN preserves existing bits and never uses a
   rebuilding marker or TTL window; false-positives are safe, while loader

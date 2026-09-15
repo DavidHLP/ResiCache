@@ -342,7 +342,7 @@ requestId.
 host-config smoke. No `spring-boot-maven-plugin` AOT wiring exists in the pom.
 
 **Decision**: AOT/native-image compatibility is recorded **DEFERRED**
-(non-blocking debt per plan P2-AOT-001). The serialization envelope
+(non-blocking debt in the local task ledger as AOT-001). The serialization envelope
 (`{version, payload}` + whitelist) is a known native-image reflection
 surface that would need explicit `RuntimeHints` before GraalVM support is
 claimed.
@@ -363,9 +363,9 @@ package (excluding test classes); stable SPI types keep their original package
 names. The wire envelope remains `serialization.VersionEnvelope`, and
 `CacheContext` exposes only `InputView`/`CachePolicyView`.
 
-**Verification**: The compiled public surface now exactly equals the 34-entry
-allowlist; the in-progress manifest is empty. `clean verify` passes 916 tests,
-coverage checks, Checkstyle, and Javadoc with zero warnings.
+**Verification**: The compiled public surface is locked by the 34-entry
+allowlist and the in-progress manifest is empty. Exact test counts belong to
+the current CI/local verification record rather than this durable decision.
 
 ## 18. Protection switch resolution semantics
 

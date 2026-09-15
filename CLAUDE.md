@@ -21,6 +21,21 @@
 - **Lombok**: Used throughout - `@Data`, `@Getter`, `@Setter`, `@Builder`
 - **Javadoc**: Chinese comments explaining design rationale in key classes
 
+## Documentation authorities
+
+Keep one canonical owner per topic; linked documents provide navigation, not a
+second copy of the contract:
+
+- Public overview and quick start: `README.md`; `README.zh-CN.md` is the
+  translated companion and does not override the English contract.
+- Stable public surface: `STABILITY.md`; supported build line and runtime
+  limitations: `COMPATIBILITY.md`.
+- Accepted design rationale: `docs/adr/README.md`; change history:
+  `CHANGELOG.md`; contributor workflow: `CONTRIBUTING.md`.
+- Current local task/deferred status: `.agent/tasks/resicache-maturity.yaml`.
+  Closed plans, checkpoints, and review notes are not recreated after their
+  durable facts have been absorbed into the sources above.
+
 ## Testing
 
 - **Run tests**: `./mvnw test`
@@ -55,10 +70,10 @@ ResiCache/
 
 ```
 src/test/java/io/github/davidhlp/spring/cache/redis/
-├── cache/                       # internal implementation tests + shared Testcontainers scaffolding
-├── (stable contract packages: annotation/, chain/, config/, serialization/) # API/contract tests
-├── cache/                       # unit/integration suites plus Testcontainers fixtures
-└── com/example/domain/           # test fixture for whitelisted custom domain types (serializer interop)
+├── cache/                       # implementation unit/integration tests + Testcontainers fixtures
+├── chain/ + config/             # stable contract and configuration tests
+├── PublicSurfaceContractTest.java # top-level and nested public-surface manifest
+└── com/example/                 # external-consumer and serializer domain fixtures
 ```
 > Redis integration tests now live beside the internal cache module; all use the
 > `*IntegrationTest.java` suffix. The naming guard
@@ -90,7 +105,7 @@ Each handler implements `CacheHandler` interface with `handle()` method.
 
 | I want to... | Look at... |
 |--------------|-----------|
-| Understand the chain / a mechanism | `chain/` package + `protection/<mechanism>/` (each handler carries design rationale in Javadoc) |
+| Understand the chain / a mechanism | stable contracts in `chain/`, runtime handlers in `cache/`, and replaceable seams in `protection/` |
 | Understand a module | the package itself under `src/main/java/.../`; module layout is in Project Structure above |
 | Add a new cache protection handler | internal `cache/` runtime + implement `CacheHandler`, annotate `@HandlerPriority(HandlerOrder.X)` |
 | Modify annotation processing | internal `cache/` annotation pipeline |
