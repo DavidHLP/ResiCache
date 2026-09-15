@@ -1,0 +1,20 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandler.java
+  h_77173abe25c3ff 24-25,37-39,52-60,169-170,174-176,202-204,209-212
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandler.java
+  h_77173abe25c3ff 15,59,65,80-81,106-110,113-114
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandlerSemanticCounterTest.java
+  h_77173abe25c3ff 8-9,18,70-89,191-203
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandlerTest.java
+  h_77173abe25c3ff 16,49-50,59-60,86-90,176-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bd9949f9007084e6fcd9b50aead0ead625437081",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
