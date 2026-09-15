@@ -161,7 +161,10 @@ class RedisCacheRegister {
      */
     @SuppressWarnings("unchecked")
     public <O extends CacheOperation> O get(String name, AnnotatedElementKey elementKey, OperationKind kind) {
-        AnnotationParser.ParsedAnnotations snapshot = snapshotsByElement.get(elementKey);
+        Method method = MetadataKeys.extractMethod(elementKey);
+        Class<?> targetClass = MetadataKeys.extractTargetClass(elementKey);
+        AnnotationParser.ParsedAnnotations snapshot =
+                method == null || targetClass == null ? null : getSnapshot(method, targetClass);
         if (snapshot != null) {
             List<CacheOperation> policies = snapshot.policyOperations();
             for (int i = policies.size() - 1; i >= 0; i--) {

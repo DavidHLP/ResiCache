@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -68,8 +69,10 @@ class RedisCacheInterceptorNormalizationTest {
         RedisCacheableOperation declaredPolicy =
                 (RedisCacheableOperation) parsed.policyOperations().get(0);
         register.registerSnapshot(interfaceMethod, InterfaceAnnotatedService.class, parsed);
-        RecordingAnnotationChainEngine chain = new RecordingAnnotationChainEngine(register);
         DefaultMethodMetadataResolver metadataResolver = spy(new DefaultMethodMetadataResolver());
+        CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
+        RecordingAnnotationChainEngine chain =
+                new RecordingAnnotationChainEngine(register, resolver, "interface-cache");
         RedisCacheInterceptor interceptor = new RedisCacheInterceptor(
                 operationSource,
                 new ConcurrentMapCacheManager("interface-cache"),
@@ -89,6 +92,10 @@ class RedisCacheInterceptorNormalizationTest {
                 .isEqualTo(654L);
         assertThat(((RedisCacheableOperation) chain.observedOperations.get(0)).isUseBloomFilter())
                 .isTrue();
+        assertThat(chain.observedResolution).isSameAs(declaredPolicy);
+        assertThat(chain.observedResolution.getTtl()).isEqualTo(654L);
+        assertThat(chain.observedResolution.isUseBloomFilter()).isTrue();
+
         verify(metadataResolver).activate(
                 InterfaceAnnotatedServiceImpl.class.getMethod("load", String.class),
                 InterfaceAnnotatedServiceImpl.class);
@@ -120,14 +127,29 @@ class RedisCacheInterceptorNormalizationTest {
 
     private static final class RecordingAnnotationChainEngine extends AnnotationChainEngine {
         private List<CacheOperation> observedOperations = List.of();
+        private final CacheOperationResolver resolver;
+        private final String resolverCacheName;
+        private CachePolicyView.Source observedResolution;
 
         private RecordingAnnotationChainEngine(RedisCacheRegister register) {
+            this(register, null, null);
+        }
+
+        private RecordingAnnotationChainEngine(
+                RedisCacheRegister register, CacheOperationResolver resolver, String resolverCacheName) {
             super(List.of(), register);
+            this.resolver = resolver;
+            this.resolverCacheName = resolverCacheName;
         }
 
         @Override
         public List<CacheOperation> execute(Method method, Object target, Object[] args) {
             observedOperations = super.execute(method, target, args);
+            if (resolver != null) {
+                observedResolution = resolver.resolve(
+                        resolverCacheName,
+                        io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET);
+            }
             return observedOperations;
         }
     }
