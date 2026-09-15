@@ -65,36 +65,45 @@ class CacheHandlerChainFactory {
      * <p>注意:不含 TTL — {@code TtlHandler} 兼担基础 TTL 计算,禁用会导致
      * {@code ActualCacheHandler} 写入无 TTL 永久缓存(数据陈旧 + 内存泄漏)。
      *
-     * <p>每条 toggle 三要素:order 字段(既是短路枚举又是 disableName 派生源),
-     * getter 字段(per-mechanism 覆盖读取,null = 继承 enabled),
-     * configPath 字段(kebab-case 路径段,仅用于日志)。
+     * <p>每条 toggle 两要素:{@code order} 字段(既是短路枚举,又是 disableName 的派生源 ——
+     * 配置项 {@code resi-cache.protection.<disableName>.enabled} 与
+     * {@code HandlerOrder#getDisableName()} 同源,不再各自维护字面量)、
+     * {@code getter} 字段(per-mechanism 覆盖读取,null = 继承 enabled)。
+     * {@code ProtectionToggleGuardTest} 用反射按 disableName 反查 property 并断言 getter
+     * 读的正是该 property,故新增机制漏配属性时直接红。
      */
     private static final List<Toggle> PROTECTION_TOGGLES = List.of(
             new Toggle(HandlerOrder.BLOOM_FILTER,
-                    RedisProCacheProperties.ProtectionProperties::getBloomFilterEnabled,
-                    "bloom-filter"),
+                    RedisProCacheProperties.ProtectionProperties::getBloomFilterEnabled),
             new Toggle(HandlerOrder.SYNC_LOCK,
-                    RedisProCacheProperties.ProtectionProperties::getSyncLockEnabled,
-                    "sync-lock"),
+                    RedisProCacheProperties.ProtectionProperties::getSyncLockEnabled),
             new Toggle(HandlerOrder.EARLY_EXPIRATION,
-                    RedisProCacheProperties.ProtectionProperties::getEarlyExpirationEnabled,
-                    "early-expiration"),
+                    RedisProCacheProperties.ProtectionProperties::getEarlyExpirationEnabled),
             new Toggle(HandlerOrder.NULL_VALUE,
-                    RedisProCacheProperties.ProtectionProperties::getNullValueEnabled,
-                    "null-value"));
+                    RedisProCacheProperties.ProtectionProperties::getNullValueEnabled));
 
     /**
-     * 单条 protection 机制 toggle 描述。
+     * 单条 protection 机制 toggle 描述 —— 机制身份({@link HandlerOrder})与其属性读取器
+     * ({@link RedisProCacheProperties.ProtectionProperties} 上对应的 {@code *Enabled} 字段)。
      *
-     * @param order      防护机制对应的 {@link HandlerOrder}
-     * @param getter     从 {@link RedisProCacheProperties.ProtectionProperties} 读取
-     *                   Boolean 字段(null = 继承 enabled,非 null = 单独覆盖)
-     * @param configPath 配置文件中的 kebab-case 路径段(用于日志)
+     * <p>configuration path 不再单独持有:它由 {@link HandlerOrder#getDisableName()} 派生
+     * (两者曾经是同一字面量的两份拷贝)。
+     *
+     * @param order  防护机制对应的 {@link HandlerOrder}(disableName 的真值源)
+     * @param getter 从 {@link RedisProCacheProperties.ProtectionProperties} 读取
+     *               Boolean 字段(null = 继承 enabled,非 null = 单独覆盖)
      */
-    private record Toggle(
+    record Toggle(
             HandlerOrder order,
-            Function<RedisProCacheProperties.ProtectionProperties, Boolean> getter,
-            String configPath) {
+            Function<RedisProCacheProperties.ProtectionProperties, Boolean> getter) {
+    }
+
+    /**
+     * 只读快照 —— 供 {@code ProtectionToggleGuardTest} 校验「表 ↔ 绑定属性」一致。
+     * 生产代码无需读取(禁用解析已内联)。
+     */
+    static List<Toggle> protectionToggles() {
+        return PROTECTION_TOGGLES;
     }
 
     /**
@@ -267,7 +276,7 @@ class CacheHandlerChainFactory {
                 if (Boolean.FALSE.equals(toggle.getter().apply(protection))) {
                     disabled.add(toggle.order().getDisableName());
                     log.info("{} disabled by resi-cache.protection.{}.enabled=false",
-                            toggle.order().getDescription(), toggle.configPath());
+                            toggle.order().getDescription(), toggle.order().getDisableName());
                 }
             }
         }
