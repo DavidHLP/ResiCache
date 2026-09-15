@@ -215,6 +215,7 @@ class CacheHandlerChainFactoryTest {
             // TtlHandler 兼担基础 TTL 计算,禁用会导致 ActualCacheHandler 写无 TTL 永久缓存 → 必须保留
             assertThat(chain.size()).isEqualTo(2);
             assertThat(chain.execute(testContext()).isSuccess()).isTrue();
+        }
         @Test
         @DisplayName("protection.enabled=true(default) 保留全部 handler")
         void protectionEnabled_keepsAll() {
