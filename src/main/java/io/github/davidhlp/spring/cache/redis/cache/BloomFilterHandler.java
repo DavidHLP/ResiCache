@@ -5,8 +5,9 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
+import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import lombok.extern.slf4j.Slf4j;
@@ -59,7 +60,7 @@ class BloomFilterHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected HandlerResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         // PUT/PIF/CLEAN 的"实际工作"在 afterChainExecution() 后置路径,
         // requiresPostProcess() 派生自 operation 枚举,不在此处重复分派。
         return switch (context.getOperation()) {

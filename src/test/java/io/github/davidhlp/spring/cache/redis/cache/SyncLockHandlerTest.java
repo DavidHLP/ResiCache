@@ -13,6 +13,7 @@ import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,8 @@ class SyncLockHandlerTest {
     /** 句柄存根:多数用例只关心锁协议,不关心剩余链内容。 */
     private static final ChainContinuation NEXT = CacheResult::success;
 
+    private SimpleMeterRegistry meterRegistry;
+
     private SyncLockHandler handler;
 
     @BeforeEach
@@ -53,6 +56,8 @@ class SyncLockHandlerTest {
         lenient().when(syncLockProperties.getTimeout()).thenReturn(3000L);
         lenient().when(syncLockProperties.getUnit()).thenReturn(java.util.concurrent.TimeUnit.MILLISECONDS);
         handler = new SyncLockHandler(syncSupport, new SyncLockTimeout(properties));
+        meterRegistry = new SimpleMeterRegistry();
+        handler.attachMeterRegistry(meterRegistry);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
@@ -77,6 +82,11 @@ class SyncLockHandlerTest {
                 .syncTimeout(syncTimeout)
                 .build();
     }
+
+    private double acquiredCount() {
+        return meterRegistry.get("resicache.handler.sync.lock.acquired").counter().count();
+    }
+
 
     @Nested
     @DisplayName("shouldHandle tests")
@@ -163,6 +173,77 @@ class SyncLockHandlerTest {
     @Nested
     @DisplayName("doHandle tests")
     class DoHandleTests {
+        @Test
+        @DisplayName("成功持锁的 leader 执行 work lambda 时只计数一次")
+        void doHandle_successfulLeader_incrementsAcquiredExactlyOnce() {
+            RedisCacheableOperation operation = createSyncOperation(true, 10);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenAnswer(invocation -> {
+                java.util.function.Supplier<CacheResult> work = invocation.getArgument(1);
+                return work.get();
+            });
+
+            handler.doHandle(context, NEXT);
+
+            assertThat(acquiredCount()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("锁超时未执行 work lambda → acquired counter 不变")
+        void doHandle_lockTimeout_doesNotIncrementAcquired() {
+            RedisCacheableOperation operation = createSyncOperation(true, 10);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            when(syncSupport.executeSync(anyString(), any(), anyLong()))
+                    .thenThrow(new IllegalStateException("Timed out acquiring lock"));
+
+            assertThatThrownBy(() -> handler.doHandle(context, NEXT))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Timed out acquiring lock");
+
+            assertThat(acquiredCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("follower 拒绝等待且未执行 work lambda → acquired counter 不变")
+        void doHandle_followerRefuses_doesNotIncrementAcquired() {
+            RedisCacheableOperation operation = createSyncOperation(true, 10);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            when(syncSupport.executeSync(anyString(), any(), anyLong()))
+                    .thenThrow(new IllegalStateException("follower refuses to wait"));
+
+            assertThatThrownBy(() -> handler.doHandle(context, NEXT))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("follower refuses to wait");
+
+            assertThat(acquiredCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("无锁后端 fail-fast 且未执行 work lambda → acquired counter 不变")
+        void doHandle_noBackendFailFast_doesNotIncrementAcquired() {
+            RedisCacheableOperation operation = createSyncOperation(true, 10);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            when(syncSupport.executeSync(anyString(), any(), anyLong()))
+                    .thenThrow(new IllegalStateException("No distributed lock backend"));
+
+            assertThatThrownBy(() -> handler.doHandle(context, NEXT))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("No distributed lock backend");
+
+            assertThat(acquiredCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("follower joining leader result never executes work lambda")
+        void doHandle_followerJoinsResult_doesNotIncrementAcquired() {
+            RedisCacheableOperation operation = createSyncOperation(true, 10);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(CacheResult.success());
+
+            handler.doHandle(context, NEXT);
+
+            assertThat(acquiredCount()).isZero();
+        }
 
         @Test
         @DisplayName("executes in lock when lock required")
@@ -253,13 +334,17 @@ class SyncLockHandlerTest {
         }
 
         @Test
-        @DisplayName("单参入口被拒绝:锁内推进必须有引擎交出的句柄")
-        void doHandle_singleArgForm_isRejected() {
+        @DisplayName("单参 handle 由基类提供拒绝推进的 continuation")
+        void handle_singleArgForm_usesBaseRejectionContinuation() {
             CacheContext context = createContext(CacheOperation.GET, createSyncOperation(true, 10));
+            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenAnswer(invocation -> {
+                java.util.function.Supplier<CacheResult> work = invocation.getArgument(1);
+                return work.get();
+            });
 
-            assertThatThrownBy(() -> handler.doHandle(context))
+            assertThatThrownBy(() -> handler.handle(context))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("ChainContinuation");
+                    .hasMessageContaining("single-argument handle");
         }
     }
 }

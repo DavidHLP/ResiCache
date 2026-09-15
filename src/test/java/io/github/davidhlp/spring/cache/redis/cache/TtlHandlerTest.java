@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -124,7 +125,7 @@ class TtlHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30),
                     configuredOperation(120, false, 0.2f));
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(120L);
@@ -135,7 +136,7 @@ class TtlHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30),
                     configuredOperation(0, false, 0.2f));
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(30L);
@@ -146,7 +147,7 @@ class TtlHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(-1),
                     configuredOperation(0, false, 0.2f));
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
@@ -157,7 +158,8 @@ class TtlHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, null,
                     configuredOperation(0, false, 0.2f));
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
+
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(60L);
@@ -168,7 +170,7 @@ class TtlHandlerTest {
             CacheContext context = createContext(CacheOperation.PUT, null,
                     configuredOperation(120, true, 0.1f));
 
-            handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().finalTtl()).isBetween(108L, 132L);
         }
@@ -179,7 +181,7 @@ class TtlHandlerTest {
         CacheContext context = createContext(CacheOperation.PUT, null,
                 configuredOperation(120, false, 0.2f));
 
-        HandlerResult result = handler.doHandle(context);
+        HandlerResult result = handler.doHandle(context, CacheResult::success);
 
         assertThat(result.shouldTerminate()).isFalse();
     }

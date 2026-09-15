@@ -134,7 +134,7 @@ class BloomFilterHandlerTest {
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(true);
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isTrue();
             verify(statistics).incMisses(CACHE_NAME);
@@ -146,7 +146,7 @@ class BloomFilterHandlerTest {
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
             verify(statistics, never()).incMisses(anyString());
@@ -162,7 +162,7 @@ class BloomFilterHandlerTest {
         void handlePut_continuesChain() {
             CacheContext context = createContext(CacheOperation.PUT);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
         }
@@ -172,7 +172,7 @@ class BloomFilterHandlerTest {
         void handlePutIfAbsent_continuesChain() {
             CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
         }
@@ -182,7 +182,7 @@ class BloomFilterHandlerTest {
         void handleClean_continuesChain() {
             CacheContext context = createContext(CacheOperation.CLEAN);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
             verify(bloomGate, never()).definiteMiss(anyString(), anyString());
@@ -327,7 +327,7 @@ class BloomFilterHandlerTest {
 
             // 同一 key 的后续 GET:布隆判定基于"可能存在",不短路,loader 可达
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
-            HandlerResult getResult = handler.doHandle(createContext(CacheOperation.GET));
+            HandlerResult getResult = handler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
 
             assertThat(getResult.shouldTerminate()).isFalse();
             verify(statistics, never()).incMisses(anyString());
@@ -366,7 +366,7 @@ class BloomFilterHandlerTest {
             CacheContext getContext = createContext(CacheOperation.GET);
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
 
-            HandlerResult result = handler.doHandle(getContext);
+            HandlerResult result = handler.doHandle(getContext, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
         }

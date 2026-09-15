@@ -73,7 +73,7 @@ class BloomFilterFalsePositiveTest {
         void get_bloomRejects_terminatesWithMiss() {
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isTrue();
             verify(bloomSupport).mightContain(anyString(), anyString());
@@ -86,7 +86,7 @@ class BloomFilterFalsePositiveTest {
             when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(true);
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
             verify(bloomSupport).mightContain(anyString(), anyString());

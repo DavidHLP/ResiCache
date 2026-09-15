@@ -21,7 +21,8 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>语义 counter 装配钩子：{@link #attachMeterRegistry(MeterRegistry)} →
  *       {@link #semanticCounter()}（子类 declare 自身 counter 元数据）</li>
  *   <li>语义 counter helper：{@link #registerCounter} / {@link #safeIncrementSemantic}</li>
- *   <li>handler 钩子：{@link #shouldHandle(CacheContext)} / {@link #doHandle(CacheContext)}</li>
+ *   <li>handler 钩子：{@link #shouldHandle(CacheContext)} /
+ *       {@link #doHandle(CacheContext, ChainContinuation)}</li>
  * </ul>
  *
  * <p>uniform fired counter 的注册与自增由 Engine 在节点前后统一调 observer
@@ -33,13 +34,9 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #safeIncrementSemantic} null-safe 自增。每 handler 的 counter 名字仍
  * 唯一（语义不合并），仅注册样板收敛到基类。
  *
- * <p><b>handle(ctx) 模板方法默认实现</b>：保留作为基类的"do work"默认实现，
- * 委托给子类钩子 {@code shouldHandle} / {@code doHandle}：
- *
- * <pre>
- *   if (shouldHandle(ctx)) return doHandle(ctx);
- *   else return continueChain();
- * </pre>
+ * <p><b>handle(ctx) 模板方法默认实现</b>：单参形态没有剩余链可推进，本基类传入一个
+ * {@code NO_REMAINDER} continuation；若 handler 尝试推进，基类统一拒绝。带 continuation
+ * 的形态则把引擎交出的句柄透传给同一个处理钩子。
  *
  * <p>Engine 调用本方法拿 {@link HandlerResult}，其 {@code driveChain} 负责
  * decision switch + 节点间推进。
@@ -52,6 +49,15 @@ import lombok.extern.slf4j.Slf4j;
 @Getter
 @Slf4j
 abstract class AbstractCacheHandler implements CacheHandler {
+
+    /**
+     * 单参 {@link #handle(CacheContext)} 没有剩余链可供推进。句柄由基类统一提供，
+     * 避免需要嵌套推进的 handler 各自手写拒绝逻辑。
+     */
+    private static final ChainContinuation NO_REMAINDER = () -> {
+        throw new IllegalStateException(
+                "ChainContinuation.advance() is unavailable for single-argument handle(context)");
+    };
 
     /**
      * 语义 counter 元数据（name + description 不可变记录）。子类通过
@@ -160,20 +166,21 @@ abstract class AbstractCacheHandler implements CacheHandler {
      *   <li>推进到下一个 handler（CONTINUE）</li>
      * </ul>
      *
-     * <p>本方法只做"读 shouldHandle → 调 doHandle 或退化为 continueChain"的最薄
-     * 包装。子类不应自行推进链；链推进由 {@link ChainEngine} 统一驱动。
+     * 本方法只把单参调用转为统一的二参处理钩子，并提供显式的"无剩余链"句柄。
+     * 链推进由 {@link ChainEngine} 统一驱动。
      */
     @Override
     public HandlerResult handle(CacheContext context) {
-        return shouldHandle(context) ? doHandle(context) : HandlerResult.continueChain();
+        return shouldHandle(context)
+                ? doHandle(context, NO_REMAINDER)
+                : HandlerResult.continueChain();
     }
 
     /**
      * Engine 实际调用的节点入口 —— 携带 {@link ChainContinuation} 的形态。
      *
-     * <p>与单参 {@link #handle(CacheContext)} 同样的 shouldHandle 闸门,区别只是把推进句柄
-     * 透传给 {@link #doHandle(CacheContext, ChainContinuation)};后者默认忽略句柄、委派单参
-     * {@link #doHandle(CacheContext)} —— 不需要嵌套推进的子类零改动。
+     * <p>本方法把引擎交出的推进句柄透传给唯一的二参处理钩子；单参
+     * {@link #handle(CacheContext)} 则传入基类提供的拒绝推进句柄。
      */
     @Override
     public HandlerResult handle(CacheContext context, ChainContinuation next) {
@@ -188,37 +195,17 @@ abstract class AbstractCacheHandler implements CacheHandler {
      */
     protected abstract boolean shouldHandle(CacheContext context);
 
-    /**
-     * 执行实际的处理逻辑。
-     *
-     * <p>返回 {@link HandlerResult} 包含：
-     * <ul>
-     *   <li>{@code decision}：控制责任链后续执行（CONTINUE / TERMINATE / SKIP_ALL）</li>
-     *   <li>{@code result}：处理结果（可选，为 null 时 Engine 退化为 success）</li>
-     * </ul>
-     *
-     * <p>子类 doHandle <strong>不应</strong>自行推进链；链推进由 {@link ChainEngine}
-     * 统一驱动。需要在自身临界区内推进剩余链的 handler(如 {@code SyncLockHandler} 锁内推进)
-     * override 二参形态 {@link #doHandle(CacheContext, ChainContinuation)}。
-     *
-     * @param context 缓存上下文
-     * @return HandlerResult 包含决策和结果
-     */
-    protected abstract HandlerResult doHandle(CacheContext context);
 
     /**
-     * 执行实际处理逻辑的嵌套推进形态 —— 默认忽略 {@code next},委派
-     * {@link #doHandle(CacheContext)}。
+     * 执行实际处理逻辑的唯一 handler 钩子。
      *
-     * <p>需要「在自己的临界区内跑完剩余链」的 handler override 本方法,把
-     * {@link ChainContinuation#advance()} 放进临界区(如分布式锁 lambda),再以
-     * {@link HandlerResult#terminate(CacheResult)} 结束本节点。
+     * <p>普通 handler 忽略 {@code next}；需要在自身临界区内推进剩余链的 handler
+     * (如 {@code SyncLockHandler} 锁内推进)在此钩子中调用
+     * {@link ChainContinuation#advance()}。
      *
      * @param context 缓存上下文
      * @param next    本节点之后剩余链的推进句柄;仅当次调用有效,至多推进一次
      * @return HandlerResult 包含决策和结果
      */
-    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
-        return doHandle(context);
-    }
+    protected abstract HandlerResult doHandle(CacheContext context, ChainContinuation next);
 }

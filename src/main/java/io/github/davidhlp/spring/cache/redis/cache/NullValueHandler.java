@@ -4,6 +4,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
@@ -55,7 +56,7 @@ class NullValueHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected HandlerResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         Object deserializedValue = context.getDeserializedValue();
 
         if (deserializedValue == null) {

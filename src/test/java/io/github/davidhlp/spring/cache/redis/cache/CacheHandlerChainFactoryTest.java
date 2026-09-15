@@ -6,6 +6,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
@@ -418,7 +419,7 @@ class CacheHandlerChainFactoryTest {
             }
 
             @Override
-            protected HandlerResult doHandle(CacheContext context) {
+            protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
                 return HandlerResult.continueWith(CacheResult.success());
             }
         }
