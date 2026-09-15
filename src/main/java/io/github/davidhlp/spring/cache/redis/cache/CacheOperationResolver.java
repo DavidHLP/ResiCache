@@ -71,11 +71,13 @@ class CacheOperationResolver {
      *   <li>查 register;未命中 → 记 debug 日志,返回 null</li>
      * </ol>
      *
-     * <p>按<b>当前链侧操作</b>选择注册命名空间(见 {@link OperationKind#forCacheOperation}):
-     * GET 查 {@code @RedisCacheable},PUT / PUT_IF_ABSENT 查 {@code @RedisCachePut},
-     * REMOVE / CLEAN 查 {@code @RedisCacheEvict}。写路径在自身命名空间未命中时回退查
-     * CACHEABLE —— 读穿透的写回由 {@code @RedisCacheable} 方法承担,其写侧没有独立的
-     * {@code @RedisCachePut} 声明,回退保证该场景策略不丢。
+     * <p><b>读侧声明优先</b>:方法声明了 {@code @RedisCacheable} 时,它就是该方法<b>及其读穿透
+     * 写回</b>的唯一策略来源 —— 写回是读操作的一部分,必须沿用同一份 ttl / cacheNullValues /
+     * bloom 声明,不能被写侧注解的默认值悄悄改掉。写路径只有在方法<em>没有</em>
+     * {@code @RedisCacheable} 声明时才读 {@code @RedisCachePut},即写侧注解只对「只写」方法生效。
+     *
+     * <p>REMOVE / CLEAN 无方法级策略可解析(见 {@link OperationKind#forCacheOperation}),
+     * 直接返回 null,不做必然未命中的查询。
      *
      * @param cacheName 缓存名(由调用方解析为 {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCache#getName()}
      *                   或 Spring Cache 抽象传入)
@@ -92,11 +94,13 @@ class CacheOperationResolver {
             return null;
         }
 
-        CachePolicyView.Source resolved = lookup(cacheName, key,
-                OperationKind.forCacheOperation(operation));
+        CachePolicyView.Source resolved = lookup(cacheName, key, OperationKind.CACHEABLE);
         if (resolved == null && operation.isWrite()) {
-            // 读穿透写回:@RedisCacheable 方法的写侧策略来自读侧声明
-            resolved = lookup(cacheName, key, OperationKind.CACHEABLE);
+            // 方法没有 @RedisCacheable 声明:只有 @RedisCachePut 的「只写」方法读自己的命名空间
+            OperationKind writeKind = OperationKind.forCacheOperation(operation);
+            if (writeKind != null) {
+                resolved = lookup(cacheName, key, writeKind);
+            }
         }
 
         if (resolved == null) {
@@ -107,8 +111,7 @@ class CacheOperationResolver {
     }
 
     /**
-     * 单次命名空间查询 —— 未命中或类型不实现 {@link CachePolicyView.Source}(如驱逐操作)
-     * 时返回 null。
+     * 单次命名空间查询 —— 未命中,或类型不实现 {@link CachePolicyView.Source} 时返回 null。
      */
     @Nullable
     private CachePolicyView.Source lookup(String cacheName, AnnotatedElementKey key,

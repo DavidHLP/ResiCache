@@ -151,8 +151,8 @@ class ChainEngine {
                 return CacheResult.success();
             }
             CacheHandler current = snapshot.get(idx);
-            HandlerResult result = invokeWithObservers(current, context,
-                    continuationFor(snapshot, idx, context));
+            NodeContinuation next = continuationFor(snapshot, idx, context);
+            HandlerResult result = invokeWithObservers(current, context, next);
 
             if (result == null) {
                 // SPI 协议(RM-007):handler 必须返回非 null HandlerResult。
@@ -163,6 +163,14 @@ class ChainEngine {
             }
             switch (result.decision()) {
                 case CONTINUE:
+                    if (next.advanced()) {
+                        // 协议违规:handler 已用句柄把剩余链跑完,又返回 CONTINUE 让引擎再推一遍
+                        // —— 后继会对同一请求执行两次(重复 Redis 写 / 重复 bloom 回填 / 二次取锁)。
+                        throw new IllegalStateException(
+                                "CacheHandler advanced the remainder and then returned CONTINUE: "
+                                        + current.getClass().getName()
+                                        + " — return TERMINATE after ChainContinuation.advance()");
+                    }
                     // 链尾 CONTINUE：返回 handler 的 result（result 为 null 时退化为 success）
                     if (idx == snapshot.size() - 1) {
                         return materialize(result);
@@ -188,26 +196,53 @@ class ChainEngine {
      *
      * <p>语义与旧的 fragment API 等价(跳过 aroundChain 观测与 post-process,由外层
      * {@link #execute} 唯一负责),但起点来自构造期的 index,不再需要 {@code indexOf(from)}
-     * 反查,也不需要任何 ThreadLocal。单次使用由 {@link java.util.concurrent.atomic.AtomicBoolean}
-     * 守护 —— 重复推进会让同一批后继 handler 对同一请求执行两次。
+     * 反查,也不需要任何 ThreadLocal。
      */
-    private ChainContinuation continuationFor(List<CacheHandler> snapshot, int index,
-                                              CacheContext context) {
-        java.util.concurrent.atomic.AtomicBoolean used =
-                new java.util.concurrent.atomic.AtomicBoolean(false);
-        return () -> {
-            if (!used.compareAndSet(false, true)) {
+    private NodeContinuation continuationFor(List<CacheHandler> snapshot, int index,
+                                             CacheContext context) {
+        return new NodeContinuation(snapshot, index, context);
+    }
+
+    /**
+     * 单节点的推进句柄 —— 每次 {@link #driveChain} 迭代构造一个,生命周期止于该节点返回。
+     *
+     * <p>{@code used} 用普通字段而非原子量:契约要求句柄只在<b>当前线程</b>内使用
+     * (见 {@link ChainContinuation}),违规使用的最坏后果是重复推进一次后继链,不值得为
+     * 每次缓存操作多分配一个原子量。
+     */
+    private final class NodeContinuation implements ChainContinuation {
+
+        private final List<CacheHandler> snapshot;
+        private final int index;
+        private final CacheContext context;
+        private boolean used;
+
+        NodeContinuation(List<CacheHandler> snapshot, int index, CacheContext context) {
+            this.snapshot = snapshot;
+            this.index = index;
+            this.context = context;
+        }
+
+        /** 句柄是否已被推进 —— 引擎据此拒绝「推进后仍返回 CONTINUE」的协议违规。 */
+        boolean advanced() {
+            return used;
+        }
+
+        @Override
+        public CacheResult advance() {
+            if (used) {
                 throw new IllegalStateException(
                         "ChainContinuation.advance() called more than once for handler #" + index
                                 + " of " + snapshot.size());
             }
+            used = true;
             if (index + 1 >= snapshot.size()) {
                 // 已是链尾:无后继可推进
                 return CacheResult.success();
             }
             // 不可变快照的 subList view — driveChain 只读（get / size），view 安全
             return driveChain(snapshot.subList(index + 1, snapshot.size()), context);
-        };
+        }
     }
 
     /**
@@ -390,10 +425,14 @@ class ChainEngine {
                         log.debug("Post-processing executed for: {}",
                                 handler.getClass().getSimpleName());
                     } catch (Exception e) {
-                        // ADR-0001 §15 key 隐私:ERROR 只带 cacheName(低基数),不带 raw key
-                        log.error("Post-processing failed for: {}, operation: {}, cacheName: {}",
+                        // ADR-0001 §15 key 隐私:ERROR 只带 cacheName + 异常类型链,不带 raw key;
+                        // 完整栈留 DEBUG(异常 message 可能内嵌 key)。
+                        log.error("Post-processing failed for: {}, operation: {}, cacheName: {}, cause={}",
                                 handler.getClass().getSimpleName(),
                                 context.getOperation(),
+                                context.getCacheName(),
+                                FailureDiagnostics.sanitizedFailure(e));
+                        log.debug("Post-processing failure detail: cacheName={}",
                                 context.getCacheName(), e);
                     }
                 }

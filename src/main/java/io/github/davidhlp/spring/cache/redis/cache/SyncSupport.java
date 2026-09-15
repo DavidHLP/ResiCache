@@ -156,6 +156,34 @@ class SyncSupport {
     }
 
     /**
+     * 执行<b>独占</b>工作 —— 写路径用:只用分布式锁做互斥,不做 single-flight 结果共享。
+     *
+     * <p><b>为什么写不能用 {@link #executeSync}</b>:single-flight 的语义是「同一 key 的并发请求
+     * 共享 leader 的结果」—— 对<b>加载</b>是优化(只回源一次),对<b>写</b>是数据丢失:成为
+     * follower 的线程根本不会执行自己的工作,却拿着 leader 的成功结果返回,于是它那一笔写
+     * 被静默丢掉(且 {@code requireSuccessful(PUT)} 看到的是成功)。共享同一个 future map 还会
+     * 让「读 loader 的 {@code LoadOutcome}」与「写的 {@code CacheResult}」互相 join 而类型错乱。
+     *
+     * <p>本入口每个调用各自排队拿锁、各自执行 —— 并发写互斥但不互相吞并。
+     *
+     * @param key            缓存键(锁键)
+     * @param work           要执行的工作
+     * @param timeoutSeconds 获锁超时(秒)
+     * @param <T>            返回值类型
+     * @return 本次调用自己的执行结果
+     */
+    public <T> T executeExclusive(final String key, final Supplier<T> work, final long timeoutSeconds) {
+        // 重入 fast-path:本线程已持有该 key 的锁(链内嵌套),再取一次会自死锁
+        if (reentrantKeys.get().contains(key)) {
+            return work.get();
+        }
+        // 复用 Leader 的获锁 / fail-fast / local-only / lease 逻辑,但 future 不发布到 inFlight ——
+        // 其他线程无从 join,只能各自排队拿锁后执行自己的工作。
+        return new SyncRole.Leader<>(key, timeoutSeconds, work, new CompletableFuture<>(),
+                distributedManagers, properties, inFlight, reentrantKeys).run();
+    }
+
+    /**
      * 选举:基于 reentrantKeys + inFlight CAS 决定走哪个角色.
      *
      * <p>本方法不持锁(CAS 无锁);race 条件下多个线程可能各自走 leader 路径(无 distributedManagers

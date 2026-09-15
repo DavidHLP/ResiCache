@@ -29,7 +29,11 @@
  *
  * <h2>核心类说明</h2>
  * <ul>
- *   <li><b>CacheHandler</b>：处理器接口（仅 handle 一方法;handler 不承担链接职责）</li>
+ *   <li><b>CacheHandler</b>：处理器接口（{@code handle(context)} 为主契约;引擎另调
+ *       {@code handle(context, ChainContinuation)}，其 default 忽略句柄并委派前者）</li>
+ *   <li><b>ChainContinuation</b>：引擎交给当前节点的「推进剩余链」句柄 —— 需要在自己的
+ *       临界区内跑完后继的 handler（如 {@code sync=true} 的分布式锁内推进）用它，
+ *       否则链推进完全由 Engine 承担</li>
  *   <li><b>AbstractCacheHandler</b>：抽象处理器，handle 退化为
  *       {@code shouldHandle ? doHandle : continueChain}（链推进由 Engine 承担）</li>
  *   <li><b>CacheHandlerChain</b>：责任链 facade —— 维护 handler 列表 + 委派

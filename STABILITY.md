@@ -73,10 +73,12 @@ custom implementation must satisfy.
 
 ### Handlers
 
-1. **Non-null result**: `handle(context)` MUST return a non-null
-   `HandlerResult`. The engine rejects `null` with
-   `IllegalStateException("CacheHandler returned null HandlerResult: <class>")`
-   — never an opaque NPE.
+1. **Non-null result**: handling a node MUST return a non-null
+   `HandlerResult`. The engine calls `handle(context, next)` and rejects `null`
+   with `IllegalStateException("CacheHandler returned null HandlerResult:
+   <class>")` — never an opaque NPE. A handler whose work requires the
+   continuation (see item 6) may reject a bare `handle(context)` call with
+   `IllegalStateException` rather than silently run a partial chain.
 2. **FlowControl semantics**: `CONTINUE` advances to the next handler (a
    `null` result field at chain end materializes to `success()`); `TERMINATE`
    ends the chain and returns the carried result; `SKIP_ALL` ends the chain,
@@ -99,6 +101,9 @@ custom implementation must satisfy.
    at most once (a second call throws `IllegalStateException`), stays on the
    calling thread, and carries per-node observation only — around-chain
    observation and post-processing remain owned by the outer execution.
+   After advancing, the handler MUST end its node with `TERMINATE`: returning
+   `CONTINUE` would make the engine run every successor a second time and is
+   rejected with `IllegalStateException`.
 
 ### Observers
 

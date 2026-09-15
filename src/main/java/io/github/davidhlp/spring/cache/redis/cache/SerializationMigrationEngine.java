@@ -131,8 +131,11 @@ class SerializationMigrationEngine
         } catch (Exception ex) {
             report.failed++;
             record("failed");
-            log.warn("[ResiCache] Serialization migration rejected key fingerprint={}: {}",
-                    keyFingerprint(key), ex.getMessage());
+            // ADR-0001 §15:WARN 不带 raw key,也不带异常 message(可能内嵌 key);
+            // 只留类型链 + 指纹,完整栈在 DEBUG。
+            log.warn("[ResiCache] Serialization migration rejected key fingerprint={}, cause={}",
+                    keyFingerprint(key), FailureDiagnostics.sanitizedFailure(ex));
+            log.debug("[ResiCache] Serialization migration rejection detail", ex);
         }
     }
 
@@ -178,8 +181,9 @@ class SerializationMigrationEngine
         } catch (Exception ex) {
             report.failed++;
             record("failed");
-            log.warn("[ResiCache] Serialization rollback rejected key fingerprint={}: {}",
-                    keyFingerprint(backupKey), ex.getMessage());
+            log.warn("[ResiCache] Serialization rollback rejected key fingerprint={}, cause={}",
+                    keyFingerprint(backupKey), FailureDiagnostics.sanitizedFailure(ex));
+            log.debug("[ResiCache] Serialization rollback rejection detail", ex);
         }
     }
 

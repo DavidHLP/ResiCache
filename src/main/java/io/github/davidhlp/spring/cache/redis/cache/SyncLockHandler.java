@@ -32,7 +32,8 @@ import org.springframework.util.Assert;
  *       (MDC stamp / Timer record)由外层 execute 唯一负责,锁内不重复打点</li>
  *   <li>句柄由 Engine 按<b>本节点在快照中的位置</b>构造,handler 不反查引擎、不依赖自身
  *       在链中的 next 引用,不会再回到本 handler 自身</li>
- *   <li>锁内行为与主链一致</li>
+ *   <li>锁内行为与主链一致;读走 single-flight(并发共享 leader 结果),写走独占执行
+ *       (并发写互斥但各自执行,不被 follower 合并)</li>
  * </ul>
  *
  * <p><b>锁超时解析</b>:由 {@link SyncLockTimeout} 统一承担,与 {@code RedisProCache}
@@ -114,12 +115,11 @@ class SyncLockHandler extends AbstractCacheHandler {
         safeIncrementSemantic();
 
         // 在锁内执行后续 Handler — 用引擎交出的推进句柄驱动(perNode 观测照常,
-        // aroundChain 观测由外层 execute 唯一负责,锁内不重复打点)
-        CacheResult result = syncSupport.executeSync(
-            lockKey,
-            next::advance,
-            timeout
-        );
+        // aroundChain 观测由外层 execute 唯一负责,锁内不重复打点)。
+        // 写路径走独占执行:写不能 join 他线程的 single-flight 结果(否则本笔写被静默丢弃)。
+        CacheResult result = context.getOperation().isWrite()
+                ? syncSupport.executeExclusive(lockKey, next::advance, timeout)
+                : syncSupport.executeSync(lockKey, next::advance, timeout);
 
         // 锁内执行完成,终止链
         return HandlerResult.terminate(result);

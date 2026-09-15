@@ -68,24 +68,53 @@ class FailureLogKeyPrivacyTest {
         ((Logger) LoggerFactory.getLogger(loggerName)).detachAppender(appender);
     }
 
-    /** 拼接全部 WARN/ERROR 事件的格式化消息。 */
+    /**
+     * 拼接全部 WARN/ERROR 事件的<b>完整渲染</b>:格式化消息 + 每个 throwable 的类型与 message
+     * (含 cause 链)。
+     *
+     * <p>只断言格式化消息是不够的 —— SLF4J 会把异常栈(含 message)一并打印,而
+     * {@code Cache.ValueRetrievalException} 的 message 内嵌 raw key。故本 helper 把
+     * throwable 的 message 也算进「诊断文本」。
+     */
     private String warnAndErrorText(ListAppender<ILoggingEvent> captured) {
-        return captured.list.stream()
-                .filter(event -> event.getLevel().isGreaterOrEqual(Level.WARN))
-                .map(ILoggingEvent::getFormattedMessage)
-                .reduce("", (a, b) -> a + "\n" + b);
+        StringBuilder sb = new StringBuilder();
+        for (ILoggingEvent event : captured.list) {
+            if (!event.getLevel().isGreaterOrEqual(Level.WARN)) {
+                continue;
+            }
+            sb.append(event.getFormattedMessage()).append('\n');
+            for (ch.qos.logback.classic.spi.IThrowableProxy proxy = event.getThrowableProxy();
+                 proxy != null;
+                 proxy = proxy.getCause()) {
+                sb.append(proxy.getClassName()).append(": ").append(proxy.getMessage()).append('\n');
+                for (ch.qos.logback.classic.spi.StackTraceElementProxy frame
+                        : proxy.getStackTraceElementProxyArray()) {
+                    sb.append("  at ").append(frame.getSTEAsString()).append('\n');
+                }
+            }
+        }
+        return sb.toString();
     }
 
     @Test
-    @DisplayName("keyFingerprint:与 raw key 不同、稳定、null-safe,byte[] 与 String 同源")
+    @DisplayName("keyFingerprint:与 raw key 不同、稳定、null-safe,byte[] 按字节哈希")
     void keyFingerprint_isStableTokenNotRawKey() {
         assertThat(FailureDiagnostics.keyFingerprint(SECRET_KEY))
                 .isNotEqualTo(SECRET_KEY)
                 .isEqualTo(FailureDiagnostics.keyFingerprint(SECRET_KEY));
         assertThat(FailureDiagnostics.keyFingerprint((String) null)).isEqualTo("null");
         assertThat(FailureDiagnostics.keyFingerprint((byte[]) null)).isEqualTo("null");
-        assertThat(FailureDiagnostics.keyFingerprint(SECRET_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
-                .isEqualTo(FailureDiagnostics.keyFingerprint(SECRET_KEY));
+
+        byte[] bytes = SECRET_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(FailureDiagnostics.keyFingerprint(bytes))
+                .as("字节形态按字节哈希(不经过 UTF-8 解码,避免非法序列碰撞)")
+                .isNotEqualTo(SECRET_KEY)
+                .isEqualTo(FailureDiagnostics.keyFingerprint(bytes));
+
+        byte[] withReplacementChar = SECRET_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(FailureDiagnostics.keyFingerprint(new byte[] {(byte) 0xFF, (byte) 0xFE}))
+                .as("不同字节序列不得因解码替换而碰撞")
+                .isNotEqualTo(FailureDiagnostics.keyFingerprint(new byte[] {(byte) 0xFE, (byte) 0xFF}));
     }
 
     @Test
@@ -98,7 +127,8 @@ class FailureLogKeyPrivacyTest {
 
             assertThatThrownBy(() -> policy.executeWithRetry(SECRET_KEY, () -> {
                 attempts.incrementAndGet();
-                throw new IllegalStateException("redis down");
+                // 异常 message 故意内嵌 raw key:WARN/ERROR 不得把它渲染出来
+                throw new IllegalStateException("redis down for key " + SECRET_KEY);
             })).isInstanceOf(RuntimeException.class);
 
             assertThat(attempts.get()).isEqualTo(RefreshRetryPolicy.MAX_RETRY_COUNT);
@@ -136,7 +166,7 @@ class FailureLogKeyPrivacyTest {
 
                 @Override
                 public void afterChainExecution(CacheContext ctx, CacheResult result) {
-                    throw new IllegalStateException("post-process boom");
+                    throw new IllegalStateException("post-process boom for key " + SECRET_KEY);
                 }
             };
 
@@ -272,7 +302,8 @@ class FailureLogKeyPrivacyTest {
         ListAppender<ILoggingEvent> captured = attach(EarlyRefresh.class);
         try {
             ValueOperations<String, Object> valueOperations = mock(ValueOperations.class);
-            when(valueOperations.get(any())).thenThrow(new IllegalStateException("redis down"));
+            when(valueOperations.get(any()))
+                    .thenThrow(new IllegalStateException("redis down for key " + SECRET_KEY));
             EarlyRefresh earlyRefresh = new EarlyRefresh(
                     mock(EarlyExpirationPolicy.class),
                     mock(ThreadPoolEarlyExpirationExecutor.class),

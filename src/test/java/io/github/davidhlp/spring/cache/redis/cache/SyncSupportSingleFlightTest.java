@@ -26,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -112,6 +114,51 @@ class SyncSupportSingleFlightTest {
                 .as("loader invoked exactly once (single-flight)").isEqualTo(1);
         assertThat(results).hasSize(n);
         assertThat(results).allMatch(r -> "VALUE".equals(r));
+    }
+
+    @Test
+    @DisplayName("executeExclusive:并发写各自执行(不 join),每笔工作都不被丢弃")
+    void executeExclusive_concurrentWrites_eachRuns() throws Exception {
+        when(lockManager.tryAcquire(anyString(), anyLong()))
+                .thenReturn(Optional.of(mock(LockManager.LockHandle.class)));
+        SyncSupport support = new SyncSupport(List.of(lockManager), properties);
+
+        int n = 8;
+        ExecutorService ex = Executors.newFixedThreadPool(n);
+        CountDownLatch done = new CountDownLatch(n);
+        ConcurrentLinkedQueue<String> written = new ConcurrentLinkedQueue<>();
+
+        for (int i = 0; i < n; i++) {
+            final String value = "v" + i;
+            ex.submit(() -> {
+                try {
+                    written.add(support.executeExclusive("write-key", () -> value, 10));
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        assertThat(done.await(5, TimeUnit.SECONDS)).as("all writers complete").isTrue();
+        ex.shutdown();
+
+        assertThat(written)
+                .as("独占执行:每个写线程都跑了自己的工作(single-flight 会只留一个)")
+                .hasSize(n);
+    }
+
+    @Test
+    @DisplayName("executeExclusive:同线程重入走 fast-path,不二次取锁(不死锁)")
+    void executeExclusive_reentrant_runsInline() throws Exception {
+        when(lockManager.tryAcquire(anyString(), anyLong()))
+                .thenReturn(Optional.of(mock(LockManager.LockHandle.class)));
+        SyncSupport support = new SyncSupport(List.of(lockManager), properties);
+
+        String result = support.executeExclusive("nested-key", () ->
+                support.executeExclusive("nested-key", () -> "inner", 10), 10);
+
+        assertThat(result).isEqualTo("inner");
+        verify(lockManager, times(1)).tryAcquire(anyString(), anyLong());
     }
 
     @Test

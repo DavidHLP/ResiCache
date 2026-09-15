@@ -180,17 +180,18 @@ class SyncLockHandlerTest {
         }
 
         @Test
-        @DisplayName("terminates chain when lock required regardless of operation type")
-        void doHandle_lockRequiredForPut_terminatesChain() {
+        @DisplayName("写路径走独占执行:并发写不得被 single-flight 合并(否则本笔写被丢弃)")
+        void doHandle_lockRequiredForPut_usesExclusiveExecution() {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.PUT, operation);
             CacheResult expectedResult = CacheResult.success();
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
+            when(syncSupport.executeExclusive(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
             HandlerResult result = handler.doHandle(context, NEXT);
 
             assertThat(result.decision()).isEqualTo(FlowControl.TERMINATE);
-            verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
+            verify(syncSupport).executeExclusive(eq("test:key"), any(), eq(10L));
+            verify(syncSupport, never()).executeSync(anyString(), any(), anyLong());
         }
 
         @Test
