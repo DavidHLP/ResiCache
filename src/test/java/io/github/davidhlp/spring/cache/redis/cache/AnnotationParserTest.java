@@ -5,7 +5,7 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
 import java.lang.reflect.Method;
-import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.interceptor.CacheEvictOperation;
@@ -51,7 +51,7 @@ class AnnotationParserTest {
                 .containsExactly(RedisCacheableOperation.class, RedisCacheEvictOperation.class,
                         RedisCachePutOperation.class);
         assertThat(parsed.operations()).extracting(CacheOperation::getCacheNames)
-                .containsExactly(List.of("composite-cache"), List.of("composite-evict"), List.of("composite-put"));
+                .containsExactly(Set.of("composite-cache"), Set.of("composite-evict"), Set.of("composite-put"));
     }
 
     @Test
@@ -62,7 +62,7 @@ class AnnotationParserTest {
         assertThat(parsed.operations()).extracting(Object::getClass)
                 .containsExactly(CacheableOperation.class, CachePutOperation.class);
         assertThat(parsed.operations()).extracting(CacheOperation::getCacheNames)
-                .containsExactly(List.of("class-cache"), List.of("class-put"));
+                .containsExactly(Set.of("class-cache"), Set.of("class-put"));
         assertThat(parsed.policyOperations()).isEmpty();
     }
 

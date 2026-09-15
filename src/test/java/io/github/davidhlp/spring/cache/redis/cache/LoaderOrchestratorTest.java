@@ -135,6 +135,7 @@ class LoaderOrchestratorTest {
         @Test
         @DisplayName("bloom accepts (mightContain=true) → proceeds to default path, no short-circuit")
         void bloomAccepts_proceedsToDefaultPath() {
+            RedisCacheableOperation op = operation(true, false);
             when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(true);
 
             Callable<String> loader = () -> "value";

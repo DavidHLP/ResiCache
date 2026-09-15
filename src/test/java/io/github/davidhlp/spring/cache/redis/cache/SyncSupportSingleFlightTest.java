@@ -78,6 +78,7 @@ class SyncSupportSingleFlightTest {
         ExecutorService ex = Executors.newFixedThreadPool(n);
         CountDownLatch done = new CountDownLatch(n);
         CountDownLatch callersReady = new CountDownLatch(n);
+        ConcurrentLinkedQueue<Object> results = new ConcurrentLinkedQueue<>();
 
         for (int i = 0; i < n; i++) {
             ex.submit(() -> {
