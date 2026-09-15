@@ -165,7 +165,7 @@ public class RedisProCache extends RedisCache {
                             "Cache write-back failed after successful load; returning loaded value: "
                                     + "cacheName={}, failure={}",
                             getName(),
-                            sanitizedFailure(writeBackCause));
+                            FailureDiagnostics.sanitizedFailure(writeBackCause));
                     yield value;
                 }
                 case LoaderOrchestrator.LoadFailed<T>(Throwable cause) -> {
@@ -190,24 +190,6 @@ public class RedisProCache extends RedisCache {
      */
     private Cache.ValueWrapper doubleCheckLookup(Object key) {
         return super.get(key);
-    }
-
-    /**
-     * 写回失败的安全日志描述 —— 不含原始 key / 异常消息(key 隐私 ADR-06)。
-     *
-     * <p>异常 message 可能携带 raw key;默认 WARN 日志只记异常类型链的简单名。
-     */
-    private static String sanitizedFailure(Throwable failure) {
-        if (failure == null) {
-            return "null";
-        }
-        StringBuilder sb = new StringBuilder(failure.getClass().getSimpleName());
-        Throwable cause = failure.getCause();
-        while (cause != null && sb.length() < 160) {
-            sb.append(" <- ").append(cause.getClass().getSimpleName());
-            cause = cause.getCause();
-        }
-        return sb.toString();
     }
 
     /**

@@ -46,4 +46,26 @@ final class FailureDiagnostics {
     static String keyFingerprint(@Nullable byte[] key) {
         return key == null ? "null" : keyFingerprint(new String(key, StandardCharsets.UTF_8));
     }
+
+    /**
+     * 失败的安全日志描述 —— 只记异常类型链的简单名,不含异常 message
+     * (message 可能内嵌 raw key,§15 禁止 WARN/ERROR 外泄)。
+     *
+     * <p>类型链最多 160 字符,避免深 cause 链刷屏。
+     *
+     * @param failure 失败原因(可为 null)
+     * @return 异常类型链描述
+     */
+    static String sanitizedFailure(@Nullable Throwable failure) {
+        if (failure == null) {
+            return "null";
+        }
+        StringBuilder sb = new StringBuilder(failure.getClass().getSimpleName());
+        Throwable cause = failure.getCause();
+        while (cause != null && sb.length() < 160) {
+            sb.append(" <- ").append(cause.getClass().getSimpleName());
+            cause = cause.getCause();
+        }
+        return sb.toString();
+    }
 }
