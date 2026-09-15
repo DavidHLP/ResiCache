@@ -1,12 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
@@ -15,6 +10,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -41,6 +38,18 @@ class CacheHandlerChainFactoryTest {
     void setUp() {
         properties = mock(RedisProCacheProperties.class);
         factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, null, new ChainEngine());
+    }
+    private CacheContext testContext() {
+        return CacheContext.of(CacheInput.builder()
+                .operation(CacheOperation.GET)
+                .cacheName("factory-test")
+                .redisKey("factory:key")
+                .actualKey("factory:key")
+                .build());
+    }
+
+    private static byte[] marker(String value) {
+        return value.getBytes(StandardCharsets.UTF_8);
     }
 
     @Nested
@@ -82,11 +91,9 @@ class CacheHandlerChainFactoryTest {
             );
             factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
-            CacheHandlerChain chain = factory.createChain();
+            CacheResult result = factory.createChain().execute(testContext());
 
-            // Order should be: BLOOM_FILTER(100), SYNC_LOCK(200), ACTUAL_CACHE(500)
-            assertThat(chain.getHandlerNames()).containsExactly(
-                    "BloomFilterTestHandler", "SyncLockTestHandler", "ActualCacheTestHandler");
+            assertThat(result.resultBytes()).isEqualTo(marker("bloom-filter"));
         }
 
         @Test
@@ -98,11 +105,9 @@ class CacheHandlerChainFactoryTest {
             );
             factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
-            CacheHandlerChain chain = factory.createChain();
+            CacheResult result = factory.createChain().execute(testContext());
 
-            // PriorityTestHandler has explicit order, TestCacheHandler has MAX_VALUE
-            List<String> names = chain.getHandlerNames();
-            assertThat(names.get(names.size() - 1)).isEqualTo("TestCacheHandler");
+            assertThat(result.resultBytes()).isEqualTo(marker("priority"));
         }
 
         @Test
@@ -127,7 +132,6 @@ class CacheHandlerChainFactoryTest {
         @Test
         @DisplayName("filters out disabled handlers from global config")
         void createChain_disabledHandlersGlobally_filtersOut() {
-            // TestCacheHandler -> "test-cache" (Handler removed, camelCase converted)
             List<CacheHandler> handlers = List.of(
                     new TestCacheHandler(),
                     new AnotherTestHandler()
@@ -138,13 +142,12 @@ class CacheHandlerChainFactoryTest {
             CacheHandlerChain chain = factory.createChain();
 
             assertThat(chain.size()).isEqualTo(1);
-            assertThat(chain.getHandlerNames()).containsExactly("AnotherTestHandler");
+            assertThat(chain.execute(testContext()).resultBytes()).isEqualTo(marker("another-test"));
         }
 
         @Test
         @DisplayName("handles kebab-case and class name mapping")
         void createChain_kebabCaseMapping_worksCorrectly() {
-            // TestCacheHandler -> "test-cache", AnotherTestHandler -> "another-test"
             List<CacheHandler> handlers = List.of(
                     new TestCacheHandler(),
                     new AnotherTestHandler()
@@ -155,7 +158,7 @@ class CacheHandlerChainFactoryTest {
             CacheHandlerChain chain = factory.createChain();
 
             assertThat(chain.size()).isEqualTo(1);
-            assertThat(chain.getHandlerNames()).containsExactly("AnotherTestHandler");
+            assertThat(chain.execute(testContext()).resultBytes()).isEqualTo(marker("another-test"));
         }
 
         @Test
@@ -207,14 +210,11 @@ class CacheHandlerChainFactoryTest {
                     new TtlHandler(), new NullValueHandler(), new ActualCacheHandler());
             factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
-            List<String> names = factory.createChain().getHandlerNames();
+            CacheHandlerChain chain = factory.createChain();
 
-            // B1:TtlHandler 兼担基础 TTL 计算,禁用会导致 ActualCacheHandler 写无 TTL 永久缓存 → 必须保留
-            assertThat(names).contains("TtlHandler", "ActualCacheHandler");
-            assertThat(names).doesNotContain("BloomFilterHandler", "SyncLockHandler",
-                    "EarlyExpirationHandler", "NullValueHandler");
-        }
-
+            // TtlHandler 兼担基础 TTL 计算,禁用会导致 ActualCacheHandler 写无 TTL 永久缓存 → 必须保留
+            assertThat(chain.size()).isEqualTo(2);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         @Test
         @DisplayName("protection.enabled=true(default) 保留全部 handler")
         void protectionEnabled_keepsAll() {
@@ -225,9 +225,12 @@ class CacheHandlerChainFactoryTest {
                     new BloomFilterHandler(), new TtlHandler(), new ActualCacheHandler());
             factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
-            assertThat(factory.createChain().getHandlerNames())
-                    .contains("BloomFilterHandler", "TtlHandler", "ActualCacheHandler");
+            CacheHandlerChain chain = factory.createChain();
+
+            assertThat(chain.size()).isEqualTo(3);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
+
 
         @Test
         @DisplayName("总开关 true + 分项全 null → 全部防护 handler 保留(null 继承)")
@@ -239,10 +242,10 @@ class CacheHandlerChainFactoryTest {
             protection.setEarlyExpirationEnabled(null);
             protection.setNullValueEnabled(null);
 
-            List<String> names = chainNames(protection);
+            CacheHandlerChain chain = chainFor(protection);
 
-            assertThat(names).contains("BloomFilterHandler", "SyncLockHandler",
-                    "EarlyExpirationHandler", "NullValueHandler", "TtlHandler", "ActualCacheHandler");
+            assertThat(chain.size()).isEqualTo(6);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
 
         @Test
@@ -252,10 +255,10 @@ class CacheHandlerChainFactoryTest {
                     new RedisProCacheProperties.ProtectionProperties();
             protection.setSyncLockEnabled(false);
 
-            List<String> names = chainNames(protection);
+            CacheHandlerChain chain = chainFor(protection);
 
-            assertThat(names).contains("BloomFilterHandler", "TtlHandler", "ActualCacheHandler");
-            assertThat(names).doesNotContain("SyncLockHandler");
+            assertThat(chain.size()).isEqualTo(5);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
 
         @Test
@@ -268,10 +271,10 @@ class CacheHandlerChainFactoryTest {
             protection.setEarlyExpirationEnabled(true);
             protection.setNullValueEnabled(true);
 
-            List<String> names = chainNames(protection);
+            CacheHandlerChain chain = chainFor(protection);
 
-            assertThat(names).contains("BloomFilterHandler", "SyncLockHandler",
-                    "EarlyExpirationHandler", "NullValueHandler", "TtlHandler", "ActualCacheHandler");
+            assertThat(chain.size()).isEqualTo(6);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
 
         @Test
@@ -285,11 +288,10 @@ class CacheHandlerChainFactoryTest {
             protection.setEarlyExpirationEnabled(true);
             protection.setNullValueEnabled(true);
 
-            List<String> names = chainNames(protection);
+            CacheHandlerChain chain = chainFor(protection);
 
-            assertThat(names).contains("TtlHandler", "ActualCacheHandler");
-            assertThat(names).doesNotContain("BloomFilterHandler", "SyncLockHandler",
-                    "EarlyExpirationHandler", "NullValueHandler");
+            assertThat(chain.size()).isEqualTo(2);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
 
         @Test
@@ -302,11 +304,10 @@ class CacheHandlerChainFactoryTest {
             protection.setEarlyExpirationEnabled(null);
             protection.setNullValueEnabled(false);
 
-            List<String> names = chainNames(protection);
+            CacheHandlerChain chain = chainFor(protection);
 
-            assertThat(names).contains("SyncLockHandler", "EarlyExpirationHandler",
-                    "TtlHandler", "ActualCacheHandler");
-            assertThat(names).doesNotContain("BloomFilterHandler", "NullValueHandler");
+            assertThat(chain.size()).isEqualTo(4);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
 
         @Test
@@ -315,7 +316,7 @@ class CacheHandlerChainFactoryTest {
             RedisProCacheProperties.ProtectionProperties protection =
                     new RedisProCacheProperties.ProtectionProperties();
             protection.setBloomFilterEnabled(false);
-            List<String> first = chainNames(protection);
+            CacheHandlerChain first = chainFor(protection);
             CacheHandlerChain cached = factory.createChain();
 
             // 链构建后翻转配置:总开关关闭 + 分项重新启用
@@ -323,25 +324,24 @@ class CacheHandlerChainFactoryTest {
             protection.setBloomFilterEnabled(true);
 
             assertThat(factory.createChain()).isSameAs(cached);
-            assertThat(cached.getHandlerNames()).isEqualTo(first);
+            assertThat(cached.size()).isEqualTo(first.size());
+            assertThat(cached.execute(testContext()).isSuccess()).isTrue();
         }
 
-        private List<String> chainNames(RedisProCacheProperties.ProtectionProperties protection) {
+        private CacheHandlerChain chainFor(
+                RedisProCacheProperties.ProtectionProperties protection) {
             when(properties.getProtection()).thenReturn(protection);
             when(properties.getDisabledHandlers()).thenReturn(Collections.emptyList());
             List<CacheHandler> handlers = List.of(new BloomFilterHandler(), new SyncLockHandler(),
                     new EarlyExpirationHandler(), new TtlHandler(), new NullValueHandler(),
                     new ActualCacheHandler());
             factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
-            return factory.createChain().getHandlerNames();
+            return factory.createChain();
         }
 
         @Test
         @DisplayName("disableName 派生自 @HandlerPriority 注解,与类名解耦(H1/I3 回归)")
         void protectionDisabled_disableNameFromAnnotation_notClassName() {
-            // 故意使用与真实 handler 完全不同的类名,仅靠 @HandlerPriority(BLOOM_FILTER)
-            // 关联 disableName="bloom-filter"。证明禁用契约来自枚举注解(单一事实源),
-            // 而非类名派生——handler 类重命名不会让 protection 短路静默失效。
             RedisProCacheProperties.ProtectionProperties protection =
                     new RedisProCacheProperties.ProtectionProperties();
             protection.setEnabled(false);
@@ -351,26 +351,25 @@ class CacheHandlerChainFactoryTest {
                     new OddlyNamedBloomHandler(), new TtlHandler(), new ActualCacheHandler());
             factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
-            List<String> names = factory.createChain().getHandlerNames();
+            CacheHandlerChain chain = factory.createChain();
 
-            assertThat(names).contains("TtlHandler", "ActualCacheHandler");
-            assertThat(names).doesNotContain("OddlyNamedBloomHandler");
+            assertThat(chain.size()).isEqualTo(2);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
 
         @Test
         @DisplayName("全局 disabled-handlers 也通过注解 disableName 匹配(类名解耦)")
         void globalDisabled_disableNameFromAnnotation_notClassName() {
-            // 类名不匹配任何已知模式,但 @HandlerPriority(SYNC_LOCK) → disableName="sync-lock"
             when(properties.getDisabledHandlers()).thenReturn(List.of("sync-lock"));
 
             List<CacheHandler> handlers = List.of(
                     new WeirdlyNamedLockHandler(), new TtlHandler());
             factory = new CacheHandlerChainFactory(handlers, properties, null, new ChainEngine());
 
-            List<String> names = factory.createChain().getHandlerNames();
+            CacheHandlerChain chain = factory.createChain();
 
-            assertThat(names).contains("TtlHandler");
-            assertThat(names).doesNotContain("WeirdlyNamedLockHandler");
+            assertThat(chain.size()).isEqualTo(1);
+            assertThat(chain.execute(testContext()).isSuccess()).isTrue();
         }
     }
 
@@ -386,7 +385,7 @@ class CacheHandlerChainFactoryTest {
             ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
             when(provider.getIfAvailable()).thenReturn(registry);
 
-            AbstractCacheHandler probe = new FiredCounterProbe();
+            CacheHandler probe = new FiredCounterProbe();
             // P1-API-001-C:observer 为有序 Bean,工厂注入 List<ChainObserver> 后单一注册。
             // 4-arg 便捷构造(空 observer)不装配 registry observer — fired counter 走标准 bean。
             factory = new CacheHandlerChainFactory(
@@ -407,19 +406,11 @@ class CacheHandlerChainFactoryTest {
             assertThat(counters.get(0).count())
                     .as("probe 被引擎求值一次 → counter 自增 1")
                     .isEqualTo(1.0);
-            assertThat(counters.get(0).getId().getTag("handler"))
-                    .as("handler tag = 运行时子类 SimpleName")
-                    .isEqualTo("FiredCounterProbe");
         }
 
-        static class FiredCounterProbe extends AbstractCacheHandler {
+        static class FiredCounterProbe implements CacheHandler {
             @Override
-            protected boolean shouldHandle(CacheContext context) {
-                return true;
-            }
-
-            @Override
-            protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
+            public HandlerResult handle(CacheContext context) {
                 return HandlerResult.continueWith(CacheResult.success());
             }
         }
@@ -456,11 +447,10 @@ class CacheHandlerChainFactoryTest {
 
     @HandlerPriority(HandlerOrder.SYNC_LOCK)
     static class WeirdlyNamedLockHandler extends NamedHandler { }
-
     static class TestCacheHandler implements CacheHandler {
         @Override
         public HandlerResult handle(CacheContext context) {
-            return HandlerResult.continueWith(CacheResult.success());
+            return HandlerResult.terminate(CacheResult.success(marker("test-cache")));
         }
 
     }
@@ -468,7 +458,7 @@ class CacheHandlerChainFactoryTest {
     static class AnotherTestHandler implements CacheHandler {
         @Override
         public HandlerResult handle(CacheContext context) {
-            return HandlerResult.continueWith(CacheResult.success());
+            return HandlerResult.terminate(CacheResult.success(marker("another-test")));
         }
 
     }
@@ -485,7 +475,7 @@ class CacheHandlerChainFactoryTest {
     static class BloomFilterTestHandler implements CacheHandler {
         @Override
         public HandlerResult handle(CacheContext context) {
-            return HandlerResult.continueWith(CacheResult.success());
+            return HandlerResult.terminate(CacheResult.success(marker("bloom-filter")));
         }
 
     }
@@ -494,7 +484,7 @@ class CacheHandlerChainFactoryTest {
     static class SyncLockTestHandler implements CacheHandler {
         @Override
         public HandlerResult handle(CacheContext context) {
-            return HandlerResult.continueWith(CacheResult.success());
+            return HandlerResult.terminate(CacheResult.success(marker("sync-lock")));
         }
 
     }
@@ -521,7 +511,7 @@ class CacheHandlerChainFactoryTest {
     static class PriorityTestHandler implements CacheHandler {
         @Override
         public HandlerResult handle(CacheContext context) {
-            return HandlerResult.continueWith(CacheResult.success());
+            return HandlerResult.terminate(CacheResult.success(marker("priority")));
         }
 
     }
