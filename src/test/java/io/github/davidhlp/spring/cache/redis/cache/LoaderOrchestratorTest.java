@@ -39,7 +39,7 @@ import static org.mockito.Mockito.when;
 /**
  * {@link LoaderOrchestrator} 单测 — 3 个 seam 测试集。
  *
- * <p>{@code isBloomShortCircuited} / {@code performLoad} 等 package-private seam 下沉到
+ * <p>{@code isBloomShortCircuited} / {@code readThrough} 等 package-private seam 下沉到
  * LoaderOrchestrator,通过 {@link LoaderOrchestrator#orchestrate} 公开方法间接覆盖 —
  * 每条 case 路径(bloom 短路 / sync 路由 / default 路由 / load 协议决策)
  * 用 {@link LoadOutcome} 各态断言。
@@ -219,8 +219,8 @@ class LoaderOrchestratorTest {
     // ==================== load 协议决策分支(sync 路径:锁内执行) ====================
 
     @Nested
-    @DisplayName("performLoad Tests — sync 路径锁内执行")
-    class PerformLockedLoadTests {
+    @DisplayName("readThrough Tests — sync 路径锁内执行")
+    class ReadThroughLockedLoadTests {
 
         @Test
         @DisplayName("double-check hits → Loaded with cached value, loader never invoked")
