@@ -89,7 +89,14 @@ Current milestones:
   lock acquire/release, `SyncRole` leader/follower failures, the async
   early-expiration retry path, chain post-processing, and the migration
   engine's fingerprint helper (now one implementation).
-- **Nested chain advancement is explicit (SPI addition, compatible)** —
+- **One early-refresh module** — the read → decision → schedule → TTL-shortening
+  CAS cycle moved out of the chain handler into `EarlyRefresh`.
+  `EarlyExpirationHandler` is now a thin chain adapter: it asks the module for
+  one evaluation, publishes the typed `PrefetchDecision` (so the value the
+  decision read is reused instead of fetched twice) and maps the outcome to
+  `SKIP_ALL`/`CONTINUE`. The executor, retry policy and cancellation seam are
+  unchanged (ADR-0001 §11).
+
   `CacheHandler` gains `default HandlerResult handle(CacheContext,
   ChainContinuation next)`; the default ignores `next` and delegates to
   `handle(context)`, so existing implementations need no change (the

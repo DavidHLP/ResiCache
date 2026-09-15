@@ -71,12 +71,12 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     @BeforeEach
     void setUp() {
         redisTemplate.getConnectionFactory().getConnection().flushDb();
-        handler = new EarlyExpirationHandler(
+        handler = new EarlyExpirationHandler(new EarlyRefresh(
                 earlyExpirationPolicy,
                 earlyExpirationExecutor,
                 redisTemplate,
                 statistics,
-                valueOperations);
+                valueOperations));
         executor = Executors.newCachedThreadPool();
     }
 
