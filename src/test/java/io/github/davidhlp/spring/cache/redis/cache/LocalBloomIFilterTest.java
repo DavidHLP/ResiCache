@@ -18,14 +18,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LocalBloomIFilterTest {
 
     private BloomFilterConfig config;
-    private BloomHashStrategy hashStrategy;
     private LocalBloomIFilter filter;
 
     @BeforeEach
     void setUp() {
         config = new BloomFilterConfig("test:", 1024, 3, 100);
-        hashStrategy = new MessageDigestBloomHashStrategy();
-        filter = new LocalBloomIFilter(config, hashStrategy);
+        filter = new LocalBloomIFilter(config);
     }
 
     @Nested

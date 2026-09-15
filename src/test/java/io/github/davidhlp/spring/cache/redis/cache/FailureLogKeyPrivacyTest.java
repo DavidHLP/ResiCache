@@ -14,6 +14,7 @@ import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -337,7 +338,7 @@ class FailureLogKeyPrivacyTest {
             when(valueOperations.get(any()))
                     .thenThrow(new IllegalStateException("redis down for key " + SECRET_KEY));
             EarlyRefresh earlyRefresh = new EarlyRefresh(
-                    mock(EarlyExpirationPolicy.class),
+                    Clock.systemUTC(),
                     mock(ThreadPoolEarlyExpirationExecutor.class),
                     mock(RedisTemplate.class),
                     mock(CacheStatisticsCollector.class),

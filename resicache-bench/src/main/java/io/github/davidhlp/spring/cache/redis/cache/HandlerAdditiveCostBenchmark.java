@@ -52,7 +52,7 @@ public class HandlerAdditiveCostBenchmark {
                 .actualKey("order:1001")
                 .build());
 
-        TtlHandler ttlHandler = new TtlHandler(new DefaultTtlPolicy());
+        TtlHandler ttlHandler = new TtlHandler();
         PassthroughHandler p1 = new PassthroughHandler("bloomGate");
         PassthroughHandler p2 = new PassthroughHandler("nullValue");
         PassthroughHandler p3 = new PassthroughHandler("syncLock");

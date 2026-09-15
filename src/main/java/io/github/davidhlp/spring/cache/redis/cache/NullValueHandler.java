@@ -36,11 +36,6 @@ import org.springframework.stereotype.Component;
 @HandlerPriority(HandlerOrder.NULL_VALUE)
 class NullValueHandler extends AbstractCacheHandler {
 
-    private final NullValuePolicy nullValuePolicy;
-
-    public NullValueHandler(NullValuePolicy nullValuePolicy) {
-        this.nullValuePolicy = nullValuePolicy;
-    }
 
     /**
      * 语义 counter 元数据声明。基类 {@link AbstractCacheHandler#attachMeterRegistry}
@@ -81,10 +76,8 @@ class NullValueHandler extends AbstractCacheHandler {
                     context.getRedisKey());
         }
 
-        // 转换值为存储格式(cacheNullValues=true 时空值原样存储,null 由 codec 编码)
-        Object storeValue =
-                nullValuePolicy.toStoreValue(deserializedValue, context.policy().cacheNullValues());
-        context.setNullDecision(NullDecision.of(storeValue));
+        // NullDecision 只携带写入值;null 本身就是合法的缓存占位值
+        context.setNullDecision(NullDecision.of(deserializedValue));
 
         // 继续执行后续 Handler
         return HandlerResult.continueChain();

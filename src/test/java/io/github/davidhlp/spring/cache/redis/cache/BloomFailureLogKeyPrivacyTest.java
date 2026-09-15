@@ -70,7 +70,6 @@ class BloomFailureLogKeyPrivacyTest {
             RedisBloomIFilter filter = new RedisBloomIFilter(
                     template,
                     new BloomFilterConfig("bf:", 1024, 3, 100),
-                    new MessageDigestBloomHashStrategy(),
                     null);
             filter.init();
             doThrow(new RuntimeException("redis down"))

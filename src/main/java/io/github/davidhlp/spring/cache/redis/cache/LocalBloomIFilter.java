@@ -30,7 +30,6 @@ import lombok.extern.slf4j.Slf4j;
 class LocalBloomIFilter implements BloomIFilter {
 
     private final BloomFilterConfig config;
-    private final BloomHashStrategy hashStrategy;
     private final ConcurrentMap<String, BitSet> localFilters = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ReadWriteLock> locks = new ConcurrentHashMap<>();
 
@@ -44,7 +43,7 @@ class LocalBloomIFilter implements BloomIFilter {
             return;
         }
         BitSet bitSet = bitSetFor(cacheName);
-        int[] positions = hashStrategy.positionsFor(key, config);
+        int[] positions = config.positionsFor(key);
         lockFor(cacheName).writeLock().lock();
         try {
             for (int position : positions) {
@@ -69,7 +68,7 @@ class LocalBloomIFilter implements BloomIFilter {
         if (bitSet == null) {
             return false;
         }
-        int[] positions = hashStrategy.positionsFor(key, config);
+        int[] positions = config.positionsFor(key);
         lockFor(cacheName).readLock().lock();
         try {
             for (int position : positions) {

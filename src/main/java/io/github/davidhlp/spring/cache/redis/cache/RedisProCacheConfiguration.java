@@ -134,29 +134,6 @@ class RedisProCacheConfiguration {
                 bloom.getHashCacheSize());
     }
 
-    @Bean
-    @ConditionalOnMissingBean(BloomHashStrategy.class)
-    public BloomHashStrategy bloomHashStrategy() {
-        return new MessageDigestBloomHashStrategy();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(TtlPolicy.class)
-    public TtlPolicy ttlPolicy() {
-        return new DefaultTtlPolicy();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(NullValuePolicy.class)
-    public NullValuePolicy nullValuePolicy(NullValueEncoder encoder) {
-        return new DefaultNullValuePolicy(encoder);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(EarlyExpirationPolicy.class)
-    public EarlyExpirationPolicy earlyExpirationPolicy(Clock clock) {
-        return new DefaultEarlyExpirationPolicy(clock);
-    }
 
     /**
      * Default Bloom implementation is one explicitly composed adapter. A user
@@ -167,11 +144,10 @@ class RedisProCacheConfiguration {
     public BloomIFilter bloomIFilter(
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             BloomFilterConfig config,
-            BloomHashStrategy hashStrategy,
             ObjectProvider<MeterRegistry> meterRegistryProvider) {
-        LocalBloomIFilter local = new LocalBloomIFilter(config, hashStrategy);
+        LocalBloomIFilter local = new LocalBloomIFilter(config);
         RedisBloomIFilter remote = new RedisBloomIFilter(
-                redisTemplate, config, hashStrategy, meterRegistryProvider.getIfAvailable());
+                redisTemplate, config, meterRegistryProvider.getIfAvailable());
         remote.init();
         return new HierarchicalBloomIFilter(local, remote);
     }

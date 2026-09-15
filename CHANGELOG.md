@@ -35,9 +35,14 @@ Current milestones:
   original cause; REMOVE remains observable best-effort. Callers that relied
   on swallowed write failures must catch the runtime failure or pin the
   previous 0.x version before migrating.
+- ⚠️ **Single-adapter policy seams retired** — `TtlPolicy`, `NullValuePolicy`,
+  `EarlyExpirationPolicy`, and `BloomHashStrategy` are no longer replaceable
+  beans; TTL, null-value, early-expiration, and Bloom hashing decisions now
+  live in their owning modules. Users who supplied one of these internal beans
+  must remove the override and use the owning module's configuration.
 - **Explicit auto-configuration** — removed library-root component scanning,
-  added typed default Bean back-off, and made `NullValuePolicy` the shared
-  handler contract.
+  added typed default Bean back-off, and made `NullValueEncoder` the shared
+  handler dependency.
 - **Async metadata closure** — capture now occurs before queueing work; worker
   activation restores prior ThreadLocal/MDC state in `finally`.
 - **Integration naming closure** — `*IT` classes use `*IntegrationTest` and

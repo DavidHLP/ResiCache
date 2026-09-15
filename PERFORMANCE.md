@@ -67,7 +67,7 @@ Measures single-flight leader-follower synchronization under cache breakdown / t
 ---
 
 ### Benchmark 3 — TTL Jitter (`TtlJitterBenchmark`)
-Measures `DefaultTtlPolicy` Gaussian random variance calculation to prevent cache avalanche.
+Measures `TtlHandler` Gaussian random variance calculation to prevent cache avalanche.
 
 | Benchmark | jitterRatio | Score (ops/s) | Interpretation | Status |
 |---|---|---|---|---|

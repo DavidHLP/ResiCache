@@ -94,8 +94,8 @@ class PathCAopContractIntegrationTest extends AbstractRedisIntegrationTest {
         void ttl_handlerFiredAndAppliedToRedis() {
             cacheService.getByIdWithTtl(1L);
             Long actualTtl = redisCacheTemplate.getExpire("testCache::1", TimeUnit.SECONDS);
-            // @RedisCacheable(ttl=120) 未设 randomTtl,DefaultTtlPolicy.calculateFinalTtl
-            // 在 randomTtl=false 分支直接返回 baseTtl=120;allow 1s 漂移防极端时钟。
+            // @RedisCacheable(ttl=120) 未设 randomTtl,TtlHandler 直接使用 baseTtl=120;
+            // allow 1s 漂移防极端时钟。
             assertThat(actualTtl)
                     .as("Redis 实际 TTL 应在 [119, 120] 秒(TtlHandler 未开 randomTtl)")
                     .isBetween(119L, 120L);

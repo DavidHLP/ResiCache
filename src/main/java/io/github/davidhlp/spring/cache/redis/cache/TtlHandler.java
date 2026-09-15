@@ -12,7 +12,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
 import java.time.Duration;
-import lombok.RequiredArgsConstructor;
+import java.util.concurrent.ThreadLocalRandom;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -35,12 +35,8 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @HandlerPriority(HandlerOrder.TTL)
 class TtlHandler extends AbstractCacheHandler {
-
-    private final TtlPolicy ttlPolicy;
-
     private static final long DEFAULT_TTL = 60;
 
     /**
@@ -80,11 +76,7 @@ class TtlHandler extends AbstractCacheHandler {
         // 优先使用配置中的 TTL(经稳定 CachePolicyView 读取,不依赖内部 operation)
         CachePolicyView policy = context.policy();
         if (policy.ttl() > 0) {
-            long finalTtl =
-                    ttlPolicy.calculateFinalTtl(
-                            policy.ttl(),
-                            policy.randomTtl(),
-                            policy.variance());
+            long finalTtl = calculateFinalTtl(policy.ttl(), policy.randomTtl(), policy.variance());
 
             context.setTtlDecision(TtlDecision.applied(finalTtl));
 
@@ -101,7 +93,7 @@ class TtlHandler extends AbstractCacheHandler {
                     finalTtl,
                     policy.randomTtl(),
                     policy.variance());
-        } else if (ttlPolicy.shouldApply(ttl)) {
+        } else if (shouldApply(ttl)) {
             // 使用参数中的 TTL
             long finalTtl = ttl.getSeconds();
             context.setTtlDecision(TtlDecision.applied(finalTtl));
@@ -120,5 +112,28 @@ class TtlHandler extends AbstractCacheHandler {
                     context.getCacheName(),
                     context.getRedisKey());
         }
+    }
+
+    /** ttl 非空、非零、非负则应用。 */
+    private boolean shouldApply(Duration ttl) {
+        return ttl != null && !ttl.isZero() && !ttl.isNegative();
+    }
+
+    /** 计算最终 TTL; randomTtl=true 时按 variance 抖动以防雪崩。 */
+    long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance) {
+        if (baseTtl == null || baseTtl <= 0) {
+            return -1;
+        }
+        if (!randomTtl || variance <= 0) {
+            return baseTtl;
+        }
+
+        float boundedVariance = Math.min(1.0f, Math.max(0.0f, variance));
+        double randomFactor = ThreadLocalRandom.current().nextGaussian();
+        randomFactor = Math.max(-3.0, Math.min(3.0, randomFactor));
+
+        long offset = (long) (baseTtl * boundedVariance * randomFactor / 3.0);
+        long result = baseTtl + offset;
+        return Math.max(1, Math.min(result, baseTtl * 2));
     }
 }

@@ -8,6 +8,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -27,21 +28,16 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * EarlyExpirationHandler race tests backed by real Redis state.
  *
- * <p>The policy and executor remain mocks because they control the refresh decision
- * and scheduling seam. Redis reads and writes are always performed by the real
- * integration beans; in particular, concurrent phases use real SET/DELETE calls.
+ * <p>Refresh decisions are exercised through the owning {@link EarlyRefresh} module.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("EarlyExpirationHandler Race Condition Tests (real Redis)")
@@ -51,10 +47,8 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     private static final String CACHE_NAME = "test-cache";
 
     @Mock
-    private EarlyExpirationPolicy earlyExpirationPolicy;
-
-    @Mock
     private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
+
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
@@ -72,7 +66,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     void setUp() {
         redisTemplate.getConnectionFactory().getConnection().flushDb();
         handler = new EarlyExpirationHandler(new EarlyRefresh(
-                earlyExpirationPolicy,
+                Clock.systemUTC(),
                 earlyExpirationExecutor,
                 redisTemplate,
                 statistics,
@@ -127,7 +121,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     void asyncRefreshAndEvict_concurrentNoCorruption() throws InterruptedException {
         RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
-        CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis(), 1L);
+        CachedValue cachedValue = createCachedValue(60, System.currentTimeMillis() - 30_000, 1L);
         AtomicBoolean exceptionThrown = new AtomicBoolean(false);
         CountDownLatch refreshStarted = new CountDownLatch(1);
         CountDownLatch allowRefresh = new CountDownLatch(1);
@@ -135,7 +129,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
         CountDownLatch evictFinished = new CountDownLatch(1);
 
         store(cachedValue, 30);
-        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             executor.submit(() -> {
@@ -178,7 +172,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     void asyncRefreshAndPut_concurrentCorrectPrecedence() throws InterruptedException {
         RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
-        CachedValue originalValue = createCachedValue("original", 60, System.currentTimeMillis(), 1L);
+        CachedValue originalValue = createCachedValue("original", 60, System.currentTimeMillis() - 30_000, 1L);
         CachedValue newValue = createCachedValue("new", 60, System.currentTimeMillis(), 2L);
 
         CountDownLatch refreshStarted = new CountDownLatch(1);
@@ -186,7 +180,7 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
         CountDownLatch refreshFinished = new CountDownLatch(1);
 
         store(originalValue, 30);
-        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             executor.submit(() -> {
@@ -228,12 +222,12 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
         CacheContext context2 = createContext(CacheOperation.GET, operation);
         CacheContext context3 = createContext(CacheOperation.GET, operation);
 
-        CachedValue cachedValue1 = createCachedValue("value-1", 60, System.currentTimeMillis(), 1L);
-        CachedValue cachedValue2 = createCachedValue("value-2", 60, System.currentTimeMillis(), 2L);
-        CachedValue cachedValue3 = createCachedValue("value-3", 60, System.currentTimeMillis(), 3L);
+        CachedValue cachedValue1 = createCachedValue("value-1", 60, System.currentTimeMillis() - 30_000, 1L);
+        CachedValue cachedValue2 = createCachedValue("value-2", 60, System.currentTimeMillis() - 30_000, 2L);
+        CachedValue cachedValue3 = createCachedValue("value-3", 60, System.currentTimeMillis() - 30_000, 3L);
 
         CountDownLatch allRefreshesSubmitted = new CountDownLatch(3);
-        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+
         doAnswer(invocation -> {
             allRefreshesSubmitted.countDown();
             return null;
@@ -259,9 +253,9 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
         CacheContext context = createContext(CacheOperation.GET, operation);
         // The real serializer emits envelope format version 2 plus a distinct
         // CachedValue.version token; the Lua script must compare the latter.
-        CachedValue cachedValue = createCachedValue("stable", 60, System.currentTimeMillis(), 42L);
+        CachedValue cachedValue = createCachedValue("stable", 60, System.currentTimeMillis() - 30_000, 42L);
         store(cachedValue, 30);
-        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(1);
             runnable.run();
@@ -278,11 +272,11 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     void atomicLuaScript_valueChanged_skipsTtlShorten() {
         RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
         CacheContext context = createContext(CacheOperation.GET, operation);
-        CachedValue capturedValue = createCachedValue("captured", 60, System.currentTimeMillis(), 42L);
+        CachedValue capturedValue = createCachedValue("captured", 60, System.currentTimeMillis() - 30_000, 42L);
         CachedValue changedValue = createCachedValue("changed", 60, System.currentTimeMillis(), 43L);
 
         store(capturedValue, 30);
-        when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+
         doAnswer(invocation -> {
             // Replace the value in real Redis before the captured refresh runs.
             store(changedValue, 30);

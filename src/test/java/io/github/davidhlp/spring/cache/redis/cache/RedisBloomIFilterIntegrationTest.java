@@ -30,7 +30,6 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
     private RedisTemplate<String, String> redisTemplate;
 
     private BloomFilterConfig config;
-    private BloomHashStrategy hashStrategy;
     private RedisBloomIFilter filter;
 
     @BeforeEach
@@ -42,8 +41,7 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
         redisTemplate.getConnectionFactory().getConnection().flushDb();
 
         config = new BloomFilterConfig("bf:", 1024, 3, 100);
-        hashStrategy = new MessageDigestBloomHashStrategy();
-        filter = new RedisBloomIFilter(redisTemplate, config, hashStrategy, null);
+        filter = new RedisBloomIFilter(redisTemplate, config, null);
         filter.init();
     }
 
@@ -100,7 +98,7 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
         @DisplayName("returns false when a real hash position is missing")
         void mightContain_anyPositionMissing_returnsFalse() {
             filter.add("test-cache", "test-key");
-            int missingPosition = hashStrategy.positionsFor("test-key", config)[1];
+            int missingPosition = config.positionsFor("test-key")[1];
             redisTemplate.opsForHash().delete("bf:test-cache", String.valueOf(missingPosition));
 
             assertThat(filter.mightContain("test-cache", "test-key")).isFalse();
@@ -126,7 +124,7 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
             when(throwingTemplate.executePipelined(any(RedisCallback.class)))
                     .thenThrow(new RuntimeException("Redis error"));
             RedisBloomIFilter faultFilter =
-                    new RedisBloomIFilter(throwingTemplate, config, hashStrategy, null);
+                    new RedisBloomIFilter(throwingTemplate, config, null);
             faultFilter.init();
 
             assertThat(faultFilter.mightContain("test-cache", "test-key")).isTrue();
@@ -173,7 +171,7 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
             when(throwingTemplate.delete(anyString()))
                     .thenThrow(new RuntimeException("Redis error"));
             RedisBloomIFilter faultFilter =
-                    new RedisBloomIFilter(throwingTemplate, config, hashStrategy, null);
+                    new RedisBloomIFilter(throwingTemplate, config, null);
             faultFilter.init();
 
             faultFilter.clear("test-cache");
@@ -220,7 +218,7 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
             when(throwingTemplate.executePipelined(any(RedisCallback.class)))
                     .thenThrow(new RuntimeException("Connection failed"));
             RedisBloomIFilter faultFilter =
-                    new RedisBloomIFilter(throwingTemplate, config, hashStrategy, null);
+                    new RedisBloomIFilter(throwingTemplate, config, null);
             faultFilter.init();
 
             assertThat(faultFilter.mightContain("test-cache", "test-key")).isTrue();
