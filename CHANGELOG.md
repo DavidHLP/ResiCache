@@ -103,7 +103,10 @@ Current milestones:
 - **Concurrent writes are no longer merged** — a write inside the distributed
   lock takes an exclusive path instead of single-flight: joining another
   request's in-flight result would skip this request's write while still
-  reporting success. Reads keep the single-flight behaviour.
+  reporting success. Reads keep the single-flight behaviour. The local-only
+  serial queue waits for its predecessor at most the resolved `syncTimeout` and
+  fails closed when it expires, instead of blocking indefinitely behind a
+  stalled operation.
 - **WARN/ERROR render exception types, not stacks** — the redaction rule now
   covers throwables too (a stack trace prints its message, and
   `Cache.ValueRetrievalException` embeds the raw key); the full stack stays at

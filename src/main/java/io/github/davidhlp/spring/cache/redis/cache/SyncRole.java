@@ -227,6 +227,10 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
         /**
          * local-only 模式下让读 leader 与写调用共享同一个 per-key 串行队列。
          * {@code current} 完成后再按 value 移除，避免后继调用被误删；失败也必须放行后继。
+         *
+         * <p>等待前驱同样受 {@code timeoutSeconds} 约束(对齐分布式锁 acquire 与 follower join):
+         * 卡死的前驱绝不能无限拖住该 key 的所有排队请求 —— 超时即失败(fail-closed),
+         * 且超时/中断路径同样要在 finally 中放行后继,否则队列会永久卡在已放弃的条目上。
          */
         private T executeLocalOnly(Supplier<T> loader) {
             AtomicReference<CompletableFuture<Void>> predecessorRef = new AtomicReference<>();
@@ -235,14 +239,42 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                 return new CompletableFuture<>();
             });
             CompletableFuture<Void> predecessor = predecessorRef.get();
-            if (predecessor != null) {
-                predecessor.join();
-            }
             try {
+                if (predecessor != null) {
+                    awaitPredecessor(predecessor);
+                }
                 return loader.get();
             } finally {
                 current.complete(null);
                 localOnlyTails.remove(key, current);
+            }
+        }
+
+        /**
+         * 等待队列前驱完成,等待上限为 {@code timeoutSeconds}({@code <= 0} 时未完成即失败,
+         * 与 {@link Follower} 拒绝等待的语义一致)。
+         *
+         * @throws IllegalStateException 超时或被中断
+         */
+        private void awaitPredecessor(CompletableFuture<Void> predecessor) {
+            try {
+                predecessor.get(Math.max(timeoutSeconds, 0L), TimeUnit.SECONDS);
+            } catch (final TimeoutException e) {
+                throw new IllegalStateException(
+                        "Timed out after " + timeoutSeconds
+                                + "s waiting for the local-only predecessor (keyFingerprint="
+                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
+            } catch (final ExecutionException e) {
+                // 前驱 future 只会 complete(null);兜底避免把 checked 异常漏给调用方
+                throw new IllegalStateException(
+                        "Local-only predecessor failed (keyFingerprint="
+                                + FailureDiagnostics.keyFingerprint(key) + ")",
+                        e.getCause() != null ? e.getCause() : e);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(
+                        "Thread interrupted while waiting for the local-only predecessor (keyFingerprint="
+                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
             }
         }
 
