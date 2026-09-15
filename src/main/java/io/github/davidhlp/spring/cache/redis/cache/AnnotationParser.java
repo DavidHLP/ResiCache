@@ -12,7 +12,6 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CachePutOperation;
@@ -40,22 +39,17 @@ import org.springframework.cache.interceptor.CacheableOperation;
 final class AnnotationParser {
 
     private final RedisCacheAttributesProjector projector;
-    private final SpringCacheableAdapter springCacheableAdapter;
 
     AnnotationParser() {
-        this(new RedisCacheAttributesProjector(), new SpringCacheableAdapter(
-                new RedisCacheAttributesProjector()));
+        this.projector = new RedisCacheAttributesProjector();
     }
 
-    AnnotationParser(
-            RedisCacheAttributesProjector projector,
-            SpringCacheableAdapter springCacheableAdapter) {
+    AnnotationParser(RedisCacheAttributesProjector projector) {
         this.projector = projector;
-        this.springCacheableAdapter = springCacheableAdapter;
     }
 
     /**
-     * Parses an annotated element once and returns both Spring operations and chain policy operations.
+     * 单次解析目标元素，同时产出 Spring operation 与 annotation chain policy operation。
      */
     ParsedAnnotations parse(final Object target) {
         final List<CacheOperation> operations = new ArrayList<>();
@@ -67,12 +61,6 @@ final class AnnotationParser {
         if (cacheable != null) {
             operations.add(parseRedisCacheable(cacheable, target));
             addPolicy(policyOperations, cacheable, target);
-        } else {
-            final Cacheable springCacheable =
-                    AnnotationTargets.findMerged(target, Cacheable.class);
-            if (springCacheable != null) {
-                addPolicy(policyOperations, springCacheable, target);
-            }
         }
 
         final RedisCacheEvict cacheEvict =
@@ -140,13 +128,6 @@ final class AnnotationParser {
         if (target instanceof java.lang.reflect.Method method) {
             policies.add(RedisCacheEvictOperation.fromAttributes(
                     method, annotation.key(), projector.from(annotation)));
-        }
-    }
-
-    private void addPolicy(
-            List<CacheOperation> policies, Cacheable annotation, Object target) {
-        if (target instanceof java.lang.reflect.Method method) {
-            policies.add(springCacheableAdapter.create(method, annotation, annotation.key()));
         }
     }
 

@@ -526,8 +526,10 @@ attributes — including `ttl()`, whose annotation default is 60 seconds and
 therefore now applies where the cache-level TTL used to. Methods that declare
 both annotations are unchanged from before this decision.
 
-**Known limitation**: the annotations are still parsed twice — once by the
-Spring cache-operation source for the AOP operations, once per invocation by
-the annotation chain engine that feeds the register. Merging those into one
-parse per element key is a separate change with its own AOP-behavior risk; the
-register is written per invocation and read per invocation meanwhile.
+**State**: each annotated element is parsed once by the Spring operation source
+into an immutable `ParsedAnnotations` snapshot. The source returns the Spring
+operations from that snapshot and writes its policy operations to
+`RedisCacheRegister`; the annotation chain reads the same snapshot during
+invocation. Namespace entries remain indexed by operation kind, so the
+resolution rules above are unchanged. The register is populated at element
+resolution and is not written per invocation.

@@ -34,9 +34,9 @@ import org.springframework.util.StringUtils;
  * </ol>
  *
  * <p>{@link RegisterAction} 函数式接口签名
- * {@code (Method, Class<?>, O, OperationKind) -> void},第 4 参数 {@link OperationKind}
- * 让 {@link RedisCacheRegister#register} 单一 seam 区分命名空间。register API 为 2 方法,
- * 新增操作种类零漂移。
+ * {@code (Method, Class<?>, O) -> void}；具体 operation kind 由
+ * {@link #registerActionFor(OperationKind)} 固定，并交给 {@link RedisCacheRegister#register}
+ * 区分命名空间。register API 为 2 方法,新增操作种类零漂移。
  *
  * <p><b>下游契约</b>：4 个具体 handler（{@code Cacheable} / {@code CachePut} /
  * {@code Evict} / {@code Caching}）的 {@code doHandle} 方法只负责"获取注解

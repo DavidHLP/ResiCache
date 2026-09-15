@@ -13,13 +13,9 @@ import org.springframework.context.expression.AnnotatedElementKey;
 /**
  * Redis 缓存注册器。
  *
- * <p><b>API(2 公开方法)</b>:
- * <ul>
- *   <li>{@link #register(Method, Class, CacheOperation, OperationKind)} —— 单一注册 seam</li>
- *   <li>{@link #get(String, AnnotatedElementKey, OperationKind)} —— 单一查询 seam</li>
- * </ul>
- * 调用方传入 {@link OperationKind} 替代方法名;tag 字符串 + 期望 operation 类型
- * 均由 enum 派生,杜绝 stringly-typed 漂移。
+ * <p>Spring operation source 在元素解析阶段写入一个不可变
+ * {@link AnnotationParser.ParsedAnnotations} 快照，并同时建立按 operation kind 索引的策略查询。
+ * kind 派生 tag 与 operation 类型，避免 stringly-typed 漂移；annotation chain 只读取快照。
  *
  * <p><b>查找键</b> = {@code <tag>:<cacheName>:<elementKey.toString()>},由
  * {@link #buildKey(String, AnnotatedElementKey, String)} 统一构造。operation 自身的
