@@ -7,6 +7,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.EarlyExpirationDecision;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
@@ -46,19 +47,19 @@ class EarlyRefresh {
     /** 宽限期:剩余 TTL 低于此值时不再安排刷新(即将过期的数据不值得刷)。 */
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
 
-    private final EarlyExpirationPolicy earlyExpirationPolicy;
+    private final Clock clock;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
 
     EarlyRefresh(
-            EarlyExpirationPolicy earlyExpirationPolicy,
+            Clock clock,
             ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             CacheStatisticsCollector statistics,
             ValueOperations<String, Object> valueOperations) {
-        this.earlyExpirationPolicy = earlyExpirationPolicy;
+        this.clock = clock;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.redisTemplate = redisTemplate;
         this.statistics = statistics;
@@ -103,11 +104,10 @@ class EarlyRefresh {
      * 检查是否需要提前过期
      */
     private EarlyExpirationDecision checkEarlyExpiration(CacheContext context, CachedValue cachedValue) {
-        boolean shouldRefresh = earlyExpirationPolicy.shouldRefresh(
-            cachedValue.getCreatedTime(),
-            cachedValue.getTtl(),
-            context.policy().earlyExpirationThreshold()
-        );
+        boolean shouldRefresh = shouldRefresh(
+                cachedValue.getCreatedTime(),
+                cachedValue.getTtl(),
+                context.policy().earlyExpirationThreshold());
 
         if (!shouldRefresh) {
             return EarlyExpirationDecision.noRefresh();
@@ -125,6 +125,20 @@ class EarlyRefresh {
 
         statistics.incMisses(context.getCacheName());
         return EarlyExpirationDecision.syncRefresh();
+    }
+
+    /**
+     * 判断缓存项是否进入提前刷新窗口。
+     */
+    private boolean shouldRefresh(long createdTime, long ttlSeconds, double threshold) {
+        if (ttlSeconds <= 0 || threshold <= 0 || threshold >= 1) {
+            return false;
+        }
+
+        long elapsedTime = clock.millis() - createdTime;
+        long totalTime = ttlSeconds * 1000;
+        double usedRatio = (double) elapsedTime / totalTime;
+        return usedRatio >= (1 - threshold);
     }
 
     /**

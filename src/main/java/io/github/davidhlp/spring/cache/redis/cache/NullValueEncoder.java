@@ -20,9 +20,8 @@ import org.springframework.stereotype.Component;
  * <p><b>依赖方向</b>:{@code NullValueEncoder} → {@code TypeSupport}(单向,
  * 无循环)。{@code TypeSupport} 不感知上层 null 决策,两条流水线各司其职。
  *
- * <p>本类是 {@code DefaultNullValuePolicy} 的协作者;不暴露为独立 interface —
- * 字节编码是实现细节,不属于可替换策略面(对齐 {@code SecureNullValueDeserializer}
- * 的 final 工具类纪律)。
+ * <p>{@code NullValueHandler} 负责 null 缓存决策;字节编码是实现细节,不属于可替换策略面
+ * (对齐 {@code SecureNullValueDeserializer} 的 final 工具类纪律)。
  */
 @Slf4j
 @Component
