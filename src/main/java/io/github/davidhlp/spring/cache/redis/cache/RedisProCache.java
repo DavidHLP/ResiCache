@@ -24,7 +24,7 @@ import org.springframework.data.redis.cache.RedisCacheWriter;
  *       并在 override 中按业务语义记录(timing + 命中/未命中/写/淘汰计数)。{@code MeterRegistry} 缺失时
  *       全 no-op,与 Spring 默认行为一致。</li>
  *   <li><b>Loader 路径编排</b> — 委派 {@link LoaderOrchestrator} 统一处理 bloom 短路 / sync 锁 /
- *       default load 三分枝。本类仅做 callback capture(4 个 closure) + outcome switch 翻译。</li>
+ *       default load 三分枝。本类仅做 callback capture(3 个 closure) + outcome switch 翻译。</li>
  *   <li><b>方法级 operation 解析</b> — 委派 {@link CacheOperationResolver} 提供 method → operation 元数据
  *       查找。</li>
  * </ol>
@@ -90,15 +90,14 @@ public class RedisProCache extends RedisCache {
         this.metricsRegistry = new RedisProCacheMetricsRegistry(features.getMeterRegistry(), name);
         this.operationResolver = features.getOperationResolver();
         // loader 路径编排器 build — protection 依赖 + cache-specific callbacks 一次性绑定;
-        // 生产 get(key, loader) 只需传入 key/loader/operation,不再重复装配 4 个 callback。
+        // 生产 get(key, loader) 只需传入 key/loader/operation,不再重复装配 3 个 callback。
         this.loaderOrchestrator = new LoaderOrchestrator(
                 features.getBloomGate(),
                 features.getSyncSupport(),
                 features.getSyncLockTimeout(),
                 this::deriveRedisKey,
                 this::doubleCheckLookup,
-                (k, v) -> put(k, v),
-                (k, loader) -> defaultLoad(k, loader));
+                (k, v) -> put(k, v));
     }
 
     @Override
@@ -138,13 +137,14 @@ public class RedisProCache extends RedisCache {
      * miss counter 自增:bloom 短路 1 次 / 失败路径 1 次 / 成功路径 0 次;异常翻译:
      * RuntimeException 直接抛 / checked Exception 翻译为 RuntimeException。
      *
-     * <p>4 个 callback 已在构造期绑定到 {@link LoaderOrchestrator};此处不重复组装:
+     * <p>3 个 callback 已在构造期绑定到 {@link LoaderOrchestrator};此处不重复组装:
      * <ul>
      *   <li>{@code redisKeyFn} → {@link #deriveRedisKey}(super.createCacheKey) — BloomGate/SyncSupport 用</li>
-     *   <li>{@code doubleCheckFn} → {@link #doubleCheckLookup}(super.get) — 锁内双检,绕过 override 不打 metrics</li>
+     *   <li>{@code doubleCheckFn} → {@link #doubleCheckLookup}(super.get) — 缓存读原语,绕过 override 不打 metrics</li>
      *   <li>{@code putAfterLoad} → {@code (k, v) -> put(k, v)} — 走 override,保留 putTimer + putCounter</li>
-     *   <li>{@code defaultLoadFn} → {@link #defaultLoad}(super.get(key, loader)) — Spring local-lock</li>
      * </ul>
+     * sync 与非 sync 两条 loader 路径共用 orchestrator 内的同一 load 协议;差别只在
+     * sync 路径把协议跑在分布式锁内。
      */
     @Override
     public <T> T get(Object key, Callable<T> loader) {
@@ -190,14 +190,6 @@ public class RedisProCache extends RedisCache {
      */
     private Cache.ValueWrapper doubleCheckLookup(Object key) {
         return super.get(key);
-    }
-
-    /**
-     * Default load 原语 — 委派 Spring Cache 本地锁路径;失败异常透传给 caller 翻译。
-     */
-    @SuppressWarnings("unchecked")
-    private <T> T defaultLoad(Object key, Callable<T> loader) {
-        return (T) super.get(key, loader);
     }
 
     /**

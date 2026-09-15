@@ -12,6 +12,7 @@ import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.Loaded;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadedWithWriteBackFailure;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -38,13 +39,13 @@ import static org.mockito.Mockito.when;
 /**
  * {@link LoaderOrchestrator} 单测 — 3 个 seam 测试集。
  *
- * <p>{@code isBloomShortCircuited} / {@code loadValue} / {@code performLockedLoad}
- * 3 个 package-private seam 下沉到 LoaderOrchestrator,通过 {@link LoaderOrchestrator#orchestrate}
- * 公开方法间接覆盖 — 每条 case 路径(bloom 短路 / sync 路由 / default 路由 / 锁内 3 决策)
- * 用 {@link LoadOutcome} 三态断言。
+ * <p>{@code isBloomShortCircuited} / {@code performLoad} 等 package-private seam 下沉到
+ * LoaderOrchestrator,通过 {@link LoaderOrchestrator#orchestrate} 公开方法间接覆盖 —
+ * 每条 case 路径(bloom 短路 / sync 路由 / default 路由 / load 协议决策)
+ * 用 {@link LoadOutcome} 各态断言。
  *
- * <p>测试 seam 形态:orchestrator 接受 {@link RedisCache} 引用 + 4 个 callback
- * (redisKey / doubleCheck / putAfterLoad / defaultLoad),本测试用 Mockito mock RedisCache
+ * <p>测试 seam 形态:orchestrator 接受 {@link RedisCache} 引用 + 3 个 callback
+ * (redisKey / doubleCheck / putAfterLoad),本测试用 Mockito mock RedisCache
  * + 自定义 callback 控制 cache-specific 行为,无 RedisProCache fixture 依赖。
  */
 @ExtendWith(MockitoExtension.class)
@@ -97,16 +98,14 @@ class LoaderOrchestratorTest {
         @Test
         @DisplayName("null operation → return BloomShortCircuited never invoked (orchestrator proceeds to default path)")
         void nullOperation_proceedsToDefaultPath() {
-            // operation null 时,orchestrator 跳过 bloom 短路走 default load
+            // operation null 时,orchestrator 跳过 bloom 短路走 default load 协议
             Callable<String> loader = () -> "value";
-            when(cache.get(eq("key1"), any(Callable.class))).thenReturn("value");
 
             LoadOutcome<String> outcome = orchestrator.orchestrate(
                     "testCache",
                     key -> testRedisKey,
-                    k -> cache.get(k),         // double-check
+                    k -> null,                 // double-check miss
                     (k, v) -> {},              // putAfterLoad
-                    (k, l) -> (String) cache.get(k, l),
                     loader,
                     "key1",
                     null);
@@ -121,14 +120,12 @@ class LoaderOrchestratorTest {
         void bloomDisabled_proceedsToDefaultPath() {
             RedisCacheableOperation op = operation(false, false);
             Callable<String> loader = () -> "value";
-            when(cache.get(eq("key1"), any(Callable.class))).thenReturn("value");
 
             LoadOutcome<String> outcome = orchestrator.orchestrate(
                     "testCache",
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> {},
-                    (k, l) -> (String) cache.get(k, l),
                     loader,
                     "key1",
                     op);
@@ -152,7 +149,6 @@ class LoaderOrchestratorTest {
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> {},
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     loader,
                     "key1",
                     op);
@@ -175,7 +171,6 @@ class LoaderOrchestratorTest {
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> {},
-                    (k, l) -> (String) cache.get(k, l),
                     loader,
                     "key1",
                     op);
@@ -211,7 +206,6 @@ class LoaderOrchestratorTest {
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> {},
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     loader,
                     "key1",
                     op);
@@ -222,10 +216,10 @@ class LoaderOrchestratorTest {
         }
     }
 
-    // ==================== 锁内 performLockedLoad 3 决策分支 ====================
+    // ==================== load 协议决策分支(sync 路径:锁内执行) ====================
 
     @Nested
-    @DisplayName("performLockedLoad Tests — single-flight seam 迁移")
+    @DisplayName("performLoad Tests — sync 路径锁内执行")
     class PerformLockedLoadTests {
 
         @Test
@@ -251,7 +245,6 @@ class LoaderOrchestratorTest {
                     (k, v) -> {
                         throw new AssertionError("put should not be invoked on cache hit");
                     },
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     loader,
                     "key1",
                     op);
@@ -281,7 +274,6 @@ class LoaderOrchestratorTest {
                         putKey.set(k);
                         putValue.set(v);
                     },
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     () -> "loaded-value",
                     "key1",
                     op);
@@ -309,7 +301,6 @@ class LoaderOrchestratorTest {
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> putCalls.incrementAndGet(),
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     () -> null,
                     "key1",
                     op);
@@ -338,7 +329,6 @@ class LoaderOrchestratorTest {
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> {},
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     loader,
                     "key1",
                     op);
@@ -366,7 +356,6 @@ class LoaderOrchestratorTest {
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> { throw putBoom; },      // putAfterLoad 写回失败
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     () -> "loaded-value",
                     "key1",
                     op);
@@ -396,7 +385,6 @@ class LoaderOrchestratorTest {
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> { throw putBoom; },
-                    (k, l) -> { throw new AssertionError("defaultLoad should not be invoked"); },
                     () -> null,
                     "key1",
                     op);
@@ -408,10 +396,10 @@ class LoaderOrchestratorTest {
         }
     }
 
-    // ==================== Default load path ====================
+    // ==================== Default load path(与 sync 路径同一 load 协议) ====================
 
     @Nested
-    @DisplayName("Default Load Path Tests")
+    @DisplayName("Default Load Path Tests — 同一 load 协议,无分布式锁")
     class DefaultLoadPathTests {
 
         @Test
@@ -423,61 +411,106 @@ class LoaderOrchestratorTest {
                     null,
                     key -> testRedisKey,
                     key -> null,
-                    (key, value) -> { },
-                    (key, loader) -> "bound-value");
+                    (key, value) -> { });
 
             LoadOutcome<String> outcome = bound.orchestrate(
-                    "testCache", () -> "unused-loader", "key1", operation(false, false));
+                    "testCache", () -> "loaded-value", "key1", operation(false, false));
 
             assertThat(outcome).isInstanceOf(Loaded.class);
-            assertThat(((Loaded<String>) outcome).value()).isEqualTo("bound-value");
+            assertThat(((Loaded<String>) outcome).value()).isEqualTo("loaded-value");
         }
 
         @Test
-        @DisplayName("default path returns Loaded with defaultLoadFn result")
-        void defaultPath_returnsLoaded() {
+        @DisplayName("double-check hits → default path returns cached value, loader never invoked")
+        void doubleCheckHit_defaultPathSkipsLoader() {
             RedisCacheableOperation op = operation(false, false);
-            Callable<String> loader = () -> "default-value";
+            Cache.ValueWrapper cached = () -> "cached-value";
 
             LoadOutcome<String> outcome = orchestrator.orchestrate(
                     "testCache",
                     key -> testRedisKey,
-                    k -> null,
-                    (k, v) -> {},
-                    (k, l) -> {
-                        try {
-                            return l.call();
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
-                        }
+                    k -> cached,
+                    (k, v) -> {
+                        throw new AssertionError("put must not run on cache hit");
                     },
-                    loader,
+                    () -> {
+                        throw new AssertionError("loader must not run on cache hit");
+                    },
                     "key1",
                     op);
 
             assertThat(outcome).isInstanceOf(Loaded.class);
-            assertThat(((Loaded<String>) outcome).value()).isEqualTo("default-value");
+            assertThat(((Loaded<String>) outcome).value()).isEqualTo("cached-value");
         }
 
         @Test
-        @DisplayName("default path throws → LoadFailed with cause")
-        void defaultPath_throws_returnsLoadFailed() {
+        @DisplayName("double-check miss → loader runs, value written back through putAfterLoad")
+        void doubleCheckMiss_defaultPathLoadsAndWritesBack() {
             RedisCacheableOperation op = operation(false, false);
-            Callable<String> loader = () -> "value";
-            RuntimeException boom = new RuntimeException("default failed");
+            AtomicReference<Object> written = new AtomicReference<>();
+
+            LoadOutcome<String> outcome = orchestrator.orchestrate(
+                    "testCache",
+                    key -> testRedisKey,
+                    k -> null,
+                    (k, v) -> written.set(v),
+                    () -> "loaded-value",
+                    "key1",
+                    op);
+
+            assertThat(outcome).isInstanceOf(Loaded.class);
+            assertThat(((Loaded<String>) outcome).value()).isEqualTo("loaded-value");
+            assertThat(written.get())
+                    .as("默认载荷路径的写回必须走 putAfterLoad(带 put metrics 的 override)")
+                    .isEqualTo("loaded-value");
+        }
+
+        @Test
+        @DisplayName("loader throws → LoadFailed wrapping Cache.ValueRetrievalException")
+        void loaderThrows_defaultPathReturnsLoadFailed() {
+            RedisCacheableOperation op = operation(false, false);
+            Callable<String> loader = () -> {
+                throw new RuntimeException("default failed");
+            };
 
             LoadOutcome<String> outcome = orchestrator.orchestrate(
                     "testCache",
                     key -> testRedisKey,
                     k -> null,
                     (k, v) -> {},
-                    (k, l) -> { throw boom; },
                     loader,
                     "key1",
                     op);
 
             assertThat(outcome).isInstanceOf(LoadFailed.class);
-            assertThat(((LoadFailed<String>) outcome).cause()).isSameAs(boom);
+            Throwable cause = ((LoadFailed<String>) outcome).cause();
+            assertThat(cause).isInstanceOf(Cache.ValueRetrievalException.class);
+            assertThat(cause.getCause()).hasMessage("default failed");
+        }
+
+        @Test
+        @DisplayName("write-back fails after loader success → LoadedWithWriteBackFailure (ADR-02 同 sync 路径)")
+        void writeBackFails_defaultPathReturnsLoadedWithWriteBackFailure() {
+            RedisCacheableOperation op = operation(false, false);
+            RuntimeException putBoom = new RuntimeException("redis put failed");
+
+            LoadOutcome<String> outcome = orchestrator.orchestrate(
+                    "testCache",
+                    key -> testRedisKey,
+                    k -> null,
+                    (k, v) -> {
+                        throw putBoom;
+                    },
+                    () -> "loaded-value",
+                    "key1",
+                    op);
+
+            assertThat(outcome).isInstanceOf(LoadedWithWriteBackFailure.class);
+            LoadedWithWriteBackFailure<String> wbf = (LoadedWithWriteBackFailure<String>) outcome;
+            assertThat(wbf.value())
+                    .as("loader 成功值必须保留并返回(写回失败不覆盖)")
+                    .isEqualTo("loaded-value");
+            assertThat(wbf.cause()).isSameAs(putBoom);
         }
     }
 }
