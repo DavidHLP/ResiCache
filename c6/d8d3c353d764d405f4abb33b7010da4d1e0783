@@ -1,0 +1,22 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/OperationKind.java
+  h_77173abe25c3ff 32,43,61
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 5,8,11,65-76,79,86-114
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptorNormalizationTest.java
+  h_77173abe25c3ff 59-108
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegisterAgreementTest.java
+  h_77173abe25c3ff 16,68
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegisterTest.java
+  h_77173abe25c3ff 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6d8d3c353d764d405f4abb33b7010da4d1e0783",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
