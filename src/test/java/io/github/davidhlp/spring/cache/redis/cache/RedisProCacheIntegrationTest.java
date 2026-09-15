@@ -7,6 +7,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
+import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -27,6 +28,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -228,7 +230,7 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
                 io.github.davidhlp.spring.cache.redis.cache.RedisCacheableOperation returnedOperation) {
             io.github.davidhlp.spring.cache.redis.cache.CacheOperationResolver operationResolver =
                     org.mockito.Mockito.mock(io.github.davidhlp.spring.cache.redis.cache.CacheOperationResolver.class);
-            when(operationResolver.resolve(eq(NAME))).thenReturn(returnedOperation);
+            when(operationResolver.resolve(eq(NAME), any(CacheOperation.class))).thenReturn(returnedOperation);
             return new RedisProCache(
                     NAME, realWriter, cacheConfiguration,
                     ResiCacheFeatures.builder()

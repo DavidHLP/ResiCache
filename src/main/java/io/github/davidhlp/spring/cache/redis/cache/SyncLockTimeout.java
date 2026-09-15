@@ -4,6 +4,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
@@ -46,10 +47,10 @@ class SyncLockTimeout {
     /**
      * 解析给定 operation 的锁超时(秒).
      *
-     * @param operation 方法级 operation(可为 null,视作「未覆盖」→ 全局配置)
+     * @param operation 方法级策略视图(可为 null,视作「未覆盖」→ 全局配置)
      * @return 锁超时秒数(恒为正)
      */
-    public long resolveSeconds(@Nullable RedisCacheableOperation operation) {
+    public long resolveSeconds(@Nullable CachePolicyView.Source operation) {
         long timeout = operation == null ? -1L : operation.getSyncTimeout();
         return resolveSeconds(timeout);
     }

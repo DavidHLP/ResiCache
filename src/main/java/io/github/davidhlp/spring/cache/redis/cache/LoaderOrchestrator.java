@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
@@ -151,7 +152,7 @@ final class LoaderOrchestrator {
             String cacheName,
             Callable<T> loader,
             Object key,
-            @Nullable RedisCacheableOperation operation) {
+            @Nullable CachePolicyView.Source operation) {
         if (boundRedisKeyFn == null
                 || boundDoubleCheckFn == null
                 || boundPutAfterLoad == null) {
@@ -178,7 +179,7 @@ final class LoaderOrchestrator {
      *                         闭包 → 走 override 保留 putTimer + putCounter 指标)
      * @param loader           Spring Cache {@link Callable} loader
      * @param key              缓存 key(用户传入的原始 key;由 redisKeyFn 派生 Redis key)
-     * @param operation        方法级 operation(可为 null,视作「无增强属性」→ 不走 bloom / sync)
+     * @param operation        方法级策略视图(可为 null,视作「无增强属性」→ 不走 bloom / sync)
      * @param <T>              加载结果类型
      * @return {@link LoadOutcome} 四态之一
      */
@@ -190,7 +191,7 @@ final class LoaderOrchestrator {
             BiConsumer<Object, Object> putAfterLoad,
             Callable<T> loader,
             Object key,
-            @Nullable RedisCacheableOperation operation) {
+            @Nullable CachePolicyView.Source operation) {
 
         // 1) Bloom 短路检查 — caller 据 BloomShortCircuited 自增 miss counter
         if (isBloomShortCircuited(cacheName, redisKeyFn.apply(key), operation)) {
@@ -244,7 +245,7 @@ final class LoaderOrchestrator {
             BiConsumer<Object, Object> putAfterLoad,
             Callable<T> loader,
             Object key,
-            RedisCacheableOperation operation) {
+            CachePolicyView.Source operation) {
         long timeout = syncLockTimeout != null
                 ? syncLockTimeout.resolveSeconds(operation)
                 : SyncLockTimeout.DEFAULT_LOCK_TIMEOUT_SECONDS;
@@ -267,7 +268,7 @@ final class LoaderOrchestrator {
      * actualKey/redisKey 漂移缺陷。
      */
     private boolean isBloomShortCircuited(String cacheName, String redisKey,
-                                          @Nullable RedisCacheableOperation operation) {
+                                          @Nullable CachePolicyView.Source operation) {
         if (operation == null || !operation.isUseBloomFilter() || bloomGate == null) {
             return false;
         }

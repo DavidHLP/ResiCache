@@ -89,6 +89,13 @@ Current milestones:
   lock acquire/release, `SyncRole` leader/follower failures, the async
   early-expiration retry path, chain post-processing, and the migration
   engine's fingerprint helper (now one implementation).
+- ⚠️ **`@RedisCachePut` / `@RedisCacheEvict` metadata now resolves** — the chain
+  used to read only the `@RedisCacheable` namespace, so a method annotated only
+  with `@RedisCachePut` ran without its `ttl`, `useBloomFilter`, `sync`,
+  `cacheNullValues` and early-expiration attributes. Each operation now reads
+  its own declaration, with a write-side fallback to the `@RedisCacheable`
+  declaration so read-through write-backs keep the read method's policy. A
+  method declaring both now applies the `@RedisCachePut` TTL to writes.
 - **One early-refresh module** — the read → decision → schedule → TTL-shortening
   CAS cycle moved out of the chain handler into `EarlyRefresh`.
   `EarlyExpirationHandler` is now a thin chain adapter: it asks the module for
@@ -96,7 +103,7 @@ Current milestones:
   decision read is reused instead of fetched twice) and maps the outcome to
   `SKIP_ALL`/`CONTINUE`. The executor, retry policy and cancellation seam are
   unchanged (ADR-0001 §11).
-
+- **Nested chain advancement is explicit (SPI addition, compatible)** —
   `CacheHandler` gains `default HandlerResult handle(CacheContext,
   ChainContinuation next)`; the default ignores `next` and delegates to
   `handle(context)`, so existing implementations need no change (the
