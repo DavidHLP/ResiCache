@@ -8,7 +8,10 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.lang.Nullable;
@@ -16,16 +19,18 @@ import org.springframework.lang.Nullable;
 /**
  * 缓存 loader 路径编排器 — loader-path deep seam.
  *
- * <p>承接 {@link RedisProCache#get(Object, Callable)} 的 3 步 loader 编排:
+ * <p>承接 {@link RedisProCache#get(Object, Callable)} 与
+ * {@link RedisProCacheWriter#get(String, byte[], java.util.function.Supplier, java.time.Duration, boolean)}
+ * 的 read-through 编排:
  *
  * <ol>
  *   <li><b>Bloom 短路检查</b> — 经 {@link BloomGate#definiteMiss} 判定「确定不存在」 →
  *       返回 {@link LoadOutcome.BloomShortCircuited};caller 据此自增 miss counter 并返回 null</li>
  *   <li><b>Sync 路径</b> — {@code sync=true} + {@link SyncSupport} 在场 →
- *       {@link SyncSupport#executeSync} + 锁内 {@link #performLoad double-check + load + put};
+ *       {@link SyncSupport#executeSync} + 锁内 {@link #readThrough read-through protocol};
  *       返回 {@link LoadOutcome.Loaded};锁内 loader 抛异常 →
  *       {@link LoadOutcome.LoadFailed}(由 caller 翻译)</li>
- *   <li><b>Default 路径</b> — 同一 load 协议({@link #performLoad}),不带分布式锁;
+ *   <li><b>Default 路径</b> — 同一 read-through 协议({@link #readThrough}),不带分布式锁;
  *       同样 {@link LoadOutcome.Loaded} / {@link LoadOutcome.LoadFailed}</li>
  * </ol>
  *
@@ -41,7 +46,8 @@ import org.springframework.lang.Nullable;
  * </ul>
  *
  * <p><b>callback 协议</b>:orchestrator 不继承 {@code RedisCache},因此需要 cache-specific 操作
- * (key 派生 / 双检 / 写回)以 callback 形式由 {@code RedisProCache} 注入:
+ * (key 派生 / 双检 / 写回)以 callback 形式由 {@code RedisProCache} 注入;writer 入口则直接
+ * 使用静态 {@link #readThrough} 并传入字节适配:
  * <ul>
  *   <li>{@code Function<Object, String> redisKeyFn} — 派生 Redis key 用于 BloomGate 与 SyncSupport</li>
  *   <li>{@code Function<Object, Cache.ValueWrapper> doubleCheckFn} — 缓存读原语(走
@@ -50,9 +56,9 @@ import org.springframework.lang.Nullable;
  *       {@code RedisProCache.put} override,保留 putTimer + putCounter metrics)</li>
  * </ul>
  *
- * <p><b>一条协议,两个入口</b>:sync 与非 sync 路径都在本类内走 {@link #performLoad} —
- * 同一套 double-check 语义、同一套写回容错({@link LoadOutcome.LoadedWithWriteBackFailure})、
- * 同一套 metric 记账。两者唯一差别是 sync 路径把协议跑在 {@link SyncSupport} 的分布式锁内。
+ * <p><b>一条协议,两个入口</b>:cache 与 writer 入口都走 {@link #readThrough} —
+ * 同一套 double-check 语义、同一套写回容错和单点 WARN。两者只在读值表示与 loader
+ * 异常翻译上不同;sync 路径另外把 cache 协议跑在 {@link SyncSupport} 的分布式锁内。
  *
  * <p><b>状态</b>:无可变状态。3 个共享依赖和 3 个 cache-specific callback 由
  * {@code RedisProCache} 在构造期一次性绑定(指向 {@code super.createCacheKey} /
@@ -101,7 +107,8 @@ final class LoaderOrchestrator {
 
     /**
      * loader 抛异常或 default path 异常;{@code cause} 为原始异常
-     * (checked 异常已在 {@link #performLoad} 翻译为 {@link Cache.ValueRetrievalException})。
+     * (cache 入口由 {@link #readThrough} 翻译为 {@link Cache.ValueRetrievalException},
+     * writer 入口保留原始异常)。
      * caller 应翻译为 {@link RuntimeException} 并自增 miss counter 后抛出。
      */
     public record LoadFailed<T>(Throwable cause) implements LoadOutcome<T> {
@@ -200,36 +207,12 @@ final class LoaderOrchestrator {
 
         // 2) Sync 路径 — sync=true 且 SyncSupport 在场才走;否则降级 default 路径
         if (operation != null && operation.isSync() && syncSupport != null) {
-            return executeSyncLoad(redisKeyFn, doubleCheckFn, putAfterLoad, loader, key, operation);
+            return executeSyncLoad(cacheName, redisKeyFn, doubleCheckFn, putAfterLoad,
+                    loader, key, operation);
         }
 
         // 3) Default 路径 — 与 sync 路径同一 load 协议,只是不跑在分布式锁内
-        return executeLoad(doubleCheckFn, putAfterLoad, loader, key);
-    }
-
-    /**
-     * 把 {@link #performLoad} 的异常语义翻译为 {@link LoadOutcome} —— 两条 load 路径
-     * (sync / default)共用的容错规则,单点定义 availability-first 与失败归类。
-     *
-     * <ul>
-     *   <li>loader 失败(已翻译为 {@link Cache.ValueRetrievalException})→ {@link LoadOutcome.LoadFailed}</li>
-     *   <li>写回失败但 loader 已成功 → {@link LoadOutcome.LoadedWithWriteBackFailure}(值保留)</li>
-     * </ul>
-     */
-    @SuppressWarnings("unchecked")
-    private <T> LoadOutcome<T> executeLoad(
-            Function<Object, Cache.ValueWrapper> doubleCheckFn,
-            BiConsumer<Object, Object> putAfterLoad,
-            Callable<T> loader,
-            Object key) {
-        try {
-            return new Loaded<>(performLoad(doubleCheckFn, putAfterLoad, loader, key));
-        } catch (WriteBackFailureException wbf) {
-            // 写回失败不覆盖 loader 值(ADR-02):值已捕获在异常中,直接以该 outcome 返回
-            return new LoadedWithWriteBackFailure<>((T) wbf.loadedValue(), wbf.getCause());
-        } catch (Throwable cause) {
-            return new LoadFailed<>(cause);
-        }
+        return executeLoad(cacheName, doubleCheckFn, putAfterLoad, loader, key);
     }
 
     /**
@@ -238,8 +221,8 @@ final class LoaderOrchestrator {
      * (同一 load 协议 + 同一容错规则);锁基础设施失败(未获取锁 / 中断 / follower 超时)
      * → {@link LoadOutcome.LoadFailed}。
      */
-    @SuppressWarnings("unchecked")
     private <T> LoadOutcome<T> executeSyncLoad(
+            String cacheName,
             Function<Object, String> redisKeyFn,
             Function<Object, Cache.ValueWrapper> doubleCheckFn,
             BiConsumer<Object, Object> putAfterLoad,
@@ -253,11 +236,111 @@ final class LoaderOrchestrator {
             String lockKey = redisKeyFn.apply(key);
             return syncSupport.executeSync(
                     lockKey,
-                    () -> executeLoad(doubleCheckFn, putAfterLoad, loader, key),
+                    () -> executeLoad(cacheName, doubleCheckFn, putAfterLoad, loader, key),
                     timeout);
         } catch (Throwable cause) {
             return new LoadFailed<>(cause);
         }
+    }
+
+    /**
+     * 缓存侧 loader 入口对共享协议的适配。
+     *
+     * <p>{@link Cache.ValueWrapper} 代表读侧的命中状态,而 loader 结果是 wrapper 内的业务值;
+     * Spring 的 loader 异常在这里显式翻译,原始字节 writer 则传入身份翻译。
+     */
+    @SuppressWarnings("unchecked")
+    private <T> LoadOutcome<T> executeLoad(
+            String cacheName,
+            Function<Object, Cache.ValueWrapper> doubleCheckFn,
+            BiConsumer<Object, Object> putAfterLoad,
+            Callable<T> loader,
+            Object key) {
+        return readThrough(
+                cacheName,
+                () -> doubleCheckFn.apply(key),
+                cached -> cached != null,
+                cached -> (T) cached.get(),
+                loader::call,
+                value -> putAfterLoad.accept(key, value),
+                cause -> translateCacheLoaderFailure(key, loader, cause));
+    }
+
+    /**
+     * 一条 read-through 协议的唯一实现。
+     *
+     * <p>读侧表示({@code R})和业务值表示({@code T})由 caller 显式适配;因此
+     * {@link Cache.ValueWrapper} 与 writer 的 {@code byte[]} 不需要各自复制协议。
+     * 写回失败只在此处容忍并发出一次脱敏 WARN;{@link IllegalArgumentException} 保持为
+     * {@link LoadOutcome.LoadFailed},由 caller 原样抛出。
+     *
+     * @param cacheName         缓存名称,仅用于脱敏诊断
+     * @param read              读原语
+     * @param isHit             判断读结果是否命中
+     * @param hitValue          把命中表示转换为业务值
+     * @param loader            回源 loader
+     * @param writeBack         成功加载后的写回原语
+     * @param loaderFailure     入口特定的 loader 异常翻译
+     * @param <R>               读原语返回的表示
+     * @param <T>               loader 业务值表示
+     * @return 共享的四态编排结果
+     */
+    static <R, T> LoadOutcome<T> readThrough(
+            String cacheName,
+            Supplier<R> read,
+            Predicate<R> isHit,
+            Function<R, T> hitValue,
+            ThrowingSupplier<T> loader,
+            Consumer<T> writeBack,
+            Function<Throwable, Throwable> loaderFailure) {
+        final R cached;
+        try {
+            cached = read.get();
+            if (isHit.test(cached)) {
+                return new Loaded<>(hitValue.apply(cached));
+            }
+        } catch (Throwable cause) {
+            return new LoadFailed<>(cause);
+        }
+
+        final T loaded;
+        try {
+            loaded = loader.get();
+        } catch (Throwable cause) {
+            return new LoadFailed<>(loaderFailure.apply(cause));
+        }
+
+        try {
+            writeBack.accept(loaded);
+        } catch (IllegalArgumentException configError) {
+            return new LoadFailed<>(configError);
+        } catch (RuntimeException writeBackFailure) {
+            log.warn(
+                    "Cache write-back failed after successful load; returning loaded value: "
+                            + "cacheName={}, failure={}",
+                    cacheName,
+                    FailureDiagnostics.sanitizedFailure(writeBackFailure));
+            return new LoadedWithWriteBackFailure<>(loaded, writeBackFailure);
+        } catch (Throwable cause) {
+            return new LoadFailed<>(cause);
+        }
+        return new Loaded<>(loaded);
+    }
+
+    /**
+     * Spring Cache loader 契约的异常适配;writer 入口传入 identity。
+     */
+    private static <T> Throwable translateCacheLoaderFailure(
+            Object key, Callable<T> loader, Throwable cause) {
+        if (cause instanceof Exception exception) {
+            return new Cache.ValueRetrievalException(key, loader, exception);
+        }
+        return cause;
+    }
+
+    @FunctionalInterface
+    interface ThrowingSupplier<T> {
+        T get() throws Throwable;
     }
 
     /**
@@ -274,73 +357,5 @@ final class LoaderOrchestrator {
         }
         String bloomKey = CacheKeys.fromRedisKey(cacheName, redisKey).bloomKey();
         return bloomGate.definiteMiss(cacheName, bloomKey);
-    }
-
-    /**
-     * 缓存 load 协议:double-check → loader → write-back —— sync 与非 sync 路径共用同一实现。
-     *
-     * <ol>
-     *   <li><b>double-check</b>:{@code doubleCheckFn.apply(key)} 已有值 → 直接返回(走
-     *       {@code super.get(key)} 无 metrics,因 metrics 在外层 {@code get(key, loader)} 记录);
-     *       缓存 null 值经 NullValue round-trip 在此同样命中(非 null wrapper + null value)</li>
-     *   <li><b>load</b>:cache miss → 调 {@code loader.call()};loader 异常 →
-     *       {@link Cache.ValueRetrievalException}(Spring 抽象层契约,checked 亦翻译)</li>
-     *   <li><b>write-back</b>:loader 成功(无论 null 与否)后
-     *       {@link BiConsumer#accept 写回}(由 RedisCache 配置处理 null-value 缓存契约);
-     *       写回失败 → 抛 {@link WriteBackFailureException}(携带已加载值),由
-     *       {@link #executeLoad} 翻译为 {@link LoadedWithWriteBackFailure},不覆盖业务值。
-     *       {@link IllegalArgumentException}(null 缓存未启用等配置错误)不在此列,原样上抛</li>
-     * </ol>
-     */
-    @SuppressWarnings("unchecked")
-    <T> T performLoad(Function<Object, Cache.ValueWrapper> doubleCheckFn,
-                      BiConsumer<Object, Object> putAfterLoad,
-                      Callable<T> loader,
-                      Object key) {
-        // 双重检查:可能在等待锁期间其他线程已加载。doubleCheckFn 由 caller 绑为 super.get(key),
-        // 完整保留 null-value round-trip 语义(NullValue → null)。
-        Cache.ValueWrapper existingValue = doubleCheckFn.apply(key);
-        if (existingValue != null) {
-            return (T) existingValue.get();
-        }
-
-        // 执行加载 — loader 异常在此翻译为 Spring 抽象层契约
-        final T loaded;
-        try {
-            loaded = loader.call();
-        } catch (Exception ex) {
-            throw new Cache.ValueRetrievalException(key, loader, ex);
-        }
-
-        // 写回 — 失败时保留 loader 值,以 WriteBackFailureException 冒泡(不吞、不覆盖)。
-        // IllegalArgumentException 例外:那是配置错误(如 disableCachingNullValues() 下 loader
-        // 返回 null),不是「缓存写回失败」,降级成 WARN + 返回值会让错误配置静默 —— 原样抛出。
-        try {
-            putAfterLoad.accept(key, loaded);
-        } catch (IllegalArgumentException configError) {
-            throw configError;
-        } catch (RuntimeException ex) {
-            throw new WriteBackFailureException(loaded, ex);
-        }
-        return loaded;
-    }
-
-    /**
-     * 写回失败哨兵 — 把「loader 已成功 + 写回失败」的状态从
-     * {@link #performLoad} 传出到 {@link #executeLoad} 翻译为
-     * {@link LoadedWithWriteBackFailure}。私有控制流异常,不跨类。
-     */
-    private static final class WriteBackFailureException extends RuntimeException {
-
-        private final Object loadedValue;
-
-        WriteBackFailureException(Object loadedValue, RuntimeException cause) {
-            super(cause);
-            this.loadedValue = loadedValue;
-        }
-
-        Object loadedValue() {
-            return loadedValue;
-        }
     }
 }

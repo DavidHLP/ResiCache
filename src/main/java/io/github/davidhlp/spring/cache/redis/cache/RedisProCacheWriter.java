@@ -85,23 +85,20 @@ class RedisProCacheWriter implements RedisCacheWriter {
     /**
      * Read-through loader 入口 —— availability-first(ADR-0001 §13)。
      *
-     * <p><b>与 cache 侧 loader 路径的关系</b>:{@code RedisProCache.get(key, loader)} 覆写了
-     * Spring 的 loader 入口,整条「读 → 回源 → 写回」协议由 {@link LoaderOrchestrator} 承担
-     * (含 put 指标与写回容错)。本方法是 <b>writer 级</b>入口,写给直接持有 writer 的调用方:
+     * <p>{@code RedisProCache.get(key, loader)} 与本方法都委派
+     * {@link LoaderOrchestrator#readThrough} 的同一条「读 → 回源 → 写回」协议。
+     * 本入口只提供 writer 的字节读写适配,并保留低层 SPI 的 loader 异常原样传播契约;
      * {@link org.springframework.cache.Cache#getNativeCache()} 是公开方法,调用方拿到
-     * {@code RedisCacheWriter} 后可以直接走这里;若不覆写,Spring 的接口默认实现会在写回失败时
-     * 把已加载值连同异常一起丢掉(§13 明确否决的行为)。
+     * {@code RedisCacheWriter} 后可以直接走这里。
      *
-     * <p>因此这里保留一份<b>同等容错</b>的实现(写回失败 → 渲染后的 WARN + 返回已加载字节),
-     * 而不是放任接口默认实现。
-     *
-     * <p>cacheTti 参数:与既有 ResiCache 行为一致(链 GET 不做 TTI 刷新),命中/未命中均按普通读处理。
+     * <p>{@code cacheTti} 按 ResiCache 的既有语义保持忽略:链 GET 不做 TTI 刷新,
+     * 命中/未命中均按普通读处理。刷新 TTL 会引入本库刻意避免的写放大。
      *
      * @param name           缓存名
      * @param key            Redis key 字节
-     * @param loaderSupplier loader 字节提供者(Spring 契约;loader 异常在此传播)
+     * @param loaderSupplier loader 字节提供者(Spring 契约;loader 异常原样传播)
      * @param ttl            TTL
-     * @param cacheTti       是否 time-to-idle(本实现不消费,与既有链语义一致)
+     * @param cacheTti       是否 time-to-idle(本实现保持忽略,不刷新 TTL)
      * @return 缓存命中或 loader 产出的字节;缓存 miss 且 loader 产出 null 时为 null
      */
     @Override
@@ -109,28 +106,33 @@ class RedisProCacheWriter implements RedisCacheWriter {
     public byte[] get(@NonNull String name, @NonNull byte[] key,
                       @NonNull java.util.function.Supplier<byte[]> loaderSupplier,
                       @Nullable Duration ttl, boolean cacheTti) {
-        // 1) 缓存读(链 GET:bloom 短路 / 提前过期均在此生效)
-        byte[] cached = get(name, key, ttl);
-        if (cached != null) {
-            return cached;
+        LoaderOrchestrator.LoadOutcome<byte[]> outcome = LoaderOrchestrator.readThrough(
+                name,
+                () -> get(name, key, ttl),
+                cached -> cached != null,
+                cached -> cached,
+                loaderSupplier::get,
+                loaded -> put(name, key, loaded, ttl),
+                cause -> cause);
+        if (outcome instanceof LoaderOrchestrator.Loaded<?> loaded) {
+            return (byte[]) loaded.value();
         }
-
-        // 2) loader — 异常原样传播(loader 失败是用户可见失败,不得吞)
-        byte[] loaded = loaderSupplier.get();
-
-        // 3) 写回 — 失败不覆盖 loader 值(ADR-0001 §13 availability-first);
-        //    配置错误(IllegalArgumentException,如未启用 null 缓存)原样上抛
-        try {
-            put(name, key, loaded, ttl);
-        } catch (IllegalArgumentException configError) {
-            throw configError;
-        } catch (RuntimeException writeBackFailure) {
-            log.warn("Cache write-back failed after successful load; returning loaded value: "
-                            + "cacheName={}, failure={}",
-                    name,
-                    FailureDiagnostics.sanitizedFailure(writeBackFailure));
+        if (outcome instanceof LoaderOrchestrator.LoadedWithWriteBackFailure<?> loaded) {
+            return (byte[]) loaded.value();
         }
-        return loaded;
+        if (outcome instanceof LoaderOrchestrator.LoadFailed<?> failed) {
+            return throwRawLoaderFailure(failed.cause());
+        }
+        return null;
+    }
+    private static byte[] throwRawLoaderFailure(Throwable cause) {
+        RedisProCacheWriter.<RuntimeException>throwUnchecked(cause);
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> void throwUnchecked(Throwable cause) throws E {
+        throw (E) cause;
     }
 
     @Override

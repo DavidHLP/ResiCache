@@ -265,29 +265,32 @@ and write-back exceptions into a single `LoadFailed`, and the default path
 wrapped a write-back failure so the already-loaded business value was lost or
 turned into a `ValueRetrievalException`.
 
-**Decision**: Availability-first, and one protocol. `LoaderOrchestrator`
-owns the whole read → load → write-back cycle in `performLoad`; both loader
-paths call it, and the only difference between them is that the sync path
-runs it inside `SyncSupport`'s distributed lock.
+**Decision**: Availability-first, and one protocol. `LoaderOrchestrator.readThrough`
+owns the whole read → load → write-back cycle, including write-back-failure
+tolerance and the single redacted WARN. Both loader entries delegate to it; their
+only entry-specific differences are the read-value representation and loader
+failure translation.
 
-- **Default path**: same `performLoad` (chain read via the cache read
-  primitive → miss → loader → write-back through `RedisProCache.put`) and the
-  same tolerance rule. It no longer delegates to Spring's
-  `RedisCache.get(key, loader)`, so its write-back carries the same put
-  metrics as the sync path and cannot drift from it.
-  `RedisProCacheWriter` keeps its own 5-arg `get` with the same tolerance,
-  because `Cache.getNativeCache()` is public and hands callers the writer
-  directly — Spring's interface default would discard the loaded bytes.
+- **Default path**: the cache adapter supplies the chain read primitive,
+  converts `Cache.ValueWrapper` to the business value, and writes through
+  `RedisProCache.put`. The same protocol carries the put metrics and cannot drift
+  from the sync path.
+- **Native writer path**: `RedisProCacheWriter` supplies the byte-oriented read
+  and write primitives and delegates to the same `readThrough` implementation.
+  Its low-level SPI contract keeps loader exceptions raw. `cacheTti` remains
+  intentionally ignored: native reads do not refresh TTL because that would add
+  write amplification.
 - **Configuration errors are not write-back failures**: an
   `IllegalArgumentException` from the write-back (for example a loader that
   returns `null` while null caching is disabled) propagates instead of
   degrading to a warn-and-return, so the misconfiguration is not silent.
-- **Sync path**: `SyncSupport.executeSync` wraps the same `performLoad`, so
-  followers share the leader's outcome — including a write-back failure.
-- Loader exceptions propagate as `Cache.ValueRetrievalException` in both
-  paths; a write-back failure produces
-  `LoadOutcome.LoadedWithWriteBackFailure(value, cause)`, which
-  `RedisProCache` logs redacted (no raw key) and answers with the value.
+- **Sync path**: `SyncSupport.executeSync` wraps the same cache adapter and
+  protocol, so followers share the leader's outcome — including a write-back failure.
+- Cache loader exceptions propagate as `Cache.ValueRetrievalException` in both
+  cache paths; native writer loader exceptions propagate raw. A write-back failure
+  produces `LoadOutcome.LoadedWithWriteBackFailure(value, cause)`; the shared
+  protocol logs the cause redacted (no raw key) and both entries answer with the
+  loaded value.
 - Explicit `PUT` / `PUT_IF_ABSENT` / `CLEAN` remain fail-fast typed
   (`CacheOperationException`); `REMOVE` stays observable best-effort.
 

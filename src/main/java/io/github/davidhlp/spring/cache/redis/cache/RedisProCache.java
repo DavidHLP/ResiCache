@@ -11,7 +11,6 @@ import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.util.concurrent.Callable;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -35,7 +34,6 @@ import org.springframework.data.redis.cache.RedisCacheWriter;
  * 全部 metric 关注点由 {@code RedisProCacheMetricsRegistry} 承载；特性值对象仅在构造期透传 registry。
  * 唯一耦合点是构造期把 registry 透传给 registry seam,运行期本类对 Micrometer API 零依赖。
  */
-@Slf4j
 public class RedisProCache extends RedisCache {
 
     /**
@@ -134,9 +132,8 @@ public class RedisProCache extends RedisCache {
      * <ol>
      *   <li>timed wrap(getTimer)(委派 {@link RedisProCacheMetricsRegistry#recordGet})</li>
      *   <li>委派 orchestrator.orchestrate(...) 返回 {@link LoadOutcome}</li>
-     *   <li>switch 翻译 3 态 → 路径返回 / miss 自增 / 异常翻译</li>
+     *   <li>switch 翻译 4 态 → 路径返回 / miss 自增 / 异常翻译</li>
      * </ol>
-     * miss counter 自增:bloom 短路 1 次 / 失败路径 1 次 / 成功路径 0 次;异常翻译:
      * RuntimeException 直接抛 / checked Exception 翻译为 RuntimeException。
      *
      * <p>3 个 callback 已在构造期绑定到 {@link LoaderOrchestrator};此处不重复组装:
@@ -159,17 +156,8 @@ public class RedisProCache extends RedisCache {
                     yield null;
                 }
                 case LoaderOrchestrator.Loaded<T>(T value) -> value;
-                case LoaderOrchestrator.LoadedWithWriteBackFailure<T>(T value, Throwable writeBackCause) -> {
-                    // ADR-02 availability-first:loader 值必须返回;写回失败仅记录诊断。
-                    // ADR-06 key 隐私:WARN 不打印 cause message/toString(可能嵌 key),
-                    // 只记异常类型链。
-                    log.warn(
-                            "Cache write-back failed after successful load; returning loaded value: "
-                                    + "cacheName={}, failure={}",
-                            getName(),
-                            FailureDiagnostics.sanitizedFailure(writeBackCause));
-                    yield value;
-                }
+                case LoaderOrchestrator.LoadedWithWriteBackFailure<T>(
+                        T value, Throwable ignored) -> value;
                 case LoaderOrchestrator.LoadFailed<T>(Throwable cause) -> {
                     metricsRegistry.recordMiss();
                     throw translateFailure(cause, getName());
