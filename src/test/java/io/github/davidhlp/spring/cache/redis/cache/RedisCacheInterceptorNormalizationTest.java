@@ -56,6 +56,56 @@ class RedisCacheInterceptorNormalizationTest {
         verify(metadataResolver).activate(implementationMethod, JdkServiceImpl.class);
     }
 
+    @Test
+    @DisplayName("JDK proxy invocation preserves an interface-declared policy")
+    void jdkProxyInvocation_preservesInterfaceDeclaredPolicy() throws Throwable {
+        RedisCacheRegister register = new RedisCacheRegister();
+        RedisCacheOperationSource operationSource = new RedisCacheOperationSource(
+                io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.NativeAnnotationMode.SELECTIVE,
+                register);
+        Method interfaceMethod = InterfaceAnnotatedService.class.getMethod("load", String.class);
+        AnnotationParser.ParsedAnnotations parsed = new AnnotationParser().parse(interfaceMethod);
+        RedisCacheableOperation declaredPolicy =
+                (RedisCacheableOperation) parsed.policyOperations().get(0);
+        register.registerSnapshot(interfaceMethod, InterfaceAnnotatedService.class, parsed);
+        RecordingAnnotationChainEngine chain = new RecordingAnnotationChainEngine(register);
+        DefaultMethodMetadataResolver metadataResolver = spy(new DefaultMethodMetadataResolver());
+        RedisCacheInterceptor interceptor = new RedisCacheInterceptor(
+                operationSource,
+                new ConcurrentMapCacheManager("interface-cache"),
+                new SimpleKeyGenerator(),
+                chain,
+                metadataResolver);
+
+        ProxyFactory proxyFactory = new ProxyFactory(new InterfaceAnnotatedServiceImpl());
+        proxyFactory.setProxyTargetClass(false);
+        proxyFactory.addAdvice(interceptor);
+        InterfaceAnnotatedService proxy = (InterfaceAnnotatedService) proxyFactory.getProxy();
+
+        assertThat(Proxy.isProxyClass(proxy.getClass())).isTrue();
+        assertThat(proxy.load("id")).isEqualTo("interface:id");
+        assertThat(chain.observedOperations).singleElement().isSameAs(declaredPolicy);
+        assertThat(((RedisCacheableOperation) chain.observedOperations.get(0)).getTtl())
+                .isEqualTo(654L);
+        assertThat(((RedisCacheableOperation) chain.observedOperations.get(0)).isUseBloomFilter())
+                .isTrue();
+        verify(metadataResolver).activate(
+                InterfaceAnnotatedServiceImpl.class.getMethod("load", String.class),
+                InterfaceAnnotatedServiceImpl.class);
+    }
+
+    private interface InterfaceAnnotatedService {
+        @RedisCacheable(cacheNames = "interface-cache", ttl = 654, useBloomFilter = true)
+        String load(String id);
+    }
+
+    private static final class InterfaceAnnotatedServiceImpl implements InterfaceAnnotatedService {
+        @Override
+        public String load(String id) {
+            return "interface:" + id;
+        }
+    }
+
     private interface JdkService {
         String load(String id);
     }

@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.when;
 
 /**
- * Guards the invariant that the annotation chain and policy resolver read one LRU entry.
+ * Guards the invariant that the annotation chain and policy resolver read one snapshot.
  */
 @DisplayName("RedisCacheRegister snapshot reader agreement")
 class RedisCacheRegisterAgreementTest {
@@ -65,7 +65,7 @@ class RedisCacheRegisterAgreementTest {
     }
 
     @Test
-    @DisplayName("snapshots remain resolvable after registrations beyond the historical capacity")
+    @DisplayName("snapshots remain resolvable after registrations beyond the compatibility capacity")
     void snapshotRemainsResolvableAfterFurtherRegistrations() throws Exception {
         RedisCacheRegister register = new RedisCacheRegister(1, 1);
         Method anchorMethod = AgreementService.class.getMethod("first", String.class);

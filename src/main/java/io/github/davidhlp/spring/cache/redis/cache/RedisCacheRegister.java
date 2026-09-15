@@ -2,10 +2,13 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.context.expression.AnnotatedElementKey;
 
@@ -59,13 +62,54 @@ class RedisCacheRegister {
      * Returns the parse result shared by the Spring source and annotation chain.
      */
     public AnnotationParser.ParsedAnnotations getSnapshot(Method method, Class<?> targetClass) {
+        AnnotationParser.ParsedAnnotations snapshot = findSnapshot(method, targetClass);
+        Method specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
+        if (snapshot == null && !specificMethod.equals(method)) {
+            snapshot = findSnapshot(specificMethod, targetClass);
+        }
+        if (snapshot == null) {
+            snapshot = findInterfaceSnapshot(specificMethod, targetClass, new HashSet<>());
+        }
+        return snapshot;
+    }
+
+    private AnnotationParser.ParsedAnnotations findSnapshot(Method method, Class<?> targetClass) {
         AnnotationParser.ParsedAnnotations snapshot = snapshotsByElement.get(
                 new AnnotatedElementKey(method, targetClass));
-        if (snapshot == null && targetClass != method.getDeclaringClass()) {
+        if (snapshot == null) {
             snapshot = snapshotsByElement.get(
                     new AnnotatedElementKey(method, method.getDeclaringClass()));
         }
         return snapshot;
+    }
+
+    private AnnotationParser.ParsedAnnotations findInterfaceSnapshot(
+            Method method, Class<?> targetClass, Set<Class<?>> visited) {
+        Class<?> type = targetClass;
+        while (type != null) {
+            for (Class<?> interfaceType : type.getInterfaces()) {
+                if (!visited.add(interfaceType)) {
+                    continue;
+                }
+                try {
+                    Method interfaceMethod = interfaceType.getMethod(
+                            method.getName(), method.getParameterTypes());
+                    AnnotationParser.ParsedAnnotations snapshot =
+                            findSnapshot(interfaceMethod, targetClass);
+                    if (snapshot != null) {
+                        return snapshot;
+                    }
+                    snapshot = findInterfaceSnapshot(interfaceMethod, interfaceType, visited);
+                    if (snapshot != null) {
+                        return snapshot;
+                    }
+                } catch (NoSuchMethodException ignored) {
+                    // Continue searching inherited interfaces.
+                }
+            }
+            type = type.getSuperclass();
+        }
+        return null;
     }
 
     // ============================ 注册（单一 seam）============================
