@@ -22,7 +22,7 @@ a documented migration path (⚠️ BREAKING entry in
 | **Configuration property keys** | `resi-cache.*` namespace under `application.yml` / `application.properties` | Property names and types. Adding new properties is non-breaking. |
 | **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Envelope is the serialization contract — kept, not loosened. |
 | **Extension SPI** | `CacheHandler`, `ChainObserver`, `BloomIFilter`, `LockManager`, `LockManager.LockHandle`, `HandlerPriority` | Implementations must satisfy the documented failure, lifecycle, and thread-safety contracts. |
-| **SPI transitive contract types** | `CacheContext`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
+| **SPI transitive contract types** | `CacheContext`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.
@@ -90,12 +90,21 @@ custom implementation must satisfy.
    truth (gap = 100). Unannotated handlers sort last.
 5. **Thread safety**: one handler instance is shared across concurrent
    executions; keep per-call state out of fields (use `CacheContext`).
+6. **Nested advancement (optional)**: the engine calls
+   `handle(context, ChainContinuation next)`, whose default ignores `next` and
+   delegates to `handle(context)` — existing implementations are unaffected.
+   A handler that overrides it may run the remainder of the chain inside its
+   own critical section (this is how `sync=true` runs the chain inside the
+   distributed lock). The handle is valid only for that call, may be advanced
+   at most once (a second call throws `IllegalStateException`), stays on the
+   calling thread, and carries per-node observation only — around-chain
+   observation and post-processing remain owned by the outer execution.
 
 ### Observers
 
 1. **Hook order** per chain execution: `onChainStart` → per node
-   [`onNodeStart` → `beforeNode` → `handler.handle` → `afterNode` →
-   `onNodeEnd`] → `onChainEnd`. Multiple observers run in registration
+   [`onNodeStart` → `beforeNode` → `handler.handle(context, next)` →
+   `afterNode` → `onNodeEnd`] → `onChainEnd`. Multiple observers run in registration
    (`@Order`) order for every hook.
 2. **Scope tokens**: each `on*Start` returns a per-call token the engine
    pairs back to the same observer's `on*End` in a `finally` block (on

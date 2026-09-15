@@ -7,6 +7,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
@@ -44,9 +45,12 @@ import org.springframework.stereotype.Component;
  * opt-in 语义由类型化的 {@code requiresPostProcess} hook 表达,无需 seam 边界
  * {@code instanceof} type check。失败 try/catch 不污染主链。
  *
- * <p><b>executeFragment</b>：{@link SyncLockHandler} 锁内推进用，跳过
- * aroundChain 观测（避免重复 stamp MDC / 重复 record Timer）+ 不做
- * post-process（外层 {@link #execute} 完成）。仅做节点推进 + perNode 观测。
+ * <p><b>嵌套推进（explicit continuation）</b>：{@link SyncLockHandler} 需要在锁内推进剩余链。
+ * 引擎把它作为<b>入参</b>交给当前 handler —— {@link #driveChain} 为每个节点构造
+ * {@link ChainContinuation}(绑定该节点的快照位置),经
+ * {@link CacheHandler#handle(CacheContext, ChainContinuation)} 传入。handler 的链位置因此
+ * 不再是「引擎内部 + 静态 ThreadLocal + indexOf(this)」的隐式环境,而是它手里的一个句柄:
+ * 引擎不再持任何静态状态,handler 不再反查引擎,fragment API 与测试专用 setter 一并消失。
  *
  * <p><b>线程安全</b>：Engine 单例 Bean，{@link #observers} 字段为
  * {@link ObserverRegistry}（内部 {@code CopyOnWriteArrayList}，启动期单写、热期
@@ -54,10 +58,8 @@ import org.springframework.stereotype.Component;
  * 完全持有;Engine 内部不修改该列表。
  *
  * <p><b>快照归属</b>:链 list 单一真理源完全收敛在 {@code CacheHandlerChain},
- * Engine 通过 {@link #execute(List, CacheContext)} 接收快照参数,并用 ThreadLocal
- * ({@link #CURRENT_SNAPSHOT})在 execute entry 设入 / finally 清出,供
- * {@link #executeChainFragment(CacheContext, CacheHandler)} 隐式读取。Thread-local
- * 提供 per-thread 隔离,并发 execute 互不污染。
+ * Engine 通过 {@link #execute(List, CacheContext)} 接收快照参数,并把「当前节点之后」的
+ * 子链以 {@link ChainContinuation} 形态交给正在执行的 handler。
  *
  * <p><b>Observer 列表管理委派</b>:{@code addObserver} / {@code observers}
  * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与
@@ -70,14 +72,6 @@ class ChainEngine {
 
     /** 注册的 observer 列表 — 委派到 {@link ObserverRegistry} 单一 seam. */
     private final ObserverRegistry observers = new ObserverRegistry();
-
-    /**
-     * 当前线程正在执行的 handler 链快照:由 {@link #execute(List, CacheContext)}
-     * entry 处 set,finally 块 remove;供 {@link #executeChainFragment(CacheContext, CacheHandler)}
-     * 在同线程隐式读取(SyncLockHandler 锁内推进)。ThreadLocal 提供 per-thread
-     * 隔离,并发 execute 互不污染。
-     */
-    private static final ThreadLocal<List<CacheHandler>> CURRENT_SNAPSHOT = new ThreadLocal<>();
 
     public ChainEngine() {
         // observers 由外部 addObserver(...) 注入；ChainHandlerChainFactory 在装配时调用
@@ -105,37 +99,17 @@ class ChainEngine {
     }
 
     /**
-     * <b>仅供测试使用</b>(package-private):直接设入 {@link #CURRENT_SNAPSHOT},
-     * 模拟 {@link #execute(List, CacheContext)} 已为当前线程准备好快照的状态。
-     * <p>测试场景:验证 {@link #executeChainFragment(CacheContext, CacheHandler)}
-     * 在快照就绪时的行为,而无需走完整 execute 流程(后者会触发 observer 钩子)。
-     * <p>生产代码请用 {@link #execute(List, CacheContext)} — 它会正确管理
-     * ThreadLocal 的 set / remove 配对。
-     */
-    void setCurrentSnapshotForTest(List<CacheHandler> snapshot) {
-        CURRENT_SNAPSHOT.set(snapshot);
-    }
-
-    /**
-     * <b>仅供测试使用</b>(package-private):清空 {@link #CURRENT_SNAPSHOT}。
-     */
-    void clearCurrentSnapshotForTest() {
-        CURRENT_SNAPSHOT.remove();
-    }
-
-    /**
      * 执行责任链 — 整条 chain 全生命周期(head handle + post-process + 观测)。
      *
      * <p>接收 {@code snapshot} 作为参数(由 {@link CacheHandlerChain} 在 synchronized
-     * 块内拍出);ThreadLocal 在 entry 处 set,finally 块 remove,供 {@code executeChainFragment}
-     * 隐式读。around-hook 配对 + post-process + 异常守护由 {@link ChainLifecycle}
-     * 私有内嵌 seam 承担,本方法只做「ThreadLocal + 空链告警 + 委派」3 步。
+     * 块内拍出);around-hook 配对 + post-process + 异常守护由 {@link ChainLifecycle}
+     * 私有内嵌 seam 承担,本方法只做「空链告警 + 委派」2 步。
      *
      * <p>执行流程：
      * <ol>
      *   <li>快照当前 handler 链；空链打 WARN(由 ChainLifecycle 仍跑 around-hook 配对)</li>
      *   <li>所有 observer.onChainStart — ChainLifecycle 入口</li>
-     *   <li>节点循环:beforeNode → handler.handle → afterNode → decision switch — driveChain</li>
+     *   <li>节点循环:beforeNode → handler.handle(ctx, continuation) → afterNode → decision switch — driveChain</li>
      *   <li>post-process 遍历 — ChainLifecycle 内部</li>
      *   <li>所有 observer.onChainEnd(即使主路径异常也调用) — ChainLifecycle finally 守护</li>
      * </ol>
@@ -145,69 +119,28 @@ class ChainEngine {
      * @return 链执行最终结果(post-process 已执行)
      */
     public CacheResult execute(List<CacheHandler> snapshot, CacheContext context) {
-        CURRENT_SNAPSHOT.set(snapshot);
-        try {
-            if (snapshot == null || snapshot.isEmpty()) {
-                log.warn("Handler chain is empty!");
-            }
-            log.debug("Executing handler chain for operation: {}, cacheName: {}, key: {}",
-                    context.getOperation(), context.getCacheName(), context.getRedisKey());
-            return new ChainLifecycle(observers, snapshot, context).run();
-        } finally {
-            CURRENT_SNAPSHOT.remove();
-        }
-    }
-
-    /**
-     * 在锁内 / 嵌套场景推进 {@code from} <b>之后</b>的剩余链 — 跳过 aroundChain 观测与 post-process。
-     *
-     * <p>典型调用方：{@code SyncLockHandler} 在分布式锁持有期间推进"自己之后"的剩余
-     * handler。锁外层 {@link #execute} 已 stamp MDC / 启动 Timer，锁内不能再 stamp
-     * （避免覆盖）或重复 record（重复打点）。Post-process 由外层 execute 在锁返回后
-     * 统一调用，锁内片段无需重复。
-     *
-     * <p>定位起点基于 snapshot {@code indexOf(from) + 1}。{@code from} 通常是发起
-     * 片段推进的 handler 自身（如 {@code SyncLockHandler} 传 {@code this}），Engine
-     * 推进其后的所有 handler。
-     *
-     * <p>行为：仅 perNode 观测（beforeNode / afterNode），aroundChain 观测忽略。
-     *
-     * @param context 缓存上下文（与外层 execute 共享）
-     * @param from    推进起点的边界 handler（推进其<b>后继</b>；为 null 或不在快照中时返回 success）
-     * @return 从 {@code from} 之后推进到链尾的最终结果（无 post-process）
-     */
-    public CacheResult executeChainFragment(CacheContext context, CacheHandler from) {
-        if (from == null) {
-            return CacheResult.success();
-        }
-        List<CacheHandler> snapshot = CURRENT_SNAPSHOT.get();
         if (snapshot == null || snapshot.isEmpty()) {
-            return CacheResult.success();
+            log.warn("Handler chain is empty!");
         }
-        int start = snapshot.indexOf(from);
-        // from 不在快照中（理论不应发生）或已是链尾 → 无后继可推进
-        if (start < 0 || start + 1 >= snapshot.size()) {
-            return CacheResult.success();
-        }
-        // 不可变快照的 subList view — driveChain 只读（get / size），view 安全；
-        // 复用 driveChain：aroundChain 观测由调用方外层 execute 负责，本方法只跑 perNode
-        return driveChain(snapshot.subList(start + 1, snapshot.size()), context);
+        log.debug("Executing handler chain for operation: {}, cacheName: {}, key: {}",
+                context.getOperation(), context.getCacheName(), context.getRedisKey());
+        return new ChainLifecycle(observers, snapshot, context).run();
     }
 
     /**
-     * 节点推进主循环 — 抽取出来供 {@link #execute} 与 {@link #executeChainFragment}
-     * 共享。按 snapshot index 顺序推进:
+     * 节点推进主循环 — 按 snapshot index 顺序推进:
      * <ol>
      *   <li>检测 context.isSkipRemaining() — 短路返回 success</li>
      *   <li>observer.beforeNode</li>
-     *   <li>handler.handle(ctx)</li>
+     *   <li>handler.handle(ctx, next) — next 为「本节点之后剩余链」的推进句柄</li>
      *   <li>observer.afterNode</li>
      *   <li>decision switch（CONTINUE 推进下一 index / SKIP_ALL 物化 / TERMINATE 终止）</li>
      * </ol>
      *
      * <p><b>并发隔离</b>：snapshot 为 {@link CacheHandlerChain} 一次性拍出的不可变
      * {@code List.copyOf} 产出，index 推进在快照内读取；{@code addHandler} 改链
-     * 仅影响下次快照，当前 {@code execute} 持有的快照引用完全隔离。
+     * 仅影响下次快照，当前 {@code execute} 持有的快照引用完全隔离。Engine 无静态状态,
+     * 并发 execute 互不干扰。
      *
      * @param snapshot 不可变 handler 链快照（Engine 只读，不修改）
      */
@@ -218,7 +151,8 @@ class ChainEngine {
                 return CacheResult.success();
             }
             CacheHandler current = snapshot.get(idx);
-            HandlerResult result = invokeWithObservers(current, context);
+            HandlerResult result = invokeWithObservers(current, context,
+                    continuationFor(snapshot, idx, context));
 
             if (result == null) {
                 // SPI 协议(RM-007):handler 必须返回非 null HandlerResult。
@@ -249,6 +183,34 @@ class ChainEngine {
     }
 
     /**
+     * 为快照中第 {@code index} 个节点构造嵌套推进句柄 —— 绑定 (snapshot, index, context),
+     * 推进该节点<b>之后</b>的剩余链。
+     *
+     * <p>语义与旧的 fragment API 等价(跳过 aroundChain 观测与 post-process,由外层
+     * {@link #execute} 唯一负责),但起点来自构造期的 index,不再需要 {@code indexOf(from)}
+     * 反查,也不需要任何 ThreadLocal。单次使用由 {@link java.util.concurrent.atomic.AtomicBoolean}
+     * 守护 —— 重复推进会让同一批后继 handler 对同一请求执行两次。
+     */
+    private ChainContinuation continuationFor(List<CacheHandler> snapshot, int index,
+                                              CacheContext context) {
+        java.util.concurrent.atomic.AtomicBoolean used =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        return () -> {
+            if (!used.compareAndSet(false, true)) {
+                throw new IllegalStateException(
+                        "ChainContinuation.advance() called more than once for handler #" + index
+                                + " of " + snapshot.size());
+            }
+            if (index + 1 >= snapshot.size()) {
+                // 已是链尾:无后继可推进
+                return CacheResult.success();
+            }
+            // 不可变快照的 subList view — driveChain 只读（get / size），view 安全
+            return driveChain(snapshot.subList(index + 1, snapshot.size()), context);
+        };
+    }
+
+    /**
      * 把 {@link HandlerResult} 物化为 {@link CacheResult} —— null 退化为 success
      * 的单一权威 helper,三处 decision 分支走同一行委派,deletion test 保护语义。
      */
@@ -257,15 +219,18 @@ class ChainEngine {
     }
 
     /**
-     * 单节点调用：onNodeStart → beforeNode → handler.handle(ctx) → afterNode →
+     * 单节点调用：onNodeStart → beforeNode → handler.handle(ctx, next) → afterNode →
      * onNodeEnd。Engine 不捕获 handler 异常，异常仍向调用方冒泡；但 token 化的
      * onNodeEnd 由 finally 配对，避免计时等 around-node observer 泄漏调用状态。
      *
      * <p>beforeNode/afterNode 契约：handler 抛异常时 afterNode 不调用，因而
      * DEBUG log / fired counter 不会把失败求值计作成功结果。onNodeEnd 此时收到
      * null result，只负责回收 token，不应伪造 decision。
+     *
+     * @param next 本节点之后剩余链的推进句柄(handler 可选用,默认实现忽略)
      */
-    private HandlerResult invokeWithObservers(CacheHandler handler, CacheContext context) {
+    private HandlerResult invokeWithObservers(CacheHandler handler, CacheContext context,
+                                              ChainContinuation next) {
         List<ChainObserver> observerList = observers.snapshot();
         Object[] scopeTokens = new Object[observerList.size()];
         for (int i = 0; i < observerList.size(); i++) {
@@ -288,7 +253,7 @@ class ChainEngine {
                             observer.getClass().getSimpleName(), ex.toString(), ex);
                 }
             }
-            result = handler.handle(context);
+            result = handler.handle(context, next);
             HandlerResult completedResult = result;
             for (ChainObserver observer : observerList) {
                 try {

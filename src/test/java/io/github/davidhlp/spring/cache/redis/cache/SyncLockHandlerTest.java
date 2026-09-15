@@ -7,13 +7,14 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -40,6 +42,9 @@ class SyncLockHandlerTest {
     @Mock
     private RedisProCacheProperties.SyncLockProperties syncLockProperties;
 
+    /** 句柄存根:多数用例只关心锁协议,不关心剩余链内容。 */
+    private static final ChainContinuation NEXT = CacheResult::success;
+
     private SyncLockHandler handler;
 
     @BeforeEach
@@ -48,8 +53,6 @@ class SyncLockHandlerTest {
         lenient().when(syncLockProperties.getTimeout()).thenReturn(3000L);
         lenient().when(syncLockProperties.getUnit()).thenReturn(java.util.concurrent.TimeUnit.MILLISECONDS);
         handler = new SyncLockHandler(syncSupport, new SyncLockTimeout(properties));
-        // 锁内片段推进需要 ChainEngine —— 单元测试显式注入(避免 @Autowired 反射依赖)
-        handler.setEngine(new io.github.davidhlp.spring.cache.redis.cache.ChainEngine());
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
@@ -169,7 +172,7 @@ class SyncLockHandlerTest {
             CacheResult expectedResult = CacheResult.success();
             when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, NEXT);
 
             assertThat(result.decision()).isEqualTo(FlowControl.TERMINATE);
             assertThat(result.result()).isEqualTo(expectedResult);
@@ -184,7 +187,7 @@ class SyncLockHandlerTest {
             CacheResult expectedResult = CacheResult.success();
             when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, NEXT);
 
             assertThat(result.decision()).isEqualTo(FlowControl.TERMINATE);
             verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
@@ -198,7 +201,7 @@ class SyncLockHandlerTest {
             CacheResult expectedResult = CacheResult.success();
             when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
-            handler.doHandle(context);
+            handler.doHandle(context, NEXT);
 
             verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
         }
@@ -211,7 +214,7 @@ class SyncLockHandlerTest {
             CacheResult expectedResult = CacheResult.success();
             when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
-            handler.doHandle(context);
+            handler.doHandle(context, NEXT);
 
             verify(syncSupport).executeSync(eq("test:key"), any(), eq(3L));
         }
@@ -223,7 +226,7 @@ class SyncLockHandlerTest {
             CacheContext context = createContext(CacheOperation.GET, operation);
             when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(CacheResult.success());
 
-            handler.doHandle(context);
+            handler.doHandle(context, NEXT);
         }
 
         @Test
@@ -231,15 +234,31 @@ class SyncLockHandlerTest {
         void doHandle_executesChainInsideLock() {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            AtomicReference<CacheResult> capturedResult = new AtomicReference<>();
+            AtomicInteger advances = new AtomicInteger();
             when(syncSupport.executeSync(anyString(), any(), anyLong())).thenAnswer(invocation -> {
                 java.util.function.Supplier<CacheResult> supplier = invocation.getArgument(1);
                 return supplier.get();
             });
 
-            handler.doHandle(context);
+            handler.doHandle(context, () -> {
+                advances.incrementAndGet();
+                return CacheResult.success();
+            });
 
             verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
+            assertThat(advances.get())
+                    .as("剩余链必须在锁内推进恰好一次(句柄被传给锁 lambda)")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("单参入口被拒绝:锁内推进必须有引擎交出的句柄")
+        void doHandle_singleArgForm_isRejected() {
+            CacheContext context = createContext(CacheOperation.GET, createSyncOperation(true, 10));
+
+            assertThatThrownBy(() -> handler.doHandle(context))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("ChainContinuation");
         }
     }
 }

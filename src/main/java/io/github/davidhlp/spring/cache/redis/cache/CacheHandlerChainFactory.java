@@ -164,8 +164,7 @@ class CacheHandlerChainFactory {
             registerObserversOnce();
 
             // 2) 构建链
-            CacheHandlerChain chain = new CacheHandlerChain();
-            chain.setEngine(engine);
+            CacheHandlerChain chain = new CacheHandlerChain(engine);
 
             // guide §223b:为每个 enabled AbstractCacheHandler 注入 registry
             MeterRegistry registry =

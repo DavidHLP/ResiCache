@@ -33,6 +33,7 @@ package com.example.consumer;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
@@ -59,6 +60,25 @@ public class ExternalConsumerDemo {
         @Override
         public HandlerResult handle(CacheContext context) {
             return HandlerResult.continueWith(CacheResult.miss());
+        }
+    }
+
+    /**
+     * Supported extension: nested advancement. The engine hands this handler a
+     * ChainContinuation bound to its position, so it can run the remainder of the
+     * chain inside its own critical section (this is what sync=true does inside
+     * the distributed lock) and then end the chain.
+     */
+    static class SyncLikeHandler implements CacheHandler {
+
+        @Override
+        public HandlerResult handle(CacheContext context) {
+            throw new AssertionError("engine must call the 2-arg form");
+        }
+
+        @Override
+        public HandlerResult handle(CacheContext context, ChainContinuation next) {
+            return HandlerResult.terminate(next.advance());
         }
     }
 
@@ -98,6 +118,10 @@ public class ExternalConsumerDemo {
         if (handler.handle(null).decision() != FlowControl.CONTINUE) {
             throw new AssertionError("handler contract broken");
         }
+        ChainContinuation next = () -> CacheResult.success();
+        if (new SyncLikeHandler().handle(null, next).decision() != FlowControl.TERMINATE) {
+            throw new AssertionError("nested advancement contract broken");
+        }
         if (CachePolicyView.NONE.useBloomFilter()) {
             throw new AssertionError("policy view default contract broken");
         }
@@ -110,7 +134,7 @@ EOF
 echo "== 3) compiling consumer against packaged JAR only =="
 mkdir -p "$TMP/classes"
 "$JH/bin/javac" -cp "$JAR:$DECLARED_CP" -d "$TMP/classes" "$TMP/src/com/example/consumer/ExternalConsumerDemo.java"
-echo "consumer imports (compile resolved against JAR + declared deps only): CacheHandler, ChainObserver, CacheResult(+Outcome/FailureKind), HandlerResult, FlowControl, HandlerOrder, HandlerPriority, CacheContext, CachePolicyView, @RedisCacheable"
+echo "consumer imports (compile resolved against JAR + declared deps only): CacheHandler, ChainContinuation, ChainObserver, CacheResult(+Outcome/FailureKind), HandlerResult, FlowControl, HandlerOrder, HandlerPriority, CacheContext, CachePolicyView, @RedisCacheable"
 
 echo "== 4) running consumer =="
 "$JH/bin/java" -cp "$TMP/classes:$JAR:$DECLARED_CP" com.example.consumer.ExternalConsumerDemo

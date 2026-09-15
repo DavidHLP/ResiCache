@@ -36,8 +36,7 @@ class CacheHandlerChainTest {
     void setUp() {
         // 单元测试：手动装配 facade + engine（避免拉起 Spring 容器）
         engine = new ChainEngine();
-        chain = new CacheHandlerChain();
-        chain.setEngine(engine);
+        chain = new CacheHandlerChain(engine);
     }
 
     private CacheContext createTestContext() {
