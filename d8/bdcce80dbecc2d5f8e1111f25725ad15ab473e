@@ -1,0 +1,22 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 6-7,18,24-25,30-36,38-43,54,61-62,64-65,89,106,115-116,120
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheOperationResolver.java
+  h_77173abe25c3ff 37
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegisterAgreementTest.java
+  h_77173abe25c3ff 61-62,64-96
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptor.java
+  h_77173abe25c3ff 10,85-86
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptorNormalizationTest.java
+  h_77173abe25c3ff 3-6,9-14,16-18,20-21,24-53,56-58,60-64,68-69,71-72,75-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8bdcce80dbecc2d5f8e1111f25725ad15ab473e",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
