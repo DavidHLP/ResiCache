@@ -96,7 +96,7 @@ class SyncSupportTest {
         SyncSupport syncSupport = new SyncSupport(new ArrayList<>(List.of(lockManager)), properties);
         assertThatThrownBy(() -> syncSupport.executeSync("test-key", () -> "value", 5))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Thread interrupted while acquiring distributed lock for key: test-key")
+                .hasMessageContaining("Thread interrupted while acquiring distributed lock: keyFingerprint=")
                 .hasCauseInstanceOf(InterruptedException.class)
                 .hasRootCauseMessage("Thread interrupted");
     }

@@ -323,8 +323,12 @@ class SerializationMigrationEngine
         return true;
     }
 
+    /**
+     * key 内容指纹 — 委托 {@link FailureDiagnostics} 的单一实现(ADR-0001 §15),
+     * 使 migration 路径与锁/刷新路径的指纹形式不再各自漂移。
+     */
     private static String keyFingerprint(byte[] key) {
-        return Integer.toHexString(Arrays.hashCode(key));
+        return FailureDiagnostics.keyFingerprint(key);
     }
 
     @FunctionalInterface

@@ -425,10 +425,11 @@ class ChainEngine {
                         log.debug("Post-processing executed for: {}",
                                 handler.getClass().getSimpleName());
                     } catch (Exception e) {
-                        log.error("Post-processing failed for: {}, operation: {}, key: {}",
+                        // ADR-0001 §15 key 隐私:ERROR 只带 cacheName(低基数),不带 raw key
+                        log.error("Post-processing failed for: {}, operation: {}, cacheName: {}",
                                 handler.getClass().getSimpleName(),
                                 context.getOperation(),
-                                context.getRedisKey(), e);
+                                context.getCacheName(), e);
                     }
                 }
             }

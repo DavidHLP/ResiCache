@@ -165,7 +165,7 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
                 assertThatThrownBy(() -> faultManager.tryAcquire(key, 5))
                         .isInstanceOf(RuntimeException.class)
                         .hasMessageContaining(
-                                "Interrupted while waiting for distributed lock on key: " + key)
+                                "Interrupted while waiting for distributed lock: keyFingerprint=")
                         .hasCauseInstanceOf(InterruptedException.class)
                         .hasRootCauseMessage("Thread interrupted");
             } finally {
