@@ -45,7 +45,7 @@ class SyncRoleTest {
             assertThat(loaderStarted.await(5, TimeUnit.SECONDS)).isTrue();
 
             Future<String> followerResult = executor.submit(
-                    new SyncRole.Follower<>("lifecycle-key", registration.future(),
+                    new SyncRole.Follower<String>("lifecycle-key", registration.future(),
                             SyncLockTimeout.Resolved.fromSeconds(5))::run);
             assertThat(state.completionObserved.await(100, TimeUnit.MILLISECONDS)).isFalse();
             releaseLoader.countDown();
