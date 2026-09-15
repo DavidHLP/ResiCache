@@ -94,13 +94,15 @@ class CacheOperationResolver {
             return null;
         }
 
+        OperationKind operationKind = OperationKind.forCacheOperation(operation);
+        if (operationKind == null) {
+            return null;
+        }
+
         CachePolicyView.Source resolved = lookup(cacheName, key, OperationKind.CACHEABLE);
         if (resolved == null && operation.isWrite()) {
             // 方法没有 @RedisCacheable 声明:只有 @RedisCachePut 的「只写」方法读自己的命名空间
-            OperationKind writeKind = OperationKind.forCacheOperation(operation);
-            if (writeKind != null) {
-                resolved = lookup(cacheName, key, writeKind);
-            }
+            resolved = lookup(cacheName, key, operationKind);
         }
 
         if (resolved == null) {

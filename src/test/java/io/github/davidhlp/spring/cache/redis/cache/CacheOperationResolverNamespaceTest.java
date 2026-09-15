@@ -117,6 +117,8 @@ class CacheOperationResolverNamespaceTest {
     void evictOperations_resolveNothing() {
         register.register(method(), CacheOperationResolverNamespaceTest.class, put(60),
                 OperationKind.CACHE_PUT);
+        register.register(method(), CacheOperationResolverNamespaceTest.class, cacheable(300),
+                OperationKind.CACHEABLE);
 
         assertThat(OperationKind.forCacheOperation(CacheOperation.REMOVE)).isNull();
         assertThat(OperationKind.forCacheOperation(CacheOperation.CLEAN)).isNull();

@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -183,6 +184,25 @@ class ChainEngineTest {
             // 2) onChainEnd 被调一次,token == onChainStart 返回的引用
             assertThat(observer.endCount).isEqualTo(1);
             assertThat(observer.endToken).isSameAs(observer.lastStartToken);
+        }
+
+        @Test
+        @DisplayName("onChainEnd 收到链路最终结果而非固定 success")
+        void onChainEnd_receivesFinalResult() {
+            AtomicReference<CacheResult> observed = new AtomicReference<>();
+            engine.addObserver(new ChainObserver() {
+                @Override
+                public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
+                    observed.set(result);
+                }
+            });
+            CacheResult expected = CacheResult.miss();
+            installChain(new RecordingHandler("h1", HandlerResult.terminate(expected)));
+
+            CacheResult actual = engine.execute(snapshot, newCtx());
+
+            assertThat(actual).isSameAs(expected);
+            assertThat(observed.get()).isSameAs(expected);
         }
 
         @Test
