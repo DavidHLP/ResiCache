@@ -41,7 +41,7 @@ class AnnotationAopBehaviorMatrixTest {
 
     @BeforeEach
     void setUp() {
-        register = new RedisCacheRegister(32, 8);
+        register = new RedisCacheRegister();
         KeyGenerator keyGenerator = Mockito.mock(KeyGenerator.class);
         when(keyGenerator.generate(any(), any(), any())).thenReturn("generated-key");
         RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();

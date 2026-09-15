@@ -37,7 +37,7 @@ class AnnotationClassLevelPolicyTest {
     @Test
     @DisplayName("class annotation is Spring-visible but not chain policy")
     void classAnnotationIsSpringVisibleButNotChainPolicy() throws Exception {
-        RedisCacheRegister register = new RedisCacheRegister(8, 4);
+        RedisCacheRegister register = new RedisCacheRegister();
         KeyGenerator keyGenerator = Mockito.mock(KeyGenerator.class);
         RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
         SpringCacheableAdapter springAdapter = Mockito.mock(SpringCacheableAdapter.class);
