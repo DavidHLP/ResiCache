@@ -218,7 +218,8 @@ real adopter, reflection inventory, and passing native-image validation.
 
 ## 11. Refresh executor boundary
 
-**Context**: `EarlyExpirationHandler` needs submit, while `ActualCacheHandler`
+**Context**: the early-refresh module (`EarlyRefresh`, called by
+`EarlyExpirationHandler`) needs submit, while `ActualCacheHandler`
 needs only cancellation. `RefreshCancellation` cannot represent full executor
 lifecycle.
 
@@ -454,20 +455,21 @@ compatibility, not by this refresh CAS.
 **Context**: An absolute 60-second fast path skipped policy evaluation for long
 TTL entries that were already inside a configured percentage refresh window.
 
-**Decision**: When early expiration is enabled, read the `CachedValue` and let
-`EarlyExpirationPolicy` decide from its TTL, creation time, and configured
-threshold. Reuse the prefetched hit in the actual handler; do not bypass the
-policy using an unrelated absolute threshold.
+**Decision**: When early expiration is enabled, `EarlyRefresh` reads the
+`CachedValue` and lets `EarlyExpirationPolicy` decide from its TTL, creation
+time, and configured threshold. The prefetched hit is handed to the actual
+handler through `PrefetchDecision`; the policy is never bypassed by an
+unrelated absolute threshold.
 
 ## 23. Internal context and loader seams
 
 **Context**: `CacheContext` was described as immutable while exposing mutable
-byte arrays, and `RedisProCache` rebuilt four loader callbacks on every call.
+byte arrays, and `RedisProCache` rebuilt its loader callbacks on every call.
 
 **Decision**: Copy byte input at `CacheInput` construction and at the public
 context read. Bind the loader callbacks once in the internal
-`LoaderOrchestrator` constructor; retain the full-parameter overload only for
-internal isolation tests. The engine-only `markSkipRemaining` member remains as
+`LoaderOrchestrator` constructor (three callbacks: redis key, cache read,
+write-back); the full-parameter overload remains for internal isolation tests. The engine-only `markSkipRemaining` member remains as
 a compatibility shim until a real external implementation justifies a migration.
 
 **Consequences**: callers receive a smaller production seam and cannot mutate

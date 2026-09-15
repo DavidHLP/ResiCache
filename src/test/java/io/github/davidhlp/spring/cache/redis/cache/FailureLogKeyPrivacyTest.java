@@ -269,24 +269,24 @@ class FailureLogKeyPrivacyTest {
     @DisplayName("EarlyExpirationHandler:异步刷新失败 ERROR 带 cacheName 但不含 raw key")
     @SuppressWarnings("unchecked")
     void earlyExpirationHandler_asyncRefreshFailure_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(EarlyExpirationHandler.class);
+        ListAppender<ILoggingEvent> captured = attach(EarlyRefresh.class);
         try {
             ValueOperations<String, Object> valueOperations = mock(ValueOperations.class);
             when(valueOperations.get(any())).thenThrow(new IllegalStateException("redis down"));
-            EarlyExpirationHandler handler = new EarlyExpirationHandler(
+            EarlyRefresh earlyRefresh = new EarlyRefresh(
                     mock(EarlyExpirationPolicy.class),
                     mock(ThreadPoolEarlyExpirationExecutor.class),
                     mock(RedisTemplate.class),
                     mock(CacheStatisticsCollector.class),
                     valueOperations);
 
-            handler.performAsyncRefresh(SECRET_KEY, "privacy-cache", null);
+            earlyRefresh.performAsyncRefresh(SECRET_KEY, "privacy-cache", null);
 
             assertThat(warnAndErrorText(captured))
                     .doesNotContain(SECRET_KEY)
                     .contains("privacy-cache");
         } finally {
-            detach(EarlyExpirationHandler.class, captured);
+            detach(EarlyRefresh.class, captured);
         }
     }
 }

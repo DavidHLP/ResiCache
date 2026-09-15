@@ -64,16 +64,18 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     private ValueOperations<String, Object> valueOperations;
 
     private EarlyExpirationHandler handler;
+    private EarlyRefresh earlyRefresh;
 
     @BeforeEach
     void setUp() {
         redisTemplate.getConnectionFactory().getConnection().flushDb();
-        handler = new EarlyExpirationHandler(
+        earlyRefresh = new EarlyRefresh(
                 earlyExpirationPolicy,
                 earlyExpirationExecutor,
                 redisTemplate,
                 statistics,
                 valueOperations);
+        handler = new EarlyExpirationHandler(earlyRefresh);
     }
 
     private CacheContext createContext(CacheOperation operation, RedisCacheableOperation cacheOperation) {
@@ -355,7 +357,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void performAsyncRefresh_liveValueNull_returnsEarly() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
 
-            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
             assertThat(redisTemplate.hasKey(REDIS_KEY)).isFalse();
         }
@@ -367,14 +369,14 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
             ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
             when(mockedValueOperations.get(REDIS_KEY)).thenReturn("legacy-value");
-            EarlyExpirationHandler rawValueHandler = new EarlyExpirationHandler(
+            EarlyRefresh rawValueRefresh = new EarlyRefresh(
                     earlyExpirationPolicy,
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
                     mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
-            rawValueHandler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            rawValueRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
             verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
         }
@@ -386,7 +388,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CachedValue live = CachedValue.forTest("v", 2L, System.currentTimeMillis(), 1L, false);
             store(live, 30);
 
-            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
         }
@@ -404,7 +406,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CachedValue live = createCachedValue(60, System.currentTimeMillis(), 42L, false);
             store(live, 30);
 
-            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS))
                     .isBetween(1L, 5L);
@@ -417,7 +419,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CachedValue live = createCachedValue("live", 60, System.currentTimeMillis(), 43L, false);
             store(live, 30);
 
-            handler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
             assertThat(((CachedValue) valueOperations.get(REDIS_KEY)).getValue()).isEqualTo("live");
@@ -430,14 +432,14 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
             ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
             when(mockedValueOperations.get(REDIS_KEY)).thenThrow(new RuntimeException("Redis down"));
-            EarlyExpirationHandler faultHandler = new EarlyExpirationHandler(
+            EarlyRefresh faultRefresh = new EarlyRefresh(
                     earlyExpirationPolicy,
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
                     mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
-            faultHandler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
             verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
         }
@@ -452,14 +454,14 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             when(mockedValueOperations.get(REDIS_KEY)).thenReturn(live);
             when(mockedRedisTemplate.execute(any(RedisCallback.class)))
                     .thenThrow(new RuntimeException("Lua eval failed"));
-            EarlyExpirationHandler faultHandler = new EarlyExpirationHandler(
+            EarlyRefresh faultRefresh = new EarlyRefresh(
                     earlyExpirationPolicy,
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
                     mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
-            faultHandler.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
 
             verify(mockedRedisTemplate).execute(any(RedisCallback.class));
         }
