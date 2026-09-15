@@ -143,7 +143,18 @@ class TtlHandlerTest {
         }
 
         @Test
-        void noTtl_mapsToPermanentCacheSentinel() {
+        void zeroParameterTtl_skipsTtl() {
+            CacheContext context = createContext(CacheOperation.PUT, Duration.ZERO,
+                    configuredOperation(0, false, 0.2f));
+
+            handler.doHandle(context, CacheResult::success);
+
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
+        }
+
+        @Test
+        void negativeParameterTtl_mapsToPermanentCacheSentinel() {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(-1),
                     configuredOperation(0, false, 0.2f));
 
@@ -160,19 +171,37 @@ class TtlHandlerTest {
 
             handler.doHandle(context, CacheResult::success);
 
-
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(60L);
         }
 
         @Test
+        void nullZeroAndNegativeBaseTtl_mapToPermanentSentinel() {
+            assertThat(handler.calculateFinalTtl(null, false, 0.2f)).isEqualTo(-1L);
+            assertThat(handler.calculateFinalTtl(0L, false, 0.2f)).isEqualTo(-1L);
+            assertThat(handler.calculateFinalTtl(-1L, false, 0.2f)).isEqualTo(-1L);
+        }
+
+        @Test
+        void nonPositiveVariance_doesNotJitterBaseTtl() {
+            assertThat(handler.calculateFinalTtl(120L, true, 0.0f)).isEqualTo(120L);
+            assertThat(handler.calculateFinalTtl(120L, true, -0.1f)).isEqualTo(120L);
+        }
+
+        @Test
+        void varianceAboveOne_isClampedToSafeOutputBounds() {
+            for (int i = 0; i < 128; i++) {
+                assertThat(handler.calculateFinalTtl(120L, true, 2.0f))
+                        .isBetween(1L, 240L);
+            }
+        }
+
+        @Test
         void jitteredConfiguredTtl_staysWithinBoundedVariance() {
-            CacheContext context = createContext(CacheOperation.PUT, null,
-                    configuredOperation(120, true, 0.1f));
-
-            HandlerResult result = handler.doHandle(context, CacheResult::success);
-
-            assertThat(context.getTtlDecision().finalTtl()).isBetween(108L, 132L);
+            for (int i = 0; i < 128; i++) {
+                assertThat(handler.calculateFinalTtl(120L, true, 0.1f))
+                        .isBetween(108L, 132L);
+            }
         }
     }
 

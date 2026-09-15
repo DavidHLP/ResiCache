@@ -1,11 +1,8 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.context.expression.AnnotatedElementKey;
@@ -14,19 +11,18 @@ import org.springframework.context.expression.AnnotatedElementKey;
  * Redis 缓存注册器。
  *
  * <p>Spring operation source 在元素解析阶段写入一个不可变
- * {@link AnnotationParser.ParsedAnnotations} 快照，并同时建立按 operation kind 索引的策略查询。
- * kind 派生 tag 与 operation 类型，避免 stringly-typed 漂移；annotation chain 只读取快照。
+ * {@link AnnotationParser.ParsedAnnotations} 快照。annotation chain 与策略查询都从
+ * 这份快照读取，避免独立索引在淘汰后出现两侧不一致。
  *
- * <p><b>查找键</b> = {@code <tag>:<cacheName>:<elementKey.toString()>},由
- * {@link #buildKey(String, AnnotatedElementKey, String)} 统一构造。operation 自身的
+ * <p><b>查找键</b> = {@code SNAPSHOT:<elementKey>}，由
+ * {@link #buildSnapshotKey(AnnotatedElementKey)} 统一构造。operation 自身的
  * {@code key} 字段(SpEL/字面量)是运行时缓存键的来源,与这里的注册查找键无关。
  *
- * <p>本类<em>直接</em>绑 {@link TwoListLRU},无中间策略包装。
+ * <p>本类<em>直接</em>绑定 {@link TwoListLRU},无中间策略包装。
  */
 @Slf4j
 class RedisCacheRegister {
 
-    private final TwoListLRU<String, CacheOperation> operationLru;
     private final TwoListLRU<String, AnnotationParser.ParsedAnnotations> snapshotLru;
 
     public RedisCacheRegister() {
@@ -34,12 +30,11 @@ class RedisCacheRegister {
     }
 
     public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
-        this.operationLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
         this.snapshotLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
     }
 
     /**
-     * Registers the immutable parse result for an annotated element and its policy namespaces.
+     * Registers the immutable parse result for an annotated element.
      */
     public void registerSnapshot(
             Method method,
@@ -47,9 +42,6 @@ class RedisCacheRegister {
             AnnotationParser.ParsedAnnotations snapshot) {
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
         snapshotLru.put(buildSnapshotKey(elementKey), snapshot);
-        for (CacheOperation operation : snapshot.policyOperations()) {
-            register(method, targetClass, operation, operationKind(operation));
-        }
     }
 
     /**
@@ -86,19 +78,11 @@ class RedisCacheRegister {
     // ============================ 注册（单一 seam）============================
 
     /**
-     * 注册一个缓存操作 —— 单一 seam。
+     * 注册一个缓存操作 —— 仅供 handler-only 测试路径构建快照。
      *
-     * <p>按 {@code operation.getCacheNames()} 逐个 cacheName 写入 LRU,key 形如
-     * {@code <kind.tag()>:<cacheName>:<elementKey>}。{@code kind} 同时决定 tag 字符串
-     * 与期望 operation 类型,无需调用方额外传入。
-     *
-     * <p>类型校验:若 {@code operation.getClass()} 与 {@code kind.operationType()} 不一致,
-     * 记 ERROR 日志并跳过 —— 防御性;正常调用路径下注解处理器构造的 operation 类型总是匹配。
-     *
-     * @param method      方法
-     * @param targetClass 目标类
-     * @param operation   要注册的 operation
-     * @param kind        操作种类
+     * <p>生产解析路径使用 {@link #registerSnapshot(Method, Class, AnnotationParser.ParsedAnnotations)}。
+     * 此兼容入口不建立独立 operation 索引，而是把 operation 合并进同一份快照，保证
+     * fallback chain 与 resolver 仍读取相同的数据源。
      */
     public void register(Method method, Class<?> targetClass,
                          CacheOperation operation, OperationKind kind) {
@@ -109,47 +93,51 @@ class RedisCacheRegister {
             return;
         }
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        for (String cacheName : operation.getCacheNames()) {
-            String key = buildKey(cacheName, elementKey, kind.tag());
-            operationLru.put(key, operation);
-            log.debug("Registered {} operation: cacheName={}, elementKey={}",
-                    kind.tag(), cacheName, elementKey);
+        String key = buildSnapshotKey(elementKey);
+        AnnotationParser.ParsedAnnotations existing = snapshotLru.get(key);
+        List<CacheOperation> operations = new ArrayList<>();
+        List<CacheOperation> policies = new ArrayList<>();
+        if (existing != null) {
+            operations.addAll(existing.operations());
+            policies.addAll(existing.policyOperations());
         }
+        policies.removeIf(existingOperation ->
+                operationKind(existingOperation) == kind
+                        && existingOperation.getCacheNames().stream()
+                        .anyMatch(operation.getCacheNames()::contains));
+        policies.add(operation);
+        operations.removeIf(existingOperation ->
+                operationKind(existingOperation) == kind
+                        && existingOperation.getCacheNames().stream()
+                        .anyMatch(operation.getCacheNames()::contains));
+        operations.add(operation);
+        snapshotLru.put(key,
+                new AnnotationParser.ParsedAnnotations(operations, policies));
     }
 
     // ============================ 查询（单一 seam）============================
 
     /**
-     * 查询一个缓存操作 —— 单一 seam。
+     * 查询一个缓存操作 —— 从元素快照按 kind + cacheName 过滤。
      *
-     * <p>按 {@code kind.tag()} 派生查找键,从 LRU 取出,做 instance-of 安全转型后返回。
-     * 类型不匹配(同 cacheName+elementKey 但不同 kind,或 LRU 槽位被另一种 kind 占用)
-     * 视为未命中,返回 null。
-     *
-     * @param name       cacheName
-     * @param elementKey 查找键维度
-     * @param kind       操作种类
-     * @param <O>        返回类型(与 {@code kind.operationType()} 兼容)
-     * @return 命中的 operation;未命中返回 null
+     * <p>类型不匹配或未命中视为未命中,返回 {@code null};同一 kind/cacheName 的多次注册
+     * 保持旧 LRU 的覆盖语义,返回最新 operation。
      */
     @SuppressWarnings("unchecked")
     public <O extends CacheOperation> O get(String name, AnnotatedElementKey elementKey, OperationKind kind) {
-        String operationKey = buildKey(name, elementKey, kind.tag());
-        CacheOperation operation = operationLru.get(operationKey);
-        if (kind.operationType().isInstance(operation)) {
-            return (O) operation;
+        AnnotationParser.ParsedAnnotations snapshot = snapshotLru.get(buildSnapshotKey(elementKey));
+        if (snapshot != null) {
+            List<CacheOperation> policies = snapshot.policyOperations();
+            for (int i = policies.size() - 1; i >= 0; i--) {
+                CacheOperation operation = policies.get(i);
+                if (kind.operationType().isInstance(operation)
+                        && operation.getCacheNames().contains(name)) {
+                    return (O) operation;
+                }
+            }
         }
         log.debug("{} operation not found: name={}, elementKey={}", kind.tag(), name, elementKey);
         return null;
     }
 
-    // ============================ 键构造 ============================
-
-    /** 构建操作查找键：{@code <tag>:<cacheName>:<elementKey>} —— tag 由 kind 派生 */
-    private String buildKey(String name, AnnotatedElementKey elementKey, String tag) {
-        String key = elementKey.toString();
-        StringBuilder sb = new StringBuilder(tag.length() + name.length() + key.length() + 2);
-        sb.append(tag).append(':').append(name).append(':').append(key);
-        return sb.toString();
-    }
 }

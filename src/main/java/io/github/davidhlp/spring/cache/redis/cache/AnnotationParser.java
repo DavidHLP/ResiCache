@@ -37,7 +37,7 @@ import org.springframework.cache.interceptor.CacheableOperation;
  * {@link BuilderPopulator#populate},新增 ResiCache 字段仅需追加 1 个 populate spec 行。
  */
 @Slf4j
-final class AnnotationParser {
+class AnnotationParser {
 
     private final RedisCacheAttributesProjector projector;
     private final SpringCacheableAdapter springCacheableAdapter;

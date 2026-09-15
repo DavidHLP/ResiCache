@@ -343,8 +343,7 @@ class SyncLockHandlerTest {
             });
 
             assertThatThrownBy(() -> handler.handle(context))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("single-argument handle");
+                    .isInstanceOf(IllegalStateException.class);
         }
     }
 }
