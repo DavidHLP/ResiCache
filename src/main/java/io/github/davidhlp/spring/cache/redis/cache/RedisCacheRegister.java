@@ -13,13 +13,9 @@ import org.springframework.context.expression.AnnotatedElementKey;
 /**
  * Redis 缓存注册器。
  *
- * <p><b>API(2 公开方法)</b>:
- * <ul>
- *   <li>{@link #register(Method, Class, CacheOperation, OperationKind)} —— 单一注册 seam</li>
- *   <li>{@link #get(String, AnnotatedElementKey, OperationKind)} —— 单一查询 seam</li>
- * </ul>
- * 调用方传入 {@link OperationKind} 替代方法名;tag 字符串 + 期望 operation 类型
- * 均由 enum 派生,杜绝 stringly-typed 漂移。
+ * <p>Spring operation source 在元素解析阶段写入一个不可变
+ * {@link AnnotationParser.ParsedAnnotations} 快照，并同时建立按 operation kind 索引的策略查询。
+ * kind 派生 tag 与 operation 类型，避免 stringly-typed 漂移；annotation chain 只读取快照。
  *
  * <p><b>查找键</b> = {@code <tag>:<cacheName>:<elementKey.toString()>},由
  * {@link #buildKey(String, AnnotatedElementKey, String)} 统一构造。operation 自身的
@@ -30,8 +26,8 @@ import org.springframework.context.expression.AnnotatedElementKey;
 @Slf4j
 class RedisCacheRegister {
 
-    /** 缓存操作淘汰策略(直接 TwoListLRU,无策略包装) */
     private final TwoListLRU<String, CacheOperation> operationLru;
+    private final TwoListLRU<String, AnnotationParser.ParsedAnnotations> snapshotLru;
 
     public RedisCacheRegister() {
         this(2048, 1024);
@@ -39,6 +35,52 @@ class RedisCacheRegister {
 
     public RedisCacheRegister(int maxActiveSize, int maxInactiveSize) {
         this.operationLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
+        this.snapshotLru = new TwoListLRU<>(maxActiveSize, maxInactiveSize);
+    }
+
+    /**
+     * Registers the immutable parse result for an annotated element and its policy namespaces.
+     */
+    public void registerSnapshot(
+            Method method,
+            Class<?> targetClass,
+            AnnotationParser.ParsedAnnotations snapshot) {
+        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
+        snapshotLru.put(buildSnapshotKey(elementKey), snapshot);
+        for (CacheOperation operation : snapshot.policyOperations()) {
+            register(method, targetClass, operation, operationKind(operation));
+        }
+    }
+
+    /**
+     * Returns the parse result shared by the Spring source and annotation chain.
+     */
+    public AnnotationParser.ParsedAnnotations getSnapshot(Method method, Class<?> targetClass) {
+        AnnotationParser.ParsedAnnotations snapshot = snapshotLru.get(
+                buildSnapshotKey(new AnnotatedElementKey(method, targetClass)));
+        if (snapshot == null && targetClass != method.getDeclaringClass()) {
+            snapshot = snapshotLru.get(buildSnapshotKey(
+                    new AnnotatedElementKey(method, method.getDeclaringClass())));
+        }
+        return snapshot;
+    }
+
+    private OperationKind operationKind(CacheOperation operation) {
+        if (operation instanceof RedisCacheableOperation) {
+            return OperationKind.CACHEABLE;
+        }
+        if (operation instanceof RedisCachePutOperation) {
+            return OperationKind.CACHE_PUT;
+        }
+        if (operation instanceof RedisCacheEvictOperation) {
+            return OperationKind.CACHE_EVICT;
+        }
+        throw new IllegalArgumentException(
+                "Unsupported policy operation: " + operation.getClass().getName());
+    }
+
+    private String buildSnapshotKey(AnnotatedElementKey elementKey) {
+        return "SNAPSHOT:" + elementKey;
     }
 
     // ============================ 注册（单一 seam）============================

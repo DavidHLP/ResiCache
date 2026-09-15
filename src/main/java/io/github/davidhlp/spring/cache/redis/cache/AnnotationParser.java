@@ -12,6 +12,7 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CachePutOperation;
@@ -38,6 +39,76 @@ import org.springframework.cache.interceptor.CacheableOperation;
 @Slf4j
 final class AnnotationParser {
 
+    private final RedisCacheAttributesProjector projector;
+    private final SpringCacheableAdapter springCacheableAdapter;
+
+    AnnotationParser() {
+        this.projector = new RedisCacheAttributesProjector();
+        this.springCacheableAdapter = new SpringCacheableAdapter(projector);
+    }
+
+    AnnotationParser(
+            RedisCacheAttributesProjector projector,
+            SpringCacheableAdapter springCacheableAdapter) {
+        this.projector = projector;
+        this.springCacheableAdapter = springCacheableAdapter;
+    }
+
+    /**
+     * 单次解析目标元素，同时产出 Spring operation 与 annotation chain policy operation。
+     */
+    ParsedAnnotations parse(final Object target) {
+        final List<CacheOperation> operations = new ArrayList<>();
+        final List<CacheOperation> policyOperations = new ArrayList<>();
+        log.trace("Parsing cache annotations for target: {}", target);
+
+        final RedisCacheable cacheable =
+                AnnotationTargets.findMerged(target, RedisCacheable.class);
+        if (cacheable != null) {
+            operations.add(parseRedisCacheable(cacheable, target));
+            addPolicy(policyOperations, cacheable, target);
+        } else {
+            final Cacheable springCacheable =
+                    AnnotationTargets.findMerged(target, Cacheable.class);
+            if (springCacheable != null) {
+                addPolicy(policyOperations, springCacheable, target);
+            }
+        }
+
+        final RedisCacheEvict cacheEvict =
+                AnnotationTargets.findMerged(target, RedisCacheEvict.class);
+        if (cacheEvict != null) {
+            operations.add(parseRedisCacheEvict(cacheEvict, target));
+            addPolicy(policyOperations, cacheEvict, target);
+        }
+
+        final RedisCachePut cachePut =
+                AnnotationTargets.findMerged(target, RedisCachePut.class);
+        if (cachePut != null) {
+            operations.add(parseRedisCachePut(cachePut, target));
+            addPolicy(policyOperations, cachePut, target);
+        }
+
+        final RedisCaching caching =
+                AnnotationTargets.findMerged(target, RedisCaching.class);
+        if (caching != null) {
+            for (final RedisCacheable annotation : caching.redisCacheable()) {
+                operations.add(parseRedisCacheable(annotation, target));
+                addPolicy(policyOperations, annotation, target);
+            }
+            for (final RedisCacheEvict annotation : caching.redisCacheEvict()) {
+                operations.add(parseRedisCacheEvict(annotation, target));
+                addPolicy(policyOperations, annotation, target);
+            }
+            for (final RedisCachePut annotation : caching.redisCachePut()) {
+                operations.add(parseRedisCachePut(annotation, target));
+                addPolicy(policyOperations, annotation, target);
+            }
+        }
+
+        return new ParsedAnnotations(operations, policyOperations);
+    }
+
     /**
      * 解析目标(Method 或 Class)上的所有 ResiCache 注解.
      *
@@ -45,50 +116,48 @@ final class AnnotationParser {
      * @return 缓存操作集合(可能为空,但不会为 null)
      */
     List<CacheOperation> parseResiCacheAnnotations(final Object target) {
-        final List<CacheOperation> ops = new ArrayList<>();
-        log.trace("Parsing cache annotations for target: {}", target);
+        return parse(target).operations();
+    }
 
-        // 处理单个 @RedisCacheable 注解
-        final RedisCacheable cacheable =
-                AnnotationTargets.findMerged(target, RedisCacheable.class);
-        if (cacheable != null) {
-            log.debug("Found @RedisCacheable annotation on target: {}", target);
-            ops.add(parseRedisCacheable(cacheable, target));
+    private void addPolicy(
+            List<CacheOperation> policies, RedisCacheable annotation, Object target) {
+        if (target instanceof java.lang.reflect.Method method) {
+            policies.add(RedisCacheableOperation.fromAttributes(
+                    method, annotation.key(), projector.from(annotation)));
         }
+    }
 
-        // 处理单个 @RedisCacheEvict 注解
-        final RedisCacheEvict cacheEvict =
-                AnnotationTargets.findMerged(target, RedisCacheEvict.class);
-        if (cacheEvict != null) {
-            log.debug("Found @RedisCacheEvict annotation on target: {}", target);
-            ops.add(parseRedisCacheEvict(cacheEvict, target));
+    private void addPolicy(
+            List<CacheOperation> policies, RedisCachePut annotation, Object target) {
+        if (target instanceof java.lang.reflect.Method method) {
+            policies.add(RedisCachePutOperation.fromAttributes(
+                    method, annotation.key(), projector.from(annotation)));
         }
+    }
 
-        // 处理单个 @RedisCachePut 注解
-        final RedisCachePut cachePut =
-                AnnotationTargets.findMerged(target, RedisCachePut.class);
-        if (cachePut != null) {
-            log.debug("Found @RedisCachePut annotation on target: {}", target);
-            ops.add(parseRedisCachePut(cachePut, target));
+    private void addPolicy(
+            List<CacheOperation> policies, RedisCacheEvict annotation, Object target) {
+        if (target instanceof java.lang.reflect.Method method) {
+            policies.add(RedisCacheEvictOperation.fromAttributes(
+                    method, annotation.key(), projector.from(annotation)));
         }
+    }
 
-        // 处理 @RedisCaching 复合注解
-        final RedisCaching caching =
-                AnnotationTargets.findMerged(target, RedisCaching.class);
-        if (caching != null) {
-            log.debug("Found @RedisCaching annotation on target: {}", target);
-            for (final RedisCacheable c : caching.redisCacheable()) {
-                ops.add(parseRedisCacheable(c, target));
-            }
-            for (final RedisCacheEvict e : caching.redisCacheEvict()) {
-                ops.add(parseRedisCacheEvict(e, target));
-            }
-            for (final RedisCachePut p : caching.redisCachePut()) {
-                ops.add(parseRedisCachePut(p, target));
-            }
+    private void addPolicy(
+            List<CacheOperation> policies, Cacheable annotation, Object target) {
+        if (target instanceof java.lang.reflect.Method method) {
+            policies.add(springCacheableAdapter.create(method, annotation, annotation.key()));
         }
+    }
 
-        return ops;
+    record ParsedAnnotations(
+            List<CacheOperation> operations,
+            List<CacheOperation> policyOperations) {
+
+        ParsedAnnotations {
+            operations = List.copyOf(operations);
+            policyOperations = List.copyOf(policyOperations);
+        }
     }
 
     /**

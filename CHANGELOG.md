@@ -105,6 +105,9 @@ Current milestones:
   method that also declares `@RedisCacheable` keeps using the read-side
   declaration, because the read-through write-back is part of the read
   operation.
+- **One annotation policy snapshot** — each annotated element is parsed once into
+  an immutable snapshot shared by the Spring operation source and annotation chain;
+  policy namespaces are registered at element resolution instead of per invocation.
 - **Concurrent writes are no longer merged** — a write inside the distributed
   lock takes an exclusive path instead of single-flight: joining another
   request's in-flight result would skip this request's write while still
