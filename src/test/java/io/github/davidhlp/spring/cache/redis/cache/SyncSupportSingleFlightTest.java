@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -196,6 +197,61 @@ class SyncSupportSingleFlightTest {
         assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
         ex.shutdown();
         assertThat(written).hasSize(n);
+    }
+
+    @Test
+    @DisplayName("executeExclusive:local-only 队列等待受 syncTimeout 约束,前驱卡死即失败(不无限阻塞)")
+    void executeExclusive_localOnly_predecessorWaitHonorsTimeout() throws Exception {
+        properties.getSyncLock().setLocalOnly(true);
+        SyncSupport support = new SyncSupport(List.of(), properties);
+
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        ExecutorService ex = Executors.newFixedThreadPool(2);
+
+        try {
+            ex.submit(() -> {
+                support.executeExclusive("stalled-key", () -> {
+                    firstEntered.countDown();
+                    await(releaseFirst);
+                    return "FIRST";
+                }, 30);
+                return null;
+            });
+
+            assertThat(firstEntered.await(5, TimeUnit.SECONDS))
+                    .as("first caller holds the local-only queue").isTrue();
+            Thread.sleep(200); // 确保第二个调用已排到第一个之后
+
+            long start = System.nanoTime();
+            Future<Throwable> queued = ex.submit(() -> {
+                try {
+                    support.executeExclusive("stalled-key", () -> "SECOND", 1);
+                    return null;
+                } catch (Throwable t) {
+                    return t;
+                }
+            });
+            Throwable failure = queued.get(5, TimeUnit.SECONDS);
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+            assertThat(failure)
+                    .as("排队者必须按 syncTimeout 失败,绝不无限等待卡死的前驱")
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Timed out after 1");
+            assertThat(elapsedMs)
+                    .as("失败应发生在 ~1s,而不是永久阻塞")
+                    .isBetween(900L, 3000L);
+        } finally {
+            releaseFirst.countDown();
+        }
+
+        // 超时者必须放行后继:队列不能卡在已放弃的条目上
+        assertThat(support.executeExclusive("stalled-key", () -> "THIRD", 5))
+                .as("超时后队列仍可用(超时路径已完成并移除自己的尾部条目)")
+                .isEqualTo("THIRD");
+        ex.shutdown();
+        assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
     }
 
     @Test
