@@ -18,8 +18,6 @@ import org.slf4j.MDC;
 import org.springframework.data.redis.cache.CacheStatistics;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
@@ -40,8 +38,6 @@ import org.springframework.lang.Nullable;
 @Slf4j
 class RedisProCacheWriter implements RedisCacheWriter {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final ValueOperations<String, Object> valueOperations;
     private final CacheOperationResolver operationResolver;
     private final CacheStatisticsCollector statistics;
     private final TypeSupport typeSupport;
@@ -53,14 +49,10 @@ class RedisProCacheWriter implements RedisCacheWriter {
     /**
      * 构造函数，初始化缓存责任链
      */
-    public RedisProCacheWriter(RedisTemplate<String, Object> redisTemplate,
-                               ValueOperations<String, Object> valueOperations,
-                               CacheStatisticsCollector statistics,
+    public RedisProCacheWriter(CacheStatisticsCollector statistics,
                                TypeSupport typeSupport,
                                CacheHandlerChainFactory chainFactory,
                                CacheOperationResolver operationResolver) {
-        this.redisTemplate = redisTemplate;
-        this.valueOperations = valueOperations;
         this.statistics = statistics;
         this.typeSupport = typeSupport;
         this.chainFactory = chainFactory;
@@ -241,8 +233,6 @@ class RedisProCacheWriter implements RedisCacheWriter {
     public RedisCacheWriter withStatisticsCollector(
             @NonNull CacheStatisticsCollector cacheStatisticsCollector) {
         return new RedisProCacheWriter(
-                redisTemplate,
-                valueOperations,
                 cacheStatisticsCollector,
                 typeSupport,
                 chainFactory,
