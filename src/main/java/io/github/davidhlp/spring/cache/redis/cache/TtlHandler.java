@@ -120,7 +120,7 @@ class TtlHandler extends AbstractCacheHandler {
     }
 
     /** 计算最终 TTL; randomTtl=true 时按 variance 抖动以防雪崩。 */
-    private long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance) {
+    long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance) {
         if (baseTtl == null || baseTtl <= 0) {
             return -1;
         }

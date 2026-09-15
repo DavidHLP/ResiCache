@@ -46,7 +46,7 @@ public class BloomFilterBenchmark {
     @Setup(Level.Trial)
     public void setup() {
         BloomFilterConfig config = new BloomFilterConfig("bf:", bitSize, hashFunctions, 10000);
-        bloom = new LocalBloomIFilter(config, new MessageDigestBloomHashStrategy());
+        bloom = new LocalBloomIFilter(config);
         // Pre-populate so mightContain hits are realistic
         for (int i = 0; i < 50000; i++) {
             bloom.add(CACHE_NAME, "user:" + i);

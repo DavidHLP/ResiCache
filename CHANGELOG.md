@@ -40,6 +40,9 @@ Current milestones:
   beans; TTL, null-value, early-expiration, and Bloom hashing decisions now
   live in their owning modules. Users who supplied one of these internal beans
   must remove the override and use the owning module's configuration.
+- **Explicit auto-configuration** — removed library-root component scanning,
+  added typed default Bean back-off, and made `NullValueEncoder` the shared
+  handler dependency.
 - **Async metadata closure** — capture now occurs before queueing work; worker
   activation restores prior ThreadLocal/MDC state in `finally`.
 - **Integration naming closure** — `*IT` classes use `*IntegrationTest` and

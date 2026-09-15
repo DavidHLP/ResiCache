@@ -111,7 +111,7 @@ components implicitly, while concrete injection defeated replacement.
 **Decision**: Remove root-package scanning. The public auto-configuration
 scans only the package-private `cache` runtime module (excluding test classes),
 while stable defaults retain typed `@ConditionalOnMissingBean` contracts.
-`NullValuePolicy` is the shared Actual/Null handler dependency. Bloom's default
+`NullValueEncoder` is the shared handler dependency. Bloom's default
 is one explicit local-plus-Redis composition replaced by one user `BloomIFilter`
 bean. Redisson lock creation remains behind its class-level optional
 configuration.
@@ -467,10 +467,9 @@ compatibility, not by this refresh CAS.
 TTL entries that were already inside a configured percentage refresh window.
 
 **Decision**: When early expiration is enabled, `EarlyRefresh` reads the
-`CachedValue` and lets `EarlyExpirationPolicy` decide from its TTL, creation
-time, and configured threshold. The prefetched hit is handed to the actual
-handler through `PrefetchDecision`; the policy is never bypassed by an
-unrelated absolute threshold.
+`CachedValue` and decides from its TTL, creation time, and configured threshold.
+The prefetched hit is handed to the actual handler through `PrefetchDecision`;
+the decision is never bypassed by an unrelated absolute threshold.
 
 ## 23. Internal context and loader seams
 
