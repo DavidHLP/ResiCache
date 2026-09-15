@@ -1,0 +1,24 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockTimeout.java
+  h_77173abe25c3ff 47-57
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncRole.java
+  h_77173abe25c3ff 17,22,24-27,30-31,33,35-36,38,42,53,59,61,64,67,69,72,74,76,79,84,89-90,101,109-116,126,132,134,137,143,148-149,163,181-324
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupport.java
+  h_77173abe25c3ff 15-18,44-45,64,73,77,122-123,127,132-138,144-145,149,154-155,158-159,163,165-166,168-172,175-277
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncRoleTest.java
+  h_77173abe25c3ff 1-149
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupportLockOrderTest.java
+  h_77173abe25c3ff 1-43
+src/test/resources/allowlist/public-surface-nested.txt
+  h_77173abe25c3ff 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34f915b1bfb8243026f05c32d9f1566477a8e110",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
