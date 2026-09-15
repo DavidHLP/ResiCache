@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 164-167
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptorNormalizationTest.java
+  h_77173abe25c3ff 4,73-75,95-98,130-132,135-139,141-142,148-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a839527dd7970b2c6cfdff01b5878363488c329",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
