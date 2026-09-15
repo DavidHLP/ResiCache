@@ -64,11 +64,11 @@ class DistributedLockManager implements LockManager {
         try {
             boolean acquired = lock.tryLock(timeoutSeconds, leaseTimeSeconds, TimeUnit.SECONDS);
             if (!acquired) {
+                // ADR-0001 §15 key 隐私:WARN 只带 keyFingerprint(关联令牌),不带 raw key / lockKey
                 log.warn(
-                        "Failed to acquire distributed lock for key within {} seconds: {} (lockKey={})",
+                        "Failed to acquire distributed lock within {}s: keyFingerprint={}",
                         timeoutSeconds,
-                        key,
-                        lockKey);
+                        FailureDiagnostics.keyFingerprint(key));
                 return Optional.empty();
             }
 
@@ -77,8 +77,11 @@ class DistributedLockManager implements LockManager {
             return Optional.of(new RedissonLockHandle(lock, key));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("Interrupted while waiting for distributed lock on key: {}", key, e);
-            throw new RuntimeException("Interrupted while waiting for distributed lock on key: " + key, e);
+            // ADR-0001 §15 key 隐私:ERROR 与异常 message 均不带 raw key
+            log.error("Interrupted while waiting for distributed lock: keyFingerprint={}",
+                    FailureDiagnostics.keyFingerprint(key), e);
+            throw new RuntimeException("Interrupted while waiting for distributed lock: keyFingerprint="
+                    + FailureDiagnostics.keyFingerprint(key), e);
         }
     }
 
@@ -172,17 +175,22 @@ class DistributedLockManager implements LockManager {
                     return;
                 } catch (Exception e) {
                     if (attempt == MAX_UNLOCK_RETRIES) {
-                        log.error("Failed to release distributed lock for key: {} after {} attempts",
-                                key, MAX_UNLOCK_RETRIES, e);
+                        // ADR-0001 §15 key 隐私:ERROR/WARN 只带 keyFingerprint
+                        log.error("Failed to release distributed lock after {} attempts: keyFingerprint={}",
+                                MAX_UNLOCK_RETRIES,
+                                FailureDiagnostics.keyFingerprint(key), e);
                         return;
                     }
-                    log.warn("Failed to release distributed lock for key: {} on attempt {}, retrying in {}ms",
-                            key, attempt, UNLOCK_RETRY_INTERVAL_MS);
+                    log.warn("Failed to release distributed lock on attempt {}, retrying in {}ms: "
+                                    + "keyFingerprint={}",
+                            attempt, UNLOCK_RETRY_INTERVAL_MS,
+                            FailureDiagnostics.keyFingerprint(key));
                     try {
                         Thread.sleep(UNLOCK_RETRY_INTERVAL_MS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.error("Interrupted while retrying lock release for key: {}", key, ie);
+                        log.error("Interrupted while retrying lock release: keyFingerprint={}",
+                                FailureDiagnostics.keyFingerprint(key), ie);
                         return;
                     }
                 }

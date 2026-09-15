@@ -326,6 +326,17 @@ count-once exit for all chain failures. WARN/ERROR and typed exception
 messages omit the raw key; `cacheName` (config-level, low cardinality) is kept
 for correlation. `CacheOperationException` carries no raw-key field/getter.
 
+Where a diagnostic has no `cacheName` (distributed-lock keys, single-flight
+role failures, async early-expiration retries) the raw key is replaced by
+`FailureDiagnostics.keyFingerprint` — a short content token that keeps the
+line correlatable without carrying the key. It is a correlation token, not a
+security boundary: low-entropy keys remain brute-forceable from it. The
+fingerprint rule covers lock acquisition/release, `SyncRole` leader/follower
+failures (logs *and* their `IllegalStateException`/`RuntimeException`
+messages), the async early-expiration retry path, and chain post-processing.
+`DEBUG`/`INFO` sites are outside this rule — they are the tracing channel the
+fingerprint correlates back to.
+
 **Consequences**: GET degrade, write fail-fast, REMOVE best-effort and
 read-through write-back failures are alertable by bounded tags. The Bloom
 filter's own `bloomsift.*` counters and fail-open paths are deliberately
@@ -333,7 +344,7 @@ filter's own `bloomsift.*` counters and fail-open paths are deliberately
 cache-operation failure, so reporting it would corrupt degradation alerts.
 
 **Known limitation**: No per-key alerting; correlation relies on MDC
-requestId.
+requestId or the `keyFingerprint` token.
 
 ## 16. AOT/native deferred
 

@@ -47,15 +47,17 @@ final class RefreshRetryPolicy {
                 return; // 成功，退出
             } catch (Exception ex) {
                 lastException = ex;
-                log.warn("Async early-expiration failed for key: {} (attempt {}/{})",
-                        key, attempt, MAX_RETRY_COUNT, ex);
+                // ADR-0001 §15 key 隐私:WARN/ERROR 只带 keyFingerprint,不带 raw key
+                log.warn("Async early-expiration failed (attempt {}/{}): keyFingerprint={}",
+                        attempt, MAX_RETRY_COUNT, FailureDiagnostics.keyFingerprint(key), ex);
 
                 if (attempt < MAX_RETRY_COUNT) {
                     try {
                         Thread.sleep(RETRY_DELAY_MS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.warn("Retry interrupted for key: {}, continuing with next attempt", key, ie);
+                        log.warn("Retry interrupted, continuing with next attempt: keyFingerprint={}",
+                                FailureDiagnostics.keyFingerprint(key), ie);
                         continue; // 继续下一次重试而非退出循环
                     }
                 }
@@ -64,8 +66,8 @@ final class RefreshRetryPolicy {
 
         // 所有重试都失败
         if (lastException != null) {
-            log.error("Async early-expiration failed after {} attempts for key: {}",
-                    MAX_RETRY_COUNT, key, lastException);
+            log.error("Async early-expiration failed after {} attempts: keyFingerprint={}",
+                    MAX_RETRY_COUNT, FailureDiagnostics.keyFingerprint(key), lastException);
             throw new RuntimeException(
                     "Pre-refresh failed after " + MAX_RETRY_COUNT + " attempts", lastException);
         }

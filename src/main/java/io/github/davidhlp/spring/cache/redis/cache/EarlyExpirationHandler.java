@@ -235,7 +235,9 @@ class EarlyExpirationHandler extends AbstractCacheHandler {
                 log.debug("Async early-expiration skipped: value changed: {}", redisKey);
             }
         } catch (Exception ex) {
-            log.error("Async early-expiration failed: cacheName={}, key={}", cacheName, redisKey, ex);
+            // ADR-0001 §15 key 隐私:ERROR 只带 cacheName + keyFingerprint,不带 raw key
+            log.error("Async early-expiration failed: cacheName={}, keyFingerprint={}",
+                    cacheName, FailureDiagnostics.keyFingerprint(redisKey), ex);
         }
     }
 

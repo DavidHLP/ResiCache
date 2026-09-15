@@ -134,8 +134,10 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                 failure = e;
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
+                // ADR-0001 §15:异常 message 不带 raw key,只带 keyFingerprint
                 failure = new IllegalStateException(
-                        "Thread interrupted while acquiring distributed lock for key: " + key, e);
+                        "Thread interrupted while acquiring distributed lock: keyFingerprint="
+                                + FailureDiagnostics.keyFingerprint(key), e);
             } finally {
                 if (success) {
                     mine.complete(value);
@@ -168,8 +170,10 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
             try (LockStack lockStack = new LockStack()) {
                 for (LockManager manager : distributedManagers) {
                     manager.tryAcquire(key, timeoutSeconds).ifPresentOrElse(lockStack::push, () -> {
-                        log.warn("Lock manager {} failed to acquire distributed lock for key: {}",
-                                manager.getClass().getSimpleName(), key);
+                        // ADR-0001 §15 key 隐私:WARN 只带 keyFingerprint
+                        log.warn("Lock manager {} failed to acquire distributed lock: keyFingerprint={}",
+                                manager.getClass().getSimpleName(),
+                                FailureDiagnostics.keyFingerprint(key));
                         throw new RuntimeException("Failed to acquire distributed lock");
                     });
                 }
@@ -189,16 +193,18 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
             if (properties.getSyncLock().isLocalOnly()) {
             // 显式合法降级:单 JVM single-flight(leader 串行跑 loader,follower join future)。
                 log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
-                        + "已按 local-only=true 降级为单 JVM 同步 (key={})", key);
+                        + "已按 local-only=true 降级为单 JVM 同步 (keyFingerprint={})",
+                        FailureDiagnostics.keyFingerprint(key));
                 return loader.get();
             }
             // fail-fast:绝不静默退化为单 JVM。多实例下单 JVM synchronized 无法防击穿,
             // 标榜分布式却单机是最坏失败模式 —— 必须让用户立刻看见。
+            // ADR-0001 §15:异常 message 不带 raw key。
             throw new IllegalStateException(
                     "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
                             + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
                             + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
-                            + " [key=" + key + "]");
+                            + " [keyFingerprint=" + FailureDiagnostics.keyFingerprint(key) + "]");
         }
 
         /**
@@ -264,9 +270,11 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
         public T run() {
             try {
                 if (timeoutSeconds <= 0 && !leader.isDone()) {
+                    // ADR-0001 §15:异常 message 不带 raw key,只带 keyFingerprint
                     throw new IllegalStateException(
                             "In-flight single-flight loader still running; waitTimeoutSeconds=" + timeoutSeconds
-                                    + " <= 0 — follower refuses to wait (key=" + key + ")");
+                                    + " <= 0 — follower refuses to wait (keyFingerprint="
+                                    + FailureDiagnostics.keyFingerprint(key) + ")");
                 }
                 final Object value = (timeoutSeconds > 0)
                         ? leader.get(timeoutSeconds, TimeUnit.SECONDS)
@@ -275,7 +283,8 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
             } catch (final TimeoutException e) {
                 throw new IllegalStateException(
                         "Timed out after " + timeoutSeconds
-                                + "s waiting for in-flight single-flight loader (key=" + key + ")", e);
+                                + "s waiting for in-flight single-flight loader (keyFingerprint="
+                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
             } catch (final ExecutionException e) {
                 // leader 的原始异常:RuntimeException 原样抛(保留调用方既有 catch 语义)
                 final Throwable cause = (e.getCause() != null) ? e.getCause() : e;
@@ -285,11 +294,13 @@ sealed interface SyncRole<T> permits SyncRole.Reentrant, SyncRole.Leader, SyncRo
                 if (cause instanceof Error err) {
                     throw err;
                 }
-                throw new RuntimeException("In-flight single-flight loader failed (key=" + key + ")", cause);
+                throw new RuntimeException("In-flight single-flight loader failed (keyFingerprint="
+                        + FailureDiagnostics.keyFingerprint(key) + ")", cause);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(
-                        "Thread interrupted while waiting for in-flight loader (key=" + key + ")", e);
+                        "Thread interrupted while waiting for in-flight loader (keyFingerprint="
+                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
             }
         }
     }
