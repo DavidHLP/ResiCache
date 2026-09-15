@@ -1,0 +1,26 @@
+CHANGELOG.md
+  h_77173abe25c3ff 43-45
+PERFORMANCE.md
+  h_77173abe25c3ff 70
+docs/adr/0001-interface-contract-closure.md
+  h_77173abe25c3ff 114,470-472
+resicache-bench/src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterBenchmark.java
+  h_77173abe25c3ff 49
+resicache-bench/src/main/java/io/github/davidhlp/spring/cache/redis/cache/HandlerAdditiveCostBenchmark.java
+  h_77173abe25c3ff 55
+resicache-bench/src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlJitterBenchmark.java
+  h_77173abe25c3ff 13,37,49,59,68,73,79
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlHandler.java
+  h_77173abe25c3ff 123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "239408ec7435fdbd7bbfb72eca2cd0145939b9e6",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
