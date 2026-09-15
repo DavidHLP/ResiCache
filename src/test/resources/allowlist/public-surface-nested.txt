@@ -14,6 +14,7 @@ cache.RedisCacheEvictOperation$Builder
 cache.RedisCachePutOperation$Builder
 cache.RedisCacheableOperation$Builder
 cache.ResiCacheFeatures$ResiCacheFeaturesBuilder
+cache.SyncRole$Exclusive
 cache.SyncRole$Follower
 cache.SyncRole$Leader
 cache.SyncRole$Reentrant
