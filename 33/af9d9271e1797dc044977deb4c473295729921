@@ -1,0 +1,28 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandlerIntegrationTest.java
+  h_77173abe25c3ff 114,119,123,132,141,155,167,183,191,201,219,235,255,263,273,292,311,319,327,344,352,357-358,362,365
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParserTest.java
+  h_77173abe25c3ff 1-101
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactoryTest.java
+  h_77173abe25c3ff 13,22,42-53,94,96,108,110,145,161,213,215-217,228-231,234,245,247-248,258,260-261,274,276-277,291,293-294,307,309-310,319,327-328,331-332,339,354,356-357,369,371-372,388,411,413,453,461,478,487,514
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/LoaderOrchestratorTest.java
+  h_77173abe25c3ff 21,37-38,51
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheHealthIndicatorTest.java
+  h_77173abe25c3ff 1-72
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SecureNullValueDeserializerTest.java
+  h_77173abe25c3ff 1-62
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupportSingleFlightTest.java
+  h_77173abe25c3ff 80,85,101-104,187,192,270,275,290-291
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/TlsConfigurationValidatorTest.java
+  h_77173abe25c3ff 1-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33af9d9271e1797dc044977deb4c473295729921",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
