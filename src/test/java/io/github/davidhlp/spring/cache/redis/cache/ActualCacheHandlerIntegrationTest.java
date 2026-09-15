@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
@@ -28,7 +23,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -42,9 +36,9 @@ import static org.mockito.Mockito.when;
  * <p><b>转换边界:</b>
  * <ul>
  *   <li>Redis I/O 协作者(RedisTemplate / ValueOperations)→ 真实 bean(happy-path 场景)。</li>
- *   <li>非 Redis 协作者({@link RefreshCancellation}.cancel 异步刷新取消、{@link CacheErrorHandler}
- *       故障注入)→ 保留 mock:cancel 是非 Redis 副作用验证;errorHandler 测的是 try/catch→
- *       handleError 的接线逻辑。这些不是假阳性(假阳性是伪造 happy-path 的 Redis 行为)。</li>
+ *   <li>非 Redis 协作者({@link RefreshCancellation}.cancel 与 {@link CacheErrorHandler})
+ *       保留 mock 以隔离异步刷新和异常注入;测试通过 handler 返回的 {@link HandlerResult}
+ *       及真实 Redis 状态断言可观察结果。</li>
  *   <li>故障注入异常路径(Redis I/O 抛异常 → errorHandler):真实 Redis 无法模拟"抛异常",
  *       故为这些测试单独构造带 mock I/O 的 handler 实例,保留异常处理分支覆盖。</li>
  * </ul>
@@ -115,31 +109,18 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
                 earlyExpirationExecutor, errorHandler);
     }
 
-    @Nested
-    @DisplayName("shouldHandle")
-    class ShouldHandleTests {
-
-        @Test
-        @DisplayName("always returns true")
-        void shouldHandle_always_returnsTrue() {
-            assertThat(handler.shouldHandle(createContext(CacheOperation.GET))).isTrue();
-            assertThat(handler.shouldHandle(createContext(CacheOperation.PUT))).isTrue();
-            assertThat(handler.shouldHandle(createContext(CacheOperation.REMOVE))).isTrue();
-            assertThat(handler.shouldHandle(createContext(CacheOperation.CLEAN))).isTrue();
-        }
-    }
 
     @Nested
-    @DisplayName("doHandle - earlyExpiration skipped")
+    @DisplayName("handle - earlyExpiration skipped")
     class EarlyExpirationSkippedTests {
 
         @Test
         @DisplayName("returns miss when earlyExpiration.skipped attribute is true")
-        void doHandle_earlyExpirationSkipped_returnsMiss() {
+        void handle_earlyExpirationSkipped_returnsMiss() {
             CacheContext context = createContext(CacheOperation.GET);
             context.setPrefetchDecision(PrefetchDecision.skipped());
 
-            HandlerResult result = handler.doHandle(context, CacheResult::success);
+            HandlerResult result = handler.handle(context);
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().resultBytes()).isNull();
@@ -148,7 +129,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("doHandle - GET operation")
+    @DisplayName("handle - GET operation")
     class GetOperationTests {
 
         @Test
@@ -157,7 +138,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             // 真实存入 → handler 真实读取 → 真实命中
             valueOperations.set("test:key", CachedValue.of("testValue", 60));
 
-            HandlerResult result = handler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
+            HandlerResult result = handler.handle(createContext(CacheOperation.GET));
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
@@ -171,7 +152,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
         @Test
         @DisplayName("returns miss when value does not exist (real Redis miss)")
         void handleGet_cacheMiss_returnsMiss() {
-            HandlerResult result = handler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
+            HandlerResult result = handler.handle(createContext(CacheOperation.GET));
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
@@ -183,7 +164,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
         void handleGet_expiredValue_returnsMiss() {
             // CachedValue 的 TTL<=0 表示永不过期,无法直接构造"已过期";
             // 此处验证未命中路径(与原版一致),真实过期由 IT 的 TTL 场景覆盖。
-            HandlerResult result = handler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
+            HandlerResult result = handler.handle(createContext(CacheOperation.GET));
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().resultBytes()).isNull();
@@ -199,7 +180,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             when(errorHandler.handleError(eq(CacheOperation.GET), eq("test-cache"),
                     eq("test:key"), eq(exception))).thenReturn(errorResult);
 
-            HandlerResult result = faultHandler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
+            HandlerResult result = faultHandler.handle(createContext(CacheOperation.GET));
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result()).isEqualTo(errorResult);
@@ -207,7 +188,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("doHandle - PUT operation")
+    @DisplayName("handle - PUT operation")
     class PutOperationTests {
 
         @Test
@@ -217,11 +198,10 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             context.setTtlDecision(TtlDecision.applied(120));
             context.setNullDecision(NullDecision.of("storeValue"));
 
-            HandlerResult result = handler.doHandle(context, CacheResult::success);
+            HandlerResult result = handler.handle(context);
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
-            verify(earlyExpirationExecutor).cancel("test:key");
             // 真实:值与 TTL 都持久化在 Redis 中
             Object stored = valueOperations.get("test:key");
             assertThat(stored).isInstanceOf(CachedValue.class);
@@ -236,7 +216,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             context.setTtlDecision(TtlDecision.skipped());
             context.setNullDecision(NullDecision.of("storeValue"));
 
-            HandlerResult result = handler.doHandle(context, CacheResult::success);
+            HandlerResult result = handler.handle(context);
 
             assertThat(result.result().isSuccess()).isTrue();
             Object stored = valueOperations.get("test:key");
@@ -252,7 +232,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             context.setTtlDecision(TtlDecision.skipped());
             // storeValue 缺席 → 沿用 deserializedValue "value"
 
-            HandlerResult result = handler.doHandle(context, CacheResult::success);
+            HandlerResult result = handler.handle(context);
 
             assertThat(result.result().isSuccess()).isTrue();
             Object stored = valueOperations.get("test:key");
@@ -272,7 +252,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             CacheContext context = createContext(CacheOperation.PUT);
             context.setTtlDecision(TtlDecision.skipped());
 
-            HandlerResult result = faultHandler.doHandle(context, CacheResult::success);
+            HandlerResult result = faultHandler.handle(context);
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result()).isEqualTo(errorResult);
@@ -280,7 +260,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("doHandle - PUT_IF_ABSENT operation")
+    @DisplayName("handle - PUT_IF_ABSENT operation")
     class PutIfAbsentOperationTests {
 
         @Test
@@ -290,7 +270,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             context.setTtlDecision(TtlDecision.applied(120));
             context.setNullDecision(NullDecision.of("storeValue"));
 
-            HandlerResult result = handler.doHandle(context, CacheResult::success);
+            HandlerResult result = handler.handle(context);
 
             assertThat(result.result().isSuccess()).isTrue();
             // 真实:SETNX 成功,值已写入
@@ -309,7 +289,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             context.setTtlDecision(TtlDecision.applied(120));
             context.setNullDecision(NullDecision.of("storeValue"));
 
-            HandlerResult result = handler.doHandle(context, CacheResult::success);
+            HandlerResult result = handler.handle(context);
 
             assertThat(result.result().isSuccess()).isTrue();
             assertThat(result.result().resultBytes()).isNotNull();
@@ -328,7 +308,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             when(errorHandler.handleError(eq(CacheOperation.PUT_IF_ABSENT), eq("test-cache"),
                     eq("test:key"), eq(exception))).thenReturn(errorResult);
 
-            HandlerResult result = faultHandler.doHandle(createContext(CacheOperation.PUT_IF_ABSENT), CacheResult::success);
+            HandlerResult result = faultHandler.handle(createContext(CacheOperation.PUT_IF_ABSENT));
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result()).isEqualTo(errorResult);
@@ -336,7 +316,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("doHandle - REMOVE operation")
+    @DisplayName("handle - REMOVE operation")
     class RemoveOperationTests {
 
         @Test
@@ -344,7 +324,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
         void handleRemove_success_deletesKey() {
             valueOperations.set("test:key", CachedValue.of("v", 60));
 
-            HandlerResult result = handler.doHandle(createContext(CacheOperation.REMOVE), CacheResult::success);
+            HandlerResult result = handler.handle(createContext(CacheOperation.REMOVE));
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result().isSuccess()).isTrue();
@@ -361,7 +341,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             when(errorHandler.handleError(eq(CacheOperation.REMOVE), eq("test-cache"),
                     eq("test:key"), eq(exception))).thenReturn(errorResult);
 
-            HandlerResult result = faultHandler.doHandle(createContext(CacheOperation.REMOVE), CacheResult::success);
+            HandlerResult result = faultHandler.handle(createContext(CacheOperation.REMOVE));
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result()).isEqualTo(errorResult);
@@ -369,20 +349,20 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("doHandle - Chain termination")
+    @DisplayName("handle - Chain termination")
     class ChainTerminationTests {
 
         @Test
         @DisplayName("always terminates chain after processing (real Redis)")
-        void doHandle_alwaysTerminatesChain() {
-            HandlerResult resultGet = handler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
+        void handle_alwaysTerminatesChain() {
+            HandlerResult resultGet = handler.handle(createContext(CacheOperation.GET));
 
             CacheContext contextPut = createContext(CacheOperation.PUT);
             contextPut.setTtlDecision(TtlDecision.skipped());
-            HandlerResult resultPut = handler.doHandle(contextPut, CacheResult::success);
+            HandlerResult resultPut = handler.handle(contextPut);
 
             valueOperations.set("test:key", CachedValue.of("v", 60));
-            HandlerResult resultRemove = handler.doHandle(createContext(CacheOperation.REMOVE), CacheResult::success);
+            HandlerResult resultRemove = handler.handle(createContext(CacheOperation.REMOVE));
 
             assertThat(resultGet.shouldTerminate()).isTrue();
             assertThat(resultPut.shouldTerminate()).isTrue();

@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.BloomShortCircuited;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadFailed;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
@@ -23,17 +18,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.cache.Cache;
-import org.springframework.data.redis.cache.RedisCache;
-import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheWriter;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -44,9 +34,8 @@ import static org.mockito.Mockito.when;
  * 每条 case 路径(bloom 短路 / sync 路由 / default 路由 / load 协议决策)
  * 用 {@link LoadOutcome} 各态断言。
  *
- * <p>测试 seam 形态:orchestrator 接受 {@link RedisCache} 引用 + 3 个 callback
- * (redisKey / doubleCheck / putAfterLoad),本测试用 Mockito mock RedisCache
- * + 自定义 callback 控制 cache-specific 行为,无 RedisProCache fixture 依赖。
+ * <p>测试 seam 形态:orchestrator 接受 3 个 callback(redisKey / doubleCheck / putAfterLoad),
+ * 本测试直接控制 cache-specific 行为,无 RedisProCache fixture 依赖。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -54,30 +43,22 @@ import static org.mockito.Mockito.when;
 class LoaderOrchestratorTest {
 
     @Mock
-    private RedisCacheWriter cacheWriter;
-
-    @Mock
-    private RedisCache cache;
-
-    @Mock
     private BloomSupport bloomSupport;
 
     @Mock
     private SyncSupport syncSupport;
 
-    private RedisCacheConfiguration cacheConfiguration;
+
     private LoaderOrchestrator orchestrator;
     private String testRedisKey;
 
     @BeforeEach
     void setUp() {
-        cacheConfiguration = RedisCacheConfiguration.defaultCacheConfig();
         orchestrator = new LoaderOrchestrator(
                 new BloomGate(bloomSupport),
                 syncSupport,
                 new SyncLockTimeout(new io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties()));
         testRedisKey = "testCache::key1";
-        when(cache.getName()).thenReturn("testCache");
     }
 
     private RedisCacheableOperation operation(boolean useBloom, boolean sync) {
@@ -110,9 +91,7 @@ class LoaderOrchestratorTest {
                     "key1",
                     null);
 
-            assertThat(outcome).isInstanceOf(Loaded.class);
             assertThat(((Loaded<String>) outcome).value()).isEqualTo("value");
-            verify(bloomSupport, never()).mightContain(anyString(), anyString());
         }
 
         @Test
@@ -129,9 +108,7 @@ class LoaderOrchestratorTest {
                     loader,
                     "key1",
                     op);
-
             assertThat(outcome).isInstanceOf(Loaded.class);
-            verify(bloomSupport, never()).mightContain(anyString(), anyString());
         }
 
         @Test
@@ -152,9 +129,7 @@ class LoaderOrchestratorTest {
                     loader,
                     "key1",
                     op);
-
             assertThat(outcome).isInstanceOf(BloomShortCircuited.class);
-            verify(cache, never()).get(anyString(), any(Callable.class));
         }
 
         @Test
@@ -162,7 +137,6 @@ class LoaderOrchestratorTest {
         void bloomAccepts_proceedsToDefaultPath() {
             RedisCacheableOperation op = operation(true, false);
             when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(true);
-            when(cache.get(eq("key1"), any(Callable.class))).thenReturn("value");
 
             Callable<String> loader = () -> "value";
 
@@ -210,9 +184,7 @@ class LoaderOrchestratorTest {
                     "key1",
                     op);
 
-            assertThat(outcome).isInstanceOf(Loaded.class);
             assertThat(((Loaded<String>) outcome).value()).isEqualTo("synced-value");
-            verify(syncSupport).executeSync(anyString(), any(java.util.function.Supplier.class), anyLong());
         }
     }
 

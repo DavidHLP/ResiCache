@@ -9,6 +9,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -73,8 +74,11 @@ class AnnotationAopBehaviorMatrixTest {
         CacheableOperation springOperation = (CacheableOperation) springOperations.iterator().next();
         assertThat(springOperation.getKey()).isEqualTo("#id");
         assertThat(springOperation.getCondition()).isEqualTo("#id != null");
-        assertThat(resolve("read-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
-                .isSameAs(chainOperation);
+        CachePolicyView.Source readPolicy =
+                resolve("read-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET);
+        assertThat(readPolicy).isNotNull();
+        assertThat(readPolicy.getTtl()).isEqualTo(321L);
+        assertThat(readPolicy.isUseBloomFilter()).isTrue();
     }
 
     @Test
@@ -95,8 +99,12 @@ class AnnotationAopBehaviorMatrixTest {
         assertThat(chainOperation.isSync()).isTrue();
         assertThat(chainOperation.isCacheNullValues()).isTrue();
         assertThat(chainOperation.isEnableEarlyExpiration()).isTrue();
-        assertThat(resolve("write-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT))
-                .isSameAs(chainOperation);
+        CachePolicyView.Source writePolicy =
+                resolve("write-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT);
+        assertThat(writePolicy).isNotNull();
+        assertThat(writePolicy.getTtl()).isEqualTo(123L);
+        assertThat(writePolicy.isUseBloomFilter()).isTrue();
+        assertThat(writePolicy.isSync()).isTrue();
 
         assertThat(springOperations).singleElement().isInstanceOf(CachePutOperation.class);
         CachePutOperation springOperation = (CachePutOperation) springOperations.iterator().next();
@@ -108,15 +116,15 @@ class AnnotationAopBehaviorMatrixTest {
     @DisplayName("read declaration wins write-back policy when read and put coexist")
     void readDeclarationWinsWriteBackPolicy() throws Exception {
         Method method = method("readThrough");
-
         List<CacheOperation> chainOperations = execute(method);
-        assertThat(chainOperations).extracting(Object::getClass)
-                .containsExactly(RedisCacheableOperation.class, RedisCachePutOperation.class);
-        RedisCacheableOperation readOperation = (RedisCacheableOperation) chainOperations.get(0);
-        assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
-                .isSameAs(readOperation);
-        assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT))
-                .isSameAs(readOperation);
+
+        assertThat(chainOperations).hasSize(2);
+        assertThat(chainOperations).extracting(CacheOperation::getCacheNames)
+                .containsExactly(Set.of("mixed-cache"), Set.of("mixed-cache"));
+        assertThat(((CachePolicyView.Source) chainOperations.get(0)).getTtl()).isEqualTo(900L);
+        assertThat(((CachePolicyView.Source) chainOperations.get(1)).getTtl()).isEqualTo(10L);
+        assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET).getTtl())
+                .isEqualTo(900L);
         assertThat(resolve("mixed-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.PUT).getTtl())
                 .isEqualTo(900L);
     }
@@ -148,11 +156,12 @@ class AnnotationAopBehaviorMatrixTest {
         Collection<CacheOperation> springOperations =
                 operationSource.getCacheOperations(method, Matrix.class);
 
-        assertThat(chainOperations).extracting(Object::getClass)
-                .containsExactly(RedisCacheableOperation.class, RedisCacheEvictOperation.class,
-                        RedisCachePutOperation.class);
-        assertThat(springOperations).extracting(Object::getClass)
-                .containsExactly(CacheableOperation.class, CacheEvictOperation.class, CachePutOperation.class);
+        assertThat(chainOperations).extracting(CacheOperation::getCacheNames)
+                .containsExactly(Set.of("composite-read"), Set.of("composite-evict"),
+                        Set.of("composite-write"));
+        assertThat(springOperations).extracting(CacheOperation::getCacheNames)
+                .containsExactly(Set.of("composite-read"), Set.of("composite-evict"),
+                        Set.of("composite-write"));
     }
 
     @Test
