@@ -12,6 +12,7 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CachePutOperation;
@@ -39,13 +40,18 @@ import org.springframework.cache.interceptor.CacheableOperation;
 final class AnnotationParser {
 
     private final RedisCacheAttributesProjector projector;
+    private final SpringCacheableAdapter springCacheableAdapter;
 
     AnnotationParser() {
         this.projector = new RedisCacheAttributesProjector();
+        this.springCacheableAdapter = new SpringCacheableAdapter(projector);
     }
 
-    AnnotationParser(RedisCacheAttributesProjector projector) {
+    AnnotationParser(
+            RedisCacheAttributesProjector projector,
+            SpringCacheableAdapter springCacheableAdapter) {
         this.projector = projector;
+        this.springCacheableAdapter = springCacheableAdapter;
     }
 
     /**
@@ -61,6 +67,12 @@ final class AnnotationParser {
         if (cacheable != null) {
             operations.add(parseRedisCacheable(cacheable, target));
             addPolicy(policyOperations, cacheable, target);
+        } else {
+            final Cacheable springCacheable =
+                    AnnotationTargets.findMerged(target, Cacheable.class);
+            if (springCacheable != null) {
+                addPolicy(policyOperations, springCacheable, target);
+            }
         }
 
         final RedisCacheEvict cacheEvict =
@@ -128,6 +140,13 @@ final class AnnotationParser {
         if (target instanceof java.lang.reflect.Method method) {
             policies.add(RedisCacheEvictOperation.fromAttributes(
                     method, annotation.key(), projector.from(annotation)));
+        }
+    }
+
+    private void addPolicy(
+            List<CacheOperation> policies, Cacheable annotation, Object target) {
+        if (target instanceof java.lang.reflect.Method method) {
+            policies.add(springCacheableAdapter.create(method, annotation, annotation.key()));
         }
     }
 

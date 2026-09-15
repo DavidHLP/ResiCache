@@ -104,17 +104,19 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         springAnnotationAdapter.addSpringNativeOperations(target, ops);
+        final AnnotationParser.ParsedAnnotations snapshot =
+                new AnnotationParser.ParsedAnnotations(ops, parsed.policyOperations());
 
-        if (redisCacheRegister != null && target instanceof Method method) {
-            redisCacheRegister.registerSnapshot(method, method.getDeclaringClass(), parsed);
+        if (redisCacheRegister != null && !ops.isEmpty() && target instanceof Method method) {
+            redisCacheRegister.registerSnapshot(method, method.getDeclaringClass(), snapshot);
         }
 
-        if (!ops.isEmpty()) {
-            log.debug("Found {} cache operations for target: {}", ops.size(), target);
+        if (!snapshot.operations().isEmpty()) {
+            log.debug("Found {} cache operations for target: {}", snapshot.operations().size(), target);
         } else {
             log.trace("No cache operations found for target: {}", target);
         }
 
-        return ops.isEmpty() ? null : Collections.unmodifiableList(ops);
+        return snapshot.operations().isEmpty() ? null : snapshot.operations();
     }
 }
