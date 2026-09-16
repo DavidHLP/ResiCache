@@ -1,0 +1,22 @@
+CHANGELOG.md
+  h_77173abe25c3ff 87
+README.md
+  h_77173abe25c3ff 231-235,259-260
+README.zh-CN.md
+  h_77173abe25c3ff 210,229-230
+STABILITY.md
+  h_77173abe25c3ff 25
+docs/adr/0001-interface-contract-closure.md
+  h_77173abe25c3ff 399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a1e0e1e3899a66f2fe5859c619c26b7795fea89",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
