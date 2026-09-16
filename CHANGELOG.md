@@ -29,6 +29,13 @@ The project is on a **single build line**: Spring Boot
 
 Current milestones:
 
+- **Native writer statistics contract** — `RedisProCacheWriter` now records
+  Spring Data Redis GET/GET-hit/GET-miss/PUT/DELETE counters at the writer
+  boundary, including PUT_IF_ABSENT insertion and exact CLEAN deletion counts.
+  `withStatisticsCollector` is coherent: replacing the collector does not leave
+  Bloom/early-refresh handlers incrementing the previous collector. Lock-wait
+  duration is intentionally not reported yet and remains zero.
+
 ### Interface contract closure
 - ⚠️ **Cache failure contract closure** — GET degrades to an observable miss;
   PUT, PUT_IF_ABSENT, and CLEAN propagate a typed runtime failure retaining the

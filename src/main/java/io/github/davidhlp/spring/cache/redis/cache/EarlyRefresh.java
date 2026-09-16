@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -50,19 +49,16 @@ class EarlyRefresh {
     private final Clock clock;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
 
     EarlyRefresh(
             Clock clock,
             ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
-            CacheStatisticsCollector statistics,
             ValueOperations<String, Object> valueOperations) {
         this.clock = clock;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.redisTemplate = redisTemplate;
-        this.statistics = statistics;
         this.valueOperations = valueOperations;
     }
 
@@ -79,7 +75,7 @@ class EarlyRefresh {
      * 评估是否需要提前刷新 —— 一次 GET 的读 + 判定收口。
      *
      * <p>异步模式在本方法内完成调度(值已捕获,任务只做 CAS 缩短 TTL);
-     * 同步模式只返回决策并自增 miss 计数,由链节点决定「跳过实际缓存读、返回 miss」。
+     * 同步模式只返回决策,由链节点决定「跳过实际缓存读、返回 miss」。
      *
      * @param context 缓存上下文(GET 操作)
      * @return 评估结果;缓存未命中 / 已过期 / 非 {@link CachedValue} 时返回 {@code null}
@@ -123,7 +119,7 @@ class EarlyRefresh {
             return EarlyExpirationDecision.asyncRefresh();
         }
 
-        statistics.incMisses(context.getCacheName());
+        // GET 统计统一由 RedisProCacheWriter 按链结果记录。
         return EarlyExpirationDecision.syncRefresh();
     }
 

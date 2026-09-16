@@ -24,7 +24,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,8 +53,6 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
-    @Autowired
-    private CacheStatisticsCollector statistics;
 
     @Autowired
     private ValueOperations<String, Object> valueOperations;
@@ -70,7 +67,6 @@ class EarlyExpirationHandlerRaceConditionIntegrationTest extends AbstractRedisIn
                 Clock.systemUTC(),
                 earlyExpirationExecutor,
                 redisTemplate,
-                statistics,
                 valueOperations));
         executor = Executors.newCachedThreadPool();
     }

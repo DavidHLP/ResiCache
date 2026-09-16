@@ -29,6 +29,7 @@ import org.springframework.lang.Nullable;
  *   <li>{@link #outcome()} — typed {@link Outcome} 枚举(取代原 String outcome)</li>
  *   <li>{@link #resultBytes()} — GET 命中 / PUT_IF_ABSENT existing 的字节;防御性复制</li>
  *   <li>{@link #operation()} / {@link #failureKind()} — 仅 failure 非 null(typed)</li>
+ *   <li>{@link #deletedCount()} — CLEAN 成功时实际删除的 key 数,其他结果为 0</li>
  *   <li>{@link #cause()} — 仅 failure 非 null</li>
  * </ul>
  *
@@ -85,44 +86,60 @@ public final class CacheResult {
     private final FailureKind failureKind;
     private final Throwable cause;
     private final byte[] resultBytes;
+    private final long deletedCount;
 
     private CacheResult(Outcome outcome,
                         @Nullable CacheOperation operation,
                         @Nullable FailureKind failureKind,
                         @Nullable Throwable cause,
-                        @Nullable byte[] resultBytes) {
+                        @Nullable byte[] resultBytes,
+                        long deletedCount) {
         this.outcome = Objects.requireNonNull(outcome, "outcome");
         this.operation = operation;
         this.failureKind = failureKind;
         this.cause = cause;
         this.resultBytes = defensiveCopy(resultBytes);
+        this.deletedCount = deletedCount;
     }
 
     // ==================== 静态工厂 ====================
 
     /** 创建成功的结果(无返回值) */
     public static CacheResult success() {
-        return new CacheResult(Outcome.SUCCESS, null, null, null, null);
+        return new CacheResult(Outcome.SUCCESS, null, null, null, null, 0);
     }
 
     /** 创建成功的结果(带返回值字节,防御性复制) */
     public static CacheResult success(@Nullable byte[] resultBytes) {
-        return new CacheResult(Outcome.SUCCESS, null, null, null, resultBytes);
+        return new CacheResult(Outcome.SUCCESS, null, null, null, resultBytes, 0);
+    }
+
+    /**
+     * 创建带精确删除条数的成功结果(仅 CLEAN 使用)。
+     *
+     * @param deletedCount 本次批量清理实际删除的 key 数
+     * @return 携带删除条数的成功结果
+     */
+    public static CacheResult successWithDeletedCount(long deletedCount) {
+        if (deletedCount < 0) {
+            throw new IllegalArgumentException("deletedCount must not be negative");
+        }
+        return new CacheResult(Outcome.SUCCESS, null, null, null, null, deletedCount);
     }
 
     /** 创建缓存未命中的结果 */
     public static CacheResult miss() {
-        return new CacheResult(Outcome.MISS, null, null, null, null);
+        return new CacheResult(Outcome.MISS, null, null, null, null, 0);
     }
 
     /** 创建 PUT_IF_ABSENT 插入成功的结果 */
     public static CacheResult inserted() {
-        return new CacheResult(Outcome.INSERTED, null, null, null, null);
+        return new CacheResult(Outcome.INSERTED, null, null, null, null, 0);
     }
 
     /** 创建 PUT_IF_ABSENT 发现已有 key 的结果(带既有值字节,防御性复制) */
     public static CacheResult existing(@Nullable byte[] resultBytes) {
-        return new CacheResult(Outcome.EXISTING, null, null, null, resultBytes);
+        return new CacheResult(Outcome.EXISTING, null, null, null, resultBytes, 0);
     }
 
     /**
@@ -139,7 +156,8 @@ public final class CacheResult {
                 Objects.requireNonNull(operation, "operation"),
                 Objects.requireNonNull(kind, "kind"),
                 Objects.requireNonNull(cause, "cause"),
-                null);
+                null,
+                0);
     }
 
     // ==================== 查询 ====================
@@ -167,6 +185,11 @@ public final class CacheResult {
     @Nullable
     public CacheOperation operation() {
         return operation;
+    }
+
+    /** CLEAN 成功时责任链实际删除的 key 数，其他结果为 {@code 0}。 */
+    public long deletedCount() {
+        return deletedCount;
     }
 
     /** 失败分类(仅 failure 结果非 null)。 */
@@ -197,12 +220,13 @@ public final class CacheResult {
                 && operation == that.operation
                 && failureKind == that.failureKind
                 && Objects.equals(cause, that.cause)
+                && deletedCount == that.deletedCount
                 && Arrays.equals(resultBytes, that.resultBytes);
     }
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(outcome, operation, failureKind, cause);
+        int result = Objects.hash(outcome, operation, failureKind, cause, deletedCount);
         result = 31 * result + Arrays.hashCode(resultBytes);
         return result;
     }
@@ -214,6 +238,7 @@ public final class CacheResult {
                 + ", failureKind=" + failureKind
                 + ", cause=" + (cause == null ? null : cause.getClass().getSimpleName())
                 + ", resultBytes=" + (resultBytes == null ? null : resultBytes.length + " bytes")
+                + ", deletedCount=" + deletedCount
                 + '}';
     }
 }

@@ -111,6 +111,12 @@ class CacheResultTest {
             assertThat(CacheResult.existing(null).outcome()).isEqualTo(CacheResult.Outcome.EXISTING);
             assertThat(CacheResult.existing(null).isSuccess()).isTrue();
         }
+
+        @Test
+        @DisplayName("successWithDeletedCount preserves exact CLEAN deletion count")
+        void successWithDeletedCount_preservesExactCount() {
+            assertThat(CacheResult.successWithDeletedCount(3).deletedCount()).isEqualTo(3);
+        }
     }
 
     @Nested

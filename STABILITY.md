@@ -23,6 +23,7 @@ a documented migration path (⚠️ BREAKING entry in
 | **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Envelope is the serialization contract — kept, not loosened. |
 | **Extension SPI** | `CacheHandler`, `ChainObserver`, `BloomIFilter`, `LockManager`, `LockManager.LockHandle`, `HandlerPriority` | Implementations must satisfy the documented failure, lifecycle, and thread-safety contracts. |
 | **SPI transitive contract types** | `CacheContext`, `CachePolicyView`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
+| **Native writer statistics** | Spring Data Redis GET/GET hit/GET miss/PUT/DELETE counters are emitted at the writer boundary; CLEAN carries its exact deleted-key count through stable `CacheResult` | `withStatisticsCollector` rebinds all statistics; lock-wait duration remains unreported (`getLockWaitDuration()` is zero) until an internal observation path can be added without expanding `CacheContext` |
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.
