@@ -243,6 +243,80 @@ class SyncSupportSingleFlightTest {
     }
 
     @Test
+    @DisplayName("executeExclusive:local-only 超时 follower 退出后,前缀未 drain 时 newcomer 仍不得并发")
+    void executeExclusive_localOnly_timedOutFollowerKeepsPrefixSerialized() throws Exception {
+        properties.getSyncLock().setLocalOnly(true);
+        SyncSupport support = new SyncSupport(List.of(), properties);
+        String key = "local-prefix-drain-key";
+
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        CountDownLatch newcomerEntered = new CountDownLatch(1);
+        CountDownLatch newcomerProceed = new CountDownLatch(1);
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger maxActive = new AtomicInteger();
+        ExecutorService ex = Executors.newFixedThreadPool(3);
+
+        try {
+            Future<String> first = ex.submit(() -> support.executeExclusive(key, () -> {
+                int current = active.incrementAndGet();
+                maxActive.updateAndGet(max -> Math.max(max, current));
+                firstEntered.countDown();
+                try {
+                    await(releaseFirst);
+                    return "FIRST";
+                } finally {
+                    active.decrementAndGet();
+                }
+            }, 30));
+
+            assertThat(firstEntered.await(5, TimeUnit.SECONDS)).isTrue();
+
+            Future<Throwable> timedOut = ex.submit(() -> {
+                try {
+                    support.executeExclusive(key, () -> "SECOND", 0);
+                    return null;
+                } catch (Throwable t) {
+                    return t;
+                }
+            });
+            assertThat(timedOut.get(5, TimeUnit.SECONDS))
+                    .as("超时 follower 必须退出,但不能移除仍在运行前缀的队尾")
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Timed out after 0");
+
+            Future<String> newcomer = ex.submit(() -> support.executeExclusive(key, () -> {
+                int current = active.incrementAndGet();
+                maxActive.updateAndGet(max -> Math.max(max, current));
+                newcomerEntered.countDown();
+                try {
+                    await(newcomerProceed);
+                    return "THIRD";
+                } finally {
+                    active.decrementAndGet();
+                }
+            }, 5));
+
+            assertThat(newcomerEntered.await(1, TimeUnit.SECONDS))
+                    .as("前缀未 drain 时 newcomer 不得进入工作区")
+                    .isFalse();
+
+            releaseFirst.countDown();
+            assertThat(first.get(5, TimeUnit.SECONDS)).isEqualTo("FIRST");
+            assertThat(newcomerEntered.await(5, TimeUnit.SECONDS)).isTrue();
+            newcomerProceed.countDown();
+            assertThat(newcomer.get(5, TimeUnit.SECONDS)).isEqualTo("THIRD");
+            assertThat(maxActive)
+                    .as("local-only 同 key 在 follower 超时退出后仍必须串行")
+                    .hasValue(1);
+        } finally {
+            releaseFirst.countDown();
+            newcomerProceed.countDown();
+            ex.shutdownNow();
+        }
+    }
+
+    @Test
     @DisplayName("executeExclusive:同线程重入走 fast-path,不二次取锁(不死锁)")
     void executeExclusive_reentrant_runsInline() throws Exception {
         when(lockManager.tryAcquire(anyString(), anyLong()))
