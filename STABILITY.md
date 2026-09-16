@@ -82,6 +82,9 @@ custom implementation must satisfy.
 2. **Non-null decision**: `HandlerResult` construction MUST provide a non-null
    `FlowControl`; its public canonical constructor rejects `null` with a
    `NullPointerException` explaining that the SPI protocol requires a decision.
+   If a malformed result reaches the engine, it rejects it with an
+   `IllegalStateException` naming the offending handler before dispatching the
+   decision.
 3. **FlowControl semantics**: `CONTINUE` advances to the next handler (a
    `null` result field at chain end materializes to `success()`); `TERMINATE`
    ends the chain and returns the carried result; `SKIP_ALL` ends the chain,
