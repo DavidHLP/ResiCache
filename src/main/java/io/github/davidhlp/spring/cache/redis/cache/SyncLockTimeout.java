@@ -54,6 +54,16 @@ class SyncLockTimeout {
             return new Resolved(seconds);
         }
     }
+    /**
+     * Resolves one immutable timeout value for a sync request.
+     *
+     * <p>Package-private so the loader path can pass the same {@link Resolved} instance through
+     * lock acquisition, follower waiting, and local-only queue stages without re-resolving it.
+     */
+    Resolved resolve(@Nullable CachePolicyView.Source operation) {
+        return Resolved.fromSeconds(resolveSeconds(operation));
+    }
+
 
     /**
      * 解析给定 operation 的锁超时(秒).

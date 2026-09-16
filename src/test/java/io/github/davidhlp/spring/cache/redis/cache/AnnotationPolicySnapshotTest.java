@@ -46,6 +46,27 @@ class AnnotationPolicySnapshotTest {
                 .isSameAs(first.policyOperations().get(0));
     }
 
+    @Test
+    @DisplayName("operation source registration is consumed by chain without manual registration")
+    void operationSourceRegistrationIsConsumedByChainWithoutManualRegistration() throws Exception {
+        RedisCacheRegister register = new RedisCacheRegister();
+        RedisCacheOperationSource source = new RedisCacheOperationSource(
+                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, register);
+        Method method = SnapshotService.class.getMethod("read", String.class);
+        AnnotationChainEngine chain = new AnnotationChainEngine(List.of(), register);
+
+        java.util.Collection<CacheOperation> sourceOperations =
+                source.getCacheOperations(method, SnapshotService.class);
+        AnnotationParser.ParsedAnnotations snapshot =
+                register.getSnapshot(method, SnapshotService.class);
+        List<CacheOperation> chainOperations =
+                chain.execute(method, new SnapshotService(), new Object[]{"id"});
+
+        assertThat(sourceOperations).singleElement().isSameAs(snapshot.operations().get(0));
+        assertThat(chainOperations).singleElement().isSameAs(snapshot.policyOperations().get(0));
+    }
+
+
     private static final class CountingAnnotationParser extends AnnotationParser {
         private final AtomicInteger invocations = new AtomicInteger();
 

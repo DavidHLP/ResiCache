@@ -229,9 +229,10 @@ final class LoaderOrchestrator {
             Callable<T> loader,
             Object key,
             CachePolicyView.Source operation) {
-        long timeout = syncLockTimeout != null
-                ? syncLockTimeout.resolveSeconds(operation)
-                : SyncLockTimeout.DEFAULT_LOCK_TIMEOUT_SECONDS;
+        SyncLockTimeout.Resolved timeout = syncLockTimeout != null
+                ? syncLockTimeout.resolve(operation)
+                : SyncLockTimeout.Resolved.fromSeconds(
+                        SyncLockTimeout.DEFAULT_LOCK_TIMEOUT_SECONDS);
         try {
             String lockKey = redisKeyFn.apply(key);
             return syncSupport.executeSync(
@@ -241,6 +242,7 @@ final class LoaderOrchestrator {
         } catch (Throwable cause) {
             return new LoadFailed<>(cause);
         }
+
     }
 
     /**
