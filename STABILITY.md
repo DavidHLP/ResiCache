@@ -22,7 +22,7 @@ a documented migration path (⚠️ BREAKING entry in
 | **Configuration property keys** | `resi-cache.*` namespace under `application.yml` / `application.properties` | Property names and types. Adding new properties is non-breaking. |
 | **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Envelope is the serialization contract — kept, not loosened. |
 | **Extension SPI** | `CacheHandler`, `ChainObserver`, `BloomIFilter`, `LockManager`, `LockManager.LockHandle`, `HandlerPriority` | Implementations must satisfy the documented failure, lifecycle, and thread-safety contracts. |
-| **SPI transitive contract types** | `CacheContext`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
+| **SPI transitive contract types** | `CacheContext`, `CachePolicyView`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.
