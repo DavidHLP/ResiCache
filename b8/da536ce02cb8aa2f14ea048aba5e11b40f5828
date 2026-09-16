@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterConfig.java
+  h_77173abe25c3ff 42,47-50
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterConfigTest.java
+  h_77173abe25c3ff 116-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8da536ce02cb8aa2f14ea048aba5e11b40f5828",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
