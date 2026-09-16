@@ -204,6 +204,29 @@ class ChainEngineTest {
             assertThat(actual).isSameAs(expected);
             assertThat(observed.get()).isSameAs(expected);
         }
+        @Test
+        @DisplayName("handler 异常时 onChainEnd 收到 null,execute 继续冒泡")
+        void handlerThrows_onChainEndReceivesNull() {
+            AtomicReference<CacheResult> observed = new AtomicReference<>();
+            AtomicBoolean onChainEndCalled = new AtomicBoolean();
+            engine.addObserver(new ChainObserver() {
+                @Override
+                public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
+                    onChainEndCalled.set(true);
+                    observed.set(result);
+                }
+            });
+            CacheHandler throwing = context -> {
+                throw new IllegalStateException("handler boom");
+            };
+            installChain(throwing);
+
+            assertThatThrownBy(() -> engine.execute(snapshot, newCtx()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("handler boom");
+            assertThat(onChainEndCalled).isTrue();
+            assertThat(observed.get()).isNull();
+        }
 
         @Test
         @DisplayName("continuation:handler 用引擎交出的句柄推进剩余链,aroundChain 观测不重复")

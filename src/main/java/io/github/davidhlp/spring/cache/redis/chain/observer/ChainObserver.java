@@ -6,6 +6,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import org.springframework.lang.Nullable;
 
 /**
  * 责任链推进与观测的注入点.
@@ -29,7 +30,8 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
  *     </ul>
  *   </li>
  *   <li>{@link #onChainEnd(CacheContext, Object, CacheResult)} — 链出口 around-hook(MDC restore / Timer record);
- *       接收 {@code scopeToken}(即本 observer 在 {@code onChainStart} 返回的值),
+ *       接收 {@code scopeToken}(即本 observer 在 {@code onChainStart} 返回的值) 与最终结果；
+ *       正常完成时 result 非 null，主路径抛异常时 result 为 {@code null}（表示未产生结果）。
  *       Engine 保证 start/end 配对(即使主路径异常也调用 finally 守护)</li>
  * </ol>
  *
@@ -78,9 +80,10 @@ public interface ChainObserver {
      *
      * @param context    当前链的缓存上下文
      * @param scopeToken 本 observer 在 onChainStart 返回的 per-call 状态(可为 null)
-     * @param result     链执行最终结果(post-process 已执行)
+     * @param result     链执行最终结果(post-process 已执行)；正常完成时非 null，
+     *                   主路径抛异常时为 null，表示未产生结果
      */
-    default void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
+    default void onChainEnd(CacheContext context, Object scopeToken, @Nullable CacheResult result) {
         // 默认 no-op
     }
 
