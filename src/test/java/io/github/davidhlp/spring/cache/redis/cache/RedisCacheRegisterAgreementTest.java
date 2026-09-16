@@ -112,12 +112,16 @@ class RedisCacheRegisterAgreementTest {
         AnnotationParser.ParsedAnnotations snapshot =
                 new AnnotationParser.ParsedAnnotations(List.of(operation), List.of(operation));
         register.registerSnapshot(interfaceMethod, AnnotatedService.class, snapshot);
+        AnnotatedElementKey requestKey = new AnnotatedElementKey(
+                implementationMethod, AnnotatedServiceImpl.class);
 
-        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
-                .isSameAs(snapshot);
+        assertThat(register.get(
+                "interface-cache", requestKey, OperationKind.CACHEABLE))
+                .isSameAs(operation);
         assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
-        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
-                .isSameAs(snapshot);
+        assertThat(register.get(
+                "interface-cache", requestKey, OperationKind.CACHEABLE))
+                .isSameAs(operation);
         assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
     }
 
