@@ -39,9 +39,13 @@ class BloomFilterConfig {
         long hash2 = digest(key, "SHA-256");
         for (int i = 0; i < hashFunctions; i++) {
             long combinedHash = hash1 + (i * hash2);
-            positions[i] = (int) (Math.abs(combinedHash) % bitSize);
+            positions[i] = positionFor(combinedHash, bitSize);
         }
         return positions;
+    }
+
+    static int positionFor(long hash, int bitSize) {
+        return (int) Math.floorMod(hash, bitSize);
     }
 
     private long digest(String key, String algorithm) {
