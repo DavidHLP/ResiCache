@@ -1,0 +1,18 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngineTest.java
+  h_77173abe25c3ff 207-226
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 37-38,343-345,394,396-399
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/observer/ChainObserver.java
+  h_77173abe25c3ff 9,33-34,83-84,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2015e33851d4ef62e982b9699778010f412c608",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
