@@ -1,0 +1,14 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterConstructionTest.java
+  h_77173abe25c3ff 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6eb47ec773b8ae210115187f6fde16de6c721e42",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
