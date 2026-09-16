@@ -1,0 +1,14 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationPolicySnapshotTest.java
+  h_77173abe25c3ff 49-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90435d53109d1180a5b82a64019166a639c48ba2",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
