@@ -18,8 +18,6 @@ import org.slf4j.MDC;
 import org.springframework.data.redis.cache.CacheStatistics;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheWriter;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
@@ -40,8 +38,6 @@ import org.springframework.lang.Nullable;
 @Slf4j
 class RedisProCacheWriter implements RedisCacheWriter {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final ValueOperations<String, Object> valueOperations;
     private final CacheOperationResolver operationResolver;
     private final CacheStatisticsCollector statistics;
     private final TypeSupport typeSupport;
@@ -53,14 +49,10 @@ class RedisProCacheWriter implements RedisCacheWriter {
     /**
      * 构造函数，初始化缓存责任链
      */
-    public RedisProCacheWriter(RedisTemplate<String, Object> redisTemplate,
-                               ValueOperations<String, Object> valueOperations,
-                               CacheStatisticsCollector statistics,
+    public RedisProCacheWriter(CacheStatisticsCollector statistics,
                                TypeSupport typeSupport,
                                CacheHandlerChainFactory chainFactory,
                                CacheOperationResolver operationResolver) {
-        this.redisTemplate = redisTemplate;
-        this.valueOperations = valueOperations;
         this.statistics = statistics;
         this.typeSupport = typeSupport;
         this.chainFactory = chainFactory;
@@ -79,29 +71,29 @@ class RedisProCacheWriter implements RedisCacheWriter {
     @Nullable
     public byte[] get(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        return executeChain(CacheOperation.GET, name, key, null, ttl).resultBytes();
+        CacheResult result = executeChain(CacheOperation.GET, name, key, null, ttl);
+        byte[] resultBytes = result.resultBytes();
+        recordGetStatistics(name, result, resultBytes);
+        return resultBytes;
     }
 
     /**
      * Read-through loader 入口 —— availability-first(ADR-0001 §13)。
      *
-     * <p><b>与 cache 侧 loader 路径的关系</b>:{@code RedisProCache.get(key, loader)} 覆写了
-     * Spring 的 loader 入口,整条「读 → 回源 → 写回」协议由 {@link LoaderOrchestrator} 承担
-     * (含 put 指标与写回容错)。本方法是 <b>writer 级</b>入口,写给直接持有 writer 的调用方:
+     * <p>{@code RedisProCache.get(key, loader)} 与本方法都委派
+     * {@link LoaderOrchestrator#readThrough} 的同一条「读 → 回源 → 写回」协议。
+     * 本入口只提供 writer 的字节读写适配,并保留低层 SPI 的 loader 异常原样传播契约;
      * {@link org.springframework.cache.Cache#getNativeCache()} 是公开方法,调用方拿到
-     * {@code RedisCacheWriter} 后可以直接走这里;若不覆写,Spring 的接口默认实现会在写回失败时
-     * 把已加载值连同异常一起丢掉(§13 明确否决的行为)。
+     * {@code RedisCacheWriter} 后可以直接走这里。
      *
-     * <p>因此这里保留一份<b>同等容错</b>的实现(写回失败 → 渲染后的 WARN + 返回已加载字节),
-     * 而不是放任接口默认实现。
-     *
-     * <p>cacheTti 参数:与既有 ResiCache 行为一致(链 GET 不做 TTI 刷新),命中/未命中均按普通读处理。
+     * <p>{@code cacheTti} 按 ResiCache 的既有语义保持忽略:链 GET 不做 TTI 刷新,
+     * 命中/未命中均按普通读处理。刷新 TTL 会引入本库刻意避免的写放大。
      *
      * @param name           缓存名
      * @param key            Redis key 字节
-     * @param loaderSupplier loader 字节提供者(Spring 契约;loader 异常在此传播)
+     * @param loaderSupplier loader 字节提供者(Spring 契约;loader 异常原样传播)
      * @param ttl            TTL
-     * @param cacheTti       是否 time-to-idle(本实现不消费,与既有链语义一致)
+     * @param cacheTti       是否 time-to-idle(本实现保持忽略,不刷新 TTL)
      * @return 缓存命中或 loader 产出的字节;缓存 miss 且 loader 产出 null 时为 null
      */
     @Override
@@ -109,28 +101,33 @@ class RedisProCacheWriter implements RedisCacheWriter {
     public byte[] get(@NonNull String name, @NonNull byte[] key,
                       @NonNull java.util.function.Supplier<byte[]> loaderSupplier,
                       @Nullable Duration ttl, boolean cacheTti) {
-        // 1) 缓存读(链 GET:bloom 短路 / 提前过期均在此生效)
-        byte[] cached = get(name, key, ttl);
-        if (cached != null) {
-            return cached;
+        LoaderOrchestrator.LoadOutcome<byte[]> outcome = LoaderOrchestrator.readThrough(
+                name,
+                () -> get(name, key, ttl),
+                cached -> cached != null,
+                cached -> cached,
+                loaderSupplier::get,
+                loaded -> put(name, key, loaded, ttl),
+                cause -> cause);
+        if (outcome instanceof LoaderOrchestrator.Loaded<?> loaded) {
+            return (byte[]) loaded.value();
         }
-
-        // 2) loader — 异常原样传播(loader 失败是用户可见失败,不得吞)
-        byte[] loaded = loaderSupplier.get();
-
-        // 3) 写回 — 失败不覆盖 loader 值(ADR-0001 §13 availability-first);
-        //    配置错误(IllegalArgumentException,如未启用 null 缓存)原样上抛
-        try {
-            put(name, key, loaded, ttl);
-        } catch (IllegalArgumentException configError) {
-            throw configError;
-        } catch (RuntimeException writeBackFailure) {
-            log.warn("Cache write-back failed after successful load; returning loaded value: "
-                            + "cacheName={}, failure={}",
-                    name,
-                    FailureDiagnostics.sanitizedFailure(writeBackFailure));
+        if (outcome instanceof LoaderOrchestrator.LoadedWithWriteBackFailure<?> loaded) {
+            return (byte[]) loaded.value();
         }
-        return loaded;
+        if (outcome instanceof LoaderOrchestrator.LoadFailed<?> failed) {
+            return throwRawLoaderFailure(failed.cause());
+        }
+        return null;
+    }
+    private static byte[] throwRawLoaderFailure(Throwable cause) {
+        RedisProCacheWriter.<RuntimeException>throwUnchecked(cause);
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> void throwUnchecked(Throwable cause) throws E {
+        throw (E) cause;
     }
 
     @Override
@@ -168,6 +165,9 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable Duration ttl) {
         CacheResult result = executeChain(CacheOperation.PUT, name, key, value, ttl);
         requireSuccessful(CacheOperation.PUT, name, key, result);
+        if (result.isSuccess()) {
+            statistics.incPuts(name);
+        }
     }
 
     @Override
@@ -200,6 +200,9 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable Duration ttl) {
         CacheResult result = executeChain(CacheOperation.PUT_IF_ABSENT, name, key, value, ttl);
         requireSuccessful(CacheOperation.PUT_IF_ABSENT, name, key, result);
+        if (result.outcome() == CacheResult.Outcome.INSERTED) {
+            statistics.incPuts(name);
+        }
         return result.resultBytes();
     }
 
@@ -209,6 +212,9 @@ class RedisProCacheWriter implements RedisCacheWriter {
         // route through the same responsibility-chain logic.
         CacheResult result = executeChain(CacheOperation.REMOVE, name, key, null, null);
         requireSuccessful(CacheOperation.REMOVE, name, key, result);
+        if (result.isSuccess()) {
+            statistics.incDeletes(name);
+        }
     }
 
     @Override
@@ -223,8 +229,11 @@ class RedisProCacheWriter implements RedisCacheWriter {
                 CacheOperation.CLEAN, name, keyPattern, actualKey,
                 null, null, null, resolveOperation(name, CacheOperation.CLEAN), keyPattern);
 
-        CacheResult result = getChain().execute(context);
+        CacheResult result = executeContext(context);
         requireSuccessful(CacheOperation.CLEAN, name, keyPattern, result);
+        if (result.isSuccess()) {
+            recordCleanDeletes(name, result.deletedCount());
+        }
     }
 
     @Override
@@ -239,8 +248,6 @@ class RedisProCacheWriter implements RedisCacheWriter {
     public RedisCacheWriter withStatisticsCollector(
             @NonNull CacheStatisticsCollector cacheStatisticsCollector) {
         return new RedisProCacheWriter(
-                redisTemplate,
-                valueOperations,
                 cacheStatisticsCollector,
                 typeSupport,
                 chainFactory,
@@ -354,7 +361,33 @@ class RedisProCacheWriter implements RedisCacheWriter {
         CacheContext context = buildContext(
                 operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl,
                 resolveOperation(name, operation), null);
+        return executeContext(context);
+    }
+
+    private CacheResult executeContext(CacheContext context) {
         return getChain().execute(context);
+    }
+
+    private void recordGetStatistics(
+            String cacheName, CacheResult result, @Nullable byte[] resultBytes) {
+        if (!result.isSuccess()) {
+            return;
+        }
+        statistics.incGets(cacheName);
+        if (resultBytes == null) {
+            statistics.incMisses(cacheName);
+        } else {
+            statistics.incHits(cacheName);
+        }
+    }
+
+    private void recordCleanDeletes(String cacheName, long deletedCount) {
+        long remaining = deletedCount;
+        while (remaining > Integer.MAX_VALUE) {
+            statistics.incDeletesBy(cacheName, Integer.MAX_VALUE);
+            remaining -= Integer.MAX_VALUE;
+        }
+        statistics.incDeletesBy(cacheName, (int) remaining);
     }
 
     /**

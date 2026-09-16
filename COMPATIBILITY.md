@@ -95,6 +95,16 @@ not require a cache flush.
   (type and cause preserved; the diagnostic key is reduced to cache name);
   exception text carries no raw key — the checked-exception wrapper names the
   cache only.
+- **Native writer time-to-idle reads**: `RedisCacheWriter.get(..., cacheTti)`
+  intentionally ignores `cacheTti`; native reads do not refresh TTL because
+  refresh-on-read would add write amplification. Use ordinary TTL semantics on
+  this low-level SPI path.
+
+- **Native writer statistics**: SDR 4.0 writer counters are now emitted by
+  `RedisProCacheWriter` for GET/GET-hit/GET-miss/PUT/DELETE, including exact
+  `clear` deletion counts and PUT_IF_ABSENT insertion. `withStatisticsCollector`
+  fully rebinds statistics; lock-wait duration remains unreported (zero).
+- **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; this behavior is unchanged from `main`.
 - **Refresh metadata**: the version-2 envelope persists the fields required by
   early-expiration policy and version CAS (`ttl`, `createdTime`, access/visit
   counters, `expired`, and `version`). `startNanoTime` is process-local and is

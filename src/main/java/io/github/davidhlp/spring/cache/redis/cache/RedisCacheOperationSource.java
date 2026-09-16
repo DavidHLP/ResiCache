@@ -4,14 +4,13 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
-
-
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.lang.Nullable;
@@ -41,6 +40,7 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
     private final AnnotationParser annotationParser;
     private final OperationValidator operationValidator;
     private final SpringAnnotationAdapter springAnnotationAdapter;
+    private RedisCacheRegister redisCacheRegister;
 
     public RedisCacheOperationSource() {
         this(RedisProCacheProperties.NativeAnnotationMode.SELECTIVE);
@@ -48,10 +48,29 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
 
     public RedisCacheOperationSource(
             RedisProCacheProperties.NativeAnnotationMode nativeAnnotationMode) {
+        this(nativeAnnotationMode, new AnnotationParser(), null);
+    }
+
+    RedisCacheOperationSource(
+            RedisProCacheProperties.NativeAnnotationMode nativeAnnotationMode,
+            RedisCacheRegister redisCacheRegister) {
+        this(nativeAnnotationMode, new AnnotationParser(), redisCacheRegister);
+    }
+
+    RedisCacheOperationSource(
+            RedisProCacheProperties.NativeAnnotationMode nativeAnnotationMode,
+            AnnotationParser annotationParser,
+            RedisCacheRegister redisCacheRegister) {
         super(false);
-        this.annotationParser = new AnnotationParser();
+        this.annotationParser = annotationParser;
         this.operationValidator = new OperationValidator();
         this.springAnnotationAdapter = new SpringAnnotationAdapter(nativeAnnotationMode);
+        this.redisCacheRegister = redisCacheRegister;
+    }
+
+    @Autowired
+    void setRedisCacheRegister(RedisCacheRegister redisCacheRegister) {
+        this.redisCacheRegister = redisCacheRegister;
     }
 
     @Override
@@ -76,21 +95,27 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
      */
     @Nullable
     private Collection<CacheOperation> parseCacheOperations(final Object target) {
-        final List<CacheOperation> ops =
-                annotationParser.parseResiCacheAnnotations(target);
+        final AnnotationParser.ParsedAnnotations parsed = annotationParser.parse(target);
+        final List<CacheOperation> ops = new ArrayList<>(parsed.operations());
 
         for (final CacheOperation op : ops) {
             operationValidator.validate(target, op);
         }
 
         springAnnotationAdapter.addSpringNativeOperations(target, ops);
+        final AnnotationParser.ParsedAnnotations snapshot =
+                new AnnotationParser.ParsedAnnotations(ops, parsed.policyOperations());
 
-        if (!ops.isEmpty()) {
-            log.debug("Found {} cache operations for target: {}", ops.size(), target);
+        if (redisCacheRegister != null && !ops.isEmpty() && target instanceof Method method) {
+            redisCacheRegister.registerSnapshot(method, method.getDeclaringClass(), snapshot);
+        }
+
+        if (!snapshot.operations().isEmpty()) {
+            log.debug("Found {} cache operations for target: {}", snapshot.operations().size(), target);
         } else {
             log.trace("No cache operations found for target: {}", target);
         }
 
-        return ops.isEmpty() ? null : Collections.unmodifiableList(ops);
+        return snapshot.operations().isEmpty() ? null : snapshot.operations();
     }
 }

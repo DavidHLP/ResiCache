@@ -4,21 +4,34 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 /**
  * 统一 read-through load 协议(ADR-0001 §13)在 cache 入口的契约测试 —— 无容器。
@@ -27,8 +40,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 因此非 sync 路径也必须:走带 metrics 的 {@code put} 写回、缓存命中不调 loader、
  * 写回失败不覆盖 loader 值。本测试用内存 writer 驱动真实 {@link RedisProCache}。
  */
+@ExtendWith(MockitoExtension.class)
 @DisplayName("RedisProCache 统一 load 协议")
 class RedisProCacheLoadPathTest {
+
+
+    @Mock
+    private CacheStatisticsCollector statistics;
+
+    @Mock
+    private TypeSupport typeSupport;
+
+    @Mock
+    private CacheHandlerChainFactory chainFactory;
+
+    @Mock
+    private CacheHandlerChain chain;
 
     private static final String CACHE_NAME = "load-path-cache";
     private static final String SENTINEL_KEY = "sentinel-key:user#42";
@@ -38,11 +65,17 @@ class RedisProCacheLoadPathTest {
 
         private final byte[] stored;
         private final boolean failPut;
+        private final boolean failWithIllegalArgument;
         private final AtomicInteger putCalls = new AtomicInteger();
 
         MemoryWriter(byte[] stored, boolean failPut) {
+            this(stored, failPut, false);
+        }
+
+        MemoryWriter(byte[] stored, boolean failPut, boolean failWithIllegalArgument) {
             this.stored = stored;
             this.failPut = failPut;
+            this.failWithIllegalArgument = failWithIllegalArgument;
         }
 
         @Override public byte[] get(String name, byte[] key) { return stored; }
@@ -55,8 +88,16 @@ class RedisProCacheLoadPathTest {
 
         @Override public void put(String name, byte[] key, byte[] value, Duration ttl) {
             putCalls.incrementAndGet();
+            if (failPut && failWithIllegalArgument) {
+                throw new IllegalArgumentException("invalid write-back configuration");
+            }
             if (failPut) {
-                throw new IllegalStateException("redis put failed for key " + new String(key));
+                throw new CacheOperationException(
+                        CacheOperation.PUT,
+                        io.github.davidhlp.spring.cache.redis.chain.CacheResult.FailureKind.REDIS,
+                        name,
+                        new IllegalStateException("redis put failed for key "
+                                + new String(key, StandardCharsets.UTF_8)));
             }
         }
 
@@ -98,6 +139,33 @@ class RedisProCacheLoadPathTest {
         return new RedisProCache(CACHE_NAME, writer,
                 RedisCacheConfiguration.defaultCacheConfig(),
                 ResiCacheFeatures.builder().meterRegistry(new SimpleMeterRegistry()).build());
+    }
+    private RedisProCacheWriter writerWithPutFailure() {
+        return writerWithPutFailure(false);
+    }
+
+    private RedisProCacheWriter writerWithPutFailure(boolean illegalArgument) {
+        when(chainFactory.createChain()).thenReturn(chain);
+        when(typeSupport.bytesToString(any())).thenAnswer(invocation ->
+                new String(invocation.getArgument(0), StandardCharsets.UTF_8));
+        when(chain.execute(any(CacheContext.class))).thenAnswer(invocation -> {
+            CacheContext context = invocation.getArgument(0);
+            if (context.getOperation() == CacheOperation.GET) {
+                return CacheResult.miss();
+            }
+            if (illegalArgument) {
+                throw new IllegalArgumentException("invalid write-back configuration");
+            }
+            return CacheResult.failure(
+                    CacheOperation.PUT,
+                    CacheResult.FailureKind.REDIS,
+                    new IllegalStateException("redis put failed for key " + SENTINEL_KEY));
+        });
+        return new RedisProCacheWriter(
+                statistics,
+                typeSupport,
+                chainFactory,
+                null);
     }
 
     @Test
@@ -141,7 +209,7 @@ class RedisProCacheLoadPathTest {
         RedisProCache cache = cacheWith(writer);
         ListAppender<ILoggingEvent> captured = new ListAppender<>();
         captured.start();
-        Logger logger = (Logger) LoggerFactory.getLogger(RedisProCache.class);
+        Logger logger = (Logger) LoggerFactory.getLogger(LoaderOrchestrator.class);
         logger.addAppender(captured);
 
         try {
@@ -162,5 +230,90 @@ class RedisProCacheLoadPathTest {
         } finally {
             logger.detachAppender(captured);
         }
+    }
+    @Test
+    @DisplayName("cache 与 native writer 分别各写出一个规范 WARN")
+    void cacheAndWriter_eachEntryEmitsOneCanonicalWarning() {
+        Logger logger = (Logger) LoggerFactory.getLogger(LoaderOrchestrator.class);
+        ListAppender<ILoggingEvent> cacheAppender = new ListAppender<>();
+        cacheAppender.start();
+        logger.addAppender(cacheAppender);
+        try {
+            RedisProCache cache = cacheWith(new MemoryWriter(null, true));
+            assertThat(cache.get(SENTINEL_KEY, () -> "business-value"))
+                    .isEqualTo("business-value");
+            assertSingleCanonicalWarning(cacheAppender);
+        } finally {
+            logger.detachAppender(cacheAppender);
+        }
+
+        ListAppender<ILoggingEvent> writerAppender = new ListAppender<>();
+        writerAppender.start();
+        logger.addAppender(writerAppender);
+        try {
+            RedisProCacheWriter writer = writerWithPutFailure();
+            byte[] writerValue = writer.get(
+                    CACHE_NAME,
+                    SENTINEL_KEY.getBytes(StandardCharsets.UTF_8),
+                    () -> "business-value".getBytes(StandardCharsets.UTF_8),
+                    null,
+                    false);
+
+            assertThat(new String(writerValue, StandardCharsets.UTF_8))
+                    .isEqualTo("business-value");
+            assertSingleCanonicalWarning(writerAppender);
+        } finally {
+            logger.detachAppender(writerAppender);
+        }
+    }
+
+    @Test
+    @DisplayName("IllegalArgumentException write-back failure propagates raw through both entries")
+    void illegalArgumentWriteBack_propagatesRawWithoutToleranceWarning() {
+        Logger logger = (Logger) LoggerFactory.getLogger(LoaderOrchestrator.class);
+        ListAppender<ILoggingEvent> cacheAppender = new ListAppender<>();
+        cacheAppender.start();
+        logger.addAppender(cacheAppender);
+        try {
+            RedisProCache cache = cacheWith(new MemoryWriter(null, true, true));
+            assertThatThrownBy(() -> cache.get(SENTINEL_KEY, () -> "business-value"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("invalid write-back configuration");
+            assertThat(cacheAppender.list)
+                    .filteredOn(event -> event.getLevel() == Level.WARN)
+                    .isEmpty();
+        } finally {
+            logger.detachAppender(cacheAppender);
+        }
+
+        ListAppender<ILoggingEvent> writerAppender = new ListAppender<>();
+        writerAppender.start();
+        logger.addAppender(writerAppender);
+        try {
+            RedisProCacheWriter writer = writerWithPutFailure(true);
+            assertThatThrownBy(() -> writer.get(
+                    CACHE_NAME,
+                    SENTINEL_KEY.getBytes(StandardCharsets.UTF_8),
+                    () -> "business-value".getBytes(StandardCharsets.UTF_8),
+                    null,
+                    false))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("invalid write-back configuration");
+            assertThat(writerAppender.list)
+                    .filteredOn(event -> event.getLevel() == Level.WARN)
+                    .isEmpty();
+        } finally {
+            logger.detachAppender(writerAppender);
+        }
+    }
+
+    private void assertSingleCanonicalWarning(ListAppender<ILoggingEvent> appender) {
+        assertThat(appender.list)
+                .filteredOn(event -> event.getLevel() == Level.WARN)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .containsExactly(
+                        "Cache write-back failed after successful load; returning loaded value: "
+                                + "cacheName=" + CACHE_NAME
+                                + ", failure=CacheOperationException <- IllegalStateException");
     }
 }

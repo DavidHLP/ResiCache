@@ -207,7 +207,7 @@ resi-cache:
       - "com.example."                          # ← 务必加上你自己的业务包名
 ```
 
-> ⚠️ **白名单默认仅含 `io.github.davidhlp.`**。缓存自定义业务类型（如 `com.example.User`）时，**必须**在 `allowed-package-prefixes` 显式添加你的包名，否则反序列化会抛异常。
+> ⚠️ **白名单默认仅含 `io.github.davidhlp`**（字面前缀，沿用现有 `startsWith` 语义）。如需 dot 边界保护，请配置 `io.github.davidhlp.*`；缓存自定义业务类型（如 `com.example.User`）时，**必须**显式添加你的包名，否则反序列化会抛异常。
 >
 > **通配形式（当前未发布）**：以 `.*` 结尾的前缀被解释为通配符——匹配直接类（`com.example.Foo`）、所有子包内的类（`com.example.sub.Bar`、`com.example.foo.bar.baz.Qux` …），并以 dot 边界保护（`com.example.*` **不会**误匹配 `com.exampleX.Foo`）。当你想允许整个包子树、无需逐子包列出时使用。
 >
@@ -226,8 +226,8 @@ resi-cache:
 | `ttl` | 60 | 缓存 TTL（秒） |
 | `cacheNullValues` | false | 是否缓存 null |
 | `useBloomFilter` | false | 启用布隆过滤 |
-| `expectedInsertions` | 10000 | 布隆预期插入量 |
-| `falseProbability` | 0.03 | 布隆误判率 |
+| `expectedInsertions` | 100000 | 布隆预期插入量 |
+| `falseProbability` | 0.01 | 布隆误判率 |
 | `randomTtl` | false | 启用 TTL 抖动 |
 | `variance` | 0.2 | TTL 抖动幅度 |
 | `enableEarlyExpiration` | false | 启用提前过期 |

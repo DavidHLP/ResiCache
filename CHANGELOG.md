@@ -29,15 +29,27 @@ The project is on a **single build line**: Spring Boot
 
 Current milestones:
 
+- **Native writer statistics contract** — `RedisProCacheWriter` now records
+  Spring Data Redis GET/GET-hit/GET-miss/PUT/DELETE counters at the writer
+  boundary, including PUT_IF_ABSENT insertion and exact CLEAN deletion counts.
+  `withStatisticsCollector` is coherent: replacing the collector does not leave
+  Bloom/early-refresh handlers incrementing the previous collector. Lock-wait
+  duration is intentionally not reported yet and remains zero.
+
 ### Interface contract closure
 - ⚠️ **Cache failure contract closure** — GET degrades to an observable miss;
   PUT, PUT_IF_ABSENT, and CLEAN propagate a typed runtime failure retaining the
   original cause; REMOVE remains observable best-effort. Callers that relied
   on swallowed write failures must catch the runtime failure or pin the
   previous 0.x version before migrating.
+- ⚠️ **Single-adapter policy seams retired** — `TtlPolicy`, `NullValuePolicy`,
+  `EarlyExpirationPolicy`, and `BloomHashStrategy` are no longer replaceable
+  beans; TTL, null-value, early-expiration, and Bloom hashing decisions now
+  live in their owning modules. Users who supplied one of these internal beans
+  must remove the override and use the owning module's configuration.
 - **Explicit auto-configuration** — removed library-root component scanning,
-  added typed default Bean back-off, and made `NullValuePolicy` the shared
-  handler contract.
+  added typed default Bean back-off, and made `NullValueEncoder` the shared
+  handler dependency.
 - **Async metadata closure** — capture now occurs before queueing work; worker
   activation restores prior ThreadLocal/MDC state in `finally`.
 - **Integration naming closure** — `*IT` classes use `*IntegrationTest` and
@@ -79,7 +91,7 @@ Current milestones:
   reassemble orchestration parameters.
 - **One read-through load protocol** — the default (non-sync) loader path no
   longer delegates to Spring's `RedisCache.get(key, loader)`; both loader
-  paths run `LoaderOrchestrator.performLoad` (cache read → loader → write-back)
+  paths run `LoaderOrchestrator.readThrough` (cache read → loader → write-back)
   and share one tolerance rule. The default path's write-back now carries the
   same put metrics as the sync path. Failing write-backs are still logged
   redacted and never override the loaded value.
@@ -100,6 +112,9 @@ Current milestones:
   method that also declares `@RedisCacheable` keeps using the read-side
   declaration, because the read-through write-back is part of the read
   operation.
+- **One annotation policy snapshot** — each annotated element is parsed once into
+  an immutable snapshot shared by the Spring operation source and annotation chain;
+  policy namespaces are registered at element resolution instead of per invocation.
 - **Concurrent writes are no longer merged** — a write inside the distributed
   lock takes an exclusive path instead of single-flight: joining another
   request's in-flight result would skip this request's write while still

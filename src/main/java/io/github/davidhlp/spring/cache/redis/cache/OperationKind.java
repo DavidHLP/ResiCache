@@ -29,7 +29,7 @@ enum OperationKind {
     /** {@link RedisCacheEvictOperation} —— @RedisCacheEvict 路径 */
     CACHE_EVICT("EVICT", RedisCacheEvictOperation.class);
 
-    /** LRU key 的 tag 段 */
+    /** Registry key tag */
     private final String tag;
 
     /** 期望的 operation 类型 —— 用于 register 写入时类型校验,get 查询时 instance-of 安全转型 */
@@ -40,7 +40,7 @@ enum OperationKind {
         this.operationType = operationType;
     }
 
-    /** @return LRU key 标签("CACHE" / "PUT" / "EVICT") */
+    /** @return registry key tag labels ("CACHE" / "PUT" / "EVICT") */
     public String tag() {
         return tag;
     }
@@ -58,7 +58,7 @@ enum OperationKind {
      *
      * <p>{@link CacheOperation#REMOVE} / {@link CacheOperation#CLEAN} 返回 {@code null}:
      * 驱逐元数据不携带 chain 侧策略(无 TTL 写入、无 bloom 回填),查了也是必然未命中
-     * —— 不做这次无谓的 register 查询(其内部要取 LRU 锁)。
+     * —— 不做这次无谓的 register 查询。
      *
      * @param operation 链侧操作类型({@code chain.CacheOperation},与本文件已 import 的
      *                  Spring {@code CacheOperation} 同名,故用全限定名)

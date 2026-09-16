@@ -22,7 +22,8 @@ a documented migration path (⚠️ BREAKING entry in
 | **Configuration property keys** | `resi-cache.*` namespace under `application.yml` / `application.properties` | Property names and types. Adding new properties is non-breaking. |
 | **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Envelope is the serialization contract — kept, not loosened. |
 | **Extension SPI** | `CacheHandler`, `ChainObserver`, `BloomIFilter`, `LockManager`, `LockManager.LockHandle`, `HandlerPriority` | Implementations must satisfy the documented failure, lifecycle, and thread-safety contracts. |
-| **SPI transitive contract types** | `CacheContext`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
+| **SPI transitive contract types** | `CacheContext`, `CachePolicyView`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
+| **Native writer statistics** | Spring Data Redis GET/GET hit/GET miss/PUT/DELETE counters are emitted at the writer boundary; CLEAN carries its exact deleted-key count through stable `CacheResult` | `withStatisticsCollector` rebinds all statistics; lock-wait duration remains unreported (`getLockWaitDuration()` is zero) until an internal observation path can be added without expanding `CacheContext` |
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.
@@ -37,7 +38,7 @@ line.
 | **Observability metric names and tags** | Pre-1.0 metric namespace is NOT contractual | A `bloomsift.*` → `resicache.handler.*` rename is allowed pre-1.0 (with ⚠️ BREAKING CHANGELOG) |
 | **Diagnostic warnings and logs** | Message text, log levels for startup probes | "whitelist auto-derived from host app root package" WARN may rephrase |
 | **Behavior defaults** (e.g. protection preset) | When explicitly opted into a new default via ⚠️ BREAKING CHANGELOG entry | `resi-cache.protection.preset=NONE` (v0.0.2) → `=STANDARD` (v0.0.3) is allowed if flagged breaking |
-| **Internal implementation types** | `TtlPolicy`, `NullValuePolicy`, `EarlyExpirationPolicy`, `BloomHashStrategy`, `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, default adapters, and `ThreadPoolEarlyExpirationExecutor` | Package-private collaborators under the internal `cache` module; not importable extension contracts. |
+| **Internal implementation types** | `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, and `ThreadPoolEarlyExpirationExecutor` | Package-private collaborators under the internal `cache` module; not importable extension contracts. |
 
 If you depend on items in this section, pin to an exact patch version
 (`0.x.y`) and review `CHANGELOG.md` entries on upgrade.
@@ -49,7 +50,7 @@ If you depend on items in this section, pin to an exact patch version
 | `MethodMetadataResolver` / `MethodSnapshot` | internal resolver lifecycle via auto-configuration | internalized in the Phase 4 cache module | source/binary break for custom resolver implementations |
 | `LoaderOrchestrator` / `LoadOutcome` (and the former `DefaultLoadFn`) | `RedisProCache.get(key, loader)` | internalized in the Phase 4 cache module | callers must use the cache API, not loader callbacks |
 | `CacheContext` / `HandlerResult` / decision records | documented SPI value surface for handler signatures; implementation-only members may evolve | no removal while `CacheHandler`/`ChainObserver` remain supported | extensions use documented fields and flow values |
-| default policy and executor classes | documented stable SPI only; concrete policies/executors remain internal | internalized in the Phase 4 cache module | custom code uses stable interfaces, not implementation classes |
+| `ThreadPoolEarlyExpirationExecutor` | documented stable SPI only; concrete executor remains internal | internalized in the Phase 4 cache module | custom code uses stable interfaces, not implementation classes |
 
 Removal is not activated solely from local source evidence. A published
 artifact, adopter usage, or external implementation supersedes this default
@@ -104,6 +105,12 @@ custom implementation must satisfy.
    After advancing, the handler MUST end its node with `TERMINATE`: returning
    `CONTINUE` would make the engine run every successor a second time and is
    rejected with `IllegalStateException`.
+7. **Non-null decision**: `HandlerResult` construction MUST provide a non-null
+   `FlowControl`; its public canonical constructor rejects `null` with a
+   `NullPointerException` explaining that the SPI protocol requires a decision.
+   If a malformed result reaches the engine, it rejects it with an
+   `IllegalStateException` naming the offending handler before dispatching the
+   decision.
 
 ### Observers
 

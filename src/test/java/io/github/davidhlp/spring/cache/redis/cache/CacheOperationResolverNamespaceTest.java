@@ -42,7 +42,7 @@ class CacheOperationResolverNamespaceTest {
         annotatedMethod = CacheOperationResolverNamespaceTest.class
                 .getDeclaredMethod("annotatedMethod");
         elementKey = new AnnotatedElementKey(annotatedMethod, CacheOperationResolverNamespaceTest.class);
-        register = new RedisCacheRegister(16, 4);
+        register = new RedisCacheRegister();
 
         MethodMetadataResolver metadata = Mockito.mock(MethodMetadataResolver.class);
         Mockito.when(metadata.currentKey()).thenReturn(elementKey);

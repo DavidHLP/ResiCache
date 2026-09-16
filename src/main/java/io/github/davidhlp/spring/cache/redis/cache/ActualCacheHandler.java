@@ -8,6 +8,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
@@ -47,18 +48,18 @@ class ActualCacheHandler extends AbstractCacheHandler {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
-    private final NullValuePolicy nullValuePolicy;
+    private final NullValueEncoder nullValueEncoder;
     private final RefreshCancellation earlyExpirationExecutor;
     private final CacheErrorHandler errorHandler;
     public ActualCacheHandler(
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             ValueOperations<String, Object> valueOperations,
-            NullValuePolicy nullValuePolicy,
+            NullValueEncoder nullValueEncoder,
             @Qualifier("earlyExpirationExecutor") RefreshCancellation earlyExpirationExecutor,
             CacheErrorHandler errorHandler) {
         this.redisTemplate = redisTemplate;
         this.valueOperations = valueOperations;
-        this.nullValuePolicy = nullValuePolicy;
+        this.nullValueEncoder = nullValueEncoder;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.errorHandler = errorHandler;
     }
@@ -69,7 +70,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected HandlerResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         Assert.notNull(context, "CacheContext must not be null");
         Assert.notNull(context.getOperation(), "Cache operation must not be null");
 
@@ -145,7 +146,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
         // 读路径默认不触发写操作，避免写放大。
         // 如需 TTI（读取刷新 TTL），应使用 Spring Data Redis 的 RedisCacheConfiguration.enableTimeToIdle()，
         // 由 Redis 6.2+ 的 GETEX 命令实现，无需重写 value。
-        byte[] result = nullValuePolicy.toReturnValue(
+        byte[] result = nullValueEncoder.encodeForReturn(
             cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
 
         return CacheResult.success(result);
@@ -221,7 +222,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
                       context.getCacheName(), context.getRedisKey());
             CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
             if (existingValue != null) {
-                byte[] result = nullValuePolicy.toReturnValue(
+                byte[] result = nullValueEncoder.encodeForReturn(
                     existingValue.getValue(), context.getCacheName(), context.getRedisKey());
                 return CacheResult.existing(result);
             }
@@ -309,7 +310,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
             log.debug("Cache CLEAN completed: cacheName={}, pattern={}, deletedCount={}",
                       context.getCacheName(), keyPattern, deletedTotal);
 
-            return CacheResult.success();
+            return CacheResult.successWithDeletedCount(deletedTotal);
 
         } catch (Exception e) {
             CacheResult.FailureKind failureKind = totalDeleted.get() > 0

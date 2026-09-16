@@ -7,12 +7,12 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import java.lang.reflect.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInvocation;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.interceptor.CacheInterceptor;
 import org.springframework.cache.interceptor.CacheOperationSource;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.lang.Nullable;
-
 /**
  * ResiCache 缓存拦截器 —— 单一 advice seam。
  *
@@ -81,8 +81,9 @@ class RedisCacheInterceptor extends CacheInterceptor {
         Object target = invocation.getThis();
         org.springframework.util.Assert.state(target != null, "Target object must not be null");
 
-        Object[] args = invocation.getArguments();
         Class<?> targetClass = target.getClass();
+        method = AopUtils.getMostSpecificMethod(method, targetClass);
+        Object[] args = invocation.getArguments();
 
         if (isReactiveType(method.getReturnType().getName())) {
             log.warn("Reactive return type {} on [{}.{}] is not supported — bypassing cache",

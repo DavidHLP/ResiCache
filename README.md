@@ -228,9 +228,11 @@ resi-cache:
       - "com.example."                   # ← you MUST add your own business packages
 ```
 
-> ⚠️ The whitelist defaults to **only** `io.github.davidhlp.`. When caching custom
-> business types (e.g. `com.example.User`), you **must** add your package to
-> `allowed-package-prefixes`, otherwise deserialization throws.
+> ⚠️ The whitelist defaults to **only** `io.github.davidhlp` (a literal prefix
+> using the existing `startsWith` semantics). To enforce a package boundary,
+> configure `io.github.davidhlp.*`; custom business types (e.g. `com.example.User`)
+> still require an explicit entry in `allowed-package-prefixes`, otherwise
+> deserialization throws.
 >
 > **Wildcard form (current unreleased):** any prefix ending in `.*` is a wildcard
 > sentinel — it matches the class directly (`com.example.Foo`), all sub-package
@@ -254,8 +256,8 @@ resi-cache:
 | `ttl` | 60 | Cache TTL (seconds) |
 | `cacheNullValues` | false | Cache `null` |
 | `useBloomFilter` | false | Enable Bloom filter |
-| `expectedInsertions` | 10000 | Bloom expected insertions |
-| `falseProbability` | 0.03 | Bloom false-positive rate |
+| `expectedInsertions` | 100000 | Bloom expected insertions |
+| `falseProbability` | 0.01 | Bloom false-positive rate |
 | `randomTtl` | false | Enable TTL jitter |
 | `variance` | 0.2 | TTL jitter amplitude |
 | `enableEarlyExpiration` | false | Enable early expiry |

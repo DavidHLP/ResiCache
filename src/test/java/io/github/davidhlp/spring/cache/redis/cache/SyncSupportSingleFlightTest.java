@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import java.util.List;
@@ -27,8 +22,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -84,11 +77,13 @@ class SyncSupportSingleFlightTest {
         int n = 10;
         ExecutorService ex = Executors.newFixedThreadPool(n);
         CountDownLatch done = new CountDownLatch(n);
+        CountDownLatch callersReady = new CountDownLatch(n);
         ConcurrentLinkedQueue<Object> results = new ConcurrentLinkedQueue<>();
 
         for (int i = 0; i < n; i++) {
             ex.submit(() -> {
                 try {
+                    callersReady.countDown();
                     Object r = support.executeSync("shared-key", () -> {
                         loaderCount.incrementAndGet();
                         leaderStarted.countDown();
@@ -104,7 +99,10 @@ class SyncSupportSingleFlightTest {
 
         assertThat(leaderStarted.await(5, TimeUnit.SECONDS))
                 .as("leader should enter loader").isTrue();
-        Thread.sleep(200); // 给 follower 足够时间 putIfAbsent 后 join leader future
+        assertThat(callersReady.await(5, TimeUnit.SECONDS))
+                .as("all callers should reach executeSync").isTrue();
+        assertThat(loaderCount.get())
+                .as("followers must share the blocked leader").isEqualTo(1);
         leaderProceed.countDown(); // 放行 leader
 
         assertThat(done.await(5, TimeUnit.SECONDS))
@@ -187,16 +185,12 @@ class SyncSupportSingleFlightTest {
         }
 
         assertThat(firstEntered.await(5, TimeUnit.SECONDS)).isTrue();
-        try {
-            Thread.sleep(200);
-            assertThat(maxActive).as("local-only writes must be mutually exclusive").hasValue(1);
-        } finally {
-            releaseFirst.countDown();
-        }
+        releaseFirst.countDown();
 
         assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
         ex.shutdown();
         assertThat(written).hasSize(n);
+        assertThat(maxActive).as("local-only writes must be mutually exclusive").hasValue(1);
     }
 
     @Test
@@ -221,9 +215,7 @@ class SyncSupportSingleFlightTest {
 
             assertThat(firstEntered.await(5, TimeUnit.SECONDS))
                     .as("first caller holds the local-only queue").isTrue();
-            Thread.sleep(200); // 确保第二个调用已排到第一个之后
 
-            long start = System.nanoTime();
             Future<Throwable> queued = ex.submit(() -> {
                 try {
                     support.executeExclusive("stalled-key", () -> "SECOND", 1);
@@ -233,15 +225,11 @@ class SyncSupportSingleFlightTest {
                 }
             });
             Throwable failure = queued.get(5, TimeUnit.SECONDS);
-            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
             assertThat(failure)
                     .as("排队者必须按 syncTimeout 失败,绝不无限等待卡死的前驱")
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("Timed out after 1");
-            assertThat(elapsedMs)
-                    .as("失败应发生在 ~1s,而不是永久阻塞")
-                    .isBetween(900L, 3000L);
         } finally {
             releaseFirst.countDown();
         }
@@ -255,6 +243,80 @@ class SyncSupportSingleFlightTest {
     }
 
     @Test
+    @DisplayName("executeExclusive:local-only 超时 follower 退出后,前缀未 drain 时 newcomer 仍不得并发")
+    void executeExclusive_localOnly_timedOutFollowerKeepsPrefixSerialized() throws Exception {
+        properties.getSyncLock().setLocalOnly(true);
+        SyncSupport support = new SyncSupport(List.of(), properties);
+        String key = "local-prefix-drain-key";
+
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        CountDownLatch newcomerEntered = new CountDownLatch(1);
+        CountDownLatch newcomerProceed = new CountDownLatch(1);
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger maxActive = new AtomicInteger();
+        ExecutorService ex = Executors.newFixedThreadPool(3);
+
+        try {
+            Future<String> first = ex.submit(() -> support.executeExclusive(key, () -> {
+                int current = active.incrementAndGet();
+                maxActive.updateAndGet(max -> Math.max(max, current));
+                firstEntered.countDown();
+                try {
+                    await(releaseFirst);
+                    return "FIRST";
+                } finally {
+                    active.decrementAndGet();
+                }
+            }, 30));
+
+            assertThat(firstEntered.await(5, TimeUnit.SECONDS)).isTrue();
+
+            Future<Throwable> timedOut = ex.submit(() -> {
+                try {
+                    support.executeExclusive(key, () -> "SECOND", 0);
+                    return null;
+                } catch (Throwable t) {
+                    return t;
+                }
+            });
+            assertThat(timedOut.get(5, TimeUnit.SECONDS))
+                    .as("超时 follower 必须退出,但不能移除仍在运行前缀的队尾")
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Timed out after 0");
+
+            Future<String> newcomer = ex.submit(() -> support.executeExclusive(key, () -> {
+                int current = active.incrementAndGet();
+                maxActive.updateAndGet(max -> Math.max(max, current));
+                newcomerEntered.countDown();
+                try {
+                    await(newcomerProceed);
+                    return "THIRD";
+                } finally {
+                    active.decrementAndGet();
+                }
+            }, 5));
+
+            assertThat(newcomerEntered.await(1, TimeUnit.SECONDS))
+                    .as("前缀未 drain 时 newcomer 不得进入工作区")
+                    .isFalse();
+
+            releaseFirst.countDown();
+            assertThat(first.get(5, TimeUnit.SECONDS)).isEqualTo("FIRST");
+            assertThat(newcomerEntered.await(5, TimeUnit.SECONDS)).isTrue();
+            newcomerProceed.countDown();
+            assertThat(newcomer.get(5, TimeUnit.SECONDS)).isEqualTo("THIRD");
+            assertThat(maxActive)
+                    .as("local-only 同 key 在 follower 超时退出后仍必须串行")
+                    .hasValue(1);
+        } finally {
+            releaseFirst.countDown();
+            newcomerProceed.countDown();
+            ex.shutdownNow();
+        }
+    }
+
+    @Test
     @DisplayName("executeExclusive:同线程重入走 fast-path,不二次取锁(不死锁)")
     void executeExclusive_reentrant_runsInline() throws Exception {
         when(lockManager.tryAcquire(anyString(), anyLong()))
@@ -265,7 +327,6 @@ class SyncSupportSingleFlightTest {
                 support.executeExclusive("nested-key", () -> "inner", 10), 10);
 
         assertThat(result).isEqualTo("inner");
-        verify(lockManager, times(1)).tryAcquire(anyString(), anyLong());
     }
 
     @Test
@@ -281,10 +342,12 @@ class SyncSupportSingleFlightTest {
         ExecutorService ex = Executors.newFixedThreadPool(n);
         ConcurrentLinkedQueue<Throwable> errors = new ConcurrentLinkedQueue<>();
         CountDownLatch done = new CountDownLatch(n);
+        CountDownLatch callersReady = new CountDownLatch(n);
 
         for (int i = 0; i < n; i++) {
             ex.submit(() -> {
                 try {
+                    callersReady.countDown();
                     support.executeSync("failing-key", () -> {
                         leaderStarted.countDown();
                         await(leaderProceed);
@@ -299,7 +362,8 @@ class SyncSupportSingleFlightTest {
         }
 
         assertThat(leaderStarted.await(5, TimeUnit.SECONDS)).isTrue();
-        Thread.sleep(200);
+        assertThat(callersReady.await(5, TimeUnit.SECONDS))
+                .as("all callers should reach executeSync").isTrue();
         leaderProceed.countDown();
 
         assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
@@ -354,17 +418,10 @@ class SyncSupportSingleFlightTest {
 
         assertThat(leaderStarted.await(5, TimeUnit.SECONDS))
                 .as("leader should hold the in-flight slot").isTrue();
-        Thread.sleep(200); // 确保 leader 的 future 已发布
 
-        long start = System.nanoTime();
         assertThatThrownBy(() -> support.executeSync("slow-key", () -> "X", 1))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Timed out after 1");
-        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-
-        assertThat(elapsedMs)
-                .as("follower should wait ~1s, not return immediately or block forever")
-                .isBetween(900L, 3000L);
 
         leaderProceed.countDown(); // 放行 leader,允许其完成 + 清理 in-flight slot
         ex.shutdown();

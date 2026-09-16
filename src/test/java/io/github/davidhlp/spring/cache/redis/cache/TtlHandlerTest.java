@@ -1,54 +1,34 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
-import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyFloat;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
 
 /**
- * TtlHandler 单元测试
+ * TtlHandler 单元测试。
+ *
+ * <p>TTL 默认值、配置优先级、永久缓存哨兵和抖动均由处理器直接拥有。
  */
-@ExtendWith(MockitoExtension.class)
 @DisplayName("TtlHandler Tests")
 class TtlHandlerTest {
-
-    @Mock
-    private DefaultTtlPolicy ttlPolicy;
-
-    @Mock
-    private RedisCacheableOperation cacheOperation;
 
     private TtlHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new TtlHandler(ttlPolicy);
+        handler = new TtlHandler();
     }
 
-    private CacheContext createContext(CacheOperation operation, Duration ttl, RedisCacheableOperation cacheOp) {
+    private CacheContext createContext(CacheOperation operation, Duration ttl,
+                                       RedisCacheableOperation cacheOperation) {
         CacheInput input = new CacheInput(
                 operation,
                 "test-cache",
@@ -57,46 +37,48 @@ class TtlHandlerTest {
                 new byte[]{1},
                 "value",
                 ttl,
-                cacheOp
+                cacheOperation
         );
         return new CacheContext(input);
     }
 
+    private RedisCacheableOperation configuredOperation(long ttl, boolean randomTtl, float variance) {
+        return RedisCacheableOperation.builder()
+                .name("test-cache")
+                .cacheNames("test-cache")
+                .ttl(ttl)
+                .randomTtl(randomTtl)
+                .variance(variance)
+                .build();
+    }
+
     @Nested
-    @DisplayName("ttl.jittered counter (guide §223b1)")
+    @DisplayName("ttl.jittered counter")
     class TtlJitteredCounterTests {
 
         @Test
-        @DisplayName("randomTtl=true → 自增 resicache.handler.ttl.jittered")
+        @DisplayName("randomTtl=true increments the jitter counter")
         void randomTtlTrue_incrementsJitteredCounter() {
             SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
-            TtlHandler h = new TtlHandler(ttlPolicy);
+            TtlHandler h = new TtlHandler();
             h.attachMeterRegistry(registry);
-            when(cacheOperation.getTtl()).thenReturn(60L);
-            when(cacheOperation.isRandomTtl()).thenReturn(true);
-            when(cacheOperation.getVariance()).thenReturn(0.2f);
-            when(ttlPolicy.calculateFinalTtl(eq(60L), eq(true), eq(0.2f))).thenReturn(55L);
 
-            h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60), cacheOperation));
+            h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60),
+                    configuredOperation(60, true, 0.2f)));
 
             assertThat(registry.get("resicache.handler.ttl.jittered").counter().count())
                     .isEqualTo(1.0);
         }
 
         @Test
-        @DisplayName("randomTtl=false → counter 不自增")
+        @DisplayName("randomTtl=false does not increment the jitter counter")
         void randomTtlFalse_doesNotIncrement() {
             SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
-            TtlHandler h = new TtlHandler(ttlPolicy);
+            TtlHandler h = new TtlHandler();
             h.attachMeterRegistry(registry);
-            when(cacheOperation.getTtl()).thenReturn(60L);
-            when(cacheOperation.isRandomTtl()).thenReturn(false);
-            when(cacheOperation.getVariance()).thenReturn(0.2f);
-            when(ttlPolicy.calculateFinalTtl(eq(60L), eq(false), eq(0.2f))).thenReturn(60L);
 
-            h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60), cacheOperation));
+            h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60),
+                    configuredOperation(60, false, 0.2f)));
 
             assertThat(registry.get("resicache.handler.ttl.jittered").counter().count())
                     .isEqualTo(0.0);
@@ -108,194 +90,128 @@ class TtlHandlerTest {
     class ShouldHandleTests {
 
         @Test
-        @DisplayName("returns true for PUT operation")
         void shouldHandle_putOperation_returnsTrue() {
-            CacheContext context = createContext(CacheOperation.PUT, null, null);
-
-            boolean result = handler.shouldHandle(context);
-
-            assertThat(result).isTrue();
+            assertThat(handler.shouldHandle(createContext(CacheOperation.PUT, null, null))).isTrue();
         }
 
         @Test
-        @DisplayName("returns true for PUT_IF_ABSENT operation")
         void shouldHandle_putIfAbsentOperation_returnsTrue() {
-            CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT, null, null);
-
-            boolean result = handler.shouldHandle(context);
-
-            assertThat(result).isTrue();
+            assertThat(handler.shouldHandle(
+                    createContext(CacheOperation.PUT_IF_ABSENT, null, null))).isTrue();
         }
 
         @Test
-        @DisplayName("returns false for GET operation")
         void shouldHandle_getOperation_returnsFalse() {
-            CacheContext context = createContext(CacheOperation.GET, null, null);
-
-            boolean result = handler.shouldHandle(context);
-
-            assertThat(result).isFalse();
+            assertThat(handler.shouldHandle(createContext(CacheOperation.GET, null, null))).isFalse();
         }
 
         @Test
-        @DisplayName("returns false for REMOVE operation")
         void shouldHandle_removeOperation_returnsFalse() {
-            CacheContext context = createContext(CacheOperation.REMOVE, null, null);
-
-            boolean result = handler.shouldHandle(context);
-
-            assertThat(result).isFalse();
+            assertThat(handler.shouldHandle(createContext(CacheOperation.REMOVE, null, null))).isFalse();
         }
 
         @Test
-        @DisplayName("returns false for CLEAN operation")
         void shouldHandle_cleanOperation_returnsFalse() {
-            CacheContext context = createContext(CacheOperation.CLEAN, null, null);
-
-            boolean result = handler.shouldHandle(context);
-
-            assertThat(result).isFalse();
+            assertThat(handler.shouldHandle(createContext(CacheOperation.CLEAN, null, null))).isFalse();
         }
     }
 
     @Nested
-    @DisplayName("doHandle - TTL from cache operation config")
-    class TtlFromConfigTests {
+    @DisplayName("handler-owned TTL decisions")
+    class TtlDecisionTests {
 
         @Test
-        @DisplayName("uses cache operation TTL when configured")
-        void doHandle_withCacheOperationTtl_usesConfigTtl() {
-            when(cacheOperation.getTtl()).thenReturn(120L);
-            when(cacheOperation.isRandomTtl()).thenReturn(true);
-            when(cacheOperation.getVariance()).thenReturn(0.1f);
-            when(ttlPolicy.calculateFinalTtl(eq(120L), eq(true), eq(0.1f))).thenReturn(130L);
-            CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
+        void configuredTtl_takesPrecedenceOverParameterTtl() {
+            CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30),
+                    configuredOperation(120, false, 0.2f));
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
-            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(130L);
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(120L);
         }
 
         @Test
-        @DisplayName("sets shouldApplyTtl true when cache operation TTL is positive")
-        void doHandle_positiveTtl_setsShouldApplyTtlTrue() {
-            when(cacheOperation.getTtl()).thenReturn(60L);
-            when(ttlPolicy.calculateFinalTtl(anyLong(), anyBoolean(), anyFloat())).thenReturn(60L);
-            CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
+        void parameterTtl_isUsedWhenConfiguredTtlIsAbsent() {
+            CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30),
+                    configuredOperation(0, false, 0.2f));
 
-            handler.doHandle(context);
-
-            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
-        }
-
-        @Test
-        @DisplayName("does not use cache operation TTL when TTL is zero or negative")
-        void doHandle_zeroTtl_doesNotUseConfigTtl() {
-            when(cacheOperation.getTtl()).thenReturn(0L);
-            CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30), cacheOperation);
-            when(ttlPolicy.shouldApply(any(Duration.class))).thenReturn(true);
-
-            handler.doHandle(context);
-
-            // Should fall through to use parameter TTL instead
-        }
-    }
-
-    @Nested
-    @DisplayName("doHandle - TTL from parameter")
-    class TtlFromParameterTests {
-
-        @Test
-        @DisplayName("uses parameter TTL when cache operation TTL is not set")
-        void doHandle_noConfigTtl_usesParameterTtl() {
-            when(cacheOperation.getTtl()).thenReturn(0L);
-            when(ttlPolicy.shouldApply(Duration.ofSeconds(30))).thenReturn(true);
-            CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30), cacheOperation);
-
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(30L);
         }
 
         @Test
-        @DisplayName("sets shouldApplyTtl true when ttl policy says apply")
-        void doHandle_ttlPolicySaysApply_setsShouldApplyTtlTrue() {
-            when(cacheOperation.getTtl()).thenReturn(0L);
-            when(ttlPolicy.shouldApply(Duration.ofSeconds(60))).thenReturn(true);
-            CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(60), cacheOperation);
+        void zeroParameterTtl_skipsTtl() {
+            CacheContext context = createContext(CacheOperation.PUT, Duration.ZERO,
+                    configuredOperation(0, false, 0.2f));
 
-            handler.doHandle(context);
-
-            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
-        }
-    }
-
-    @Nested
-    @DisplayName("doHandle - No TTL (permanent cache)")
-    class NoTtlTests {
-
-        @Test
-        @DisplayName("sets no TTL when ttl policy says do not apply")
-        void doHandle_ttlPolicySaysDoNotApply_setsNoTtl() {
-            when(cacheOperation.getTtl()).thenReturn(0L);
-            when(ttlPolicy.shouldApply(Duration.ofSeconds(-1))).thenReturn(false);
-            CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(-1), cacheOperation);
-
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
         }
 
         @Test
-        @DisplayName("sets no TTL when both config and parameter TTL are not available")
-        void doHandle_noTtlConfigured_setsNoTtl() {
-            when(cacheOperation.getTtl()).thenReturn(0L);
-            when(ttlPolicy.shouldApply(any(Duration.class))).thenReturn(false);
-            CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
+        void negativeParameterTtl_mapsToPermanentCacheSentinel() {
+            CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(-1),
+                    configuredOperation(0, false, 0.2f));
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
         }
-    }
-
-    @Nested
-    @DisplayName("doHandle - Default TTL")
-    class DefaultTtlTests {
 
         @Test
-        @DisplayName("uses default TTL when no TTL is provided")
-        void doHandle_noTtlProvided_usesDefaultTtl() {
-            when(cacheOperation.getTtl()).thenReturn(0L);
-            when(ttlPolicy.shouldApply(Duration.ofSeconds(60))).thenReturn(true);
-            CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
+        void missingTtl_usesDefaultTtl() {
+            CacheContext context = createContext(CacheOperation.PUT, null,
+                    configuredOperation(0, false, 0.2f));
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
-            // Default TTL is 60 seconds
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(60L);
         }
-    }
-
-    @Nested
-    @DisplayName("doHandle - Chain continuation")
-    class ChainContinuationTests {
 
         @Test
-        @DisplayName("always continues chain after TTL calculation")
-        void doHandle_alwaysContinuesChain() {
-            when(cacheOperation.getTtl()).thenReturn(120L);
-            when(ttlPolicy.calculateFinalTtl(anyLong(), anyBoolean(), anyFloat())).thenReturn(120L);
-            CacheContext context = createContext(CacheOperation.PUT, null, cacheOperation);
-
-            HandlerResult result = handler.doHandle(context);
-
-            assertThat(result.shouldTerminate()).isFalse();
+        void nullZeroAndNegativeBaseTtl_mapToPermanentSentinel() {
+            assertThat(handler.calculateFinalTtl(null, false, 0.2f)).isEqualTo(-1L);
+            assertThat(handler.calculateFinalTtl(0L, false, 0.2f)).isEqualTo(-1L);
+            assertThat(handler.calculateFinalTtl(-1L, false, 0.2f)).isEqualTo(-1L);
         }
+
+        @Test
+        void nonPositiveVariance_doesNotJitterBaseTtl() {
+            assertThat(handler.calculateFinalTtl(120L, true, 0.0f)).isEqualTo(120L);
+            assertThat(handler.calculateFinalTtl(120L, true, -0.1f)).isEqualTo(120L);
+        }
+
+        @Test
+        void varianceAboveOne_isClampedToSafeOutputBounds() {
+            for (int i = 0; i < 128; i++) {
+                assertThat(handler.calculateFinalTtl(120L, true, 2.0f))
+                        .isBetween(1L, 240L);
+            }
+        }
+
+        @Test
+        void jitteredConfiguredTtl_staysWithinBoundedVariance() {
+            for (int i = 0; i < 128; i++) {
+                assertThat(handler.calculateFinalTtl(120L, true, 0.1f))
+                        .isBetween(108L, 132L);
+            }
+        }
+    }
+
+    @Test
+    void doHandle_alwaysContinuesChain() {
+        CacheContext context = createContext(CacheOperation.PUT, null,
+                configuredOperation(120, false, 0.2f));
+
+        HandlerResult result = handler.doHandle(context, CacheResult::success);
+
+        assertThat(result.shouldTerminate()).isFalse();
     }
 }

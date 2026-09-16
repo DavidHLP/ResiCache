@@ -6,11 +6,13 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.EarlyExpirationDecision;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,25 +23,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
  * EarlyExpirationHandler tests backed by a real Redis container.
  *
- * <p>The policy mock is intentional: it controls the refresh decision, not Redis I/O.
- * Redis TTL reads and cached-value reads/writes all use the real integration beans.
+ * <p>Refresh decisions are exercised through the owning {@link EarlyRefresh} module.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("EarlyExpirationHandler Tests (real Redis)")
@@ -49,16 +46,12 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     private static final String CACHE_NAME = "test-cache";
 
     @Mock
-    private EarlyExpirationPolicy earlyExpirationPolicy;
-
-    @Mock
     private ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
+
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
-    @Autowired
-    private CacheStatisticsCollector statistics;
 
     @Autowired
     private ValueOperations<String, Object> valueOperations;
@@ -70,10 +63,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     void setUp() {
         redisTemplate.getConnectionFactory().getConnection().flushDb();
         earlyRefresh = new EarlyRefresh(
-                earlyExpirationPolicy,
+                Clock.systemUTC(),
                 earlyExpirationExecutor,
                 redisTemplate,
-                statistics,
                 valueOperations);
         handler = new EarlyExpirationHandler(earlyRefresh);
     }
@@ -179,12 +171,11 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CacheContext context = createContext(CacheOperation.GET, operation);
             valueOperations.set(REDIS_KEY, null, Duration.ofSeconds(30));
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isBetween(1L, 30L);
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(result.result()).isNull();
-            verifyNoInteractions(earlyExpirationPolicy);
         }
 
         @Test
@@ -192,14 +183,12 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void doHandle_highRemainingTtl_evaluatesPolicy() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            store(createCachedValue(120, System.currentTimeMillis()), 120);
-            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            store(createCachedValue(120, System.currentTimeMillis() - 60_000), 120);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
-            verify(earlyExpirationPolicy).shouldRefresh(anyLong(), anyLong(), anyDouble());
         }
 
         @Test
@@ -208,11 +197,10 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isEqualTo(-2L);
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
-            verifyNoInteractions(earlyExpirationPolicy);
         }
 
         @Test
@@ -222,7 +210,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CacheContext context = createContext(CacheOperation.GET, operation);
             store(createCachedValue(60, System.currentTimeMillis(), 1L, true), 30);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
         }
@@ -238,10 +226,8 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             store(createCachedValue(60, System.currentTimeMillis()), 30);
-            // Policy is a non-Redis decision collaborator; keep it mocked deliberately.
-            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(false);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(result.result()).isNull();
@@ -258,11 +244,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void doHandle_syncRefreshNeeded_returnsSkipAll() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            store(createCachedValue(60, System.currentTimeMillis()), 30);
-            // Policy controls only the refresh branch; all Redis reads above are real.
-            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
@@ -280,10 +264,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     .earlyExpirationMode(null)
                     .build();
             CacheContext context = createContext(CacheOperation.GET, operation);
-            store(createCachedValue(60, System.currentTimeMillis()), 30);
-            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
@@ -299,10 +282,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void doHandle_asyncRefresh_schedulesAndContinues() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            store(createCachedValue(60, System.currentTimeMillis()), 30);
-            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             verify(earlyExpirationExecutor).submit(any(String.class), any(Runnable.class));
@@ -313,10 +295,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void doHandle_asyncRefresh_noMissIncrement() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.ASYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            store(createCachedValue(60, System.currentTimeMillis()), 30);
-            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(context.getPrefetchDecision().decision().isSync()).isFalse();
@@ -332,10 +313,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void doHandle_setsDecisionAttribute() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            store(createCachedValue(60, System.currentTimeMillis()), 30);
-            when(earlyExpirationPolicy.shouldRefresh(anyLong(), anyLong(), anyDouble())).thenReturn(true);
+            store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
 
-            handler.doHandle(context);
+            handler.doHandle(context, CacheResult::success);
 
             EarlyExpirationDecision decision = context.getPrefetchDecision().decision();
             assertThat(decision).isNotNull();
@@ -370,10 +350,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
             when(mockedValueOperations.get(REDIS_KEY)).thenReturn("legacy-value");
             EarlyRefresh rawValueRefresh = new EarlyRefresh(
-                    earlyExpirationPolicy,
+                    Clock.systemUTC(),
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
-                    mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
             rawValueRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
@@ -433,10 +412,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
             when(mockedValueOperations.get(REDIS_KEY)).thenThrow(new RuntimeException("Redis down"));
             EarlyRefresh faultRefresh = new EarlyRefresh(
-                    earlyExpirationPolicy,
+                    Clock.systemUTC(),
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
-                    mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
             faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
@@ -455,10 +433,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             when(mockedRedisTemplate.execute(any(RedisCallback.class)))
                     .thenThrow(new RuntimeException("Lua eval failed"));
             EarlyRefresh faultRefresh = new EarlyRefresh(
-                    earlyExpirationPolicy,
+                    Clock.systemUTC(),
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
-                    mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
             faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);

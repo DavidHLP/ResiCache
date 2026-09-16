@@ -5,12 +5,12 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
+import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,14 +32,11 @@ class BloomFilterHandler extends AbstractCacheHandler {
 
     private final BloomGate bloomGate;
     private final BloomSupport bloomSupport;
-    private final CacheStatisticsCollector statistics;
 
     public BloomFilterHandler(BloomGate bloomGate,
-                              BloomSupport bloomSupport,
-                              CacheStatisticsCollector statistics) {
+                              BloomSupport bloomSupport) {
         this.bloomGate = bloomGate;
         this.bloomSupport = bloomSupport;
-        this.statistics = statistics;
     }
 
     /**
@@ -59,7 +56,7 @@ class BloomFilterHandler extends AbstractCacheHandler {
     }
 
     @Override
-    protected HandlerResult doHandle(CacheContext context) {
+    protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
         // PUT/PIF/CLEAN 的"实际工作"在 afterChainExecution() 后置路径,
         // requiresPostProcess() 派生自 operation 枚举,不在此处重复分派。
         return switch (context.getOperation()) {
@@ -79,8 +76,8 @@ class BloomFilterHandler extends AbstractCacheHandler {
     private HandlerResult handleGet(CacheContext context) {
         // 读侧确定 miss 判定 + 统一 debug 日志收口到 BloomGate(与 RedisProCache loader 路径共享)
         if (bloomGate.definiteMiss(context.getCacheName(), context.getActualKey())) {
-            statistics.incMisses(context.getCacheName());
-            // Bloom 拒绝事件计数
+            // GET 统计统一由 RedisProCacheWriter 按链结果记录，避免
+            // withStatisticsCollector 复用链时写入旧 collector。
             safeIncrementSemantic();
             return HandlerResult.terminate(CacheResult.miss());
         }

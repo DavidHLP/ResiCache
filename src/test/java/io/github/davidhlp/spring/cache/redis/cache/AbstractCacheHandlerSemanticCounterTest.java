@@ -5,6 +5,8 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
+import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.micrometer.core.instrument.Counter;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 契约测试 — {@link AbstractCacheHandler} 语义 counter 模板方法 seam。
@@ -34,7 +37,7 @@ class AbstractCacheHandlerSemanticCounterTest {
             return false;
         }
         @Override
-        protected HandlerResult doHandle(CacheContext context) {
+        protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
             return HandlerResult.continueChain();
         }
     }
@@ -54,13 +57,33 @@ class AbstractCacheHandlerSemanticCounterTest {
             return false;
         }
         @Override
-        protected HandlerResult doHandle(CacheContext context) {
+        protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
             return HandlerResult.continueChain();
         }
 
         /** 测试用：暴露基类的 null-safe 自增 helper 给测试断言。 */
         void incrementForTest() {
             safeIncrementSemantic();
+        }
+    }
+
+    /** 只实现二参处理钩子的 handler：验证基类单参入口提供拒绝推进的句柄。 */
+    static final class ContinuationHandler extends AbstractCacheHandler {
+        private ChainContinuation continuation;
+
+        @Override
+        protected boolean shouldHandle(CacheContext context) {
+            return true;
+        }
+
+        @Override
+        protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
+            continuation = next;
+            return HandlerResult.continueChain();
+        }
+
+        ChainContinuation continuation() {
+            return continuation;
         }
     }
 
@@ -164,5 +187,17 @@ class AbstractCacheHandlerSemanticCounterTest {
             assertThat(md.name()).isEqualTo("name");
             assertThat(md.description()).isEqualTo("description");
         }
+    }
+
+    @Test
+    @DisplayName("单参 handle 提供无剩余链句柄且推进被基类拒绝")
+    void singleArgumentHandle_providesNoRemainderContinuation() {
+        ContinuationHandler handler = new ContinuationHandler();
+
+        HandlerResult result = handler.handle(null);
+
+        assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
+        assertThatThrownBy(() -> handler.continuation().advance())
+                .isInstanceOf(IllegalStateException.class);
     }
 }

@@ -187,10 +187,6 @@ class RedisProCacheConfigurationContractTest {
 
     @Test
     void replaceableDefaults_backOffByContractType() {
-        assertThat(conditionOn("ttlPolicy").value()).contains(TtlPolicy.class);
-        assertThat(conditionOn("nullValuePolicy").value()).contains(NullValuePolicy.class);
-        assertThat(conditionOn("earlyExpirationPolicy").value()).contains(EarlyExpirationPolicy.class);
-        assertThat(conditionOn("bloomHashStrategy").value()).contains(BloomHashStrategy.class);
         assertThat(conditionOn("bloomIFilter").value()).contains(BloomIFilter.class);
     }
 
@@ -201,10 +197,6 @@ class RedisProCacheConfigurationContractTest {
                 "cacheErrorHandler",
                 "cacheOperationResolver",
                 "bloomFilterConfig",
-                "bloomHashStrategy",
-                "ttlPolicy",
-                "nullValuePolicy",
-                "earlyExpirationPolicy",
                 "bloomIFilter",
                 "redisProCacheWriter",
                 "defaultRedisCacheConfiguration",

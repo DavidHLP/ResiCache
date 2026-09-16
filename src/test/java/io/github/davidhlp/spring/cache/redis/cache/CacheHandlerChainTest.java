@@ -6,6 +6,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
+import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
@@ -297,7 +298,7 @@ class CacheHandlerChainTest {
                 }
 
                 @Override
-                protected HandlerResult doHandle(CacheContext context) {
+                protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
                     sink.add(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY));
                     return result;
                 }

@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -35,14 +34,12 @@ class BloomFilterFalsePositiveTest {
     @Mock
     private BloomSupport bloomSupport;
 
-    @Mock
-    private CacheStatisticsCollector statistics;
 
     private BloomFilterHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new BloomFilterHandler(new BloomGate(bloomSupport), bloomSupport, statistics);
+        handler = new BloomFilterHandler(new BloomGate(bloomSupport), bloomSupport);
     }
 
     private CacheContext createContext(CacheOperation operation) {
@@ -73,11 +70,11 @@ class BloomFilterFalsePositiveTest {
         void get_bloomRejects_terminatesWithMiss() {
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isTrue();
+            assertThat(result.result()).isEqualTo(CacheResult.miss());
             verify(bloomSupport).mightContain(anyString(), anyString());
-            verify(statistics).incMisses(anyString());
         }
 
         @Test
@@ -86,11 +83,10 @@ class BloomFilterFalsePositiveTest {
             when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(true);
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
             verify(bloomSupport).mightContain(anyString(), anyString());
-            verify(statistics, never()).incMisses(anyString());
         }
     }
 

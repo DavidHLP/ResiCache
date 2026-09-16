@@ -45,6 +45,27 @@ class SyncLockTimeout {
     }
 
     /**
+     * 一次 sync 请求解析后的不可变超时值。该值同时作为锁获取、follower 等待和 local-only
+     * 排队的上限；请求进入 {@link SyncSupport} 后不再重复解析。
+     */
+    record Resolved(long seconds) {
+
+        static Resolved fromSeconds(long seconds) {
+            return new Resolved(seconds);
+        }
+    }
+    /**
+     * Resolves one immutable timeout value for a sync request.
+     *
+     * <p>Package-private so the loader path can pass the same {@link Resolved} instance through
+     * lock acquisition, follower waiting, and local-only queue stages without re-resolving it.
+     */
+    Resolved resolve(@Nullable CachePolicyView.Source operation) {
+        return Resolved.fromSeconds(resolveSeconds(operation));
+    }
+
+
+    /**
      * 解析给定 operation 的锁超时(秒).
      *
      * @param operation 方法级策略视图(可为 null,视作「未覆盖」→ 全局配置)

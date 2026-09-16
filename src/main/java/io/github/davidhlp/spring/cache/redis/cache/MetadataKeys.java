@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InaccessibleObjectException;
 import java.lang.reflect.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.expression.AnnotatedElementKey;
@@ -75,7 +76,8 @@ final class MetadataKeys {
             Field f = AnnotatedElementKey.class.getDeclaredField(fieldName);
             f.setAccessible(true);
             return f.get(key);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
+        } catch (NoSuchFieldException | IllegalAccessException
+                | InaccessibleObjectException | SecurityException e) {
             log.warn("Failed to reflect field '{}' from AnnotatedElementKey", fieldName, e);
             return null;
         }

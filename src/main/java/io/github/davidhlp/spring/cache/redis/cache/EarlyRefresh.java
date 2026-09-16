@@ -7,9 +7,9 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.EarlyExpirationDecision;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -46,22 +46,19 @@ class EarlyRefresh {
     /** 宽限期:剩余 TTL 低于此值时不再安排刷新(即将过期的数据不值得刷)。 */
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
 
-    private final EarlyExpirationPolicy earlyExpirationPolicy;
+    private final Clock clock;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final CacheStatisticsCollector statistics;
     private final ValueOperations<String, Object> valueOperations;
 
     EarlyRefresh(
-            EarlyExpirationPolicy earlyExpirationPolicy,
+            Clock clock,
             ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor,
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
-            CacheStatisticsCollector statistics,
             ValueOperations<String, Object> valueOperations) {
-        this.earlyExpirationPolicy = earlyExpirationPolicy;
+        this.clock = clock;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.redisTemplate = redisTemplate;
-        this.statistics = statistics;
         this.valueOperations = valueOperations;
     }
 
@@ -78,7 +75,7 @@ class EarlyRefresh {
      * 评估是否需要提前刷新 —— 一次 GET 的读 + 判定收口。
      *
      * <p>异步模式在本方法内完成调度(值已捕获,任务只做 CAS 缩短 TTL);
-     * 同步模式只返回决策并自增 miss 计数,由链节点决定「跳过实际缓存读、返回 miss」。
+     * 同步模式只返回决策,由链节点决定「跳过实际缓存读、返回 miss」。
      *
      * @param context 缓存上下文(GET 操作)
      * @return 评估结果;缓存未命中 / 已过期 / 非 {@link CachedValue} 时返回 {@code null}
@@ -103,11 +100,10 @@ class EarlyRefresh {
      * 检查是否需要提前过期
      */
     private EarlyExpirationDecision checkEarlyExpiration(CacheContext context, CachedValue cachedValue) {
-        boolean shouldRefresh = earlyExpirationPolicy.shouldRefresh(
-            cachedValue.getCreatedTime(),
-            cachedValue.getTtl(),
-            context.policy().earlyExpirationThreshold()
-        );
+        boolean shouldRefresh = shouldRefresh(
+                cachedValue.getCreatedTime(),
+                cachedValue.getTtl(),
+                context.policy().earlyExpirationThreshold());
 
         if (!shouldRefresh) {
             return EarlyExpirationDecision.noRefresh();
@@ -123,8 +119,22 @@ class EarlyRefresh {
             return EarlyExpirationDecision.asyncRefresh();
         }
 
-        statistics.incMisses(context.getCacheName());
+        // GET 统计统一由 RedisProCacheWriter 按链结果记录。
         return EarlyExpirationDecision.syncRefresh();
+    }
+
+    /**
+     * 判断缓存项是否进入提前刷新窗口。
+     */
+    private boolean shouldRefresh(long createdTime, long ttlSeconds, double threshold) {
+        if (ttlSeconds <= 0 || threshold <= 0 || threshold >= 1) {
+            return false;
+        }
+
+        long elapsedTime = clock.millis() - createdTime;
+        long totalTime = ttlSeconds * 1000;
+        double usedRatio = (double) elapsedTime / totalTime;
+        return usedRatio >= (1 - threshold);
     }
 
     /**

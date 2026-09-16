@@ -1,7 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.chain;
 
-
-
+import java.util.Objects;
 
 /**
  * Handler 处理结果，包含链控制决策
@@ -12,6 +11,14 @@ package io.github.davidhlp.spring.cache.redis.chain;
  * 3. 避免通过 resultBytes != null 等隐式条件判断终止
  */
 public record HandlerResult(FlowControl decision, CacheResult result) {
+
+    /**
+     * SPI 协议要求每个结果都携带明确的控制决策，避免引擎在 switch 处以 NPE 失败。
+     */
+    public HandlerResult {
+        Objects.requireNonNull(decision,
+                "HandlerResult decision is required by the SPI protocol");
+    }
     
     /** 继续执行下一个 Handler（无中间结果） */
     public static HandlerResult continueChain() {

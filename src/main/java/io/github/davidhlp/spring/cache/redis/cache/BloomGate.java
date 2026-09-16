@@ -11,15 +11,15 @@ import org.springframework.stereotype.Component;
  *
  * <p>此前该判定在两条读路径上重复且日志分叉:
  * <ul>
- *   <li>{@code BloomFilterHandler.handleGet}(责任链 GET):{@code !mightContain} → 记
- *       "rejected (key does not exist)" + {@code statistics.incMisses} + terminate miss</li>
+ *   <li>{@code BloomFilterHandler.handleGet}(责任链 GET):{@code !mightContain} →
+ *       记录 rejected 并返回 miss</li>
  *   <li>{@code RedisProCache.isBloomShortCircuited}(loader 回源前):{@code !mightContain} →
- *       记 "rejected loader invocation" + {@code missCounter} 自增 + 短路返回 null</li>
+ *       记录 rejected loader invocation 并短路返回 null</li>
  * </ul>
  * 两处对<em>同一个布隆过滤器</em>做同样的 {@code mightContain} 判定,却各写各的日志,判定逻辑
  * 若漂移(如一处忘了取反)不易发现。本闸门把「确定 miss 判定 + 统一 debug 日志」收口到唯一
- * 入口;各调用方仍各自记录自己体系的指标(链层 {@code CacheStatisticsCollector} vs
- * cache 层 Micrometer counter,两套指标服务不同用途,刻意不合并)与自己的短路控制流。
+ * 入口;责任链 GET 的 {@code CacheStatisticsCollector} 计数统一由
+ * {@code RedisProCacheWriter} 按链结果记录,避免替换 collector 后继续写旧实例。
  *
  * <p>本闸门只承担<b>读侧</b>穿透判定;布隆的<b>写侧</b>回填 / 清空({@code add} / {@code clear})
  * 仍由 {@link BloomSupport} 直接承担(后置处理,不同关注点)。两个调用方

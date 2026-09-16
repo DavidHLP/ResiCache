@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -48,8 +47,6 @@ class BloomFilterHandlerTest {
     @Mock
     private BloomGate bloomGate;
 
-    @Mock
-    private CacheStatisticsCollector statistics;
 
     @Mock
     private RedisCacheableOperation cacheOperation;
@@ -58,7 +55,7 @@ class BloomFilterHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new BloomFilterHandler(bloomGate, bloomSupport, statistics);
+        handler = new BloomFilterHandler(bloomGate, bloomSupport);
     }
 
     private CacheContext createContext(CacheOperation operation) {
@@ -134,10 +131,10 @@ class BloomFilterHandlerTest {
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(true);
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isTrue();
-            verify(statistics).incMisses(CACHE_NAME);
+            assertThat(result.result()).isEqualTo(CacheResult.miss());
         }
 
         @Test
@@ -146,10 +143,9 @@ class BloomFilterHandlerTest {
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
             CacheContext context = createContext(CacheOperation.GET);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
-            verify(statistics, never()).incMisses(anyString());
         }
     }
 
@@ -162,7 +158,7 @@ class BloomFilterHandlerTest {
         void handlePut_continuesChain() {
             CacheContext context = createContext(CacheOperation.PUT);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
         }
@@ -172,7 +168,7 @@ class BloomFilterHandlerTest {
         void handlePutIfAbsent_continuesChain() {
             CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
         }
@@ -182,7 +178,7 @@ class BloomFilterHandlerTest {
         void handleClean_continuesChain() {
             CacheContext context = createContext(CacheOperation.CLEAN);
 
-            HandlerResult result = handler.doHandle(context);
+            HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
             verify(bloomGate, never()).definiteMiss(anyString(), anyString());
@@ -327,17 +323,16 @@ class BloomFilterHandlerTest {
 
             // 同一 key 的后续 GET:布隆判定基于"可能存在",不短路,loader 可达
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
-            HandlerResult getResult = handler.doHandle(createContext(CacheOperation.GET));
+            HandlerResult getResult = handler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
 
             assertThat(getResult.shouldTerminate()).isFalse();
-            verify(statistics, never()).incMisses(anyString());
         }
 
         /**
          * Scenario 2:重复 CLEAN 无状态残留 —— 每次 CLEAN 后置都是零副作用 no-op。
          */
         @Test
-        @DisplayName("repeated CLEANs never touch bloom or stats")
+        @DisplayName("repeated CLEANs never touch bloom")
         void repeatedCleans_staySideEffectFree() {
             // 连续多次 CLEAN:CLEAN 后置不得调用 clear/add(无 marker/window 依赖)
             for (int i = 0; i < 3; i++) {
@@ -366,7 +361,7 @@ class BloomFilterHandlerTest {
             CacheContext getContext = createContext(CacheOperation.GET);
             when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
 
-            HandlerResult result = handler.doHandle(getContext);
+            HandlerResult result = handler.doHandle(getContext, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
         }

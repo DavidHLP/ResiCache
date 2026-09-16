@@ -28,15 +28,14 @@ class BloomFilterIntegrationTest extends AbstractRedisIntegrationTest {
     private RedisTemplate<String, String> redisTemplate;
 
     private BloomFilterConfig config;
-    private BloomHashStrategy hashStrategy;
     private RedisBloomIFilter bloomFilter;
 
     @BeforeEach
     void setUp() {
         config = new BloomFilterConfig("bf:", 1024, 3, 100);
-        hashStrategy = new MessageDigestBloomHashStrategy();
-        bloomFilter = new RedisBloomIFilter(redisTemplate, config, hashStrategy, null);
+        bloomFilter = new RedisBloomIFilter(redisTemplate, config, null);
         bloomFilter.init();
+
 
         redisTemplate.getConnectionFactory().getConnection().flushDb();
     }

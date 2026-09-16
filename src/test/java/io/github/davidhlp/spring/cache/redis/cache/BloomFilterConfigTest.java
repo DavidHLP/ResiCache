@@ -113,4 +113,11 @@ class BloomFilterConfigTest {
             assertThat(config.getHashCacheSize()).isEqualTo(5000);
         }
     }
+    @Test
+    @DisplayName("Long.MIN_VALUE 哈希值也映射到有效的位索引")
+    void positionFor_minLong_returnsNonNegativeModulo() {
+        assertThat(BloomFilterConfig.positionFor(Long.MIN_VALUE, 1000))
+                .isEqualTo(192);
+    }
+
 }

@@ -29,7 +29,6 @@ class RedisBloomIFilter implements BloomIFilter {
 
     private final RedisTemplate<String, ?> redisTemplate;
     private final BloomFilterConfig config;
-    private final BloomHashStrategy hashStrategy;
     private final MeterRegistry meterRegistry;
 
     private Cache<String, int[]> hashPositionCache;
@@ -40,11 +39,9 @@ class RedisBloomIFilter implements BloomIFilter {
     public RedisBloomIFilter(
             RedisTemplate<String, ?> redisTemplate,
             BloomFilterConfig config,
-            BloomHashStrategy hashStrategy,
             @Autowired(required = false) MeterRegistry meterRegistry) {
         this.redisTemplate = redisTemplate;
         this.config = config;
-        this.hashStrategy = hashStrategy;
         this.meterRegistry = meterRegistry;
     }
 
@@ -73,7 +70,7 @@ class RedisBloomIFilter implements BloomIFilter {
         String cacheEntryKey = cacheName + "::" + key;
         try {
             int[] positions = hashPositionCache.get(cacheEntryKey,
-                    k -> hashStrategy.positionsFor(key, config));
+                    k -> config.positionsFor(key));
 
             // 使用 Redis Pipeline 批量写入，减少网络往返
             redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
@@ -109,7 +106,7 @@ class RedisBloomIFilter implements BloomIFilter {
         String cacheEntryKey = cacheName + "::" + key;
         try {
             int[] positions = hashPositionCache.get(cacheEntryKey,
-                    k -> hashStrategy.positionsFor(key, config));
+                    k -> config.positionsFor(key));
 
             // 使用 Pipeline 批量查询，减少网络往返
             List<byte[]> hashKeys = Arrays.stream(positions)

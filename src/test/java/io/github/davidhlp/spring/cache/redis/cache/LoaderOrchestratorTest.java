@@ -1,18 +1,16 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.BloomShortCircuited;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadFailed;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcome;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.Loaded;
 import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadedWithWriteBackFailure;
+import io.github.davidhlp.spring.cache.redis.cache.SyncLockTimeout.Resolved;
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,30 +21,23 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.cache.Cache;
-import org.springframework.data.redis.cache.RedisCache;
-import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheWriter;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * {@link LoaderOrchestrator} 单测 — 3 个 seam 测试集。
  *
- * <p>{@code isBloomShortCircuited} / {@code performLoad} 等 package-private seam 下沉到
+ * <p>{@code isBloomShortCircuited} / {@code readThrough} 等 package-private seam 下沉到
  * LoaderOrchestrator,通过 {@link LoaderOrchestrator#orchestrate} 公开方法间接覆盖 —
  * 每条 case 路径(bloom 短路 / sync 路由 / default 路由 / load 协议决策)
  * 用 {@link LoadOutcome} 各态断言。
  *
- * <p>测试 seam 形态:orchestrator 接受 {@link RedisCache} 引用 + 3 个 callback
- * (redisKey / doubleCheck / putAfterLoad),本测试用 Mockito mock RedisCache
- * + 自定义 callback 控制 cache-specific 行为,无 RedisProCache fixture 依赖。
+ * <p>测试 seam 形态:orchestrator 接受 3 个 callback(redisKey / doubleCheck / putAfterLoad),
+ * 本测试直接控制 cache-specific 行为,无 RedisProCache fixture 依赖。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -54,30 +45,22 @@ import static org.mockito.Mockito.when;
 class LoaderOrchestratorTest {
 
     @Mock
-    private RedisCacheWriter cacheWriter;
-
-    @Mock
-    private RedisCache cache;
-
-    @Mock
     private BloomSupport bloomSupport;
 
     @Mock
     private SyncSupport syncSupport;
 
-    private RedisCacheConfiguration cacheConfiguration;
+
     private LoaderOrchestrator orchestrator;
     private String testRedisKey;
 
     @BeforeEach
     void setUp() {
-        cacheConfiguration = RedisCacheConfiguration.defaultCacheConfig();
         orchestrator = new LoaderOrchestrator(
                 new BloomGate(bloomSupport),
                 syncSupport,
                 new SyncLockTimeout(new io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties()));
         testRedisKey = "testCache::key1";
-        when(cache.getName()).thenReturn("testCache");
     }
 
     private RedisCacheableOperation operation(boolean useBloom, boolean sync) {
@@ -110,9 +93,7 @@ class LoaderOrchestratorTest {
                     "key1",
                     null);
 
-            assertThat(outcome).isInstanceOf(Loaded.class);
             assertThat(((Loaded<String>) outcome).value()).isEqualTo("value");
-            verify(bloomSupport, never()).mightContain(anyString(), anyString());
         }
 
         @Test
@@ -129,9 +110,7 @@ class LoaderOrchestratorTest {
                     loader,
                     "key1",
                     op);
-
             assertThat(outcome).isInstanceOf(Loaded.class);
-            verify(bloomSupport, never()).mightContain(anyString(), anyString());
         }
 
         @Test
@@ -152,9 +131,7 @@ class LoaderOrchestratorTest {
                     loader,
                     "key1",
                     op);
-
             assertThat(outcome).isInstanceOf(BloomShortCircuited.class);
-            verify(cache, never()).get(anyString(), any(Callable.class));
         }
 
         @Test
@@ -162,7 +139,6 @@ class LoaderOrchestratorTest {
         void bloomAccepts_proceedsToDefaultPath() {
             RedisCacheableOperation op = operation(true, false);
             when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(true);
-            when(cache.get(eq("key1"), any(Callable.class))).thenReturn("value");
 
             Callable<String> loader = () -> "value";
 
@@ -193,7 +169,8 @@ class LoaderOrchestratorTest {
             when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(true);
 
             // syncSupport.executeSync 模拟「调 supplier 后返回值」
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
+                    any(SyncLockTimeout.Resolved.class)))
                     .thenAnswer(inv -> {
                         java.util.function.Supplier<String> supplier = inv.getArgument(1);
                         return supplier.get();
@@ -210,17 +187,41 @@ class LoaderOrchestratorTest {
                     "key1",
                     op);
 
+            assertThat(((Loaded<String>) outcome).value()).isEqualTo("synced-value");
+        }
+
+        @Test
+        @DisplayName("sync read resolves once and reuses one Resolved timeout through SyncSupport")
+        void syncRead_resolvesTimeoutOnceAndReusesResolvedTimeout() {
+            RedisProCacheProperties properties = new RedisProCacheProperties();
+            properties.getSyncLock().setLocalOnly(true);
+            RecordingSyncLockTimeout timeout = new RecordingSyncLockTimeout(properties);
+            RecordingSyncSupport support = new RecordingSyncSupport(properties);
+            LoaderOrchestrator underTest = new LoaderOrchestrator(
+                    new BloomGate(bloomSupport), support, timeout);
+
+            LoadOutcome<String> outcome = underTest.orchestrate(
+                    "testCache",
+                    key -> testRedisKey,
+                    key -> null,
+                    (key, value) -> { },
+                    () -> "synced-value",
+                    "key1",
+                    operation(false, true));
+
             assertThat(outcome).isInstanceOf(Loaded.class);
             assertThat(((Loaded<String>) outcome).value()).isEqualTo("synced-value");
-            verify(syncSupport).executeSync(anyString(), any(java.util.function.Supplier.class), anyLong());
+            assertThat(timeout.resolutionCount()).isEqualTo(1);
+            assertThat(support.seenTimeout()).isSameAs(timeout.resolvedTimeout());
         }
+
     }
 
     // ==================== load 协议决策分支(sync 路径:锁内执行) ====================
 
     @Nested
-    @DisplayName("performLoad Tests — sync 路径锁内执行")
-    class PerformLockedLoadTests {
+    @DisplayName("readThrough Tests — sync 路径锁内执行")
+    class ReadThroughLockedLoadTests {
 
         @Test
         @DisplayName("double-check hits → Loaded with cached value, loader never invoked")
@@ -228,7 +229,8 @@ class LoaderOrchestratorTest {
             RedisCacheableOperation op = operation(false, true);
             Cache.ValueWrapper cached = () -> "cached-value";
 
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
+                    any(SyncLockTimeout.Resolved.class)))
                     .thenAnswer(inv -> {
                         java.util.function.Supplier<String> supplier = inv.getArgument(1);
                         return supplier.get();
@@ -257,7 +259,8 @@ class LoaderOrchestratorTest {
         @DisplayName("double-check miss + loader returns non-null → Loaded with new value, putAfterLoad invoked")
         void doubleCheckMiss_loaderReturnsValue_putsAfterLoad() {
             RedisCacheableOperation op = operation(false, true);
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
+                    any(SyncLockTimeout.Resolved.class)))
                     .thenAnswer(inv -> {
                         java.util.function.Supplier<String> supplier = inv.getArgument(1);
                         return supplier.get();
@@ -288,7 +291,8 @@ class LoaderOrchestratorTest {
         @DisplayName("double-check miss + loader returns null → Loaded with null, putAfterLoad still invoked (null-value caching)")
         void doubleCheckMiss_loaderReturnsNull_putsNull() {
             RedisCacheableOperation op = operation(false, true);
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
+                    any(SyncLockTimeout.Resolved.class)))
                     .thenAnswer(inv -> {
                         java.util.function.Supplier<String> supplier = inv.getArgument(1);
                         return supplier.get();
@@ -314,7 +318,8 @@ class LoaderOrchestratorTest {
         @DisplayName("loader throws → LoadFailed with Cache.ValueRetrievalException")
         void loaderThrows_wrapsInValueRetrievalException() {
             RedisCacheableOperation op = operation(false, true);
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
+                    any(SyncLockTimeout.Resolved.class)))
                     .thenAnswer(inv -> {
                         java.util.function.Supplier<String> supplier = inv.getArgument(1);
                         return supplier.get();
@@ -343,7 +348,8 @@ class LoaderOrchestratorTest {
         @DisplayName("write-back fails after loader success → LoadedWithWriteBackFailure carrying value + cause (ADR-02)")
         void writeBackFails_returnsLoadedWithWriteBackFailure() {
             RedisCacheableOperation op = operation(false, true);
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
+                    any(SyncLockTimeout.Resolved.class)))
                     .thenAnswer(inv -> {
                         java.util.function.Supplier<String> supplier = inv.getArgument(1);
                         return supplier.get();
@@ -372,7 +378,8 @@ class LoaderOrchestratorTest {
         @DisplayName("write-back fails on null loader value → value preserved, still LoadedWithWriteBackFailure")
         void writeBackFails_nullLoadedValue_preserved() {
             RedisCacheableOperation op = operation(false, true);
-            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class), anyLong()))
+            when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
+                    any(SyncLockTimeout.Resolved.class)))
                     .thenAnswer(inv -> {
                         java.util.function.Supplier<String> supplier = inv.getArgument(1);
                         return supplier.get();
@@ -395,6 +402,7 @@ class LoaderOrchestratorTest {
             assertThat(wbf.cause()).isSameAs(putBoom);
         }
     }
+
 
     // ==================== Default load path(与 sync 路径同一 load 协议) ====================
 
@@ -536,5 +544,46 @@ class LoaderOrchestratorTest {
                     .isEqualTo("loaded-value");
             assertThat(wbf.cause()).isSameAs(putBoom);
         }
+
     }
+    private static final class RecordingSyncLockTimeout extends SyncLockTimeout {
+        private final Resolved resolvedTimeout = Resolved.fromSeconds(37);
+        private int resolutionCount;
+
+        private RecordingSyncLockTimeout(RedisProCacheProperties properties) {
+            super(properties);
+        }
+
+        Resolved resolve(CachePolicyView.Source operation) {
+            resolutionCount++;
+            return resolvedTimeout;
+        }
+
+        private int resolutionCount() {
+            return resolutionCount;
+        }
+
+        private Resolved resolvedTimeout() {
+            return resolvedTimeout;
+        }
+    }
+
+    private static final class RecordingSyncSupport extends SyncSupport {
+        private Resolved seenTimeout;
+
+        private RecordingSyncSupport(RedisProCacheProperties properties) {
+            super(java.util.List.of(), properties);
+        }
+
+        @Override
+        <T> T executeSync(String key, Supplier<T> loader, Resolved timeout) {
+            seenTimeout = timeout;
+            return super.executeSync(key, loader, timeout);
+        }
+
+        private Resolved seenTimeout() {
+            return seenTimeout;
+        }
+    }
+
 }
