@@ -396,7 +396,7 @@ package (excluding test classes); stable SPI types keep their original package
 names. The wire envelope remains `serialization.VersionEnvelope`, and
 `CacheContext` exposes only `InputView`/`CachePolicyView`.
 
-**Verification**: The compiled public surface is locked by the 34-entry
+**Verification**: The compiled public surface is locked by the 35-entry
 allowlist and the in-progress manifest is empty. Exact test counts belong to
 the current CI/local verification record rather than this durable decision.
 

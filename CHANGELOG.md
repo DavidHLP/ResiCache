@@ -84,7 +84,7 @@ Current milestones:
   reassemble orchestration parameters.
 - **One read-through load protocol** — the default (non-sync) loader path no
   longer delegates to Spring's `RedisCache.get(key, loader)`; both loader
-  paths run `LoaderOrchestrator.performLoad` (cache read → loader → write-back)
+  paths run `LoaderOrchestrator.readThrough` (cache read → loader → write-back)
   and share one tolerance rule. The default path's write-back now carries the
   same put metrics as the sync path. Failing write-backs are still logged
   redacted and never override the loaded value.
