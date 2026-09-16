@@ -236,10 +236,12 @@ class SyncSupport {
                                       SyncLockTimeout.Resolved timeout,
                                       Supplier<T> work) {
             AtomicReference<CompletableFuture<Void>> predecessorRef = new AtomicReference<>();
-            CompletableFuture<Void> current = localOnlyTails.compute(key, (ignored, predecessor) -> {
+            CompletableFuture<Void> current = new CompletableFuture<>();
+            CompletableFuture<Void> tail = localOnlyTails.compute(key, (ignored, predecessor) -> {
                 predecessorRef.set(predecessor);
-                return new CompletableFuture<>();
+                return predecessor == null ? current : CompletableFuture.allOf(predecessor, current);
             });
+            tail.whenComplete((ignored, failure) -> localOnlyTails.remove(key, tail));
             CompletableFuture<Void> predecessor = predecessorRef.get();
             try {
                 if (predecessor != null) {
@@ -248,7 +250,6 @@ class SyncSupport {
                 return work.get();
             } finally {
                 current.complete(null);
-                localOnlyTails.remove(key, current);
             }
         }
 
