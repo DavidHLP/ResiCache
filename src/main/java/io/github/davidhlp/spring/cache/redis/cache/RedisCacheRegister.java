@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.cache.interceptor.CacheOperation;
@@ -25,8 +26,17 @@ import org.springframework.context.expression.AnnotatedElementKey;
 @Slf4j
 class RedisCacheRegister {
 
+    private record SnapshotAlias(
+            long generation, AnnotationParser.ParsedAnnotations snapshot) {
+    }
+
     private final Map<AnnotatedElementKey, AnnotationParser.ParsedAnnotations> snapshotsByElement =
             new ConcurrentHashMap<>();
+
+    private final Map<AnnotatedElementKey, SnapshotAlias> snapshotsByRequestedElement =
+            new ConcurrentHashMap<>();
+    private final AtomicLong registrationGeneration = new AtomicLong();
+    private final Object snapshotAliasLock = new Object();
 
     public RedisCacheRegister() {
     }
@@ -39,13 +49,30 @@ class RedisCacheRegister {
             Class<?> targetClass,
             AnnotationParser.ParsedAnnotations snapshot) {
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        snapshotsByElement.put(elementKey, snapshot);
+        synchronized (snapshotAliasLock) {
+            registrationGeneration.incrementAndGet();
+            snapshotsByElement.put(elementKey, snapshot);
+            snapshotsByRequestedElement.clear();
+        }
     }
 
     /**
      * Returns the parse result shared by the Spring source and annotation chain.
      */
     public AnnotationParser.ParsedAnnotations getSnapshot(Method method, Class<?> targetClass) {
+        AnnotatedElementKey requestedKey = new AnnotatedElementKey(method, targetClass);
+        long lookupGeneration;
+        synchronized (snapshotAliasLock) {
+            lookupGeneration = registrationGeneration.get();
+            SnapshotAlias alias = snapshotsByRequestedElement.get(requestedKey);
+            if (alias != null) {
+                if (alias.generation() == lookupGeneration) {
+                    return alias.snapshot();
+                }
+                snapshotsByRequestedElement.remove(requestedKey, alias);
+            }
+        }
+
         AnnotationParser.ParsedAnnotations snapshot = findSnapshot(method, targetClass);
         Method specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
         if (snapshot == null && !specificMethod.equals(method)) {
@@ -53,6 +80,9 @@ class RedisCacheRegister {
         }
         if (snapshot == null) {
             snapshot = findInterfaceSnapshot(specificMethod, targetClass, new HashSet<>());
+        }
+        if (snapshot != null) {
+            cacheAliasIfCurrent(requestedKey, snapshot, lookupGeneration);
         }
         return snapshot;
     }
@@ -67,7 +97,7 @@ class RedisCacheRegister {
         return snapshot;
     }
 
-    private AnnotationParser.ParsedAnnotations findInterfaceSnapshot(
+    AnnotationParser.ParsedAnnotations findInterfaceSnapshot(
             Method method, Class<?> targetClass, Set<Class<?>> visited) {
         Class<?> type = targetClass;
         while (type != null) {
@@ -96,6 +126,21 @@ class RedisCacheRegister {
         return null;
     }
 
+    long currentRegistrationGeneration() {
+        return registrationGeneration.get();
+    }
+
+    void cacheAliasIfCurrent(
+            AnnotatedElementKey requestedKey,
+            AnnotationParser.ParsedAnnotations snapshot,
+            long generation) {
+        synchronized (snapshotAliasLock) {
+            if (registrationGeneration.get() == generation) {
+                snapshotsByRequestedElement.put(requestedKey, new SnapshotAlias(generation, snapshot));
+            }
+        }
+    }
+
     // ============================ 注册（单一 seam）============================
 
     /**
@@ -113,26 +158,28 @@ class RedisCacheRegister {
                     operation.getClass().getSimpleName());
             return;
         }
-        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        AnnotationParser.ParsedAnnotations existing = snapshotsByElement.get(elementKey);
-        List<CacheOperation> operations = new ArrayList<>();
-        List<CacheOperation> policies = new ArrayList<>();
-        if (existing != null) {
-            operations.addAll(existing.operations());
-            policies.addAll(existing.policyOperations());
+        synchronized (snapshotAliasLock) {
+            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
+            AnnotationParser.ParsedAnnotations existing = snapshotsByElement.get(elementKey);
+            List<CacheOperation> operations = new ArrayList<>();
+            List<CacheOperation> policies = new ArrayList<>();
+            if (existing != null) {
+                operations.addAll(existing.operations());
+                policies.addAll(existing.policyOperations());
+            }
+            policies.removeIf(existingOperation ->
+                    kind.operationType().isInstance(existingOperation)
+                            && existingOperation.getCacheNames().stream()
+                            .anyMatch(operation.getCacheNames()::contains));
+            policies.add(operation);
+            operations.removeIf(existingOperation ->
+                    kind.operationType().isInstance(existingOperation)
+                            && existingOperation.getCacheNames().stream()
+                            .anyMatch(operation.getCacheNames()::contains));
+            operations.add(operation);
+            registerSnapshot(method, targetClass,
+                    new AnnotationParser.ParsedAnnotations(operations, policies));
         }
-        policies.removeIf(existingOperation ->
-                kind.operationType().isInstance(existingOperation)
-                        && existingOperation.getCacheNames().stream()
-                        .anyMatch(operation.getCacheNames()::contains));
-        policies.add(operation);
-        operations.removeIf(existingOperation ->
-                kind.operationType().isInstance(existingOperation)
-                        && existingOperation.getCacheNames().stream()
-                        .anyMatch(operation.getCacheNames()::contains));
-        operations.add(operation);
-        snapshotsByElement.put(elementKey,
-                new AnnotationParser.ParsedAnnotations(operations, policies));
     }
 
     // ============================ 查询（单一 seam）============================
