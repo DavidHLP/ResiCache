@@ -158,26 +158,28 @@ class RedisCacheRegister {
                     operation.getClass().getSimpleName());
             return;
         }
-        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
-        AnnotationParser.ParsedAnnotations existing = snapshotsByElement.get(elementKey);
-        List<CacheOperation> operations = new ArrayList<>();
-        List<CacheOperation> policies = new ArrayList<>();
-        if (existing != null) {
-            operations.addAll(existing.operations());
-            policies.addAll(existing.policyOperations());
+        synchronized (snapshotAliasLock) {
+            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, targetClass);
+            AnnotationParser.ParsedAnnotations existing = snapshotsByElement.get(elementKey);
+            List<CacheOperation> operations = new ArrayList<>();
+            List<CacheOperation> policies = new ArrayList<>();
+            if (existing != null) {
+                operations.addAll(existing.operations());
+                policies.addAll(existing.policyOperations());
+            }
+            policies.removeIf(existingOperation ->
+                    kind.operationType().isInstance(existingOperation)
+                            && existingOperation.getCacheNames().stream()
+                            .anyMatch(operation.getCacheNames()::contains));
+            policies.add(operation);
+            operations.removeIf(existingOperation ->
+                    kind.operationType().isInstance(existingOperation)
+                            && existingOperation.getCacheNames().stream()
+                            .anyMatch(operation.getCacheNames()::contains));
+            operations.add(operation);
+            registerSnapshot(method, targetClass,
+                    new AnnotationParser.ParsedAnnotations(operations, policies));
         }
-        policies.removeIf(existingOperation ->
-                kind.operationType().isInstance(existingOperation)
-                        && existingOperation.getCacheNames().stream()
-                        .anyMatch(operation.getCacheNames()::contains));
-        policies.add(operation);
-        operations.removeIf(existingOperation ->
-                kind.operationType().isInstance(existingOperation)
-                        && existingOperation.getCacheNames().stream()
-                        .anyMatch(operation.getCacheNames()::contains));
-        operations.add(operation);
-        registerSnapshot(method, targetClass,
-                new AnnotationParser.ParsedAnnotations(operations, policies));
     }
 
     // ============================ 查询（单一 seam）============================
