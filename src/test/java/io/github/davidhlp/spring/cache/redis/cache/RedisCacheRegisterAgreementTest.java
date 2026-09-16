@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -96,6 +97,114 @@ class RedisCacheRegisterAgreementTest {
                 "anchor-cache", anchorKey, OperationKind.CACHEABLE);
         assertThat(resolved).isSameAs(anchorOperation);
     }
+
+    @Test
+    @DisplayName("interface-derived snapshots are memoized by requested element")
+    void interfaceSnapshotLookup_isMemoizedByRequestedElement() throws Exception {
+        CountingRedisCacheRegister register = new CountingRedisCacheRegister();
+        Method interfaceMethod = AnnotatedService.class.getMethod("load", String.class);
+        Method implementationMethod = AnnotatedServiceImpl.class.getMethod("load", String.class);
+        RedisCacheableOperation operation = RedisCacheableOperation.builder()
+                .name("interface")
+                .cacheNames("interface-cache")
+                .ttl(654)
+                .build();
+        AnnotationParser.ParsedAnnotations snapshot =
+                new AnnotationParser.ParsedAnnotations(List.of(operation), List.of(operation));
+        register.registerSnapshot(interfaceMethod, AnnotatedService.class, snapshot);
+
+        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
+                .isSameAs(snapshot);
+        assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
+        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
+                .isSameAs(snapshot);
+        assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("registration invalidates interface-derived aliases")
+    void registration_invalidatesInterfaceAlias() throws Exception {
+        CountingRedisCacheRegister register = new CountingRedisCacheRegister();
+        Method interfaceMethod = AnnotatedService.class.getMethod("load", String.class);
+        Method implementationMethod = AnnotatedServiceImpl.class.getMethod("load", String.class);
+        RedisCacheableOperation oldOperation = RedisCacheableOperation.builder()
+                .name("old")
+                .cacheNames("interface-cache")
+                .build();
+        RedisCacheableOperation newOperation = RedisCacheableOperation.builder()
+                .name("new")
+                .cacheNames("interface-cache")
+                .build();
+        AnnotationParser.ParsedAnnotations oldSnapshot =
+                new AnnotationParser.ParsedAnnotations(List.of(oldOperation), List.of(oldOperation));
+        AnnotationParser.ParsedAnnotations newSnapshot =
+                new AnnotationParser.ParsedAnnotations(List.of(newOperation), List.of(newOperation));
+        register.registerSnapshot(interfaceMethod, AnnotatedService.class, oldSnapshot);
+        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
+                .isSameAs(oldSnapshot);
+
+        register.registerSnapshot(interfaceMethod, AnnotatedService.class, newSnapshot);
+
+        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
+                .isSameAs(newSnapshot);
+        assertThat(register.interfaceSnapshotLookups).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("an alias resolved before registration cannot be written afterward")
+    void aliasWrite_afterRegistration_doesNotRestoreOldSnapshot() throws Exception {
+        CountingRedisCacheRegister register = new CountingRedisCacheRegister();
+        Method interfaceMethod = AnnotatedService.class.getMethod("load", String.class);
+        Method implementationMethod = AnnotatedServiceImpl.class.getMethod("load", String.class);
+        RedisCacheableOperation oldOperation = RedisCacheableOperation.builder()
+                .name("old")
+                .cacheNames("interface-cache")
+                .build();
+        RedisCacheableOperation newOperation = RedisCacheableOperation.builder()
+                .name("new")
+                .cacheNames("interface-cache")
+                .build();
+        AnnotationParser.ParsedAnnotations oldSnapshot =
+                new AnnotationParser.ParsedAnnotations(List.of(oldOperation), List.of(oldOperation));
+        AnnotationParser.ParsedAnnotations newSnapshot =
+                new AnnotationParser.ParsedAnnotations(List.of(newOperation), List.of(newOperation));
+        register.registerSnapshot(interfaceMethod, AnnotatedService.class, oldSnapshot);
+        AnnotatedElementKey requestKey = new AnnotatedElementKey(
+                implementationMethod, AnnotatedServiceImpl.class);
+        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
+                .isSameAs(oldSnapshot);
+        long oldGeneration = register.currentRegistrationGeneration();
+
+        register.registerSnapshot(interfaceMethod, AnnotatedService.class, newSnapshot);
+        register.cacheAliasIfCurrent(requestKey, oldSnapshot, oldGeneration);
+
+        assertThat(register.getSnapshot(implementationMethod, AnnotatedServiceImpl.class))
+                .isSameAs(newSnapshot);
+        assertThat(register.interfaceSnapshotLookups).isEqualTo(2);
+    }
+
+    private static final class CountingRedisCacheRegister extends RedisCacheRegister {
+        private int interfaceSnapshotLookups;
+
+        @Override
+        AnnotationParser.ParsedAnnotations findInterfaceSnapshot(
+                Method method, Class<?> targetClass, Set<Class<?>> visited) {
+            interfaceSnapshotLookups++;
+            return super.findInterfaceSnapshot(method, targetClass, visited);
+        }
+    }
+
+    private interface AnnotatedService {
+        String load(String id);
+    }
+
+    private static final class AnnotatedServiceImpl implements AnnotatedService {
+        @Override
+        public String load(String id) {
+            return id;
+        }
+    }
+
 
     @Test
     @DisplayName("direct fallback registration merges snapshots containing native operations")
