@@ -23,7 +23,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -53,8 +52,6 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
-    @Autowired
-    private CacheStatisticsCollector statistics;
 
     @Autowired
     private ValueOperations<String, Object> valueOperations;
@@ -69,7 +66,6 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                 Clock.systemUTC(),
                 earlyExpirationExecutor,
                 redisTemplate,
-                statistics,
                 valueOperations);
         handler = new EarlyExpirationHandler(earlyRefresh);
     }
@@ -357,7 +353,6 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     Clock.systemUTC(),
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
-                    mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
             rawValueRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
@@ -420,7 +415,6 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     Clock.systemUTC(),
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
-                    mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
             faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
@@ -442,7 +436,6 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     Clock.systemUTC(),
                     earlyExpirationExecutor,
                     mockedRedisTemplate,
-                    mock(CacheStatisticsCollector.class),
                     mockedValueOperations);
 
             faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);

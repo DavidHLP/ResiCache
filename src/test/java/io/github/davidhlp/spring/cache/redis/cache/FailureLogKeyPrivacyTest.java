@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -341,7 +340,6 @@ class FailureLogKeyPrivacyTest {
                     Clock.systemUTC(),
                     mock(ThreadPoolEarlyExpirationExecutor.class),
                     mock(RedisTemplate.class),
-                    mock(CacheStatisticsCollector.class),
                     valueOperations);
 
             earlyRefresh.performAsyncRefresh(SECRET_KEY, "privacy-cache", null);

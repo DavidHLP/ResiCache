@@ -71,7 +71,10 @@ class RedisProCacheWriter implements RedisCacheWriter {
     @Nullable
     public byte[] get(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
-        return executeChain(CacheOperation.GET, name, key, null, ttl).resultBytes();
+        CacheResult result = executeChain(CacheOperation.GET, name, key, null, ttl);
+        byte[] resultBytes = result.resultBytes();
+        recordGetStatistics(name, result, resultBytes);
+        return resultBytes;
     }
 
     /**
@@ -162,6 +165,9 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable Duration ttl) {
         CacheResult result = executeChain(CacheOperation.PUT, name, key, value, ttl);
         requireSuccessful(CacheOperation.PUT, name, key, result);
+        if (result.isSuccess()) {
+            statistics.incPuts(name);
+        }
     }
 
     @Override
@@ -194,6 +200,9 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @Nullable Duration ttl) {
         CacheResult result = executeChain(CacheOperation.PUT_IF_ABSENT, name, key, value, ttl);
         requireSuccessful(CacheOperation.PUT_IF_ABSENT, name, key, result);
+        if (result.outcome() == CacheResult.Outcome.INSERTED) {
+            statistics.incPuts(name);
+        }
         return result.resultBytes();
     }
 
@@ -203,6 +212,9 @@ class RedisProCacheWriter implements RedisCacheWriter {
         // route through the same responsibility-chain logic.
         CacheResult result = executeChain(CacheOperation.REMOVE, name, key, null, null);
         requireSuccessful(CacheOperation.REMOVE, name, key, result);
+        if (result.isSuccess()) {
+            statistics.incDeletes(name);
+        }
     }
 
     @Override
@@ -217,8 +229,11 @@ class RedisProCacheWriter implements RedisCacheWriter {
                 CacheOperation.CLEAN, name, keyPattern, actualKey,
                 null, null, null, resolveOperation(name, CacheOperation.CLEAN), keyPattern);
 
-        CacheResult result = getChain().execute(context);
+        CacheResult result = executeContext(context);
         requireSuccessful(CacheOperation.CLEAN, name, keyPattern, result);
+        if (result.isSuccess()) {
+            recordCleanDeletes(name, result.deletedCount());
+        }
     }
 
     @Override
@@ -346,7 +361,33 @@ class RedisProCacheWriter implements RedisCacheWriter {
         CacheContext context = buildContext(
                 operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl,
                 resolveOperation(name, operation), null);
+        return executeContext(context);
+    }
+
+    private CacheResult executeContext(CacheContext context) {
         return getChain().execute(context);
+    }
+
+    private void recordGetStatistics(
+            String cacheName, CacheResult result, @Nullable byte[] resultBytes) {
+        if (!result.isSuccess()) {
+            return;
+        }
+        statistics.incGets(cacheName);
+        if (resultBytes == null) {
+            statistics.incMisses(cacheName);
+        } else {
+            statistics.incHits(cacheName);
+        }
+    }
+
+    private void recordCleanDeletes(String cacheName, long deletedCount) {
+        long remaining = deletedCount;
+        while (remaining > Integer.MAX_VALUE) {
+            statistics.incDeletesBy(cacheName, Integer.MAX_VALUE);
+            remaining -= Integer.MAX_VALUE;
+        }
+        statistics.incDeletesBy(cacheName, (int) remaining);
     }
 
     /**

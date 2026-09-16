@@ -310,7 +310,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
             log.debug("Cache CLEAN completed: cacheName={}, pattern={}, deletedCount={}",
                       context.getCacheName(), keyPattern, deletedTotal);
 
-            return CacheResult.success();
+            return CacheResult.successWithDeletedCount(deletedTotal);
 
         } catch (Exception e) {
             CacheResult.FailureKind failureKind = totalDeleted.get() > 0

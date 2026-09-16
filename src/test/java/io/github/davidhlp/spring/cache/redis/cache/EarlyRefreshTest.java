@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,7 +62,6 @@ class EarlyRefreshTest {
                 Clock.fixed(Instant.ofEpochSecond(elapsedSeconds), ZoneOffset.UTC),
                 mock(ThreadPoolEarlyExpirationExecutor.class),
                 mock(RedisTemplate.class),
-                mock(CacheStatisticsCollector.class),
                 values);
 
         EarlyRefresh.Evaluation evaluation = earlyRefresh.evaluate(context(operation(threshold)));
