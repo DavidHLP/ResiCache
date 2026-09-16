@@ -78,28 +78,22 @@ custom implementation must satisfy.
    `HandlerResult`. The engine calls `handle(context, next)` and rejects `null`
    with `IllegalStateException("CacheHandler returned null HandlerResult:
    <class>")` — never an opaque NPE. A handler whose work requires the
-   continuation (see item 7) may reject a bare `handle(context)` call with
+   continuation (see item 6) may reject a bare `handle(context)` call with
    `IllegalStateException` rather than silently run a partial chain.
-2. **Non-null decision**: `HandlerResult` construction MUST provide a non-null
-   `FlowControl`; its public canonical constructor rejects `null` with a
-   `NullPointerException` explaining that the SPI protocol requires a decision.
-   If a malformed result reaches the engine, it rejects it with an
-   `IllegalStateException` naming the offending handler before dispatching the
-   decision.
-3. **FlowControl semantics**: `CONTINUE` advances to the next handler (a
+2. **FlowControl semantics**: `CONTINUE` advances to the next handler (a
    `null` result field at chain end materializes to `success()`); `TERMINATE`
    ends the chain and returns the carried result; `SKIP_ALL` ends the chain,
    returns the carried result, and sets the engine-only
    `skipRemaining` marker so no further handler runs.
-4. **Post-process**: only handlers whose `requiresPostProcess(context)`
+3. **Post-process**: only handlers whose `requiresPostProcess(context)`
    returns `true` get `afterChainExecution(context, result)` after the main
    chain completes. Exceptions thrown there are caught and logged by the
    engine; they never alter the main-chain result.
-5. **Ordering**: `@HandlerPriority(HandlerOrder.X)` is the single source of
+4. **Ordering**: `@HandlerPriority(HandlerOrder.X)` is the single source of
    truth (gap = 100). Unannotated handlers sort last.
-6. **Thread safety**: one handler instance is shared across concurrent
+5. **Thread safety**: one handler instance is shared across concurrent
    executions; keep per-call state out of fields (use `CacheContext`).
-7. **Nested advancement (optional)**: the engine calls
+6. **Nested advancement (optional)**: the engine calls
    `handle(context, ChainContinuation next)`, whose default ignores `next` and
    delegates to `handle(context)` — existing implementations are unaffected.
    A handler that overrides it may run the remainder of the chain inside its
@@ -111,6 +105,12 @@ custom implementation must satisfy.
    After advancing, the handler MUST end its node with `TERMINATE`: returning
    `CONTINUE` would make the engine run every successor a second time and is
    rejected with `IllegalStateException`.
+7. **Non-null decision**: `HandlerResult` construction MUST provide a non-null
+   `FlowControl`; its public canonical constructor rejects `null` with a
+   `NullPointerException` explaining that the SPI protocol requires a decision.
+   If a malformed result reaches the engine, it rejects it with an
+   `IllegalStateException` naming the offending handler before dispatching the
+   decision.
 
 ### Observers
 
