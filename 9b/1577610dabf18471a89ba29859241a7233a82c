@@ -1,0 +1,18 @@
+STABILITY.md
+  h_77173abe25c3ff 80,82-85,90,94,96,98
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerResult.java
+  h_77173abe25c3ff 3,14-21
+src/test/java/io/github/davidhlp/spring/cache/redis/chain/HandlerResultTest.java
+  h_77173abe25c3ff 1-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9b1577610dabf18471a89ba29859241a7233a82c",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
