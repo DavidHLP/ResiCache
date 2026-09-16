@@ -115,13 +115,13 @@ class RedisCacheRegisterAgreementTest {
         AnnotatedElementKey requestKey = new AnnotatedElementKey(
                 implementationMethod, AnnotatedServiceImpl.class);
 
-        assertThat(register.get(
-                "interface-cache", requestKey, OperationKind.CACHEABLE))
-                .isSameAs(operation);
+        RedisCacheableOperation firstResolved = register.get(
+                "interface-cache", requestKey, OperationKind.CACHEABLE);
+        assertThat(firstResolved).isSameAs(operation);
         assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
-        assertThat(register.get(
-                "interface-cache", requestKey, OperationKind.CACHEABLE))
-                .isSameAs(operation);
+        RedisCacheableOperation secondResolved = register.get(
+                "interface-cache", requestKey, OperationKind.CACHEABLE);
+        assertThat(secondResolved).isSameAs(operation);
         assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
     }
 
