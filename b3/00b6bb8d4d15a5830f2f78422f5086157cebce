@@ -1,0 +1,14 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 10,29-32,36-40,52-56,63-75,84-86,100,129-143,179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b300b6bb8d4d15a5830f2f78422f5086157cebce",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
