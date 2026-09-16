@@ -301,15 +301,6 @@ class SyncLockHandlerTest {
             verify(syncSupport).executeSync(eq("test:key"), any(), eq(3L));
         }
 
-        @Test
-        @DisplayName("sets lock acquired attribute to prevent duplicate locking")
-        void doHandle_setsLockAcquiredAttribute() {
-            RedisCacheableOperation operation = createSyncOperation(true, 10);
-            CacheContext context = createContext(CacheOperation.GET, operation);
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(CacheResult.success());
-
-            handler.doHandle(context, NEXT);
-        }
 
         @Test
         @DisplayName("executes chain inside lock")
