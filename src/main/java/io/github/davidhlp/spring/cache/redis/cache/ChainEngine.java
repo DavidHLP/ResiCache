@@ -34,7 +34,8 @@ import org.springframework.stereotype.Component;
  * <p><b>观测编排</b>：Engine 在链入口调用所有 observer 的
  * {@link ChainObserver#onChainStart(CacheContext)}，节点前后调用
  * {@link ChainObserver#beforeNode}/{@link ChainObserver#afterNode}，
- * 链出口调用 {@link ChainObserver#onChainEnd(CacheContext, Object, CacheResult)}。
+ * 链出口调用 {@link ChainObserver#onChainEnd(CacheContext, Object, CacheResult)}；
+ * 正常完成时传最终结果，主路径抛异常时传 {@code null}（表示未产生结果）。
  * Observer 实现以 default no-op 形式提供（见 {@link ChainObserver}），
  * Engine 自身不感知 MDC / Timer / Counter / DEBUG log 等具体关注点 —
  * 新增观测维度只需新增 observer,Engine / handler 零修改。
@@ -339,8 +340,9 @@ class ChainEngine {
      *   <li>private final 嵌套类(非 static)— 不暴露给外部(只服务 ChainEngine.execute
      *       一处);非 static 因需调外部 instance method {@code driveChain},持 outer
      *       reference 是 locality 提升而非泄漏</li>
- *   <li>onChainEnd 传入 driveChain + post-process 后的 {@code mainResult},保证
- *       observer 看到与 execute 返回值一致的最终结果</li>
+     *   <li>onChainEnd 传入主路径 + post-process 后的 {@code mainResult}；
+     *       正常完成时与 execute 返回值一致，主路径异常时为 {@code null}，
+     *       且 execute 继续向上冒泡原异常</li>
      *   <li>run() 无参(不返回 mainResult 后再由 caller 收 mainResult),避免与 caller
      *       形成 split-knowledge</li>
      * </ul>
@@ -389,9 +391,12 @@ class ChainEngine {
                     // token 留 null,onChainEnd 仍按 index 配对 — 失败 observer 收 null
                 }
             }
-            CacheResult mainResult = CacheResult.success();
+            CacheResult mainResult = null;
             try {
-                if (snapshot != null && !snapshot.isEmpty()) {
+                if (snapshot == null || snapshot.isEmpty()) {
+                    // 空链仍是正常完成,保持 success 语义
+                    mainResult = CacheResult.success();
+                } else {
                     mainResult = driveChain(snapshot, context);
                     runPostProcess(mainResult);
                 }
