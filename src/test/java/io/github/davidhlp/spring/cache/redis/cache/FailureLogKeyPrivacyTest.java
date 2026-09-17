@@ -12,7 +12,9 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
+import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -24,12 +26,14 @@ import org.junit.jupiter.api.Test;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -177,6 +181,117 @@ class FailureLogKeyPrivacyTest {
                     .contains("privacy-cache");
         } finally {
             detach(ChainEngine.class, captured);
+        }
+    }
+
+    @Test
+    @DisplayName("ChainEngine:observer 失败 ERROR 只渲染异常类型链,栈保留在 DEBUG")
+    void chainEngine_observerFailure_omitsRawKey() {
+        ListAppender<ILoggingEvent> captured = attach(ChainEngine.class);
+        try {
+            ChainEngine engine = new ChainEngine();
+            engine.addObserver(new ChainObserver() {
+                @Override
+                public void onChainStart(CacheContext context) {
+                    throw new IllegalStateException("observer boom for key " + SECRET_KEY);
+                }
+            });
+            CacheContext context = CacheContext.of(CacheInput.builder()
+                    .operation(CacheOperation.GET)
+                    .cacheName("privacy-cache")
+                    .redisKey(SECRET_KEY)
+                    .actualKey(SECRET_KEY)
+                    .build());
+
+            engine.execute(List.of(new CacheHandler() {
+                @Override
+                public HandlerResult handle(CacheContext ctx) {
+                    return HandlerResult.terminate(CacheResult.success());
+                }
+            }), context);
+
+            assertThat(warnAndErrorText(captured))
+                    .as("observer 失败的 ERROR 不得渲染异常 message/栈(ADR-0001 §15)")
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain("observer boom");
+            assertThat(captured.list)
+                    .as("完整栈必须保留在 DEBUG 供关联")
+                    .anyMatch(event -> event.getLevel() == Level.DEBUG
+                            && event.getThrowableProxy() != null);
+        } finally {
+            detach(ChainEngine.class, captured);
+        }
+    }
+
+    @Test
+    @DisplayName("BloomSupport:三处 fail-open ERROR 只渲染类型链,栈保留在 DEBUG")
+    void bloomSupport_failOpen_omitsRawKey() {
+        ListAppender<ILoggingEvent> captured = attach(BloomSupport.class);
+        try {
+            BloomIFilter broken = new BloomIFilter() {
+                @Override
+                public void add(String cacheName, String key) {
+                    throw new IllegalStateException("bloom add boom for key " + SECRET_KEY);
+                }
+
+                @Override
+                public boolean mightContain(String cacheName, String key) {
+                    throw new IllegalStateException("bloom check boom for key " + SECRET_KEY);
+                }
+
+                @Override
+                public void clear(String cacheName) {
+                    throw new IllegalStateException("bloom clear boom for key " + SECRET_KEY);
+                }
+            };
+            BloomSupport support = new BloomSupport(broken);
+
+            assertThat(support.mightContain("privacy-cache", SECRET_KEY))
+                    .as("fail-open 行为必须保留")
+                    .isTrue();
+            support.add("privacy-cache", SECRET_KEY);
+            support.clear("privacy-cache");
+
+            assertThat(warnAndErrorText(captured))
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain("boom");
+            assertThat(captured.list)
+                    .anyMatch(event -> event.getLevel() == Level.DEBUG
+                            && event.getThrowableProxy() != null);
+        } finally {
+            detach(BloomSupport.class, captured);
+        }
+    }
+
+    @Test
+    @DisplayName("RedisBloomIFilter:三个失败点 ERROR 只渲染类型链,栈保留在 DEBUG")
+    void redisBloomIFilter_failures_omitRawKey() {
+        ListAppender<ILoggingEvent> captured = attach(RedisBloomIFilter.class);
+        try {
+            @SuppressWarnings("unchecked")
+            RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
+            when(redisTemplate.executePipelined(any(RedisCallback.class)))
+                    .thenThrow(new IllegalStateException("bloom redis boom for key " + SECRET_KEY));
+            when(redisTemplate.delete(anyString()))
+                    .thenThrow(new IllegalStateException("bloom redis delete boom for key " + SECRET_KEY));
+            RedisBloomIFilter filter = new RedisBloomIFilter(
+                    redisTemplate, new BloomFilterConfig("bf:", 4096, 3, 64), null);
+            filter.init();
+
+            filter.add("privacy-cache", SECRET_KEY);
+            assertThat(filter.mightContain("privacy-cache", SECRET_KEY))
+                    .as("check 失败必须 fail-open")
+                    .isTrue();
+            filter.clear("privacy-cache");
+
+            assertThat(warnAndErrorText(captured))
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain("boom");
+            assertThat(captured.list)
+                    .anyMatch(event -> event.getLevel() == Level.DEBUG
+                            && event.getThrowableProxy() != null);
+        } finally {
+            detach(RedisBloomIFilter.class, captured);
         }
     }
 
