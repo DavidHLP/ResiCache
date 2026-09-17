@@ -4,6 +4,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.SerializerProperties;
 import io.github.davidhlp.spring.cache.redis.serialization.SerializationException.EnvelopeCodec;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;

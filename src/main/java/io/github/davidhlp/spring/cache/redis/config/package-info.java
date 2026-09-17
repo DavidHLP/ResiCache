@@ -5,7 +5,7 @@
  * <ul>
  *   <li>RedisCacheAutoConfiguration - 主配置入口</li>
  *   <li>RedisProCacheProperties - {@code resi-cache.*} 配置契约</li>
- *   <li>MetricsAutoConfiguration / CachingEnablementValidation - 可选入口</li>
+ *   <li>CachingEnablementValidation - 可选入口</li>
  * </ul>
  * <p>具体装配类位于 package-private {@code cache} runtime。
  */

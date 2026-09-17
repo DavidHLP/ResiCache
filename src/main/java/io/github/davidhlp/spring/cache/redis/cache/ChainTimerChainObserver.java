@@ -53,7 +53,7 @@ final class ChainTimerChainObserver implements ChainObserver {
             return;
         }
         TimerKey key = new TimerKey(
-                handler.getClass().getSimpleName(),
+                CacheHandlerChain.handlerTag(handler),
                 result.decision().name(),
                 context.getCacheName());
         Timer timer = timers.computeIfAbsent(key, this::registerTimer);

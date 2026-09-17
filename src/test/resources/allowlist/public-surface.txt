@@ -22,7 +22,6 @@ chain.model.PrefetchDecision
 chain.model.TtlDecision
 chain.observer.ChainObserver
 config.CachingEnablementValidation
-config.MetricsAutoConfiguration
 config.RedisCacheAutoConfiguration
 config.RedisProCacheProperties
 protection.bloom.filter.BloomIFilter

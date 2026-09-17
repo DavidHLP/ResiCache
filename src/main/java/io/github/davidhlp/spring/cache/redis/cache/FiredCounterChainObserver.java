@@ -57,11 +57,12 @@ final class FiredCounterChainObserver implements ChainObserver {
         if (registry == null) {
             return;
         }
+        String handlerTag = CacheHandlerChain.handlerTag(handler);
         Counter counter = firedCounters.computeIfAbsent(handler.getClass(), klass ->
                 Counter.builder("resicache.handler.fired")
                         .description("Cache protection chain: number of times each handler was evaluated by the engine "
                                 + "(per-handler observability; tag handler = runtime subclass simple name)")
-                        .tag("handler", klass.getSimpleName())
+                        .tag("handler", handlerTag)
                         .register(registry));
         counter.increment();
     }

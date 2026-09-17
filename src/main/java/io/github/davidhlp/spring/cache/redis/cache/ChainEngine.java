@@ -362,12 +362,12 @@ class ChainEngine {
                     }
                     handler.afterChainExecution(context, mainResult);
                     log.debug("Post-processing executed for: {}",
-                            handler.getClass().getSimpleName());
+                            CacheHandlerChain.handlerTag(handler));
                 } catch (Exception e) {
                     // ADR-0001 §15 key 隐私:ERROR 只带 cacheName + 异常类型链,不带 raw key;
                     // 完整栈留 DEBUG(异常 message 可能内嵌 key)。
                     log.error("Post-processing failed for: {}, operation: {}, cacheName: {}, cause={}",
-                            handler.getClass().getSimpleName(),
+                            CacheHandlerChain.handlerTag(handler),
                             context.getOperation(),
                             context.getCacheName(),
                             FailureDiagnostics.sanitizedFailure(e));

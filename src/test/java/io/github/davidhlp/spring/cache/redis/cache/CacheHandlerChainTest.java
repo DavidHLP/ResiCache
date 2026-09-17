@@ -6,19 +6,20 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.slf4j.MDC;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * CacheHandlerChain 单元测试 — thin facade 形态。
@@ -35,8 +36,7 @@ class CacheHandlerChainTest {
 
     @BeforeEach
     void setUp() {
-        // 单元测试：手动装配 facade + engine（避免拉起 Spring 容器）
-        engine = new ChainEngine();
+        engine = mock(ChainEngine.class);
         chain = new CacheHandlerChain(engine);
     }
 
@@ -79,130 +79,38 @@ class CacheHandlerChainTest {
         }
 
         @Test
-        @DisplayName("addHandler 同步刷新 facade 持有的链快照")
+        @DisplayName("addHandler 后 execute 委派最新不可变快照")
         void addHandler_refreshesFacadeSnapshot() {
-            chain.addHandler(new TestCacheHandler());
+            CacheHandler handler = new TestCacheHandler();
+            CacheContext context = createTestContext();
+            CacheResult expected = CacheResult.success();
+            when(engine.execute(anyList(), same(context))).thenReturn(expected);
 
-            CacheResult result = chain.execute(createTestContext());
+            chain.addHandler(handler);
 
-            assertThat(result.isSuccess()).isTrue();
+            assertThat(chain.execute(context)).isSameAs(expected);
+            verify(engine).execute(
+                    argThat(snapshot -> snapshot.size() == 1 && snapshot.get(0) == handler),
+                    same(context));
         }
     }
-
     @Nested
     @DisplayName("execute")
     class ExecuteTests {
 
         @Test
-        @DisplayName("空链返回成功结果")
-        void execute_emptyChain_returnsSuccess() {
+        @DisplayName("将不可变 handler 快照与 context 委派给 Engine")
+        void execute_delegatesSnapshotAndContext() {
             CacheContext context = createTestContext();
-            CacheResult result = chain.execute(context);
-            assertThat(result.isSuccess()).isTrue();
-        }
-
-        @Test
-        @DisplayName("单处理器执行成功")
-        void execute_singleHandler_executesSuccessfully() {
-            AtomicBoolean handlerCalled = new AtomicBoolean(false);
-            CacheHandler handler = new TestCacheHandler() {
-                @Override
-                public HandlerResult handle(CacheContext context) {
-                    handlerCalled.set(true);
-                    return HandlerResult.continueWith(CacheResult.success());
-                }
-            };
-            chain.addHandler(handler);
-
-            CacheContext context = createTestContext();
-            CacheResult result = chain.execute(context);
-
-            assertThat(handlerCalled.get()).isTrue();
-            assertThat(result.isSuccess()).isTrue();
-        }
-
-        @Test
-        @DisplayName("多处理器按顺序执行")
-        void execute_multipleHandlers_executesInOrder() {
-            AtomicBoolean firstCalled = new AtomicBoolean(false);
-            AtomicBoolean secondCalled = new AtomicBoolean(false);
-
-            CacheHandler first = new TestCacheHandler() {
-                @Override
-                public HandlerResult handle(CacheContext context) {
-                    firstCalled.set(true);
-                    return HandlerResult.continueChain();
-                }
-            };
-
-            CacheHandler second = new TestCacheHandler() {
-                @Override
-                public HandlerResult handle(CacheContext context) {
-                    secondCalled.set(true);
-                    return HandlerResult.continueWith(CacheResult.success());
-                }
-            };
-
-            chain.addHandler(first);
-            chain.addHandler(second);
-
-            CacheContext context = createTestContext();
-            chain.execute(context);
-
-            assertThat(firstCalled.get()).isTrue();
-            assertThat(secondCalled.get()).isTrue();
-        }
-
-        @Test
-        @DisplayName("返回 null 的结果被替换为成功结果")
-        void execute_nullResult_replacedWithSuccess() {
-            CacheHandler handler = new TestCacheHandler() {
-                @Override
-                public HandlerResult handle(CacheContext context) {
-                    return HandlerResult.continueWith(null);
-                }
-            };
-            chain.addHandler(handler);
-
-            CacheContext context = createTestContext();
-            CacheResult result = chain.execute(context);
-
-            assertThat(result.isSuccess()).isTrue();
-        }
-    }
-
-    @Nested
-    @DisplayName("PostProcessHandler")
-    class PostProcessHandlerTests {
-
-        @Test
-        @DisplayName("后置处理器在链执行后被调用")
-        void execute_withPostProcessor_calledAfterChain() {
-            AtomicBoolean postProcessorCalled = new AtomicBoolean(false);
-            TestPostProcessor postProcessor = new TestPostProcessor(postProcessorCalled);
+            CacheResult expected = CacheResult.miss();
+            when(engine.execute(anyList(), same(context))).thenReturn(expected);
 
             chain.addHandler(new TestCacheHandler());
-            chain.addHandler(postProcessor);
 
-            CacheContext context = createTestContext();
-            chain.execute(context);
-
-            assertThat(postProcessorCalled.get()).isTrue();
-        }
-
-        @Test
-        @DisplayName("requiresPostProcess 返回 false 时不调用后置处理")
-        void execute_postProcessorNotRequired_notCalled() {
-            AtomicBoolean postProcessorCalled = new AtomicBoolean(false);
-            TestPostProcessor postProcessor = new TestPostProcessor(postProcessorCalled, false);
-
-            chain.addHandler(new TestCacheHandler());
-            chain.addHandler(postProcessor);
-
-            CacheContext context = createTestContext();
-            chain.execute(context);
-
-            assertThat(postProcessorCalled.get()).isFalse();
+            assertThat(chain.execute(context)).isSameAs(expected);
+            verify(engine).execute(
+                    argThat(snapshot -> snapshot.size() == 1),
+                    same(context));
         }
     }
 
@@ -220,24 +128,19 @@ class CacheHandlerChainTest {
         }
 
         @Test
-        @DisplayName("清空后执行返回成功")
-        void clear_emptyChain_executesSuccessfully() {
-            chain.addHandler(new TestCacheHandler());
-            chain.clear();
-
+        @DisplayName("清空后将空快照委派给 Engine")
+        void clear_emptyChain_delegatesEmptySnapshot() {
             CacheContext context = createTestContext();
-            CacheResult result = chain.execute(context);
-            assertThat(result.isSuccess()).isTrue();
-        }
+            CacheResult expected = CacheResult.success();
+            when(engine.execute(anyList(), same(context))).thenReturn(expected);
 
-        @Test
-        @DisplayName("clear 同步刷新 Engine 持有的链快照为 null")
-        void clear_refreshesEngineSnapshotToNull() {
             chain.addHandler(new TestCacheHandler());
             chain.clear();
-            // execute 不应进入主循环（空链短路）
-            CacheResult result = chain.execute(createTestContext());
-            assertThat(result.isSuccess()).isTrue();
+
+            assertThat(chain.execute(context)).isSameAs(expected);
+            verify(engine).execute(
+                    argThat(snapshot -> snapshot.isEmpty()),
+                    same(context));
         }
     }
 
@@ -281,68 +184,6 @@ class CacheHandlerChainTest {
         }
     }
 
-    @Nested
-    @DisplayName("per-handler observability (MDC requestId) — via Engine observer")
-    class MdcObservabilityTests {
-
-        // 走真实 AbstractCacheHandler 引擎的 handler:doHandle 内捕获 MDC 中的 requestId。
-        // 用于验证 Engine 中 MDCStampChainObserver stamp 的 requestId 在整条链内可被
-        // 每个 handler 观察到（facade.execute → engine.execute → MDCStampChainObserver.onChainStart
-        // → 节点循环 → each handler doHandle reads MDC）。
-        private AbstractCacheHandler recordingHandler(List<String> sink, HandlerResult result) {
-            return new AbstractCacheHandler() {
-                @Override
-                protected boolean shouldHandle(CacheContext context) {
-                    return true;
-                }
-
-                @Override
-                protected HandlerResult doHandle(CacheContext context, ChainContinuation next) {
-                    sink.add(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY));
-                    return result;
-                }
-            };
-        }
-
-        private void installDefaultObservers() {
-            engine.addObserver(new io.github.davidhlp.spring.cache.redis.cache.MDCStampChainObserver());
-        }
-
-        @Test
-        @DisplayName("execute 用单一 requestId 关联所有被求值的 handler,执行后从 MDC 清除")
-        void execute_stampsSingleRequestId_correlatingAllHandlers_thenClears() {
-            installDefaultObservers();
-            List<String> seen = new ArrayList<>();
-            chain.addHandler(recordingHandler(seen, HandlerResult.continueChain()));
-            chain.addHandler(recordingHandler(seen, HandlerResult.continueWith(CacheResult.success())));
-
-            chain.execute(createTestContext());
-
-            // 每个被引擎求值的 handler 都观察到一个非 null requestId
-            assertThat(seen).hasSize(2).doesNotContainNull();
-            // 两个 handler 共享同一个 requestId —— 这是"单次 GET/PUT 的 DEBUG trace 可串联"的契约
-            assertThat(seen.get(0)).isEqualTo(seen.get(1));
-            // 执行结束后 requestId 从 MDC 移除(不泄漏到调用方线程)
-            assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNull();
-        }
-
-        @Test
-        @DisplayName("execute 恢复调用方在 MDC 中预设的 requestId(snapshot/restore,不误清宿主 MDC)")
-        void execute_restoresCallerRequestId_afterCompletion() {
-            installDefaultObservers();
-            chain.addHandler(recordingHandler(new ArrayList<>(),
-                    HandlerResult.continueWith(CacheResult.success())));
-
-            MDC.put(CacheHandlerChain.MDC_REQUEST_ID_KEY, "caller-id");
-            try {
-                chain.execute(createTestContext());
-                // 执行后必须恢复调用方原值,而非残留框架生成的 id 或被清空
-                assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isEqualTo("caller-id");
-            } finally {
-                MDC.remove(CacheHandlerChain.MDC_REQUEST_ID_KEY);
-            }
-        }
-    }
 
     // Test handler implementations — 简化为"返回结果不主动推进" — Engine 负责推进
     static class TestCacheHandler implements CacheHandler {
@@ -359,32 +200,4 @@ class CacheHandlerChainTest {
         }
     }
 
-    static class TestPostProcessor implements CacheHandler {
-        private final AtomicBoolean called;
-        private final boolean requiresPostProcess;
-
-        TestPostProcessor(AtomicBoolean called) {
-            this(called, true);
-        }
-
-        TestPostProcessor(AtomicBoolean called, boolean requiresPostProcess) {
-            this.called = called;
-            this.requiresPostProcess = requiresPostProcess;
-        }
-
-        @Override
-        public HandlerResult handle(CacheContext context) {
-            return HandlerResult.continueWith(CacheResult.success());
-        }
-
-        @Override
-        public void afterChainExecution(CacheContext context, CacheResult result) {
-            called.set(true);
-        }
-
-        @Override
-        public boolean requiresPostProcess(CacheContext context) {
-            return requiresPostProcess;
-        }
-    }
 }

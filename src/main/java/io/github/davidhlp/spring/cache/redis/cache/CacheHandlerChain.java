@@ -68,6 +68,11 @@ class CacheHandlerChain {
         this.engine = engine;
     }
 
+    /** Shared runtime label for handler logs and bounded observer tags. */
+    static String handlerTag(CacheHandler handler) {
+        return handler.getClass().getSimpleName();
+    }
+
     /**
      * 添加处理器到责任链末尾 — O(N) 链表遍历。
      *
@@ -80,7 +85,7 @@ class CacheHandlerChain {
     public CacheHandlerChain addHandler(CacheHandler handler) {
         synchronized (chainGuard) {
             handlers.add(handler);
-            log.debug("Added handler to chain: {}", handler.getClass().getSimpleName());
+            log.debug("Added handler to chain: {}", handlerTag(handler));
             return this;
         }
     }
@@ -132,7 +137,7 @@ class CacheHandlerChain {
      */
     public List<String> getHandlerNames() {
         synchronized (chainGuard) {
-            return handlers.stream().map(h -> h.getClass().getSimpleName()).toList();
+            return handlers.stream().map(CacheHandlerChain::handlerTag).toList();
         }
     }
 }

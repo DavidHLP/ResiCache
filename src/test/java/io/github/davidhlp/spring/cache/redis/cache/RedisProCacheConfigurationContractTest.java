@@ -6,7 +6,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.config.CachingEnablementValidation;
-import io.github.davidhlp.spring.cache.redis.config.MetricsAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
@@ -43,7 +42,6 @@ class RedisProCacheConfigurationContractTest {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(
                         RedisCacheAutoConfiguration.class,
-                        MetricsAutoConfiguration.class,
                         CachingEnablementValidation.class))
                 .withPropertyValues(
                         "resi-cache.enabled=false",
@@ -235,36 +233,26 @@ class RedisProCacheConfigurationContractTest {
     }
 
     @Test
-    void standardObserverBeans_areDeclaredWithOrder() throws Exception {
-        // P1-API-001-C:标准 observer 为有序 Bean,由 factory 单一装配注入 Engine。
-        assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
-                        "mdcStampChainObserver"))
-                .isNotNull();
-        assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
-                        "chainDebugLogChainObserver"))
-                .isNotNull();
-        assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
-                        "chainTimerChainObserver",
-                        org.springframework.beans.factory.ObjectProvider.class,
-                        org.springframework.core.env.Environment.class))
-                .isNotNull();
-        assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
-                        "firedCounterChainObserver",
-                        org.springframework.beans.factory.ObjectProvider.class,
-                        org.springframework.core.env.Environment.class))
-                .isNotNull();
-        // 顺序注解:MDC(1) → DebugLog(2) → Timer(3) → FiredCounter(4)
-        Method[] methods = RedisProCacheConfiguration.class.getDeclaredMethods();
-        for (Method m : methods) {
-            if (m.getName().endsWith("ChainObserver") || m.getName().endsWith("StampChainObserver")
-                    || m.getName().equals("chainDebugLogChainObserver")) {
-                org.springframework.core.annotation.Order order =
-                        m.getAnnotation(org.springframework.core.annotation.Order.class);
-                assertThat(order)
-                        .as("observer bean 方法 %s 必须带 @Order", m.getName())
-                        .isNotNull();
-            }
-        }
+    void standardObserverBeans_areDeclaredWithOrder() {
+        var observerMethods = java.util.Arrays.stream(
+                        RedisProCacheConfiguration.class.getDeclaredMethods())
+                .filter(method -> io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver.class
+                        .isAssignableFrom(method.getReturnType()))
+                .toList();
+
+        assertThat(observerMethods).hasSize(4);
+        assertThat(observerMethods).allSatisfy(method -> {
+            assertThat(method.getAnnotation(Bean.class))
+                    .as("observer factory must be a bean method")
+                    .isNotNull();
+            assertThat(method.getAnnotation(org.springframework.core.annotation.Order.class))
+                    .as("observer bean must be ordered")
+                    .isNotNull();
+        });
+        assertThat(observerMethods)
+                .extracting(method -> method.getAnnotation(
+                        org.springframework.core.annotation.Order.class).value())
+                .containsExactlyInAnyOrder(1, 2, 3, 4);
     }
 
     @Test

@@ -211,7 +211,7 @@ class CacheHandlerChainFactory {
                 String handlerName = getHandlerDisableName(handler);
 
                 if (disabled.contains(handlerName)) {
-                    log.info("Handler disabled by configuration: {}", handler.getClass().getSimpleName());
+                    log.info("Handler disabled by configuration: {}", CacheHandlerChain.handlerTag(handler));
                     continue;
                 }
 
@@ -220,7 +220,7 @@ class CacheHandlerChainFactory {
                     ach.attachMeterRegistry(registry);
                 }
                 log.debug("Added handler to chain: {} (order={})",
-                          handler.getClass().getSimpleName(),
+                          CacheHandlerChain.handlerTag(handler),
                           getOrder(handler));
             }
 
@@ -311,7 +311,7 @@ class CacheHandlerChainFactory {
         if (annotation != null) {
             return annotation.value().getDisableName();
         }
-        String className = handler.getClass().getSimpleName();
+        String className = CacheHandlerChain.handlerTag(handler);
         return className.replace("Handler", "")
                         .replaceAll("([a-z])([A-Z])", "$1-$2")  // camelCase to kebab-case
                         .toLowerCase();
