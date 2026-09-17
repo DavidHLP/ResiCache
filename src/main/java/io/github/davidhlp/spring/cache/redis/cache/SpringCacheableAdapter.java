@@ -24,8 +24,7 @@ import org.springframework.stereotype.Component;
  * 保留为命名 seam。
  */
 @Component
-class SpringCacheableAdapter
-        implements OperationFactory<Cacheable, RedisCacheableOperation> {
+class SpringCacheableAdapter {
 
     private final RedisCacheAttributesProjector projector;
 
@@ -33,7 +32,6 @@ class SpringCacheableAdapter
         this.projector = projector;
     }
 
-    @Override
     public RedisCacheableOperation create(Method method, Cacheable annotation, String key) {
         RedisCacheAttributes a = toAttributes(annotation);
         return materialize(method, key, a);

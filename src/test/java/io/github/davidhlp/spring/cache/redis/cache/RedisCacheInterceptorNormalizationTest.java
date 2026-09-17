@@ -1,46 +1,45 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
-import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
-import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
+import org.springframework.context.expression.AnnotatedElementKey;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @DisplayName("RedisCacheInterceptor method normalization")
 class RedisCacheInterceptorNormalizationTest {
 
     @Test
-    @DisplayName("JDK proxy invocation uses the implementation method for chain and metadata")
+    @DisplayName("JDK proxy invocation uses the implementation method for metadata and resolver lookup")
     void jdkProxyInvocation_normalizesInterfaceMethod() throws Throwable {
         RedisCacheRegister register = new RedisCacheRegister();
         RedisCacheOperationSource operationSource = new RedisCacheOperationSource(
-                io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.NativeAnnotationMode.SELECTIVE,
+                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE,
                 register);
         Method implementationMethod = JdkServiceImpl.class.getMethod("load", String.class);
-        RecordingAnnotationChainEngine chain = new RecordingAnnotationChainEngine(register);
         operationSource.getCacheOperations(implementationMethod, JdkServiceImpl.class);
         RedisCacheableOperation declaredPolicy = register.get(
                 "jdk-cache",
-                new org.springframework.context.expression.AnnotatedElementKey(
-                        implementationMethod, JdkServiceImpl.class),
+                new AnnotatedElementKey(implementationMethod, JdkServiceImpl.class),
                 OperationKind.CACHEABLE);
         DefaultMethodMetadataResolver metadataResolver = spy(new DefaultMethodMetadataResolver());
+        CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
         CacheManager cacheManager = new ConcurrentMapCacheManager("jdk-cache");
         KeyGenerator keyGenerator = new SimpleKeyGenerator();
         RedisCacheInterceptor interceptor = new RedisCacheInterceptor(
-                operationSource, cacheManager, keyGenerator, chain, metadataResolver);
+                operationSource, cacheManager, keyGenerator, metadataResolver);
 
         ProxyFactory proxyFactory = new ProxyFactory(new JdkServiceImpl());
         proxyFactory.setProxyTargetClass(false);
@@ -49,11 +48,10 @@ class RedisCacheInterceptorNormalizationTest {
 
         assertThat(Proxy.isProxyClass(proxy.getClass())).isTrue();
         assertThat(proxy.load("id")).isEqualTo("value:id");
-        assertThat(chain.observedOperations).singleElement().isSameAs(declaredPolicy);
-        assertThat(((RedisCacheableOperation) chain.observedOperations.get(0)).getTtl())
-                .isEqualTo(321L);
-        assertThat(((RedisCacheableOperation) chain.observedOperations.get(0)).isUseBloomFilter())
-                .isTrue();
+        when(metadataResolver.currentKey()).thenReturn(
+                new AnnotatedElementKey(implementationMethod, proxy.getClass()));
+        assertThat(resolver.resolve("jdk-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+                .isSameAs(declaredPolicy);
         verify(metadataResolver).activate(implementationMethod, JdkServiceImpl.class);
     }
 
@@ -62,7 +60,7 @@ class RedisCacheInterceptorNormalizationTest {
     void jdkProxyInvocation_preservesInterfaceDeclaredPolicy() throws Throwable {
         RedisCacheRegister register = new RedisCacheRegister();
         RedisCacheOperationSource operationSource = new RedisCacheOperationSource(
-                io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.NativeAnnotationMode.SELECTIVE,
+                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE,
                 register);
         Method interfaceMethod = InterfaceAnnotatedService.class.getMethod("load", String.class);
         AnnotationParser.ParsedAnnotations parsed = new AnnotationParser().parse(interfaceMethod);
@@ -71,13 +69,10 @@ class RedisCacheInterceptorNormalizationTest {
         register.registerSnapshot(interfaceMethod, InterfaceAnnotatedService.class, parsed);
         DefaultMethodMetadataResolver metadataResolver = spy(new DefaultMethodMetadataResolver());
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
-        RecordingAnnotationChainEngine chain =
-                new RecordingAnnotationChainEngine(register, resolver, "interface-cache");
         RedisCacheInterceptor interceptor = new RedisCacheInterceptor(
                 operationSource,
                 new ConcurrentMapCacheManager("interface-cache"),
                 new SimpleKeyGenerator(),
-                chain,
                 metadataResolver);
 
         ProxyFactory proxyFactory = new ProxyFactory(new InterfaceAnnotatedServiceImpl());
@@ -87,18 +82,13 @@ class RedisCacheInterceptorNormalizationTest {
 
         assertThat(Proxy.isProxyClass(proxy.getClass())).isTrue();
         assertThat(proxy.load("id")).isEqualTo("interface:id");
-        assertThat(chain.observedOperations).singleElement().isSameAs(declaredPolicy);
-        assertThat(((RedisCacheableOperation) chain.observedOperations.get(0)).getTtl())
-                .isEqualTo(654L);
-        assertThat(((RedisCacheableOperation) chain.observedOperations.get(0)).isUseBloomFilter())
-                .isTrue();
-        assertThat(chain.observedResolution).isSameAs(declaredPolicy);
-        assertThat(chain.observedResolution.getTtl()).isEqualTo(654L);
-        assertThat(chain.observedResolution.isUseBloomFilter()).isTrue();
-
-        verify(metadataResolver).activate(
-                InterfaceAnnotatedServiceImpl.class.getMethod("load", String.class),
-                InterfaceAnnotatedServiceImpl.class);
+        Method implementationMethod = InterfaceAnnotatedServiceImpl.class.getMethod("load", String.class);
+        when(metadataResolver.currentKey()).thenReturn(
+                new AnnotatedElementKey(implementationMethod, proxy.getClass()));
+        assertThat(resolver.resolve(
+                "interface-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+                .isSameAs(declaredPolicy);
+        verify(metadataResolver).activate(implementationMethod, InterfaceAnnotatedServiceImpl.class);
     }
 
     private interface InterfaceAnnotatedService {
@@ -122,35 +112,6 @@ class RedisCacheInterceptorNormalizationTest {
         @RedisCacheable(cacheNames = "jdk-cache", ttl = 321, useBloomFilter = true)
         public String load(String id) {
             return "value:" + id;
-        }
-    }
-
-    private static final class RecordingAnnotationChainEngine extends AnnotationChainEngine {
-        private List<CacheOperation> observedOperations = List.of();
-        private final CacheOperationResolver resolver;
-        private final String resolverCacheName;
-        private CachePolicyView.Source observedResolution;
-
-        private RecordingAnnotationChainEngine(RedisCacheRegister register) {
-            this(register, null, null);
-        }
-
-        private RecordingAnnotationChainEngine(
-                RedisCacheRegister register, CacheOperationResolver resolver, String resolverCacheName) {
-            super(List.of(), register);
-            this.resolver = resolver;
-            this.resolverCacheName = resolverCacheName;
-        }
-
-        @Override
-        public List<CacheOperation> execute(Method method, Object target, Object[] args) {
-            observedOperations = super.execute(method, target, args);
-            if (resolver != null) {
-                observedResolution = resolver.resolve(
-                        resolverCacheName,
-                        io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET);
-            }
-            return observedOperations;
         }
     }
 }

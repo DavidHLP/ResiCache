@@ -1,4 +1,3 @@
-cache.AbstractAnnotationHandler$RegisterAction
 cache.AbstractCacheHandler$CounterMetadata
 cache.AttributePopulator$FieldSink
 cache.BuilderPopulator$TextField

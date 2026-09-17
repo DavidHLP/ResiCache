@@ -3,7 +3,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.lang.reflect.Method;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,7 +30,6 @@ class AnnotationPolicySnapshotTest {
         when(metadataResolver.currentKey()).thenReturn(
                 new AnnotatedElementKey(method, SnapshotService.class));
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
-        AnnotationChainEngine chain = new AnnotationChainEngine(List.of(), register);
 
         source.getCacheOperations(method, SnapshotService.class);
         AnnotationParser.ParsedAnnotations first = register.getSnapshot(method, SnapshotService.class);
@@ -40,32 +38,31 @@ class AnnotationPolicySnapshotTest {
 
         assertThat(parser.invocations()).isEqualTo(1);
         assertThat(second).isSameAs(first);
-        assertThat(chain.execute(method, new SnapshotService(), new Object[]{"id"}))
-                .singleElement().isSameAs(first.policyOperations().get(0));
-        assertThat(resolver.resolve("snapshot-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
-                .isSameAs(first.policyOperations().get(0));
+        assertThat(first.policyOperations()).singleElement().isSameAs(
+                resolver.resolve("snapshot-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET));
     }
 
     @Test
-    @DisplayName("operation source registration is consumed by chain without manual registration")
-    void operationSourceRegistrationIsConsumedByChainWithoutManualRegistration() throws Exception {
+    @DisplayName("operation source registration is consumed by the policy resolver")
+    void operationSourceRegistrationIsConsumedByPolicyResolver() throws Exception {
         RedisCacheRegister register = new RedisCacheRegister();
         RedisCacheOperationSource source = new RedisCacheOperationSource(
                 RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, register);
         Method method = SnapshotService.class.getMethod("read", String.class);
-        AnnotationChainEngine chain = new AnnotationChainEngine(List.of(), register);
+        MethodMetadataResolver metadataResolver = Mockito.mock(MethodMetadataResolver.class);
+        when(metadataResolver.currentKey()).thenReturn(
+                new AnnotatedElementKey(method, SnapshotService.class));
+        CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
 
         java.util.Collection<CacheOperation> sourceOperations =
                 source.getCacheOperations(method, SnapshotService.class);
         AnnotationParser.ParsedAnnotations snapshot =
                 register.getSnapshot(method, SnapshotService.class);
-        List<CacheOperation> chainOperations =
-                chain.execute(method, new SnapshotService(), new Object[]{"id"});
 
         assertThat(sourceOperations).singleElement().isSameAs(snapshot.operations().get(0));
-        assertThat(chainOperations).singleElement().isSameAs(snapshot.policyOperations().get(0));
+        assertThat(resolver.resolve("snapshot-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+                .isSameAs(snapshot.policyOperations().get(0));
     }
-
 
     private static final class CountingAnnotationParser extends AnnotationParser {
         private final AtomicInteger invocations = new AtomicInteger();

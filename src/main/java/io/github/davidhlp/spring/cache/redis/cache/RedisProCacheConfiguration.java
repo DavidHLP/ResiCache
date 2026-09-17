@@ -30,11 +30,6 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Slf4j
 @Configuration(proxyBeanMethods = false)
 @Import({
-        AnnotationChainEngine.class,
-        CachePutAnnotationHandler.class,
-        CacheableAnnotationHandler.class,
-        CachingAnnotationHandler.class,
-        EvictAnnotationHandler.class,
         RedisCacheAttributesProjector.class,
         SpringCacheableAdapter.class,
         CacheHandlerChain.class,

@@ -218,10 +218,10 @@ class AnnotationParser {
         // 使用 Spring 标准的 CacheEvictOperation.Builder,确保 getClass() 返回
         // CacheEvictOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
         // 能正确按类型索引(可缓存/可放入/可清除三桶)。ResiCache 增强字段(ttl/bloom/
-        // early-expiration 等)不进 Spring operation:由 AnnotationChainEngine 的 handler
-        // 注册到 RedisCacheRegister,链路 buildContext 按需查询。(@RedisCacheEvict 的
-        // sync/syncTimeout 是 ResiCache 扩展,Spring 原生 CacheEvictOperation 无此概念,
-        // 此处不投影——与 Spring 原生 @CacheEvict 行为一致。)
+        // early-expiration 等)不进 Spring operation,由本解析结果的 policy snapshot
+        // 提供给 RedisCacheRegister 查询。(@RedisCacheEvict 的 sync/syncTimeout 是
+        // ResiCache 扩展,Spring 原生 CacheEvictOperation 无此概念,此处不投影——
+        // 与 Spring 原生 @CacheEvict 行为一致。)
         final CacheEvictOperation.Builder builder = new CacheEvictOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(
@@ -265,8 +265,8 @@ class AnnotationParser {
         // 使用 Spring 标准的 CachePutOperation.Builder,确保 getClass() 返回
         // CachePutOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
         // 能正确按类型索引(可缓存/可放入/可清除三桶)。ResiCache 增强字段(ttl/bloom/
-        // nullValue/early-expiration 等)不进 Spring operation:由 AnnotationChainEngine
-        // 的 handler 注册到 RedisCacheRegister,链路 buildContext 按需查询。
+        // nullValue/early-expiration 等)不进 Spring operation,由 policy snapshot
+        // 提供给 RedisCacheRegister 查询。
         final CachePutOperation.Builder builder = new CachePutOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(
