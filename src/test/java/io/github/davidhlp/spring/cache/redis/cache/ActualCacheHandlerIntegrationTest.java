@@ -123,8 +123,8 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             HandlerResult result = handler.handle(context);
 
             assertThat(result.shouldTerminate()).isTrue();
+            assertThat(result.result().outcome()).isEqualTo(CacheResult.Outcome.MISS);
             assertThat(result.result().resultBytes()).isNull();
-            assertThat(result.result().isSuccess()).isTrue();
         }
     }
 
