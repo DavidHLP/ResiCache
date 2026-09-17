@@ -20,8 +20,9 @@ import org.springframework.stereotype.Component;
  * 100000} / {@code falseProbability=0.01}；{@code @RedisCachePut/Evict.syncTimeout=10}），
  * 而本投影器只做"注解 → 属性"的无差别映射，不再做隐含的 sentinel 归一化。
  *
- * <p><strong>公开注解字段签名不变</strong>。新增字段只动 {@link RedisCacheAttributes} +
- * 本投影器 + 1 个 Builder 三处，而非 9 处。
+ * <p><strong>公开注解字段签名不变</strong>。本类只负责“注解属性 → RedisCacheAttributes”的
+ * 投影；共享字段的 builder 映射由 {@link RedisCacheAttributeSink} 与
+ * {@code RedisCacheAttributes#COMMON_SINKS} 协同维护，三个 operation builder 分别实现该契约。
  *
  * <p>Spring 原生 {@code @Cacheable} 由 {@link SpringCacheableAdapter} 内部直接构造，
  * 无需投影层。
