@@ -181,6 +181,7 @@ class RedisProCacheConfigurationContractTest {
                                 io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager.class)).isEmpty();
                         assertThat(context).doesNotHaveBean("redisCacheAdvisor");
                         assertThat(context).doesNotHaveBean("redisCacheInterceptor");
+                        assertThat(context).hasBean("redisCacheOperationSource");
                         assertThat(context).hasBean("unrelatedHostBean");
                     });
         }
