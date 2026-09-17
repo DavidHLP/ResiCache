@@ -55,7 +55,7 @@ class RedisCacheRegisterTest {
     }
 
     private RedisCacheRegister register;
-    
+
     private void registerOperation(CacheOperation... operations) {
         List<CacheOperation> snapshotOperations = List.of(operations);
         register.registerSnapshot(METHOD, TARGET_CLASS,
