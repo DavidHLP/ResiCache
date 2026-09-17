@@ -1,0 +1,14 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProxyCachingConfiguration.java
+  h_77173abe25c3ff 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8b0788e2ac47a48a4b7b3b7c97a4c29224a54b6",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
