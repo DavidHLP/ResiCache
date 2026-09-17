@@ -39,6 +39,37 @@ class AnnotationParserTest {
     }
 
     @Test
+    @DisplayName("stable cacheable and put members reach standard and policy operations")
+    void stableCacheableAndPutMembersReachOperations() throws Exception {
+        Method method = AnnotatedService.class.getDeclaredMethod("write", String.class);
+
+        AnnotationParser.ParsedAnnotations parsed = parser.parse(method);
+
+        assertThat(parsed.operations()).extracting(Object::getClass)
+                .containsExactly(CacheableOperation.class, CachePutOperation.class);
+        CacheableOperation cacheable = (CacheableOperation) parsed.operations().get(0);
+        CachePutOperation put = (CachePutOperation) parsed.operations().get(1);
+        assertThat(cacheable.getUnless()).isEqualTo("#result == null");
+        assertThat(put.getUnless()).isEqualTo("#result == null");
+        assertThat(((RedisCacheableOperation) parsed.policyOperations().get(0)).getType())
+                .isEqualTo(String.class);
+        assertThat(((RedisCachePutOperation) parsed.policyOperations().get(1)).getType())
+                .isEqualTo(Long.class);
+    }
+
+    @Test
+    @DisplayName("evict unless stays source-compatible while the Spring path remains condition-driven")
+    void evictUnlessStaysSourceCompatible() throws Exception {
+        Method method = AnnotatedService.class.getDeclaredMethod("evict");
+        RedisCacheEvict annotation = method.getAnnotation(RedisCacheEvict.class);
+
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.unless()).isEqualTo("#result == null");
+        assertThat(parser.parse(method).operations()).singleElement()
+                .isInstanceOf(CacheEvictOperation.class);
+    }
+
+    @Test
     @DisplayName("composite annotation expands directly into Spring and policy operations")
     void compositeAnnotationExpands() throws Exception {
         Method method = AnnotatedService.class.getDeclaredMethod("composite", String.class);
@@ -92,6 +123,16 @@ class AnnotationParserTest {
                 redisCachePut = @RedisCachePut(value = "composite-put", key = "#id"))
         String composite(String id) {
             return id;
+        }
+
+        @RedisCacheable(value = "member-cache", key = "#id", unless = "#result == null", type = String.class)
+        @RedisCachePut(value = "member-put", key = "#id", unless = "#result == null", type = Long.class)
+        String write(String id) {
+            return id;
+        }
+
+        @RedisCacheEvict(value = "member-evict", unless = "#result == null")
+        void evict() {
         }
 
         String plain() {

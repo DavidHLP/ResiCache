@@ -18,12 +18,27 @@ a documented migration path (⚠️ BREAKING entry in
 
 | Surface | Stable form | Notes |
 |---------|-------------|-------|
-| **Enhancement annotation signatures** | `@RedisCacheable`, `@RedisCachePut`, `@RedisCacheEvict`, `@RedisCaching` | Attribute names, types, and semantics. Adding new attributes is non-breaking. |
+| **Enhancement annotation signatures** | `@RedisCacheable`, `@RedisCachePut`, `@RedisCacheEvict`, `@RedisCaching` | Attribute names, types, and documented semantics. Compatibility-only attributes are explicit below; adding new attributes is non-breaking. |
 | **Configuration property keys** | `resi-cache.*` namespace under `application.yml` / `application.properties` | Property names and types. Adding new properties is non-breaking. |
 | **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Envelope is the serialization contract — kept, not loosened. |
 | **Extension SPI** | `CacheHandler`, `ChainObserver`, `BloomIFilter`, `LockManager`, `LockManager.LockHandle`, `HandlerPriority` | Implementations must satisfy the documented failure, lifecycle, and thread-safety contracts. |
 | **SPI transitive contract types** | `CacheContext`, `CachePolicyView`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
 | **Native writer statistics** | Spring Data Redis GET/GET hit/GET miss/PUT/DELETE counters are emitted at the writer boundary; CLEAN carries its exact deleted-key count through stable `CacheResult` | `withStatisticsCollector` rebinds all statistics; lock-wait duration remains unreported (`getLockWaitDuration()` is zero) until an internal observation path can be added without expanding `CacheContext` |
+
+### Compatibility-only annotation attributes
+
+The following members remain part of the stable source/binary surface, but are not
+active runtime controls on the current blocking Spring Cache path:
+
+- `@RedisCacheEvict.unless` is retained for compatibility but is not evaluated.
+  Spring's `CacheEvictOperation` has no after-invocation `unless` slot; use
+  `condition` for supported eviction gating.
+- `@RedisCacheable.type` and `@RedisCachePut.type` are retained as declaration
+  metadata. They do not coerce or validate the runtime value; the returned value
+  and serializer determine its actual type.
+
+Activating either behavior requires a separate operation-semantics decision and
+regression contract; these members must not be removed as dead code in 0.x.
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.

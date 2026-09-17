@@ -153,6 +153,14 @@ immediately (rejected because adopter use is unknown).
 the report-only comparison remains out of scope until a matching release is
 requested.
 
+**Compatibility-only annotation members**: `RedisCacheEvict.unless` remains
+ declared for source/binary compatibility but is not evaluated because Spring's
+ `CacheEvictOperation` has no after-invocation `unless` slot; callers should use
+ `condition` for supported eviction gating. `RedisCacheable.type` and
+ `RedisCachePut.type` remain declaration metadata and do not coerce or validate
+ runtime values. Turning either into active behavior requires a separate
+ operation-semantics decision and regression contract.
+
 **Known limitation**: A same-line release tag and artifact are still required
 before enabling a blocking Revapi/Japicmp gate. **Re-evaluate** after a
 same-line published artifact and matching tag are verified.

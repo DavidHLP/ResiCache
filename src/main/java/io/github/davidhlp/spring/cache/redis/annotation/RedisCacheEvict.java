@@ -56,6 +56,10 @@ public @interface RedisCacheEvict {
 
     /**
      * 不清除的条件，支持 SpEL 表达式.
+     *
+     * <p>为保持公开注解的源/二进制兼容性而保留；当前 Spring CacheEvict 路径没有
+     * after-invocation unless 槽位，因此该属性不参与清除判断。需要条件清除时使用
+     * {@link #condition()}.
      */
     String unless() default "";
 

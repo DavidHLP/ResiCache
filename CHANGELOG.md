@@ -29,6 +29,12 @@ The project is on a **single build line**: Spring Boot
 
 Current milestones:
 
+- **Annotation compatibility members are explicit** — `RedisCacheEvict.unless`
+  remains source/binary compatible but is not evaluated on the current Spring
+  eviction path; `RedisCacheable.type` and `RedisCachePut.type` remain metadata
+  without runtime coercion or validation. Activating either behavior requires a
+  separate operation-semantics decision and regression contract.
+
 - **Native writer statistics contract** — `RedisProCacheWriter` now records
   Spring Data Redis GET/GET-hit/GET-miss/PUT/DELETE counters at the writer
   boundary, including PUT_IF_ABSENT insertion and exact CLEAN deletion counts.

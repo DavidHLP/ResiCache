@@ -74,7 +74,9 @@ public @interface RedisCacheable {
     long ttl() default 60;
 
     /**
-     * 缓存值的类型.
+     * 缓存值的声明类型（兼容性元数据）.
+     *
+     * <p>当前运行时不基于此属性强制转换或校验；实际类型由返回值与序列化器决定.
      */
     Class<?> type() default Object.class;
 
