@@ -1,22 +1,23 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
+import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.expression.AnnotatedElementKey;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @DisplayName("RedisCacheInterceptor method normalization")
 class RedisCacheInterceptorNormalizationTest {
@@ -34,8 +35,14 @@ class RedisCacheInterceptorNormalizationTest {
                 "jdk-cache",
                 new AnnotatedElementKey(implementationMethod, JdkServiceImpl.class),
                 OperationKind.CACHEABLE);
-        DefaultMethodMetadataResolver metadataResolver = spy(new DefaultMethodMetadataResolver());
+        RecordingMethodMetadataResolver metadataResolver = new RecordingMethodMetadataResolver();
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
+        AtomicReference<CachePolicyView.Source> resolvedDuringActivation = new AtomicReference<>();
+        metadataResolver.onActivate(key -> {
+            assertThat(key)
+                    .isEqualTo(new AnnotatedElementKey(implementationMethod, JdkServiceImpl.class));
+            resolvedDuringActivation.set(resolver.resolve("jdk-cache", CacheOperation.GET));
+        });
         CacheManager cacheManager = new ConcurrentMapCacheManager("jdk-cache");
         KeyGenerator keyGenerator = new SimpleKeyGenerator();
         RedisCacheInterceptor interceptor = new RedisCacheInterceptor(
@@ -48,11 +55,9 @@ class RedisCacheInterceptorNormalizationTest {
 
         assertThat(Proxy.isProxyClass(proxy.getClass())).isTrue();
         assertThat(proxy.load("id")).isEqualTo("value:id");
-        when(metadataResolver.currentKey()).thenReturn(
-                new AnnotatedElementKey(implementationMethod, proxy.getClass()));
-        assertThat(resolver.resolve("jdk-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
-                .isSameAs(declaredPolicy);
-        verify(metadataResolver).activate(implementationMethod, JdkServiceImpl.class);
+        assertThat(metadataResolver.activatedKey())
+                .isEqualTo(new AnnotatedElementKey(implementationMethod, JdkServiceImpl.class));
+        assertThat(resolvedDuringActivation).hasValue(declaredPolicy);
     }
 
     @Test
@@ -67,8 +72,15 @@ class RedisCacheInterceptorNormalizationTest {
         RedisCacheableOperation declaredPolicy =
                 (RedisCacheableOperation) parsed.policyOperations().get(0);
         register.registerSnapshot(interfaceMethod, InterfaceAnnotatedService.class, parsed);
-        DefaultMethodMetadataResolver metadataResolver = spy(new DefaultMethodMetadataResolver());
+        Method implementationMethod = InterfaceAnnotatedServiceImpl.class.getMethod("load", String.class);
+        RecordingMethodMetadataResolver metadataResolver = new RecordingMethodMetadataResolver();
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
+        AtomicReference<CachePolicyView.Source> resolvedDuringActivation = new AtomicReference<>();
+        metadataResolver.onActivate(key -> {
+            assertThat(key)
+                    .isEqualTo(new AnnotatedElementKey(implementationMethod, InterfaceAnnotatedServiceImpl.class));
+            resolvedDuringActivation.set(resolver.resolve("interface-cache", CacheOperation.GET));
+        });
         RedisCacheInterceptor interceptor = new RedisCacheInterceptor(
                 operationSource,
                 new ConcurrentMapCacheManager("interface-cache"),
@@ -82,13 +94,55 @@ class RedisCacheInterceptorNormalizationTest {
 
         assertThat(Proxy.isProxyClass(proxy.getClass())).isTrue();
         assertThat(proxy.load("id")).isEqualTo("interface:id");
-        Method implementationMethod = InterfaceAnnotatedServiceImpl.class.getMethod("load", String.class);
-        when(metadataResolver.currentKey()).thenReturn(
-                new AnnotatedElementKey(implementationMethod, proxy.getClass()));
-        assertThat(resolver.resolve(
-                "interface-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
-                .isSameAs(declaredPolicy);
-        verify(metadataResolver).activate(implementationMethod, InterfaceAnnotatedServiceImpl.class);
+
+        assertThat(metadataResolver.activatedKey())
+                .isEqualTo(new AnnotatedElementKey(implementationMethod, InterfaceAnnotatedServiceImpl.class));
+        assertThat(resolvedDuringActivation).hasValue(declaredPolicy);
+    }
+
+    private static final class RecordingMethodMetadataResolver implements MethodMetadataResolver {
+
+        private final DefaultMethodMetadataResolver delegate = new DefaultMethodMetadataResolver();
+        private Consumer<AnnotatedElementKey> activationObserver;
+        private AnnotatedElementKey activatedKey;
+
+        void onActivate(Consumer<AnnotatedElementKey> observer) {
+            this.activationObserver = observer;
+        }
+
+        AnnotatedElementKey activatedKey() {
+            return activatedKey;
+        }
+
+        @Override
+        public AnnotatedElementKey currentKey() {
+            return delegate.currentKey();
+        }
+
+        @Override
+        public Method currentMethod() {
+            return delegate.currentMethod();
+        }
+
+        @Override
+        public Class<?> currentTargetClass() {
+            return delegate.currentTargetClass();
+        }
+
+        @Override
+        public MethodSnapshot currentContext() {
+            return delegate.currentContext();
+        }
+
+        @Override
+        public ScopedActivation activate(Method method, Class<?> targetClass) {
+            ScopedActivation activation = delegate.activate(method, targetClass);
+            activatedKey = delegate.currentKey();
+            if (activationObserver != null) {
+                activationObserver.accept(activatedKey);
+            }
+            return activation;
+        }
     }
 
     private interface InterfaceAnnotatedService {
