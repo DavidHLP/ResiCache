@@ -13,8 +13,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisClusterConnection;
 import org.springframework.data.redis.connection.RedisClusterNode;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -24,6 +22,7 @@ import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.types.Expiration;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 /**
@@ -50,16 +49,14 @@ class SerializationMigrationEngine
             ObjectMapper objectMapper,
             RedisProCacheProperties properties,
             SecureJacksonSerializerFactory serializerFactory,
-            ObjectProvider<MeterRegistry> meterRegistryProvider,
-            Environment environment) {
+            @Nullable ResolvedMetrics resolvedMetrics) {
         this.connectionFactory = connectionFactory;
         var serializer = properties.getSerializer();
         this.currentSerializer = serializerFactory.create(objectMapper, serializer);
         this.legacyDecoder = new LegacyValueDecoder(
                 objectMapper, serializer.getAllowedPackagePrefixes(), serializer.getTypeProperty());
         this.migration = serializer.getMigration();
-        this.meterRegistry = RedisProCacheConfiguration.metricsRegistry(
-                meterRegistryProvider, environment);
+        this.meterRegistry = resolvedMetrics == null ? null : resolvedMetrics.meterRegistry();
     }
 
     /**
