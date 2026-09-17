@@ -52,6 +52,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
         SyncSupport.class,
         EarlyExpirationHandler.class,
         SecureJacksonSerializerFactory.class,
+        CacheValueCodec.class,
         TypeSupport.class,
         SerializationPreFlightProbe.class,
         SerializerWhitelistStartupGuard.class,
@@ -156,12 +157,14 @@ class RedisProCacheConfiguration {
     @ConditionalOnMissingBean
     public RedisProCacheWriter redisProCacheWriter(
             TypeSupport typeSupport,
+            CacheValueCodec valueCodec,
             CacheHandlerChainFactory chainFactory,
             CacheStatisticsCollector cacheStatisticsCollector,
             CacheOperationResolver operationResolver) {
         RedisProCacheWriter writer = new RedisProCacheWriter(
                 cacheStatisticsCollector,
                 typeSupport,
+                valueCodec,
                 chainFactory,
                 operationResolver);
         log.info("Created RedisProCacheWriter with handler chain pattern");
