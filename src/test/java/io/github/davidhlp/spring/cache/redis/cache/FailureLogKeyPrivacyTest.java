@@ -103,10 +103,16 @@ class FailureLogKeyPrivacyTest {
         assertThat(errors)
                 .as("每个失败点必须恰好产生一条 ERROR")
                 .hasSize(fragments.length);
+        List<ILoggingEvent> unmatched = new ArrayList<>(errors);
         for (String fragment : fragments) {
-            assertThat(errors)
+            ILoggingEvent matching = unmatched.stream()
+                    .filter(event -> event.getFormattedMessage().contains(fragment))
+                    .findFirst()
+                    .orElse(null);
+            assertThat(matching)
                     .as("缺少失败点 ERROR 文本: %s", fragment)
-                    .anyMatch(event -> event.getFormattedMessage().contains(fragment));
+                    .isNotNull();
+            unmatched.remove(matching);
         }
         assertThat(errors)
                 .as("ERROR 必须渲染异常类型链")
@@ -117,11 +123,26 @@ class FailureLogKeyPrivacyTest {
                 .doesNotContain("boom");
     }
 
-    private void assertDebugKeepsStack(ListAppender<ILoggingEvent> captured) {
-        assertThat(captured.list)
-                .as("完整栈必须保留在 DEBUG 供关联")
-                .anyMatch(event -> event.getLevel() == Level.DEBUG
-                        && event.getThrowableProxy() != null);
+    private void assertDebugKeepsStack(
+            ListAppender<ILoggingEvent> captured, String... fragments) {
+        List<ILoggingEvent> debug = captured.list.stream()
+                .filter(event -> event.getLevel() == Level.DEBUG
+                        && event.getThrowableProxy() != null)
+                .toList();
+        assertThat(debug)
+                .as("每个失败点的完整栈必须保留在 DEBUG 供关联")
+                .hasSize(fragments.length);
+        List<ILoggingEvent> unmatched = new ArrayList<>(debug);
+        for (String fragment : fragments) {
+            ILoggingEvent matching = unmatched.stream()
+                    .filter(event -> event.getFormattedMessage().contains(fragment))
+                    .findFirst()
+                    .orElse(null);
+            assertThat(matching)
+                    .as("缺少失败点 DEBUG 栈文本: %s", fragment)
+                    .isNotNull();
+            unmatched.remove(matching);
+        }
     }
 
     /**
@@ -267,7 +288,7 @@ class FailureLogKeyPrivacyTest {
                     .as("observer 失败的 ERROR 不得渲染异常 message/栈(ADR-0001 §15)")
                     .doesNotContain(SECRET_KEY);
             assertErrorSites(captured, "onChainStart failed");
-            assertDebugKeepsStack(captured);
+            assertDebugKeepsStack(captured, "onChainStart failure detail");
         } finally {
             detach(ChainEngine.class, captured);
             restoreLevel(ChainEngine.class, previous);
@@ -308,7 +329,10 @@ class FailureLogKeyPrivacyTest {
                     "mightContain failed, defaulting to may-contain",
                     "Bloom filter add failed",
                     "Bloom filter clear failed");
-            assertDebugKeepsStack(captured);
+            assertDebugKeepsStack(captured,
+                    "Bloom filter mightContain failure detail",
+                    "Bloom filter add failure detail",
+                    "Bloom filter clear failure detail");
         } finally {
             detach(BloomSupport.class, captured);
             restoreLevel(BloomSupport.class, previous);
@@ -342,7 +366,10 @@ class FailureLogKeyPrivacyTest {
                     "Bloom filter add failed",
                     "Bloom filter check failed",
                     "Bloom filter delete failed");
-            assertDebugKeepsStack(captured);
+            assertDebugKeepsStack(captured,
+                    "Bloom filter add failure detail",
+                    "Bloom filter check failure detail",
+                    "Bloom filter delete failure detail");
             assertThat(meterRegistry.get("bloomsift.add.failures").counter().count())
                     .as("add 失败计数必须仍然自增")
                     .isEqualTo(1.0);
