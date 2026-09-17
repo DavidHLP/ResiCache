@@ -50,11 +50,11 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("3 处默认值漂移修复（核心）")
-    class DriftFix {
+    @DisplayName("3 处默认值契约（核心）")
+    class DefaultValueContracts {
 
         @Test
-        @DisplayName("drift 已修复：三注解 @interface 默认值已对齐，投影器无差别通过")
+        @DisplayName("三注解默认值已对齐，投影器无差别通过")
         void defaultsAligned_acrossAllThreeAnnotations() {
             // @interface 默认值: Cacheable/Put/Evict 都是 syncTimeout=10, expectedInsertions=100000, falseProbability=0.01
             assertThat(projector.from(stubCacheable(s -> {})).getSyncTimeout()).isEqualTo(10L);
@@ -162,7 +162,7 @@ class RedisCacheAttributesProjectorTest {
 
     @Nested
     @DisplayName("FieldSource seam — Cacheable ≡ Put identity")
-    class Adr0019CacheableEqualsPut {
+    class CacheablePutProjectionContract {
 
         @Test
         @DisplayName("from(Cacheable) 与 from(Put) 在相同输入下产出 byte-for-byte 一致的 RedisCacheAttributes")
@@ -215,7 +215,7 @@ class RedisCacheAttributesProjectorTest {
 
     @Nested
     @DisplayName("FieldSource seam — Evict 默认字段 fallback")
-    class Adr0019EvictDefaults {
+    class EvictDefaultsContract {
 
         @Test
         @DisplayName("Evict 不持有 type/cacheNullValues/randomTtl/variance,extractFrom 填入合理默认")
@@ -263,8 +263,8 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("文档化的类型漂移不影响现有契约")
-    class Adr0019DriftNoRegression {
+    @DisplayName("expectedInsertions 默认值与投影契约")
+    class ExpectedInsertionsDefaultContract {
 
         @Test
         @DisplayName("Cacheable 默认 expectedInsertions=100000 投影为 long 100_000L")
