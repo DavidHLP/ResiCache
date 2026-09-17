@@ -1,0 +1,48 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  h_77173abe25c3ff 47
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheErrorHandler.java
+  h_77173abe25c3ff 65,77-106
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 15,58-59,66-67,73-74,89-91,275,279,359-361,363-375,386
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributeSink.java
+  h_77173abe25c3ff 33
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributes.java
+  h_77173abe25c3ff 9-10,46-50,105-124,131-133,135,137,139,141,143,145,147,149,151,153,155,157,159,161,163,176-177,184-186,202,211-212,233,242-243
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfiguration.java
+  h_77173abe25c3ff 55-56
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriter.java
+  h_77173abe25c3ff 13,31-33,169,204,216,226,235,359,370
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProxyCachingConfiguration.java
+  h_77173abe25c3ff 17-18,20-21
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SecureNullValueDeserializer.java
+  h_77173abe25c3ff 25
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationPreFlightProbe.java
+  h_77173abe25c3ff 7,84-87,106
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ThreadPoolEarlyExpirationExecutor.java
+  h_77173abe25c3ff 31-32
+src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisCacheAutoConfiguration.java
+  h_77173abe25c3ff 29-39
+src/main/java/io/github/davidhlp/spring/cache/redis/serialization/SerializationException.java
+  h_77173abe25c3ff 11-13,21-35
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheErrorHandlerTest.java
+  h_77173abe25c3ff 293-320
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainTest.java
+  h_77173abe25c3ff 82-83,85,87
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainObserverTest.java
+  h_77173abe25c3ff 30-31
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterFailureTest.java
+  h_77173abe25c3ff 45
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterStatisticsTest.java
+  h_77173abe25c3ff 44,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f110b195ab926e152549c146f6f2858e436bf986",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
