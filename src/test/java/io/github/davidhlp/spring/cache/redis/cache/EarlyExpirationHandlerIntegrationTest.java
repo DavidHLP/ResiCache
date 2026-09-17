@@ -56,6 +56,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     @Autowired
     private ValueOperations<String, Object> valueOperations;
 
+    @Autowired
+    private NullValueEncoder nullValueEncoder;
+
     private EarlyExpirationHandler handler;
     private EarlyRefresh earlyRefresh;
 
@@ -240,15 +243,15 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     class DoHandleSyncRefreshTests {
 
         @Test
-        @DisplayName("returns skipAll when real TTL is in the refresh window")
-        void doHandle_syncRefreshNeeded_returnsSkipAll() {
+        @DisplayName("returns continueChain when real TTL is in the refresh window")
+        void doHandle_syncRefreshNeeded_returnsContinueChain() {
             RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
             CacheContext context = createContext(CacheOperation.GET, operation);
             store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
-            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
             assertThat(context.getPrefetchDecision().decision().needsRefresh()).isTrue();
         }
@@ -268,8 +271,56 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
-            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
+        }
+    }
+
+    /**
+     * Chain-level contract: a synchronous early-expiration skip must surface as a MISS
+     * through the real engine — the documented producer/consumer pair
+     * (EarlyExpirationHandler writes {@code PrefetchDecision}, ActualCacheHandler reads it).
+     */
+    @Nested
+    @DisplayName("chain-level contract - sync refresh surfaces a miss")
+    class ChainLevelMissContractTests {
+
+        private CacheHandlerChain chainWithRealActualHandler() {
+            ActualCacheHandler actual = new ActualCacheHandler(
+                    redisTemplate,
+                    valueOperations,
+                    nullValueEncoder,
+                    earlyExpirationExecutor,
+                    new CacheErrorHandler());
+            return new CacheHandlerChain(new ChainEngine())
+                    .addHandler(handler)
+                    .addHandler(actual);
+        }
+
+        @Test
+        @DisplayName("sync early-expiration skip returns CacheResult.miss() through the real engine")
+        void chain_syncRefresh_returnsMiss() {
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
+
+            CacheResult result = chainWithRealActualHandler().execute(context);
+
+            assertThat(result.outcome()).isEqualTo(CacheResult.Outcome.MISS);
+            assertThat(result.resultBytes()).isNull();
+        }
+
+        @Test
+        @DisplayName("a fresh value still returns a hit through the same chain")
+        void chain_freshValue_returnsHit() {
+            RedisCacheableOperation operation = createEarlyExpirationOperation(true, 0.8, EarlyExpirationMode.SYNC);
+            CacheContext context = createContext(CacheOperation.GET, operation);
+            store(createCachedValue(60, System.currentTimeMillis()), 60);
+
+            CacheResult result = chainWithRealActualHandler().execute(context);
+
+            assertThat(result.outcome()).isEqualTo(CacheResult.Outcome.SUCCESS);
+            assertThat(result.resultBytes()).isNotNull();
         }
     }
 
