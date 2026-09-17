@@ -1,0 +1,18 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheOperationResolverNamespaceTest.java
+  h_77173abe25c3ff 62-65
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheOperationSourceValidationTest.java
+  h_77173abe25c3ff 52,69,78,89,100
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegisterAgreementTest.java
+  h_77173abe25c3ff 50-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ba81090afdefbc6c66b953028d74c9f361487d7",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
