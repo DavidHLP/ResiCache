@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
@@ -55,6 +56,9 @@ class CacheHandlerChainFactory {
 
     /** MeterRegistry 注入（链级 Timer + per-handler fired counter 依赖） */
     private final ObjectProvider<MeterRegistry> meterRegistryProvider;
+
+    /** Metrics opt-in property source for the assembly gate. */
+    private final Environment environment;
 
     /** 推进引擎 — 由 Spring 注入，工厂首次 createChain 时注册 observer 并装配链。 */
     private final ChainEngine engine;
@@ -107,14 +111,25 @@ class CacheHandlerChainFactory {
     }
 
     /**
-     * 便捷构造(无 observer bean)— 单元测试用;Spring 装配走 5-arg
+     * 便捷构造(无 observer bean)— 单元测试用;Spring 装配走带 Environment 的
      * {@code @Autowired} 构造。
      */
     public CacheHandlerChainFactory(List<CacheHandler> handlers,
                                  RedisProCacheProperties properties,
                                  ObjectProvider<MeterRegistry> meterRegistryProvider,
                                  ChainEngine engine) {
-        this(handlers, properties, meterRegistryProvider, engine, List.of());
+        this(handlers, properties, meterRegistryProvider, engine, List.of(), null);
+    }
+
+    /**
+     * Convenience constructor for tests without an injected Environment.
+     */
+    public CacheHandlerChainFactory(List<CacheHandler> handlers,
+                                 RedisProCacheProperties properties,
+                                 ObjectProvider<MeterRegistry> meterRegistryProvider,
+                                 ChainEngine engine,
+                                 List<ChainObserver> observers) {
+        this(handlers, properties, meterRegistryProvider, engine, observers, null);
     }
 
     /**
@@ -127,10 +142,12 @@ class CacheHandlerChainFactory {
                                  RedisProCacheProperties properties,
                                  ObjectProvider<MeterRegistry> meterRegistryProvider,
                                  ChainEngine engine,
-                                 List<ChainObserver> observers) {
+                                 List<ChainObserver> observers,
+                                 Environment environment) {
         this.handlers = handlers;
         this.properties = properties;
         this.meterRegistryProvider = meterRegistryProvider;
+        this.environment = environment;
         this.engine = engine;
         this.observers = observers == null ? List.of() : observers;
     }
@@ -176,8 +193,8 @@ class CacheHandlerChainFactory {
             CacheHandlerChain chain = new CacheHandlerChain(engine);
 
             // guide §223b:为每个 enabled AbstractCacheHandler 注入 registry
-            MeterRegistry registry =
-                    meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
+            MeterRegistry registry = RedisProCacheConfiguration.metricsRegistry(
+                    meterRegistryProvider, environment);
 
             // 3) 收集禁用集合 — 用户自定义 disabled + 总开关 + per-mechanism 覆盖
             // null-safe:测试用 mock/stub 的 properties 可能不设 protection,默认视为开启

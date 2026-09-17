@@ -64,6 +64,62 @@ class RedisProCacheBindingValidationTest {
                     "resi-cache.redis.port=6380")
                     .run(context -> assertThat(context).hasNotFailed());
         }
+
+        @Test
+        @DisplayName("redis.mode 两端空白在绑定时被移除")
+        void paddedClusterMode_bindsTrimmedValue() {
+            runner(
+                    "resi-cache.redis.mode= cluster ",
+                    "resi-cache.redis.cluster-nodes[0]=node1:6379")
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        assertThat(context.getBean(RedisProCacheProperties.class)
+                                        .getRedis().getMode())
+                                .isEqualTo("cluster");
+                    });
+        }
+
+        @Test
+        @DisplayName("带空白的 single/sentinel mode 在绑定时被移除")
+        void paddedSingleAndSentinelModes_bindTrimmedValues() {
+            runner("resi-cache.redis.mode= single ")
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        assertThat(context.getBean(RedisProCacheProperties.class)
+                                        .getRedis().getMode())
+                                .isEqualTo("single");
+                    });
+            runner(
+                    "resi-cache.redis.mode= sentinel ",
+                    "resi-cache.redis.sentinel-master=mymaster",
+                    "resi-cache.redis.sentinel-nodes[0]=sentinel1:26379")
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        assertThat(context.getBean(RedisProCacheProperties.class)
+                                        .getRedis().getMode())
+                                .isEqualTo("sentinel");
+                    });
+        }
+
+        @Test
+        @DisplayName("Cluster/SENTINEL 大小写变体在绑定时被拒绝")
+        void caseVariantModes_failValidation() {
+            runner(
+                    "resi-cache.redis.mode=Cluster",
+                    "resi-cache.redis.cluster-nodes[0]=node1:6379")
+                    .run(context -> {
+                        assertThat(context).hasFailed();
+                        assertThat(fullFailureMessage(context)).contains("redis.mode");
+                    });
+            runner(
+                    "resi-cache.redis.mode=SENTINEL",
+                    "resi-cache.redis.sentinel-master=mymaster",
+                    "resi-cache.redis.sentinel-nodes[0]=sentinel1:26379")
+                    .run(context -> {
+                        assertThat(context).hasFailed();
+                        assertThat(fullFailureMessage(context)).contains("redis.mode");
+                    });
+        }
     }
 
     @Nested

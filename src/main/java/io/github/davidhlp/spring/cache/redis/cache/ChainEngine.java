@@ -63,9 +63,7 @@ import org.springframework.stereotype.Component;
  * 子链以 {@link ChainContinuation} 形态交给正在执行的 handler。
  *
  * <p><b>Observer 列表管理委派</b>:{@code addObserver} / {@code observers}
- * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与
- * {@code handler.AnnotationChainEngine} 共用,消除两 engine 间的 observer
- * 列表样板重复。
+ * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam。
  */
 @Slf4j
 @Component
@@ -129,12 +127,11 @@ class ChainEngine {
     }
 
     /**
-     * 节点推进主循环 — 按 snapshot index 顺序推进:
+     * 节点推进主循环 — 只负责按 snapshot index 顺序推进控制流。观测派发由当前
+     * {@link ChainLifecycle} 统一承担:
      * <ol>
      *   <li>检测 context.isSkipRemaining() — 短路返回 success</li>
-     *   <li>observer.beforeNode</li>
-     *   <li>handler.handle(ctx, next) — next 为「本节点之后剩余链」的推进句柄</li>
-     *   <li>observer.afterNode</li>
+     *   <li>交给 observation seam 调度当前节点及其 observer hooks</li>
      *   <li>decision switch（CONTINUE 推进下一 index / SKIP_ALL 物化 / TERMINATE 终止）</li>
      * </ol>
      *
@@ -144,16 +141,19 @@ class ChainEngine {
      * 并发 execute 互不干扰。
      *
      * @param snapshot 不可变 handler 链快照（Engine 只读，不修改）
+     * @param context 缓存上下文
+     * @param lifecycle 当前 execute 的 observation seam
      */
-    private CacheResult driveChain(List<CacheHandler> snapshot, CacheContext context) {
+    private CacheResult driveChain(List<CacheHandler> snapshot, CacheContext context,
+                                   ChainLifecycle lifecycle) {
         for (int idx = 0; idx < snapshot.size(); idx++) {
             // 上游 SKIP_ALL 已物化：短路返回 success
             if (context.isSkipRemaining()) {
                 return CacheResult.success();
             }
             CacheHandler current = snapshot.get(idx);
-            NodeContinuation next = continuationFor(snapshot, idx, context);
-            HandlerResult result = invokeWithObservers(current, context, next);
+            NodeContinuation next = continuationFor(snapshot, idx, context, lifecycle);
+            HandlerResult result = lifecycle.invokeNode(current, context, next);
 
             if (result == null) {
                 // SPI 协议(RM-007):handler 必须返回非 null HandlerResult。
@@ -198,16 +198,16 @@ class ChainEngine {
     }
 
     /**
-     * 为快照中第 {@code index} 个节点构造嵌套推进句柄 —— 绑定 (snapshot, index, context),
-     * 推进该节点<b>之后</b>的剩余链。
+     * 为快照中第 {@code index} 个节点构造嵌套推进句柄 —— 绑定 (snapshot, index, context,
+     * lifecycle),推进该节点<b>之后</b>的剩余链。
      *
      * <p>语义与旧的 fragment API 等价(跳过 aroundChain 观测与 post-process,由外层
      * {@link #execute} 唯一负责),但起点来自构造期的 index,不再需要 {@code indexOf(from)}
      * 反查,也不需要任何 ThreadLocal。
      */
     private NodeContinuation continuationFor(List<CacheHandler> snapshot, int index,
-                                             CacheContext context) {
-        return new NodeContinuation(snapshot, index, context);
+                                             CacheContext context, ChainLifecycle lifecycle) {
+        return new NodeContinuation(snapshot, index, context, lifecycle);
     }
 
     /**
@@ -222,12 +222,15 @@ class ChainEngine {
         private final List<CacheHandler> snapshot;
         private final int index;
         private final CacheContext context;
+        private final ChainLifecycle lifecycle;
         private boolean used;
 
-        NodeContinuation(List<CacheHandler> snapshot, int index, CacheContext context) {
+        NodeContinuation(List<CacheHandler> snapshot, int index, CacheContext context,
+                         ChainLifecycle lifecycle) {
             this.snapshot = snapshot;
             this.index = index;
             this.context = context;
+            this.lifecycle = lifecycle;
         }
 
         /** 句柄是否已被推进 —— 引擎据此拒绝「推进后仍返回 CONTINUE」的协议违规。 */
@@ -248,9 +251,10 @@ class ChainEngine {
                 return CacheResult.success();
             }
             // 不可变快照的 subList view — driveChain 只读（get / size），view 安全
-            return driveChain(snapshot.subList(index + 1, snapshot.size()), context);
+            return driveChain(snapshot.subList(index + 1, snapshot.size()), context, lifecycle);
         }
     }
+
 
     /**
      * 把 {@link HandlerResult} 物化为 {@link CacheResult} —— null 退化为 success
@@ -260,101 +264,15 @@ class ChainEngine {
         return result.result() != null ? result.result() : CacheResult.success();
     }
 
-    /**
-     * 单节点调用：onNodeStart → beforeNode → handler.handle(ctx, next) → afterNode →
-     * onNodeEnd。Engine 不捕获 handler 异常，异常仍向调用方冒泡；但 token 化的
-     * onNodeEnd 由 finally 配对，避免计时等 around-node observer 泄漏调用状态。
-     *
-     * <p>beforeNode/afterNode 契约：handler 抛异常时 afterNode 不调用，因而
-     * DEBUG log / fired counter 不会把失败求值计作成功结果。onNodeEnd 此时收到
-     * null result，只负责回收 token，不应伪造 decision。
-     *
-     * @param next 本节点之后剩余链的推进句柄(handler 可选用,默认实现忽略)
-     */
-    private HandlerResult invokeWithObservers(CacheHandler handler, CacheContext context,
-                                              ChainContinuation next) {
-        List<ChainObserver> observerList = observers.snapshot();
-        Object[] scopeTokens = new Object[observerList.size()];
-        for (int i = 0; i < observerList.size(); i++) {
-            ChainObserver observer = observerList.get(i);
-            try {
-                scopeTokens[i] = observer.onNodeStart(handler, context);
-            } catch (Exception ex) {
-                log.error("Observer {} onNodeStart failed: {}",
-                        observer.getClass().getSimpleName(), ex.toString(), ex);
-            }
-        }
-
-        HandlerResult result = null;
-        try {
-            for (ChainObserver observer : observerList) {
-                try {
-                    observer.beforeNode(handler, context);
-                } catch (Exception ex) {
-                    log.error("Observer {} beforeNode failed: {}",
-                            observer.getClass().getSimpleName(), ex.toString(), ex);
-                }
-            }
-            result = handler.handle(context, next);
-            HandlerResult completedResult = result;
-            for (ChainObserver observer : observerList) {
-                try {
-                    observer.afterNode(handler, context, completedResult);
-                } catch (Exception ex) {
-                    log.error("Observer {} afterNode failed: {}",
-                            observer.getClass().getSimpleName(), ex.toString(), ex);
-                }
-            }
-            return result;
-        } finally {
-            for (int i = 0; i < observerList.size(); i++) {
-                ChainObserver observer = observerList.get(i);
-                try {
-                    observer.onNodeEnd(handler, context, scopeTokens[i], result);
-                } catch (Exception ex) {
-                    log.error("Observer {} onNodeEnd failed: {}",
-                            observer.getClass().getSimpleName(), ex.toString(), ex);
-                }
-            }
-        }
-    }
-
-    // ==================== ChainLifecycle seam ====================
+    // ==================== ChainLifecycle observation seam ====================
 
     /**
-     * 责任链全生命周期守护 — 私有 seam,封装 execute 的 4 件交织关注点:
-     * <ol>
-     *   <li><b>around-hook 配对</b>:onChainStart → driveChain + post-process → onChainEnd
-     *       (即使主路径异常也调用 onChainEnd,保证 observer 资源配对 — 防止 MDC / Timer
-     *       跨 execute 调用的资源泄漏)</li>
-     *   <li><b>post-process 遍历</b>:对所有 {@code requiresPostProcess} opt-in 的
-     *       handler 调用 {@code afterChainExecution},失败 try/catch 隔离不污染主链</li>
-     *   <li><b>异常守护</b>:driveChain 抛出的异常继续向上冒泡,onChainEnd 仍由
-     *       finally 触发</li>
-     *   <li><b>空链短路</b>:snapshot 为空时仍配对 around-hook(observer 可能在 start
-     *       注册 thread-local 资源如 Timer.Sample,不配对会泄漏),但跳过 driveChain
-     *       + post-process</li>
-     * </ol>
+     * 责任链全生命周期与 observer 派发 seam.
      *
-     * <p><b>scope token 配对</b>:onChainStart 收集每个 observer 返回的 scope token,
-     * onChainEnd 按相同 observer 顺序回传(逐个 observer 配对,跨 observer 不混淆)。
-     * Engine 不感知 token 内部协议 —— observer 状态机完全自承,CacheContext 不
-     * 承担 stringly-typed 通用 attributes 袋。
-     *
-     * <p><b>设计纪律</b>:
-     * <ul>
-     *   <li>private final 嵌套类(非 static)— 不暴露给外部(只服务 ChainEngine.execute
-     *       一处);非 static 因需调外部 instance method {@code driveChain},持 outer
-     *       reference 是 locality 提升而非泄漏</li>
-     *   <li>onChainEnd 传入主路径 + post-process 后的 {@code mainResult}；
-     *       正常完成时与 execute 返回值一致，主路径异常时为 {@code null}，
-     *       且 execute 继续向上冒泡原异常</li>
-     *   <li>run() 无参(不返回 mainResult 后再由 caller 收 mainResult),避免与 caller
-     *       形成 split-knowledge</li>
-     * </ul>
-     *
-     * <p><b>deletion test</b>:把 ChainLifecycle 删掉、内联回 execute → execute 回归
-     * 多层 try/finally 嵌套 + around-end 在 2 处独立写 2 遍,复杂度上升。本 seam 浓缩。
+     * <p>{@link ObserverDispatch} 统一拥有两条观测路径的 observer 快照、
+     * positional token 配对和逐 hook 异常隔离；ChainLifecycle 只编排链入口/出口、
+     * 节点调用以及 post-process。节点每次调用都创建自己的 dispatch 快照，保持
+     * 节点级 observer snapshot 语义；链级 start/end 共用一份快照。
      */
     private final class ChainLifecycle {
 
@@ -377,47 +295,62 @@ class ChainEngine {
          * driveChain + post-process,直接返回 {@link CacheResult#success()}。
          *
          * <p>driveChain 抛出的异常继续向上冒泡;onChainEnd 由 finally 守护保证触发。
-         *
-         * <p><b>scope token 收集</b>:around-start 阶段逐个调 observer 的 {@code onChainStart},把每个 observer 返回的 scope token 写入
-         * {@code scopeTokens} 数组(下标 = observer 在 registry 快照中的 index);
-         * around-end 阶段按相同 index 逐个调 {@code onChainEnd(ctx, token, result)}。
-         * 配对规则:onChainStart 抛异常的 observer(token 未被收集)在 onChainEnd 时
-         * 传 null(token 槽位保持初始 null),保证配对循环不越界。
          */
         CacheResult run() {
-            List<ChainObserver> observerList = observers.snapshot();
-            Object[] scopeTokens = new Object[observerList.size()];
-            for (int i = 0; i < observerList.size(); i++) {
-                ChainObserver o = observerList.get(i);
-                try {
-                    scopeTokens[i] = o.onChainStart(context);
-                } catch (Exception ex) {
-                    log.error("Observer {} onChainStart failed: {}",
-                            o.getClass().getSimpleName(), ex.toString(), ex);
-                    // token 留 null,onChainEnd 仍按 index 配对 — 失败 observer 收 null
-                }
-            }
+            ObserverDispatch observation = new ObserverDispatch();
+            Object[] scopeTokens = observation.start(
+                    "onChainStart", observer -> observer.onChainStart(context));
             CacheResult mainResult = null;
             try {
                 if (snapshot == null || snapshot.isEmpty()) {
                     // 空链仍是正常完成,保持 success 语义
                     mainResult = CacheResult.success();
                 } else {
-                    mainResult = driveChain(snapshot, context);
+                    mainResult = driveChain(snapshot, context, this);
                     runPostProcess(mainResult);
                 }
             } finally {
-                for (int i = 0; i < observerList.size(); i++) {
-                    ChainObserver o = observerList.get(i);
-                    try {
-                        o.onChainEnd(context, scopeTokens[i], mainResult);
-                    } catch (Exception ex) {
-                        log.error("Observer {} onChainEnd failed: {}",
-                                o.getClass().getSimpleName(), ex.toString(), ex);
-                    }
-                }
+                observation.finish(
+                        "onChainEnd",
+                        scopeTokens,
+                        mainResult,
+                        (observer, token, result) ->
+                                observer.onChainEnd(context, token, (CacheResult) result));
             }
             return mainResult;
+        }
+
+        /**
+         * 单节点调用：onNodeStart → beforeNode → handler.handle(ctx, next) → afterNode →
+         * onNodeEnd。handler 异常仍向调用方冒泡；token 化的 onNodeEnd 由 finally
+         * 配对，避免 around-node observer 泄漏调用状态。
+         */
+        HandlerResult invokeNode(CacheHandler handler, CacheContext nodeContext,
+                                 ChainContinuation next) {
+            // 每个节点单独拍 observer 快照,保持节点间注册变更隔离语义。
+            ObserverDispatch observation = new ObserverDispatch();
+            Object[] scopeTokens = observation.start(
+                    "onNodeStart", observer -> observer.onNodeStart(handler, nodeContext));
+            HandlerResult result = null;
+            try {
+                observation.each(
+                        "beforeNode",
+                        observer -> observer.beforeNode(handler, nodeContext));
+                result = handler.handle(nodeContext, next);
+                HandlerResult completedResult = result;
+                observation.each(
+                        "afterNode",
+                        observer -> observer.afterNode(handler, nodeContext, completedResult));
+                return result;
+            } finally {
+                observation.finish(
+                        "onNodeEnd",
+                        scopeTokens,
+                        result,
+                        (observer, token, completedResult) ->
+                                observer.onNodeEnd(
+                                        handler, nodeContext, token, (HandlerResult) completedResult));
+            }
         }
 
         /**
@@ -446,5 +379,72 @@ class ChainEngine {
                 }
             }
         }
+
+        /**
+         * One observer snapshot plus shared positional token/error protocol for either
+         * chain-level or node-level dispatch.
+         */
+        private final class ObserverDispatch {
+
+            private final List<ChainObserver> observerList = observers.snapshot();
+
+            Object[] start(String hookName, ObserverStartHook hook) {
+                Object[] scopeTokens = new Object[observerList.size()];
+                for (int i = 0; i < observerList.size(); i++) {
+                    ChainObserver observer = observerList.get(i);
+                    try {
+                        scopeTokens[i] = hook.invoke(observer);
+                    } catch (Exception ex) {
+                        logFailure(observer, hookName, ex);
+                    }
+                }
+                return scopeTokens;
+            }
+
+            void each(String hookName, ObserverHook hook) {
+                for (ChainObserver observer : observerList) {
+                    try {
+                        hook.invoke(observer);
+                    } catch (Exception ex) {
+                        logFailure(observer, hookName, ex);
+                    }
+                }
+            }
+
+            void finish(String hookName, Object[] scopeTokens, Object result,
+                        ObserverEndHook hook) {
+                for (int i = 0; i < observerList.size(); i++) {
+                    ChainObserver observer = observerList.get(i);
+                    try {
+                        hook.invoke(observer, scopeTokens[i], result);
+                    } catch (Exception ex) {
+                        logFailure(observer, hookName, ex);
+                    }
+                }
+            }
+
+            private void logFailure(ChainObserver observer, String hookName, Exception ex) {
+                log.error("Observer {} {} failed: {}",
+                        observer.getClass().getSimpleName(), hookName, ex.toString(), ex);
+            }
+
+            @FunctionalInterface
+            private interface ObserverStartHook {
+                Object invoke(ChainObserver observer);
+            }
+
+            @FunctionalInterface
+            private interface ObserverHook {
+                void invoke(ChainObserver observer);
+            }
+
+            @FunctionalInterface
+            private interface ObserverEndHook {
+                void invoke(ChainObserver observer, Object scopeToken, Object result);
+            }
+        }
     }
+
+
+
 }

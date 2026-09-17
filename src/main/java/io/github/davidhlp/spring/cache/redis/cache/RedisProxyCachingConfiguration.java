@@ -54,9 +54,6 @@ class RedisProxyCachingConfiguration {
 
     /**
      * 单一 advice —— advisor 直接持有的拦截器,装配职责与拦截职责收口到同一处。
-     *
-     * <p>构造函数注入 {@link AnnotationChainEngine},由 Spring 自动装配
-     * {@code List<AnnotationHandler>};链结构在 Engine 内部维护,本配置类零感知。
      */
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
@@ -66,14 +63,12 @@ class RedisProxyCachingConfiguration {
                     CacheOperationSource redisCacheOperationSource,
             RedisProCacheManager cacheManager,
             KeyGenerator keyGenerator,
-            AnnotationChainEngine annotationChainEngine,
             MethodMetadataResolver methodMetadataResolver) {
 
         return new RedisCacheInterceptor(
                 redisCacheOperationSource,
                 cacheManager,
                 keyGenerator,
-                annotationChainEngine,
                 methodMetadataResolver);
     }
 }

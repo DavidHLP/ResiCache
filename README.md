@@ -181,6 +181,12 @@ resi-cache:
   transaction-aware: false
 ```
 
+### Metrics and health
+
+Cache metrics require `resi-cache.metrics.enabled=true` (default OFF) and a
+`MeterRegistry`. The health indicator uses the same explicit property and
+requires Actuator.
+
 ### Bloom filter
 
 ```yaml

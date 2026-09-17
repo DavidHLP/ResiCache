@@ -10,11 +10,15 @@ import io.github.davidhlp.spring.cache.redis.config.MetricsAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.Method;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -53,6 +57,44 @@ class RedisProCacheConfigurationContractTest {
                             .doesNotHaveBean(
                                     CachingEnablementValidation.CachingEnabledValidator.class);
                 });
+    }
+
+    @Test
+    void metricsDisabled_doesNotRegisterMeters_afterCacheOperation() throws Exception {
+        assertMetricsAssembly(false, registry -> assertThat(registry.getMeters())
+                .filteredOn(meter -> meter.getId().getName().startsWith("resicache"))
+                .isEmpty());
+    }
+
+    @Test
+    void metricsEnabled_registersCacheMeter_afterCacheOperation() throws Exception {
+        assertMetricsAssembly(true, registry -> assertThat(
+                registry.find("resicache.cache.put").timer()).isNotNull());
+    }
+
+    private void assertMetricsAssembly(
+            boolean enabled,
+            Consumer<SimpleMeterRegistry> assertion) throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withPropertyValues("resi-cache.metrics.enabled=" + enabled)
+                    .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
+                    .withBean(RedisProCacheWriter.class,
+                            () -> org.mockito.Mockito.mock(RedisProCacheWriter.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        Cache cache = context.getBean(CacheManager.class).getCache("metricsProbe");
+                        assertThat(cache).isNotNull();
+                        cache.put("key", "value");
+                        assertion.accept((SimpleMeterRegistry) context.getBean(MeterRegistry.class));
+                    });
+        }
     }
 
     @Test
@@ -165,11 +207,13 @@ class RedisProCacheConfigurationContractTest {
                 .isNotNull();
         assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
                         "chainTimerChainObserver",
-                        org.springframework.beans.factory.ObjectProvider.class))
+                        org.springframework.beans.factory.ObjectProvider.class,
+                        org.springframework.core.env.Environment.class))
                 .isNotNull();
         assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
                         "firedCounterChainObserver",
-                        org.springframework.beans.factory.ObjectProvider.class))
+                        org.springframework.beans.factory.ObjectProvider.class,
+                        org.springframework.core.env.Environment.class))
                 .isNotNull();
         // 顺序注解:MDC(1) → DebugLog(2) → Timer(3) → FiredCounter(4)
         Method[] methods = RedisProCacheConfiguration.class.getDeclaredMethods();

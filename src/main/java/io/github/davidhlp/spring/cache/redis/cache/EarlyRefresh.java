@@ -46,6 +46,52 @@ class EarlyRefresh {
     /** 宽限期:剩余 TTL 低于此值时不再安排刷新(即将过期的数据不值得刷)。 */
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
 
+    /**
+     * 原子缩短 TTL 的 Lua 脚本(版本 CAS).
+     *
+     * <p>语义:{@code GET key},用 cjson 解析 envelope 的 {@code payload.version}
+     * (缓存值版本),若等于 {@code ARGV[1]}(预期版本)则 {@code EXPIRE} 为
+     * {@code ARGV[2]} 秒并返回 1,否则返回 0(值已变,放弃缩短)。顶层
+     * {@code envelope.version} 是格式版本,不能用于 CAS。保证「检查值 version 未变
+     * → 缩短 TTL」的原子性,
+     * 避免异步刷新窗口内值被覆盖后仍缩短 TTL 的竞态.
+     *
+     * <p>版本 CAS 只传 8 字节(long → string),不把整个 CachedValue 序列化值
+     * (可能 N×10KB)送进 Lua 脚本;网络字节数为 O(1) —— 独立于 payload 大小。
+     *
+     * <p>cjson 解析失败防御:解析抛出时返回 0(放弃缩短),与"value 不匹配"
+     * 行为一致(竞态 → 不缩短 → 安全)。Redis 5+ 内置 cjson,旧版本(无 cjson)的实例
+     * 启动期由本脚本抛 Lua 错误 → execute 异常 → handler catch 吞 → 不缩短,行为
+     * 与"value 不匹配"等价。注:ResiCache 3.x 文档要求 Redis 5+。
+     *
+     * <p>参数:
+     * <ul>
+     *   <li>{@code KEYS[1]} — 目标 redis key</li>
+     *   <li>{@code ARGV[1]} — 预期的 payload.version(ASCII 数字字符串,来自 CachedValue.version)</li>
+     *   <li>{@code ARGV[2]} — 缩短后的 TTL 秒数(刷新宽限期)</li>
+     * </ul>
+     */
+    private static final String ATOMIC_TTL_SHORTEN_SCRIPT =
+        "local current = redis.call('get', KEYS[1]) " +
+        "if current then " +
+        "    local ok, parsed = pcall(cjson.decode, current) " +
+        "    if ok and type(parsed) == 'table' then " +
+        "        if type(parsed[2]) == 'table' and parsed[1] ~= nil then " +
+        "            parsed = parsed[2] " +
+        "        end " +
+        "        local payload = parsed.payload " +
+        "        if type(payload) == 'table' and type(payload[2]) == 'table' and payload[1] ~= nil then " +
+        "            payload = payload[2] " +
+        "        end " +
+        "        if type(payload) == 'table' and payload.version ~= nil " +
+        "                and tostring(payload.version) == ARGV[1] then " +
+        "            redis.call('expire', KEYS[1], ARGV[2]) " +
+        "            return 1 " +
+        "        end " +
+        "    end " +
+        "end " +
+        "return 0";
+
     private final Clock clock;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
     private final RedisTemplate<String, Object> redisTemplate;
@@ -242,7 +288,7 @@ class EarlyRefresh {
             byte[] ttlBytes = String.valueOf(REFRESH_GRACE_PERIOD_SECONDS).getBytes(StandardCharsets.UTF_8);
 
             Long result = connection.eval(
-                EarlyExpirationScripts.ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
+                ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
                 ReturnType.INTEGER,
                 1,
                 keyBytes, versionBytes, ttlBytes

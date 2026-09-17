@@ -30,6 +30,9 @@ class RedisProCacheWriterFailureTest {
     private TypeSupport typeSupport;
 
     @Mock
+    private CacheValueCodec valueCodec;
+
+    @Mock
     private CacheHandlerChainFactory chainFactory;
 
     @Mock
@@ -42,7 +45,7 @@ class RedisProCacheWriterFailureTest {
         when(chainFactory.createChain()).thenReturn(chain);
         when(typeSupport.bytesToString(any())).thenReturn("cache::key");
         writer = new RedisProCacheWriter(
-                statistics, typeSupport, chainFactory, null);
+                statistics, typeSupport, valueCodec, chainFactory, null);
     }
 
     @Test
@@ -65,7 +68,7 @@ class RedisProCacheWriterFailureTest {
         io.github.davidhlp.spring.cache.redis.serialization.SerializationException failure =
                 new io.github.davidhlp.spring.cache.redis.serialization.SerializationException(
                         "cannot deserialize");
-        when(typeSupport.deserializeFromBytes(any())).thenThrow(failure);
+        when(valueCodec.fromValueBytes(any())).thenThrow(failure);
 
         assertThatThrownBy(() -> writer.put(
                 "cache", "key".getBytes(), "bad".getBytes(), Duration.ofSeconds(1)))

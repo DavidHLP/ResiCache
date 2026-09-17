@@ -102,6 +102,7 @@ public class RedisProCacheProperties {
     public enum NativeAnnotationMode {
         /** 转换所有 Spring 原生缓存注解 */
         FULL,
+
         /** 忽略 Spring 原生缓存注解 */
         NONE,
         /** 仅当同时存在 ResiCache 注解时才转换 */
@@ -216,6 +217,14 @@ public class RedisProCacheProperties {
         private List<String> sentinelNodes = new ArrayList<>();
         /** Redisson YAML 配置文件路径（高级配置） */
         private String redissonConfigPath;
+        /**
+         * 设置部署模式并移除配置值两端空白。
+         *
+         * @param mode 部署模式
+         */
+        public void setMode(String mode) {
+            this.mode = mode == null ? null : mode.trim();
+        }
     }
 
 

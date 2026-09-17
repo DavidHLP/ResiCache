@@ -120,6 +120,18 @@ class RedissonConfigurationTest {
             assertThat(single.getRetryAttempts()).isEqualTo(5);
             assertThat(single.getRetryInterval()).isEqualTo(2500);
         }
+
+        @Test
+        @DisplayName("带空白的 single mode 仍配置为单节点且规范化")
+        void paddedSingleMode_configuresSingleServer() {
+            properties.getRedis().setMode(" single ");
+
+            Config config = configuration.buildConfig(redisProperties, properties);
+
+            assertThat(properties.getRedis().getMode()).isEqualTo("single");
+            assertThat(config.useSingleServer().getAddress())
+                    .isEqualTo("redis://localhost:6379");
+        }
     }
 
     @Nested
@@ -139,6 +151,17 @@ class RedissonConfigurationTest {
             Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useClusterServers().getNodeAddresses()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("带空白的 cluster mode 仍配置为集群")
+        void paddedClusterMode_configuresClusterNodeAddresses() {
+            properties.getRedis().setMode(" cluster ");
+            properties.getRedis().setClusterNodes(List.of("node1.example.com:6379"));
+
+            Config config = configuration.buildConfig(redisProperties, properties);
+
+            assertThat(config.useClusterServers().getNodeAddresses()).hasSize(1);
         }
 
         @Test
@@ -187,7 +210,7 @@ class RedissonConfigurationTest {
         @Test
         @DisplayName("配置哨兵主节点和哨兵节点")
         void sentinelMode_configuresMasterAndSentinels() {
-            properties.getRedis().setMode("sentinel");
+            properties.getRedis().setMode(" sentinel ");
             properties.getRedis().setSentinelMaster("mymaster");
             properties.getRedis().setSentinelNodes(List.of(
                     "sentinel1.example.com:26379",
@@ -196,6 +219,7 @@ class RedissonConfigurationTest {
 
             Config config = configuration.buildConfig(redisProperties, properties);
 
+            assertThat(properties.getRedis().getMode()).isEqualTo("sentinel");
             assertThat(config.useSentinelServers().getMasterName()).isEqualTo("mymaster");
             assertThat(config.useSentinelServers().getSentinelAddresses()).hasSize(2);
         }

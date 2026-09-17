@@ -25,6 +25,7 @@ class RedisProCacheWriterConstructionTest {
                 .containsExactly(
                         CacheStatisticsCollector.class,
                         TypeSupport.class,
+                        CacheValueCodec.class,
                         CacheHandlerChainFactory.class,
                         CacheOperationResolver.class)
                 .doesNotContain(RedisTemplate.class, ValueOperations.class);
