@@ -1,0 +1,14 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/serialization/migration/SerializationMigrationCliContractTest.java
+  h_77173abe25c3ff 29-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7e056c304e541e690195045557057102cb1bc1ba",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
