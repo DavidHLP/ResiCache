@@ -192,7 +192,7 @@ class FailureLogKeyPrivacyTest {
             ChainEngine engine = new ChainEngine();
             engine.addObserver(new ChainObserver() {
                 @Override
-                public void onChainStart(CacheContext context) {
+                public Object onChainStart(CacheContext context) {
                     throw new IllegalStateException("observer boom for key " + SECRET_KEY);
                 }
             });
