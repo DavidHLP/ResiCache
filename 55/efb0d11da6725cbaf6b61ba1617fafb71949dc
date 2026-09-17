@@ -1,0 +1,26 @@
+CHANGELOG.md
+  h_77173abe25c3ff 32-37
+STABILITY.md
+  h_77173abe25c3ff 21,28-42
+docs/adr/0001-interface-contract-closure.md
+  h_77173abe25c3ff 156-163
+src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheEvict.java
+  h_77173abe25c3ff 59-62
+src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCachePut.java
+  h_77173abe25c3ff 74-76
+src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheable.java
+  h_77173abe25c3ff 77-79
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParserTest.java
+  h_77173abe25c3ff 41-71,128-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55efb0d11da6725cbaf6b61ba1617fafb71949dc",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
