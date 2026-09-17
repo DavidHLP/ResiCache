@@ -18,6 +18,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
 
 /**
@@ -136,6 +137,34 @@ class SyncSupport {
                       final Supplier<T> loader,
                       final SyncLockTimeout.Resolved timeout) {
         return electRole(key, loader, timeout).run();
+    }
+
+    /**
+     * 选择分布式锁、本地串行或 fail-fast 路径。local-only fallback 由 state owner
+     * 负责,锁执行器只处理真正的分布式锁。
+     */
+    static <T> T executeRoleWork(Logger log,
+                                  String key,
+                                  SyncLockTimeout.Resolved timeout,
+                                  Supplier<T> work,
+                                  List<LockManager> distributedManagers,
+                                  RedisProCacheProperties properties,
+                                  SyncStateAccess state) throws InterruptedException {
+        if (distributedManagers.isEmpty()) {
+            if (properties.getSyncLock().isLocalOnly()) {
+                log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
+                        + "已按 local-only=true 降级为单 JVM 同步 (keyFingerprint={})",
+                        FailureDiagnostics.keyFingerprint(key));
+                return state.executeLocalOnly(key, timeout, work);
+            }
+            // ADR-0001 §15:异常 message 不带 raw key。
+            throw new IllegalStateException(
+                    "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
+                            + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
+                            + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
+                            + " [keyFingerprint=" + FailureDiagnostics.keyFingerprint(key) + "]");
+        }
+        return SyncRoleLockExecutor.run(log, key, timeout, work, distributedManagers);
     }
 
     /**
