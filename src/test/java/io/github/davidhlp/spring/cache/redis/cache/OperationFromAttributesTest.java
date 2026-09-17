@@ -112,7 +112,7 @@ class OperationFromAttributesTest {
         }
 
         @Test
-        @DisplayName("expectedInsertions 直传无窄化(S1 后 long→long)")
+        @DisplayName("expectedInsertions long 值直传不窄化")
         void fromAttributes_passesExpectedInsertionsThrough() throws Exception {
             // Cacheable Builder 槽位是 long,直传无窄化。
             RedisCacheAttributes a = emptyExcept(RedisCacheAttributes.builder()
