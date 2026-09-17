@@ -49,11 +49,6 @@ public class RedisProCacheProperties {
     /** 是否启用事务感知缓存 */
     private boolean transactionAware = false;
 
-    /** 指标配置（resi-cache.metrics.*） */
-    @Valid
-    @NotNull
-    private Metrics metrics = new Metrics();
-
     /** 全局缓存键前缀 */
     private String keyPrefix = "";
 
@@ -112,18 +107,6 @@ public class RedisProCacheProperties {
         NONE,
         /** 仅当同时存在 ResiCache 注解时才转换 */
         SELECTIVE
-    }
-
-    /**
-     * Metrics configuration.
-     *
-     * <p>Metrics are opt-in and remain disabled unless explicitly enabled.
-     */
-    @Getter
-    @Setter
-    public static class Metrics {
-        /** Whether ResiCache metrics are enabled. */
-        private boolean enabled = false;
     }
 
     /**
