@@ -20,7 +20,8 @@ import org.springframework.lang.Nullable;
  *       消费者 {@code ActualCacheHandler.handleGet} 据此回退原生 Redis GET</li>
  * </ul>
  *
- * @param earlyExpirationSkipped 是否跳过 ActualCacheHandler(同步提前过期,触发上层 miss 回源)
+ * @param earlyExpirationSkipped 是否跳过实际缓存读(同步提前过期)。消费者 {@code ActualCacheHandler}
+ *                               仍会被引擎调用,只是其真实 Redis GET 被本标记短路并返回 miss(触发回源)
  * @param prefetchedValue        EarlyExpirationHandler 已预取的缓存值(供 ActualCacheHandler 复用,避免双重 GET)
  * @param decision               提前过期决策;{@code null} 表示未判定或未触发
  */
@@ -34,7 +35,7 @@ public record PrefetchDecision(
         return new PrefetchDecision(false, null, null);
     }
 
-    /** 仅"跳过 ActualCacheHandler"的形态(供测试与 sync 跳过路径构造)。 */
+    /** 仅"跳过实际缓存读"的形态(供测试与 sync 跳过路径构造);消费者据此返回 miss。 */
     public static PrefetchDecision skipped() {
         return new PrefetchDecision(true, null, null);
     }

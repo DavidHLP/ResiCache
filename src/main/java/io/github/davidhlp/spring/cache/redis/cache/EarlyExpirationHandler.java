@@ -80,7 +80,8 @@ class EarlyExpirationHandler extends AbstractCacheHandler {
         // 同步提前过期:继续推进到 ActualCacheHandler —— 由它消费 PrefetchDecision.earlyExpirationSkipped
         // 并返回 CacheResult.miss()(单一 producer/consumer pair,见 STABILITY §4)。
         // 不能在此 skipAll:跳过消费者会让链以 success 收尾,与 EarlyExpirationDecision.syncRefresh()
-        // 的 miss 语义相悖;TtlHandler/NullValueHandler 对 GET 的 shouldHandle=false,继续推进无副作用。
+        // 的 miss 语义相悖。TtlHandler/NullValueHandler 对 GET 的 shouldHandle=false,继续推进只会
+        // 触发这两个节点的观测钩子,不执行其处理逻辑、不写 Redis(见 ChainLevelMissContractTests)。
         log.debug("Sync early-expiration triggered, skipping actual cache read: cacheName={}, key={}",
                   context.getCacheName(), context.getRedisKey());
         // 同步提前过期触发事件计数

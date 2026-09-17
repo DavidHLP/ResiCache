@@ -285,7 +285,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     @DisplayName("chain-level contract - sync refresh surfaces a miss")
     class ChainLevelMissContractTests {
 
-        private CacheHandlerChain chainWithRealActualHandler() {
+        private CacheHandlerChain productionChain() {
             ActualCacheHandler actual = new ActualCacheHandler(
                     redisTemplate,
                     valueOperations,
@@ -293,8 +293,10 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     earlyExpirationExecutor,
                     new CacheErrorHandler());
             return new CacheHandlerChain(new ChainEngine())
-                    .addHandler(handler)
-                    .addHandler(actual);
+                    .addHandler(handler)                 // EarlyExpirationHandler (250)
+                    .addHandler(new TtlHandler())        // 300 — write-path only
+                    .addHandler(new NullValueHandler())  // 400 — write-path only
+                    .addHandler(actual);                 // 500 — the documented consumer
         }
 
         @Test
@@ -304,10 +306,13 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CacheContext context = createContext(CacheOperation.GET, operation);
             store(createCachedValue(60, System.currentTimeMillis() - 30_000), 30);
 
-            CacheResult result = chainWithRealActualHandler().execute(context);
+            CacheResult result = productionChain().execute(context);
 
             assertThat(result.outcome()).isEqualTo(CacheResult.Outcome.MISS);
             assertThat(result.resultBytes()).isNull();
+            // the write-path handlers were skipped by their own predicates, not by a short-circuit
+            assertThat(context.getTtlDecision()).isNull();
+            assertThat(context.getNullDecision()).isNull();
         }
 
         @Test
@@ -317,7 +322,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CacheContext context = createContext(CacheOperation.GET, operation);
             store(createCachedValue(60, System.currentTimeMillis()), 60);
 
-            CacheResult result = chainWithRealActualHandler().execute(context);
+            CacheResult result = productionChain().execute(context);
 
             assertThat(result.outcome()).isEqualTo(CacheResult.Outcome.SUCCESS);
             assertThat(result.resultBytes()).isNotNull();
