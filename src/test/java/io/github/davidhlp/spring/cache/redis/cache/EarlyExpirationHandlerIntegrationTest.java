@@ -190,7 +190,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
-            assertThat(result.decision()).isEqualTo(FlowControl.SKIP_ALL);
+            assertThat(result.decision()).isEqualTo(FlowControl.CONTINUE);
             assertThat(context.getPrefetchDecision().earlyExpirationSkipped()).isTrue();
         }
 
