@@ -22,11 +22,11 @@ import org.springframework.boot.health.contributor.HealthIndicator;
  *   <li>和下游用户的 observability 栈(Prometheus/OTEL)耦合,可能冲突</li>
  * </ol>
  *
- * <p>提供 a health indicator for Spring Boot Actuator. Metrics recording is
- * handled inline by {@code RedisProCache} via the {@link MeterRegistry} directly,
- * so no separate metrics-recording bean is registered here. Metrics/health are
- * disabled by default and must be explicitly enabled via
- * {@code resi-cache.metrics.enabled=true}.
+ * <p>The internal cache assembly seam reads the same property before passing a
+ * {@link MeterRegistry} to cache, chain, handler, and failure-reporter adapters.
+ * This auto-configuration contributes the health-indicator condition; it does
+ * not register a separate metrics bean. The health indicator remains gated by
+ * the explicit {@code resi-cache.metrics.enabled=true} condition below.
  *
  * <p>This configuration is only loaded when:
  * <ul>

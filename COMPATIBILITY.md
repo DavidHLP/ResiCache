@@ -54,8 +54,9 @@ baseline.
 | **Redisson** | Optional | Needed for distributed-lock (`sync=true`). Without it, a
   sync operation fails fast unless `resi-cache.sync-lock.local-only=true` is
   explicitly configured. |
-| **Micrometer / Actuator** | Optional | Without a `MeterRegistry`, cache metrics
-  are disabled. `RedisCacheHealthIndicator` requires Actuator. |
+| **Micrometer / Actuator** | Optional | Cache metrics require
+  `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`.
+  `RedisCacheHealthIndicator` requires Actuator. |
 | **Caffeine** | Bundled | Used internally for the local hash cache and
   bloom-filter bitset; not exposed as a multi-level cache. |
 

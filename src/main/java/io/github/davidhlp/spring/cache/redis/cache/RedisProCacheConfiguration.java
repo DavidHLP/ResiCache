@@ -84,17 +84,19 @@ class RedisProCacheConfiguration {
     @Bean
     @org.springframework.core.annotation.Order(3)
     public io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver chainTimerChainObserver(
-            ObjectProvider<MeterRegistry> meterRegistryProvider) {
+            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            RedisProCacheProperties properties) {
         return new io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver(
-                meterRegistryProvider.getIfAvailable());
+                metricsRegistry(meterRegistryProvider, properties));
     }
 
     @Bean
     @org.springframework.core.annotation.Order(4)
     public io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver firedCounterChainObserver(
-            ObjectProvider<MeterRegistry> meterRegistryProvider) {
+            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            RedisProCacheProperties properties) {
         return new io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver(
-                meterRegistryProvider.getIfAvailable());
+                metricsRegistry(meterRegistryProvider, properties));
     }
 
     @Bean
@@ -106,8 +108,9 @@ class RedisProCacheConfiguration {
     @Bean
     @ConditionalOnMissingBean(CacheErrorHandler.class)
     public CacheErrorHandler cacheErrorHandler(
-            ObjectProvider<MeterRegistry> meterRegistryProvider) {
-        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
+            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            RedisProCacheProperties properties) {
+        MeterRegistry registry = metricsRegistry(meterRegistryProvider, properties);
         // ADR-06:统一失败指标 reporter(registry 缺失 → 内部 no-op)
         return new CacheErrorHandler(
                 registry == null ? null
@@ -145,10 +148,11 @@ class RedisProCacheConfiguration {
     public BloomIFilter bloomIFilter(
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             BloomFilterConfig config,
-            ObjectProvider<MeterRegistry> meterRegistryProvider) {
+            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            RedisProCacheProperties properties) {
         LocalBloomIFilter local = new LocalBloomIFilter(config);
         RedisBloomIFilter remote = new RedisBloomIFilter(
-                redisTemplate, config, meterRegistryProvider.getIfAvailable());
+                redisTemplate, config, metricsRegistry(meterRegistryProvider, properties));
         remote.init();
         return new HierarchicalBloomIFilter(local, remote);
     }
@@ -208,9 +212,9 @@ class RedisProCacheConfiguration {
         Map<String, RedisCacheConfiguration> initialCacheConfigurations =
                 buildInitialCacheConfigurations(properties, defaultRedisCacheConfiguration);
 
-        MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
+        MeterRegistry meterRegistry = metricsRegistry(meterRegistryProvider, properties);
         if (meterRegistry == null) {
-            log.debug("MeterRegistry not available — metrics will be disabled");
+            log.debug("MeterRegistry not available or metrics disabled — metrics will be disabled");
         }
 
         ResiCacheFeatures features = ResiCacheFeatures.builder()
@@ -286,6 +290,16 @@ class RedisProCacheConfiguration {
                 ee.getPoolSize(),
                 ee.getMaxPoolSize(),
                 ee.getQueueCapacity(),
-                meterRegistryProvider.getIfAvailable());
+                metricsRegistry(meterRegistryProvider, properties));
+    }
+
+    static MeterRegistry metricsRegistry(
+            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            RedisProCacheProperties properties) {
+        if (properties != null && properties.getMetrics() != null
+                && !properties.getMetrics().isEnabled()) {
+            return null;
+        }
+        return meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
     }
 }

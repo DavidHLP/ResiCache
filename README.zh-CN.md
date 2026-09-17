@@ -145,6 +145,11 @@ resi-cache:
   transaction-aware: false   # 事务感知缓存
 ```
 
+### 指标与健康检查
+
+缓存指标需要显式设置 `resi-cache.metrics.enabled=true`（默认关闭），并且应用
+提供 `MeterRegistry`。健康检查使用同一显式属性，并需要 Actuator。
+
 ### 布隆过滤器
 
 ```yaml
