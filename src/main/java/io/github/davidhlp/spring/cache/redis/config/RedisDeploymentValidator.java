@@ -49,7 +49,7 @@ import java.lang.annotation.Target;
                 return true;
             }
             boolean valid = true;
-            String mode = value.getMode() == null ? "" : value.getMode().trim();
+            String mode = value.getMode() == null ? "" : value.getMode();
 
             switch (mode) {
                 case "single" -> {
