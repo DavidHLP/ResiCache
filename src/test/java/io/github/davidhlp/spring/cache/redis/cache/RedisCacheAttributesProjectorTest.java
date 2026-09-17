@@ -244,8 +244,8 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("已知 type-drift (已修复)")
-    class Adr0019TypeDriftSentinel {
+    @DisplayName("expectedInsertions 类型契约")
+    class ExpectedInsertionsTypeContract {
 
         @Test
         @DisplayName("Put/Evict/Cacheable 的 expectedInsertions 都是 long, 可承载 > Integer.MAX_VALUE 的值")

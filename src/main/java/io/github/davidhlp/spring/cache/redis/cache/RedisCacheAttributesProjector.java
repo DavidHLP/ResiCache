@@ -33,12 +33,10 @@ import org.springframework.stereotype.Component;
  * 共享字段：1 处改 {@link FieldSource} + 1 处改 {@code project()} body + 3 处改
  * {@code extractFrom()}（或部分子集），共享一份 builder 链。
  *
- * <p><b>已知 type-drift（不修）</b>：{@code @RedisCacheable.
- * expectedInsertions} 为 {@code int}，{@code @RedisCachePut} / {@code @RedisCacheEvict}
- * 与 {@link RedisCacheAttributes#expectedInsertions} 均为 {@code long}。投影器靠 Java
- * 隐式 {@code int→long} 拓宽把字段写入统一 {@code long} 容器——表面无 bug，但公开注解
- * 字段类型不一致。按注解属性类型契约，本类型不静默修复，留待
- * 1.0 毕业时显式开 BREAKING 变更统一。
+ * <p><b>{@code expectedInsertions} 类型契约已统一</b>：三个公开注解均使用 {@code long}
+ * 并以 {@code 100000L} 为默认值，与 {@link RedisCacheAttributes#expectedInsertions}
+ * 一致。本投影器只做无差别映射，不执行隐式拓宽或窄化。
+ *
  */
 @Component
 class RedisCacheAttributesProjector {
@@ -154,9 +152,8 @@ class RedisCacheAttributesProjector {
     /**
      * 把 {@link RedisCacheable} 注解的字段读入 {@link FieldSource}。
      * <p>Cacheable 与 Put 的字段集在投影层完全同构——22 字段逐一对应。
-     * <p><b>类型漂移提醒</b>：{@code annotation.expectedInsertions()} 是 {@code int}，
-     * 经 Java 隐式拓宽到 {@code FieldSource.expectedInsertions} 的 {@code long} 槽位。
-     * 调用方对超过 {@code Integer.MAX_VALUE} 的值会先在 javac 阶段被截断。
+     * <p>{@code annotation.expectedInsertions()} 是 {@code long}，直接映射到
+     * {@code FieldSource.expectedInsertions} 的 {@code long} 槽位，不存在 int 截断。
      */
     private static FieldSource extractFrom(RedisCacheable annotation) {
         return new FieldSource(
