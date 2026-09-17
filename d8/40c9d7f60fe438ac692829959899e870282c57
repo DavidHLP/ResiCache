@@ -1,0 +1,42 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  h_77173abe25c3ff 221-224,268-269
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 66
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributesProjector.java
+  h_77173abe25c3ff 64
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptor.java
+  h_77173abe25c3ff 24-25,47,65
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheOperationSource.java
+  h_77173abe25c3ff 17,27-28,32,101,120-157
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 19-20,59
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SpringCacheableAdapter.java
+  h_77173abe25c3ff 27
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationAopBehaviorMatrixTest.java
+  h_77173abe25c3ff 28,155-156,158
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationClassLevelPolicyTest.java
+  h_77173abe25c3ff 15-16,18-19,36-37,41-42,45-46,50
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationPolicySnapshotTest.java
+  h_77173abe25c3ff 41-42,46-47,52-55,63-64
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheOperationResolverNamespaceTest.java
+  h_77173abe25c3ff 5-6,18,62-67,71,83,91,102,113
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptorNormalizationTest.java
+  h_77173abe25c3ff 4,14,19,25,29,35,38,42,51-54,63,85-91
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheOperationSourceValidationTest.java
+  h_77173abe25c3ff 3-5,9,14,16-17,20-21,41-63,69-70,78,89,100
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegisterAgreementTest.java
+  h_77173abe25c3ff 16,22,50-51,210-211,225-226
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegisterTest.java
+  h_77173abe25c3ff 9-10,15,22,58-63,96,111,135,159,174,198,230,245,278,293,318,356,380,399,418-420,426,447,460,466,468
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d840c9d7f60fe438ac692829959899e870282c57",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
