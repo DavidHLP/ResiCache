@@ -15,7 +15,7 @@ record ResolvedMetrics(@Nullable MeterRegistry meterRegistry) {
     private static final String METRICS_ENABLED_PROPERTY = "resi-cache.metrics.enabled";
 
     static ResolvedMetrics resolve(
-            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            @Nullable ObjectProvider<MeterRegistry> meterRegistryProvider,
             @Nullable Environment environment) {
         if (environment != null
                 && !environment.getProperty(METRICS_ENABLED_PROPERTY, Boolean.class, false)) {
