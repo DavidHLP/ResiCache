@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
+import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.lang.reflect.Method;
@@ -12,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
-import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.expression.AnnotatedElementKey;
