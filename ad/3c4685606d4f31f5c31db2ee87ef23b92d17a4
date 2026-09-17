@@ -1,0 +1,18 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheOperationSource.java
+  h_77173abe25c3ff 42
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProxyCachingConfiguration.java
+  h_77173abe25c3ff 30-33
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfigurationContractTest.java
+  h_77173abe25c3ff 8,209-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ad3c4685606d4f31f5c31db2ee87ef23b92d17a4",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
