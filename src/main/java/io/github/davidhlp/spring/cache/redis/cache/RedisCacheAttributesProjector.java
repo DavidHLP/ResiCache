@@ -60,8 +60,9 @@ class RedisCacheAttributesProjector {
 
     /**
      * 从 {@link RedisCacheEvict} 投影。
-     * <p>{@code unless} 在 Evict 注解中存在，但 Evict 的 Builder 没有 {@code unless} 槽位——
-     * 这里保留字段（语义一致），由 Evict policy snapshot 生成路径自行决定是否应用。
+     * {@code unless} 在 Evict 注解中存在，但 Evict 的 Builder 没有 {@code unless} 槽位——
+     * 这里保留字段用于兼容性投影，但当前 Spring CacheEvictOperation 路径不会评估该属性。
+     * 需要条件清除时使用 {@code condition}；未来激活 {@code unless} 必须另行定义并验证语义。
      * <p>Evict 不持有 {@code type / cacheNullValues / randomTtl / variance} 字段（无对应
      * 业务语义），由 {@link #extractFrom(RedisCacheEvict)} 填入合理默认
      * （{@code Object.class / false / false / 0.0F}）。

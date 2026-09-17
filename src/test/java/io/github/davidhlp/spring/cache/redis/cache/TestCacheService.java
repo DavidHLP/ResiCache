@@ -79,6 +79,10 @@ public class TestCacheService {
     public void evictById(Long id) {
         // 纯缓存维护操作 — 不计入 loader 调用计数
     }
+    @RedisCacheEvict(cacheNames = "testCache", key = "#id", unless = "true")
+    public void evictByIdWithUnless(Long id) {
+        // Current Spring CacheEvictOperation ignores unless; this method locks that compatibility behavior.
+    }
 
     @RedisCacheEvict(cacheNames = "testCache", key = "#id", useBloomFilter = true)
     public void evictByIdWithBloom(Long id) {

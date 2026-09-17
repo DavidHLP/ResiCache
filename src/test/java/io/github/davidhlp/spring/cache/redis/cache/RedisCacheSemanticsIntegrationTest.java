@@ -113,6 +113,17 @@ class RedisCacheSemanticsIntegrationTest extends AbstractRedisIntegrationTest {
         }
 
         @Test
+        @DisplayName("unless is retained but not evaluated on the current Evict path")
+        void cacheEvict_unlessIsNotEvaluated() {
+            cacheService.getById(1L);
+            assertThat(valueOps.get("testCache::1")).isNotNull();
+
+            cacheService.evictByIdWithUnless(1L);
+
+            assertThat(valueOps.get("testCache::1")).isNull();
+        }
+
+        @Test
         @DisplayName("should evict all entries when allEntries=true")
         void cacheEvict_allEntries_removesAll() {
             cacheService.getById(1L);
