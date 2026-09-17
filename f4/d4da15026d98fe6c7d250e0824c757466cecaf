@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncRole.java
+  h_77173abe25c3ff 89,213,259
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupport.java
+  h_77173abe25c3ff 21,142-169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4d4da15026d98fe6c7d250e0824c757466cecaf",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
