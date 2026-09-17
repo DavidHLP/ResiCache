@@ -1,0 +1,18 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandler.java
+  h_77173abe25c3ff 83-84
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/model/PrefetchDecision.java
+  h_77173abe25c3ff 23-24,38
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandlerIntegrationTest.java
+  h_77173abe25c3ff 288,296-299,309,313-315,325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ab1eb2b73cd9b1d2c21be97cf7762737725d6e4",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
