@@ -29,6 +29,13 @@ class RedisProCachePropertiesTest {
         }
 
         @Test
+        @DisplayName("metrics 默认关闭")
+        void metrics_defaultDisabled() {
+            RedisProCacheProperties properties = new RedisProCacheProperties();
+            assertThat(properties.getMetrics().isEnabled()).isFalse();
+        }
+
+        @Test
         @DisplayName("默认核心线程池大小为 2")
         void earlyExpiration_defaultPoolSize() {
             RedisProCacheProperties properties = new RedisProCacheProperties();

@@ -25,6 +25,7 @@ chain.model.CachePolicyView$Source
 config.CachingEnablementValidation$CachingEnabledValidator
 config.RedisDeploymentValidator$RedisDeploymentChecks
 config.RedisProCacheProperties$BloomProperties
+config.RedisProCacheProperties$Metrics
 config.RedisProCacheProperties$CacheConfig
 config.RedisProCacheProperties$EarlyExpirationProperties
 config.RedisProCacheProperties$NativeAnnotationMode

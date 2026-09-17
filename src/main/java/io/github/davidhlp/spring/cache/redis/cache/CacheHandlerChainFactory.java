@@ -176,8 +176,8 @@ class CacheHandlerChainFactory {
             CacheHandlerChain chain = new CacheHandlerChain(engine);
 
             // guide §223b:为每个 enabled AbstractCacheHandler 注入 registry
-            MeterRegistry registry =
-                    meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
+            MeterRegistry registry = RedisProCacheConfiguration.metricsRegistry(
+                    meterRegistryProvider, properties);
 
             // 3) 收集禁用集合 — 用户自定义 disabled + 总开关 + per-mechanism 覆盖
             // null-safe:测试用 mock/stub 的 properties 可能不设 protection,默认视为开启
