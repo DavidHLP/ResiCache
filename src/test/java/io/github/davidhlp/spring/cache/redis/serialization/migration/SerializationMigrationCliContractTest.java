@@ -26,6 +26,9 @@ class SerializationMigrationCliContractTest {
                     assertThat(context)
                             .hasSingleBean(SerializationMigrationCli.SerializationMigrationRunner.class);
                     assertThat(context).hasBean("resolvedMetrics");
+                    assertThat(context.getBean("resolvedMetrics"))
+                            .hasFieldOrPropertyWithValue(
+                                    "meterRegistry", context.getBean(MeterRegistry.class));
                 });
     }
 }
