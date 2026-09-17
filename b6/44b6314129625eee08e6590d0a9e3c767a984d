@@ -1,0 +1,14 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 132-133,136,146-147,149-150,157-158,203-204,211-212,227,230-231,235,256,260,269,272,274-277,302-304,311,315-320,325-357,384-447,449-451
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b644b6314129625eee08e6590d0a9e3c767a984d",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
