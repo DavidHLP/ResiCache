@@ -112,10 +112,9 @@ class RedisProCacheConfigurationContractTest {
     @Test
     void entry_componentScan_excludesOperatorAndExplicitlyImportedConfigurations() {
         ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
-
         assertThat(scan.excludeFilters())
                 .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*RedisProxyCachingConfiguration"));
+                        .containsExactly(".*RedisProxyCachingConfiguration.*"));
         assertThat(scan.excludeFilters())
                 .anySatisfy(filter -> assertThat(filter.pattern())
                         .containsExactly(".*SerializationMigrationEngine"));
