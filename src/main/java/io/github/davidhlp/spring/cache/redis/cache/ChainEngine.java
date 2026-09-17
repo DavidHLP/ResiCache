@@ -424,8 +424,12 @@ class ChainEngine {
             }
 
             private void logFailure(ChainObserver observer, String hookName, Exception ex) {
+                // ADR-0001 §15:ERROR 只渲染异常类型链(异常 message 可能内嵌 raw key),完整栈留 DEBUG
                 log.error("Observer {} {} failed: {}",
-                        observer.getClass().getSimpleName(), hookName, ex.toString(), ex);
+                        observer.getClass().getSimpleName(), hookName,
+                        FailureDiagnostics.sanitizedFailure(ex));
+                log.debug("Observer {} {} failure detail",
+                        observer.getClass().getSimpleName(), hookName, ex);
             }
 
             @FunctionalInterface

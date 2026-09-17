@@ -55,8 +55,9 @@ class BloomSupport {
         try {
             return bloomIFilter.mightContain(cacheName, key);
         } catch (Exception ex) {
-            log.error("Bloom filter mightContain failed, defaulting to may-contain: cacheName={}",
-                    cacheName, ex);
+            log.error("Bloom filter mightContain failed, defaulting to may-contain: cacheName={}, cause={}",
+                    cacheName, FailureDiagnostics.sanitizedFailure(ex));
+            log.debug("Bloom filter mightContain failure detail: cacheName={}", cacheName, ex);
             return true;
         }
     }
@@ -73,7 +74,9 @@ class BloomSupport {
         try {
             bloomIFilter.add(cacheName, key);
         } catch (Exception ex) {
-            log.error("Bloom filter add failed: cacheName={}", cacheName, ex);
+            log.error("Bloom filter add failed: cacheName={}, cause={}",
+                    cacheName, FailureDiagnostics.sanitizedFailure(ex));
+            log.debug("Bloom filter add failure detail: cacheName={}", cacheName, ex);
         }
     }
 
@@ -89,7 +92,9 @@ class BloomSupport {
         try {
             bloomIFilter.clear(cacheName);
         } catch (Exception ex) {
-            log.error("Bloom filter clear failed: cacheName={}", cacheName, ex);
+            log.error("Bloom filter clear failed: cacheName={}, cause={}",
+                    cacheName, FailureDiagnostics.sanitizedFailure(ex));
+            log.debug("Bloom filter clear failure detail: cacheName={}", cacheName, ex);
         }
     }
 }
