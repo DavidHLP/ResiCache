@@ -86,7 +86,7 @@ sealed interface SyncRole<T>
             RuntimeException failure = null;
             boolean success = false;
             try {
-                value = SyncRoleLockExecutor.run(
+                value = SyncSupport.executeRoleWork(
                         log, key, timeout, loader, distributedManagers, properties, state);
                 success = true;
             } catch (final RuntimeException e) {
@@ -210,7 +210,7 @@ sealed interface SyncRole<T>
         public T run() {
             state.enter(key);
             try {
-                return SyncRoleLockExecutor.run(
+                return SyncSupport.executeRoleWork(
                         log, key, timeout, work, distributedManagers, properties, state);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -256,23 +256,7 @@ final class SyncRoleLockExecutor {
                      String key,
                      SyncLockTimeout.Resolved timeout,
                      Supplier<T> work,
-                     List<LockManager> distributedManagers,
-                     RedisProCacheProperties properties,
-                     SyncStateAccess state) throws InterruptedException {
-        if (distributedManagers.isEmpty()) {
-            if (properties.getSyncLock().isLocalOnly()) {
-                log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
-                        + "已按 local-only=true 降级为单 JVM 同步 (keyFingerprint={})",
-                        FailureDiagnostics.keyFingerprint(key));
-                return state.executeLocalOnly(key, timeout, work);
-            }
-            // ADR-0001 §15:异常 message 不带 raw key。
-            throw new IllegalStateException(
-                    "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
-                            + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
-                            + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
-                            + " [keyFingerprint=" + FailureDiagnostics.keyFingerprint(key) + "]");
-        }
+                     List<LockManager> distributedManagers) throws InterruptedException {
 
         try (LockStack lockStack = new LockStack(log)) {
             for (LockManager manager : distributedManagers) {
