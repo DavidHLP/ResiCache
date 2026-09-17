@@ -49,7 +49,7 @@ class RedisCacheOperationSourceValidationTest {
                 RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, parser, null);
     }
 
-    private Method targetMethod() {
+    private Method validationMethod() {
         try {
             return RedisCacheOperationSourceValidationTest.class.getDeclaredMethod("targetMethod");
         } catch (NoSuchMethodException e) {
@@ -66,7 +66,7 @@ class RedisCacheOperationSourceValidationTest {
     void validate_validConfig_passes() {
         CacheOperation op = opWith("myKey", null, null, null, "cache1");
 
-        assertThatCode(() -> sourceFor(op).findCacheOperations(targetMethod()))
+        assertThatCode(() -> sourceFor(op).findCacheOperations(validationMethod()))
                 .doesNotThrowAnyException();
     }
 
@@ -75,7 +75,7 @@ class RedisCacheOperationSourceValidationTest {
     void validate_keyAndKeyGenerator_throws() {
         CacheOperation op = opWith("myKey", "myKeyGenerator", null, null, "cache1");
 
-        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(targetMethod()))
+        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(validationMethod()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("key")
                 .hasMessageContaining("keyGenerator");
@@ -86,7 +86,7 @@ class RedisCacheOperationSourceValidationTest {
     void validate_cacheManagerAndCacheResolver_throws() {
         CacheOperation op = opWith(null, null, "myCacheManager", "myCacheResolver", "cache1");
 
-        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(targetMethod()))
+        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(validationMethod()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("cacheManager")
                 .hasMessageContaining("cacheResolver");
@@ -97,7 +97,7 @@ class RedisCacheOperationSourceValidationTest {
     void validate_emptyCacheNames_throws() {
         CacheOperation op = opWith(null, null, null, null);
 
-        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(targetMethod()))
+        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(validationMethod()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("cache name");
     }

@@ -59,8 +59,10 @@ class CacheOperationResolverNamespaceTest {
                 .name("m").cacheNames(CACHE).key("k").ttl(ttl).build();
     }
 
-    private void registerSnapshot(CacheOperation... operations) {
-        List<CacheOperation> snapshotOperations = Arrays.asList(operations);
+    private void registerSnapshot(
+            org.springframework.cache.interceptor.CacheOperation... operations) {
+        List<org.springframework.cache.interceptor.CacheOperation> snapshotOperations =
+                Arrays.asList(operations);
         register.registerSnapshot(method(), CacheOperationResolverNamespaceTest.class,
                 new AnnotationParser.ParsedAnnotations(snapshotOperations, snapshotOperations));
     }

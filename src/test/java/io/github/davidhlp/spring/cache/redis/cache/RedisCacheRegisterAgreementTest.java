@@ -47,8 +47,9 @@ class RedisCacheRegisterAgreementTest {
         AnnotatedElementKey firstKey = new AnnotatedElementKey(firstMethod, AgreementService.class);
         when(metadataResolver.currentKey()).thenReturn(firstKey);
 
-        assertThat(register.get("cache-a", firstKey, OperationKind.CACHEABLE))
-                .isSameAs(firstOperation);
+        RedisCacheableOperation registered = register.get(
+                "cache-a", firstKey, OperationKind.CACHEABLE);
+        assertThat(registered).isSameAs(firstOperation);
         assertThat(resolver.resolve("cache-a", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
                 .isSameAs(firstOperation);
 
