@@ -1,0 +1,20 @@
+CHANGELOG.md
+  h_77173abe25c3ff 104-108
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomSupport.java
+  h_77173abe25c3ff 58-60,77-79,95-97
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 427,429-432
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisBloomIFilter.java
+  h_77173abe25c3ff 92-94,140-142,162-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e598693969d39a8f90544d49a8f731f48c92900a",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
