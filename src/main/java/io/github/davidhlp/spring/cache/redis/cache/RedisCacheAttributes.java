@@ -16,14 +16,16 @@ import lombok.Value;
  * {@code @RedisCachePut} / {@code @RedisCacheEvict}）和 Spring 的 {@code @Cacheable}
  * 映射到一个统一的<em>语义相同的</em>值对象上。
  *
- * <p>本类是工厂层和链之间传递数据的<strong>统一运行时字段载体</strong>：
+ * <p>本类是投影器与三个 Redis operation builder 之间传递数据的<strong>统一运行时字段载体</strong>：
  * <ul>
- *   <li>三个公开注解在各自的 {@code @interface} 中声明规范化默认值；本类承载投影后的
- *       运行时字段，由 {@link RedisCacheAttributesProjector} 完成注解属性到值对象的映射，
- *       并供三个 Redis operation builder 填充;</li>
+ *   <li>三个公开注解各自声明语义相关的默认值；其中 {@code syncTimeout}、
+ *       {@code expectedInsertions} 和 {@code falseProbability} 这三个共享契约字段按统一值
+ *       规范化。本类承载投影后的运行时字段，由 {@link RedisCacheAttributesProjector} 完成
+ *       注解属性到值对象的映射，并供三个 Redis operation builder 填充;</li>
  *   <li>统一的值对象和共享 builder sink 消除了原"18/18 builder 字段逐字重复"
  *       （{@code Cacheable ≡ Put}）以及三处默认值分别声明造成的漂移风险与认知负担;</li>
- *   <li>新增字段只动本类 + 投影器 + 1 个 Builder.fromAttributes 三处，而非 9 处。</li>
+ *   <li>共享运行时字段的映射集中在本类、投影器和 Builder.fromAttributes 协作点，避免在
+ *       三个 operation builder 中重复完整映射链。</li>
  * </ul>
  *
  * <p>Evict 独有字段（{@link #allEntries} / {@link #beforeInvocation}）也包含在本类中，
