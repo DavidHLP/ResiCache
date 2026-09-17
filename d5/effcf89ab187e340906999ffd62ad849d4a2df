@@ -1,0 +1,26 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfiguration.java
+  h_77173abe25c3ff 53
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResolvedMetricsConfiguration.java
+  h_77173abe25c3ff 1-23
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationEngine.java
+  h_77173abe25c3ff 51,58
+src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisCacheAutoConfiguration.java
+  h_77173abe25c3ff 36-38
+src/main/java/io/github/davidhlp/spring/cache/redis/serialization/migration/SerializationMigrationCli.java
+  h_77173abe25c3ff 65
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfigurationContractTest.java
+  h_77173abe25c3ff 127,133-134,146-148
+src/test/java/io/github/davidhlp/spring/cache/redis/serialization/migration/SerializationMigrationCliContractTest.java
+  h_77173abe25c3ff 3-4,15,20-22,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5effcf89ab187e340906999ffd62ad849d4a2df",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
