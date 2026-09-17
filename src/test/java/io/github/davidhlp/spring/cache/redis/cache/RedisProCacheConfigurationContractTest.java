@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.config.CachingEnablementValidation;
 import io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
@@ -205,6 +206,38 @@ class RedisProCacheConfigurationContractTest {
                         assertThat(context).hasBean("redisCacheAdvisor");
                         assertThat(context).hasBean("redisCacheInterceptor");
                     });
+        }
+    }
+
+    @Test
+    void operationSource_wiringProvidesRegisterForSnapshotRegistration() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        RedisCacheOperationSource source = context.getBean(
+                                "redisCacheOperationSource", RedisCacheOperationSource.class);
+                        Method method = SpringWiredService.class.getMethod("read", String.class);
+
+                        assertThat(source.getCacheOperations(method, SpringWiredService.class))
+                                .isNotEmpty();
+                        assertThat(context.getBean(RedisCacheRegister.class)
+                                .getSnapshot(method, SpringWiredService.class))
+                                .isNotNull();
+                    });
+        }
+    }
+
+    static class SpringWiredService {
+        @RedisCacheable("spring-wiring-cache")
+        public String read(String value) {
+            return value;
         }
     }
 

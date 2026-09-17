@@ -27,8 +27,10 @@ class RedisProxyCachingConfiguration {
     @Bean(name = REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     public CacheOperationSource redisCacheOperationSource(
-            RedisProCacheProperties redisProCacheProperties) {
-        return new RedisCacheOperationSource(redisProCacheProperties.getNativeAnnotationMode());
+            RedisProCacheProperties redisProCacheProperties,
+            RedisCacheRegister redisCacheRegister) {
+        return new RedisCacheOperationSource(
+                redisProCacheProperties.getNativeAnnotationMode(), redisCacheRegister);
     }
 
     /**

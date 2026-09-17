@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.lang.Nullable;
@@ -40,7 +39,7 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
 
     private final AnnotationParser annotationParser;
     private final SpringAnnotationAdapter springAnnotationAdapter;
-    private RedisCacheRegister redisCacheRegister;
+    private final RedisCacheRegister redisCacheRegister;
 
     public RedisCacheOperationSource() {
         this(RedisProCacheProperties.NativeAnnotationMode.SELECTIVE);
@@ -67,10 +66,6 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         this.redisCacheRegister = redisCacheRegister;
     }
 
-    @Autowired
-    void setRedisCacheRegister(RedisCacheRegister redisCacheRegister) {
-        this.redisCacheRegister = redisCacheRegister;
-    }
 
     @Override
     @Nullable
