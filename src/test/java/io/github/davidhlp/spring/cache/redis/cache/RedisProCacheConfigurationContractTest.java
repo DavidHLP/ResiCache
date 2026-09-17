@@ -208,12 +208,12 @@ class RedisProCacheConfigurationContractTest {
         assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
                         "chainTimerChainObserver",
                         org.springframework.beans.factory.ObjectProvider.class,
-                        io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.class))
+                        org.springframework.core.env.Environment.class))
                 .isNotNull();
         assertThat(RedisProCacheConfiguration.class.getDeclaredMethod(
                         "firedCounterChainObserver",
                         org.springframework.beans.factory.ObjectProvider.class,
-                        io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.class))
+                        org.springframework.core.env.Environment.class))
                 .isNotNull();
         // 顺序注解:MDC(1) → DebugLog(2) → Timer(3) → FiredCounter(4)
         Method[] methods = RedisProCacheConfiguration.class.getDeclaredMethods();

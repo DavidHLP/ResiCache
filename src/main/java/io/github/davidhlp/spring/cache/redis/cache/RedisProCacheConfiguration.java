@@ -22,10 +22,12 @@ import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.lang.Nullable;
 
 @Slf4j
 @Configuration(proxyBeanMethods = false)
@@ -84,18 +86,18 @@ class RedisProCacheConfiguration {
     @org.springframework.core.annotation.Order(3)
     public io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver chainTimerChainObserver(
             ObjectProvider<MeterRegistry> meterRegistryProvider,
-            RedisProCacheProperties properties) {
+            Environment environment) {
         return new io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver(
-                metricsRegistry(meterRegistryProvider, properties));
+                metricsRegistry(meterRegistryProvider, environment));
     }
 
     @Bean
     @org.springframework.core.annotation.Order(4)
     public io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver firedCounterChainObserver(
             ObjectProvider<MeterRegistry> meterRegistryProvider,
-            RedisProCacheProperties properties) {
+            Environment environment) {
         return new io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver(
-                metricsRegistry(meterRegistryProvider, properties));
+                metricsRegistry(meterRegistryProvider, environment));
     }
 
     @Bean
@@ -108,8 +110,8 @@ class RedisProCacheConfiguration {
     @ConditionalOnMissingBean(CacheErrorHandler.class)
     public CacheErrorHandler cacheErrorHandler(
             ObjectProvider<MeterRegistry> meterRegistryProvider,
-            RedisProCacheProperties properties) {
-        MeterRegistry registry = metricsRegistry(meterRegistryProvider, properties);
+            Environment environment) {
+        MeterRegistry registry = metricsRegistry(meterRegistryProvider, environment);
         // ADR-06:统一失败指标 reporter(registry 缺失 → 内部 no-op)
         return new CacheErrorHandler(
                 registry == null ? null
@@ -148,10 +150,10 @@ class RedisProCacheConfiguration {
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             BloomFilterConfig config,
             ObjectProvider<MeterRegistry> meterRegistryProvider,
-            RedisProCacheProperties properties) {
+            Environment environment) {
         LocalBloomIFilter local = new LocalBloomIFilter(config);
         RedisBloomIFilter remote = new RedisBloomIFilter(
-                redisTemplate, config, metricsRegistry(meterRegistryProvider, properties));
+                redisTemplate, config, metricsRegistry(meterRegistryProvider, environment));
         remote.init();
         return new HierarchicalBloomIFilter(local, remote);
     }
@@ -201,6 +203,7 @@ class RedisProCacheConfiguration {
             RedisProCacheWriter redisProCacheWriter,
             RedisCacheConfiguration defaultRedisCacheConfiguration,
             ObjectProvider<MeterRegistry> meterRegistryProvider,
+            Environment environment,
             BloomGate bloomGate,
             CacheOperationResolver operationResolver,
             SyncSupport syncSupport,
@@ -209,7 +212,7 @@ class RedisProCacheConfiguration {
         Map<String, RedisCacheConfiguration> initialCacheConfigurations =
                 buildInitialCacheConfigurations(properties, defaultRedisCacheConfiguration);
 
-        MeterRegistry meterRegistry = metricsRegistry(meterRegistryProvider, properties);
+        MeterRegistry meterRegistry = metricsRegistry(meterRegistryProvider, environment);
         if (meterRegistry == null) {
             log.debug("MeterRegistry not available or metrics disabled — metrics will be disabled");
         }
@@ -281,20 +284,23 @@ class RedisProCacheConfiguration {
     @ConditionalOnMissingBean(ThreadPoolEarlyExpirationExecutor.class)
     public ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor(
             RedisProCacheProperties properties,
-            ObjectProvider<MeterRegistry> meterRegistryProvider) {
+            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            Environment environment) {
         RedisProCacheProperties.EarlyExpirationProperties ee = properties.getEarlyExpiration();
         return new ThreadPoolEarlyExpirationExecutor(
                 ee.getPoolSize(),
                 ee.getMaxPoolSize(),
                 ee.getQueueCapacity(),
-                metricsRegistry(meterRegistryProvider, properties));
+                metricsRegistry(meterRegistryProvider, environment));
     }
+
+    static final String METRICS_ENABLED_PROPERTY = "resi-cache.metrics.enabled";
 
     static MeterRegistry metricsRegistry(
             ObjectProvider<MeterRegistry> meterRegistryProvider,
-            RedisProCacheProperties properties) {
-        if (properties != null && properties.getMetrics() != null
-                && !properties.getMetrics().isEnabled()) {
+            @Nullable Environment environment) {
+        if (environment != null
+                && !environment.getProperty(METRICS_ENABLED_PROPERTY, Boolean.class, false)) {
             return null;
         }
         return meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
