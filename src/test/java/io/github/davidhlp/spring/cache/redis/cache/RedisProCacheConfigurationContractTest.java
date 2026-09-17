@@ -101,6 +101,44 @@ class RedisProCacheConfigurationContractTest {
     void productionConfiguration_hasNoRootComponentScan() {
         assertThat(RedisProCacheConfiguration.class.isAnnotationPresent(ComponentScan.class)).isFalse();
     }
+    @Test
+    void productionConfiguration_importsProxyConfigurationExplicitly() {
+        org.springframework.context.annotation.Import configurationImport =
+                RedisProCacheConfiguration.class.getAnnotation(
+                        org.springframework.context.annotation.Import.class);
+
+        assertThat(configurationImport).isNotNull();
+        assertThat(configurationImport.value()).contains(RedisProxyCachingConfiguration.class);
+    }
+
+    @Test
+    void entry_componentScan_excludesOperatorAndExplicitlyImportedConfigurations() {
+        ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
+
+        assertThat(scan.excludeFilters())
+                .anySatisfy(filter -> assertThat(filter.pattern())
+                        .containsExactly(".*RedisProxyCachingConfiguration"));
+        assertThat(scan.excludeFilters())
+                .anySatisfy(filter -> assertThat(filter.pattern())
+                        .containsExactly(".*SerializationMigrationEngine"));
+    }
+
+    @Test
+    void defaultAssembly_doesNotInstallOperatorMigrationEngine() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> assertThat(context)
+                            .doesNotHaveBean(
+                                    io.github.davidhlp.spring.cache.redis.serialization.migration
+                                            .SerializationMigrationCli.SerializationMigrationRunner.class));
+        }
+    }
 
     @Test
     void entry_componentScan_isInternalRuntimePackageOnly() {

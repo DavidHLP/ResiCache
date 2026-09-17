@@ -425,6 +425,19 @@ class ChainEngineTest {
             // main 返回 success — 即使 pp 抛异常,主链 result 仍是 success
             assertThat(result.isSuccess()).isTrue();
         }
+        @Test
+        @DisplayName("requiresPostProcess 抛异常被隔离,主链结果不受影响")
+        void postProcessPredicateFailure_swallowed() {
+            CacheHandler main = new RecordingHandler("main",
+                    HandlerResult.continueWith(CacheResult.success()));
+            CacheHandler pp = new ThrowingPostProcessPredicate();
+            installChain(main, pp);
+
+            CacheResult result = engine.execute(snapshot, newCtx());
+
+            assertThat(result.isSuccess()).isTrue();
+        }
+
 
         @Test
         @DisplayName("requiresPostProcess=false → 不调 afterChainExecution")
@@ -606,6 +619,19 @@ class ChainEngineTest {
             return true;
         }
     }
+    static class ThrowingPostProcessPredicate implements CacheHandler {
+
+        @Override
+        public HandlerResult handle(CacheContext context) {
+            return HandlerResult.continueChain();
+        }
+
+        @Override
+        public boolean requiresPostProcess(CacheContext context) {
+            throw new IllegalStateException("post-process predicate boom");
+        }
+    }
+
 
     // ==================== 测试用 observer(替换 mock) ====================
 

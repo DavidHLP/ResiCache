@@ -46,6 +46,8 @@ class SerializationPreFlightProbeTest {
             b("{\"version\":2,\"payload\":{\"@class\":\"com.example.Foo\",\"v\":1}}");
     private static final byte[] LEGACY_JSON = b("{\"@class\":\"com.example.Foo\",\"v\":1}");
     private static final byte[] JDK_BYTES = new byte[]{(byte) 0xac, (byte) 0xed, 0x00, 0x05};
+    private static final String RAW_FAILURE_MESSAGE = "probe-secret-key";
+
 
     @Nested
     @DisplayName("isEnvelope (detection)")
@@ -147,6 +149,27 @@ class SerializationPreFlightProbeTest {
             probe.scanAndReport();
 
             assertThat(warnings()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("scan failure WARN omits the raw exception message")
+        void scanFailure_warnsWithoutRawExceptionMessage() {
+            RedisConnectionFactory factory = mock(RedisConnectionFactory.class);
+            when(factory.getConnection())
+                    .thenThrow(new IllegalStateException(RAW_FAILURE_MESSAGE));
+            ObjectProvider<RedisConnectionFactory> provider = mock(ObjectProvider.class);
+            when(provider.getIfAvailable()).thenReturn(factory);
+
+            SerializationPreFlightProbe probe = new SerializationPreFlightProbe(
+                    provider, new RedisProCacheProperties());
+
+            probe.scanAndReport();
+
+            assertThat(warnings()).hasSize(1);
+            String warning = warnings().get(0).getFormattedMessage();
+            assertThat(warning)
+                    .doesNotContain(RAW_FAILURE_MESSAGE)
+                    .contains("IllegalStateException");
         }
 
         @Test

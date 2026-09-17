@@ -256,6 +256,41 @@ class FailureLogKeyPrivacyTest {
             detach(ChainEngine.class, captured);
         }
     }
+    @Test
+    @DisplayName("ChainEngine:post-process 判定失败也不泄露 raw key")
+    void chainEngine_postProcessPredicateFailure_omitsRawKey() {
+        ListAppender<ILoggingEvent> captured = attach(ChainEngine.class);
+        try {
+            ChainEngine engine = new ChainEngine();
+            CacheContext context = CacheContext.of(CacheInput.builder()
+                    .operation(CacheOperation.GET)
+                    .cacheName("privacy-cache")
+                    .redisKey(SECRET_KEY)
+                    .actualKey(SECRET_KEY)
+                    .build());
+            CacheHandler failing = new CacheHandler() {
+                @Override
+                public HandlerResult handle(CacheContext ctx) {
+                    return HandlerResult.continueChain();
+                }
+
+                @Override
+                public boolean requiresPostProcess(CacheContext ctx) {
+                    throw new IllegalStateException("post-process predicate key " + SECRET_KEY);
+                }
+            };
+
+            CacheResult result = engine.execute(List.of(failing), context);
+
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(warnAndErrorText(captured))
+                    .doesNotContain(SECRET_KEY)
+                    .contains("privacy-cache");
+        } finally {
+            detach(ChainEngine.class, captured);
+        }
+    }
+
 
     @Test
     @DisplayName("ChainEngine:observer 失败 ERROR 只渲染异常类型链,栈保留在 DEBUG")
