@@ -22,7 +22,8 @@ import org.springframework.stereotype.Component;
  *   <li>判定本节点是否适用({@link #shouldHandle}:GET 且启用提前过期)</li>
  *   <li>向 {@link EarlyRefresh} 取一次评估(读值 + 判定 + 必要时调度),把结果写成类型化
  *       {@link PrefetchDecision} 供 {@link ActualCacheHandler} 复用,避免二次 Redis GET</li>
- *   <li>同步刷新场景返回 {@link HandlerResult#skipAll()},由 ActualCacheHandler 检查标记后返回 miss</li>
+ *   <li>同步刷新场景继续推进({@link HandlerResult#continueChain()}),由 {@link ActualCacheHandler}
+ *       消费 {@link PrefetchDecision} 标记后返回 miss</li>
  * </ul>
  *
  * <p><b>读值 / 判定 / 调度 / Lua CAS 全在 {@link EarlyRefresh} 内</b>：本类不再持有
@@ -47,7 +48,7 @@ class EarlyExpirationHandler extends AbstractCacheHandler {
     protected CounterMetadata semanticCounter() {
         return new CounterMetadata(
                 "resicache.handler.early-refresh.triggered",
-                "Early refresh triggered (sync=true early expiration path, ActualCacheHandler skipped)");
+                "Early refresh triggered (sync=true early expiration path; ActualCacheHandler answers with a miss)");
     }
 
     @Override
@@ -76,11 +77,14 @@ class EarlyExpirationHandler extends AbstractCacheHandler {
             return HandlerResult.continueChain();
         }
 
-        // 同步提前过期:返回 skipAll，ActualCacheHandler 检查 prefetchDecision 后返回 miss
-        log.debug("Sync early-expiration triggered, skipping actual cache: cacheName={}, key={}",
+        // 同步提前过期:继续推进到 ActualCacheHandler —— 由它消费 PrefetchDecision.earlyExpirationSkipped
+        // 并返回 CacheResult.miss()(单一 producer/consumer pair,见 STABILITY §4)。
+        // 不能在此 skipAll:跳过消费者会让链以 success 收尾,与 EarlyExpirationDecision.syncRefresh()
+        // 的 miss 语义相悖;TtlHandler/NullValueHandler 对 GET 的 shouldHandle=false,继续推进无副作用。
+        log.debug("Sync early-expiration triggered, skipping actual cache read: cacheName={}, key={}",
                   context.getCacheName(), context.getRedisKey());
         // 同步提前过期触发事件计数
         safeIncrementSemantic();
-        return HandlerResult.skipAll();
+        return HandlerResult.continueChain();
     }
 }

@@ -101,6 +101,13 @@ Current milestones:
   lock acquire/release, `SyncRole` leader/follower failures, the async
   early-expiration retry path, chain post-processing, and the migration
   engine's fingerprint helper (now one implementation).
+- **Sync early-expiration answers with a miss** — a synchronous early-expiration
+  skip (`EarlyExpirationMode.SYNC`) now returns `CacheResult.miss()` through the
+  chain instead of a null-byte `success`: `EarlyExpirationHandler` advances to
+  `ActualCacheHandler`, which consumes the documented `PrefetchDecision` and
+  answers the miss its Javadoc and ADR-0001 §22 describe. Writer and Spring
+  behavior is unchanged (null bytes, miss statistics, loader refresh); chain
+  observers and SPI callers now receive `Outcome.MISS`.
 - ⚠️ **`@RedisCachePut` metadata now resolves** — the chain used to read only
   the `@RedisCacheable` namespace, so a method annotated only with
   `@RedisCachePut` ran without its `ttl`, `useBloomFilter`, `sync`,
