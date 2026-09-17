@@ -142,6 +142,17 @@ class RedissonConfigurationTest {
         }
 
         @Test
+        @DisplayName("带空白的 cluster mode 仍配置为集群")
+        void paddedClusterMode_configuresClusterNodeAddresses() {
+            properties.getRedis().setMode(" cluster ");
+            properties.getRedis().setClusterNodes(List.of("node1.example.com:6379"));
+
+            Config config = configuration.buildConfig(redisProperties, properties);
+
+            assertThat(config.useClusterServers().getNodeAddresses()).hasSize(1);
+        }
+
+        @Test
         @DisplayName("当 cluster-nodes 为空时抛出异常")
         void clusterMode_emptyNodes_throwsException() {
             properties.getRedis().setMode("cluster");

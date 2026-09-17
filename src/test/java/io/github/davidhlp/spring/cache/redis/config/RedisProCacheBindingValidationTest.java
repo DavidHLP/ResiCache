@@ -64,6 +64,20 @@ class RedisProCacheBindingValidationTest {
                     "resi-cache.redis.port=6380")
                     .run(context -> assertThat(context).hasNotFailed());
         }
+
+        @Test
+        @DisplayName("redis.mode 两端空白在绑定时被移除")
+        void paddedClusterMode_bindsTrimmedValue() {
+            runner(
+                    "resi-cache.redis.mode= cluster ",
+                    "resi-cache.redis.cluster-nodes[0]=node1:6379")
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        assertThat(context.getBean(RedisProCacheProperties.class)
+                                        .getRedis().getMode())
+                                .isEqualTo("cluster");
+                    });
+        }
     }
 
     @Nested
