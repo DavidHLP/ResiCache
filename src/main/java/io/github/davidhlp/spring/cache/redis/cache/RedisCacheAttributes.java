@@ -16,13 +16,13 @@ import lombok.Value;
  * {@code @RedisCachePut} / {@code @RedisCacheEvict}）和 Spring 的 {@code @Cacheable}
  * 映射到一个统一的<em>语义相同的</em>值对象上。
  *
- * <p>本类是工厂层和链之间传递数据的<strong>唯一事实来源（single source of truth）</strong>：
+ * <p>本类是工厂层和链之间传递数据的<strong>统一运行时字段载体</strong>：
  * <ul>
- *   <li>字段默认值（如 {@link #syncTimeout} / {@link #expectedInsertions} /
- *       {@link #falseProbability}）由 {@link RedisCacheAttributesProjector} 集中收敛，
- *       任何注解都不再持有自己的"分散默认";</li>
- *   <li>三个具体 factory 与 Spring 适配 factory 都消费本类，消除了原"18/18 builder 字段
- *       逐字重复"（{@code Cacheable ≡ Put}）以及"3 处默认值漂移"的死代码与认知负担;</li>
+ *   <li>三个公开注解在各自的 {@code @interface} 中声明规范化默认值；本类承载投影后的
+ *       运行时字段，由 {@link RedisCacheAttributesProjector} 完成注解属性到值对象的映射，
+ *       并供三个 Redis operation builder 填充;</li>
+ *   <li>统一的值对象和共享 builder sink 消除了原"18/18 builder 字段逐字重复"
+ *       （{@code Cacheable ≡ Put}）以及三处默认值分别声明造成的漂移风险与认知负担;</li>
  *   <li>新增字段只动本类 + 投影器 + 1 个 Builder.fromAttributes 三处，而非 9 处。</li>
  * </ul>
  *
@@ -30,18 +30,19 @@ import lombok.Value;
  * 由具体 Operation 的 {@code fromAttributes} 方法选择性使用；语义在 Evict 不适用的字段对
  * 其他注解不设任何限制。
  *
- * <p><strong>包归属</strong>：放在 {@code operation} 包而非 {@code factory} 包 —
- * 本类是对"ResiCache operation 数据形状"的统一描述，{@code fromAttributes(method, key, attributes)}
- * 三个 operation 类的静态工厂方法直接消费本类。包方向保持 {@code factory → operation} 单向
- * （factory 通过本类 import 注入数据，operation 通过 {@code fromAttributes} 静态方法完成
- * Builder 填充，二者均不需对方反向依赖）。
+ * <p><strong>内部协作</strong>：本类位于 {@code io.github.davidhlp.spring.cache.redis.cache}
+ * 包，作为投影器与三个 Redis operation 静态工厂方法之间共享的 operation 数据形状。
+ * 三个 operation 类的 {@code fromAttributes(method, key, attributes)} 工厂直接消费本类；
+ * 投影器负责生成属性值对象，operation builder 负责将字段填入 Spring operation。
+ * 协作关系保持在同一 cache 包内，不依赖不存在的 {@code factory} 或 {@code operation} 子包。
  *
- * <p><strong>public by package</strong>：仅 factory 与 projector 内部使用，未声明 public
- * 构造器；外部应通过 {@link RedisCacheAttributesProjector} 构造。
+ * <p><strong>package-private</strong>：仅 cache 包内的投影器和 operation 工厂使用，未声明
+ * public 构造器；注解属性应通过 {@link RedisCacheAttributesProjector} 进入投影路径。
  *
- * <p><strong>{@code applyTo(B)} seam</strong>: 本类也是字段映射的
- * 单一事实源 — 三个 Operation 的 {@code fromAttributes} 单行委派到本类的
- * {@code applyTo(B)} 重载(3 个),字段映射知识归属字段拥有者。
+ * <p><strong>{@code applyTo(B)} seam</strong>：本类将三个 Operation 的
+ * {@code fromAttributes} 字段映射委托给 {@code COMMON_SINKS} 与各 {@code applyTo(B)}
+ * 重载；共享字段的 setter 契约由 {@link RedisCacheAttributeSink} 统一声明，差异字段由
+ * 各重载末尾的链式 setter 处理。
  *
  * <p><strong>共享字段 vs 差异字段</strong>: 14 个共享字段由本类的 {@code COMMON_SINKS}
  * 与 {@code populate} 统一迭代；差异字段由各 {@code applyTo} 重载末尾链式 setter 管理。
