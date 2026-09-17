@@ -12,7 +12,6 @@ import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -22,7 +21,6 @@ import org.springframework.cache.interceptor.SimpleKeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.env.Environment;
 import org.springframework.data.redis.cache.CacheStatisticsCollector;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -52,18 +50,11 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
         SerializationPreFlightProbe.class,
         SerializerWhitelistStartupGuard.class,
         TlsConfigurationValidator.class,
+        ResolvedMetricsConfiguration.class,
         RedisProxyCachingConfiguration.class
 })
 @EnableConfigurationProperties(RedisProCacheProperties.class)
 class RedisProCacheConfiguration {
-
-    @Bean
-    @ConditionalOnMissingBean(ResolvedMetrics.class)
-    public ResolvedMetrics resolvedMetrics(
-            ObjectProvider<MeterRegistry> meterRegistryProvider,
-            Environment environment) {
-        return ResolvedMetrics.resolve(meterRegistryProvider, environment);
-    }
 
     /**
      * 标准 ChainObserver beans — P1-API-001-C:标准和用户 observer 均为有序 Bean,

@@ -124,13 +124,14 @@ class RedisProCacheConfigurationContractTest {
         assertThat(RedisProCacheConfiguration.class.isAnnotationPresent(ComponentScan.class)).isFalse();
     }
     @Test
-    void productionConfiguration_importsProxyConfigurationExplicitly() {
+    void productionConfiguration_importsInternalConfigurationsExplicitly() {
         org.springframework.context.annotation.Import configurationImport =
                 RedisProCacheConfiguration.class.getAnnotation(
                         org.springframework.context.annotation.Import.class);
 
         assertThat(configurationImport).isNotNull();
-        assertThat(configurationImport.value()).contains(RedisProxyCachingConfiguration.class);
+        assertThat(configurationImport.value())
+                .contains(RedisProxyCachingConfiguration.class, ResolvedMetricsConfiguration.class);
     }
 
     @Test
@@ -142,6 +143,9 @@ class RedisProCacheConfigurationContractTest {
         assertThat(scan.excludeFilters())
                 .anySatisfy(filter -> assertThat(filter.pattern())
                         .containsExactly(".*SerializationMigrationEngine"));
+        assertThat(scan.excludeFilters())
+                .anySatisfy(filter -> assertThat(filter.pattern())
+                        .containsExactly(".*ResolvedMetricsConfiguration"));
     }
 
     @Test

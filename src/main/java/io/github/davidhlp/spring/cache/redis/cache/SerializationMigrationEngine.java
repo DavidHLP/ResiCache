@@ -22,7 +22,6 @@ import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.types.Expiration;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,14 +48,14 @@ class SerializationMigrationEngine
             ObjectMapper objectMapper,
             RedisProCacheProperties properties,
             SecureJacksonSerializerFactory serializerFactory,
-            @Nullable ResolvedMetrics resolvedMetrics) {
+            ResolvedMetrics resolvedMetrics) {
         this.connectionFactory = connectionFactory;
         var serializer = properties.getSerializer();
         this.currentSerializer = serializerFactory.create(objectMapper, serializer);
         this.legacyDecoder = new LegacyValueDecoder(
                 objectMapper, serializer.getAllowedPackagePrefixes(), serializer.getTypeProperty());
         this.migration = serializer.getMigration();
-        this.meterRegistry = resolvedMetrics == null ? null : resolvedMetrics.meterRegistry();
+        this.meterRegistry = resolvedMetrics.meterRegistry();
     }
 
     /**

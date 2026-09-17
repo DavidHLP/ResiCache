@@ -62,7 +62,7 @@ public final class SerializationMigrationCli {
             useDefaultFilters = false,
             includeFilters = @ComponentScan.Filter(
                     type = FilterType.REGEX,
-                    pattern = ".*(SerializationMigrationEngine|SecureJacksonSerializerFactory)"))
+                    pattern = ".*(SerializationMigrationEngine|SecureJacksonSerializerFactory|ResolvedMetricsConfiguration)"))
     static class CliConfiguration {
         @Bean
         @ConditionalOnMissingBean(ObjectMapper.class)

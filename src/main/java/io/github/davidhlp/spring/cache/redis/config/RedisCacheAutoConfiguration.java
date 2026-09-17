@@ -35,6 +35,9 @@ import org.springframework.data.redis.core.RedisOperations;
                         pattern = ".*RedisProxyCachingConfiguration.*"),
                 @ComponentScan.Filter(
                         type = FilterType.REGEX,
+                        pattern = ".*ResolvedMetricsConfiguration"),
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
                         pattern = ".*SerializationMigrationEngine")
         })
 public class RedisCacheAutoConfiguration {
