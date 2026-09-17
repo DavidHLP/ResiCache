@@ -16,6 +16,7 @@ import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,6 +86,42 @@ class FailureLogKeyPrivacyTest {
 
     private void restoreLevel(Class<?> loggerOwner, Level previous) {
         ((Logger) LoggerFactory.getLogger(loggerOwner)).setLevel(previous);
+    }
+
+    private List<ILoggingEvent> errorEvents(ListAppender<ILoggingEvent> captured) {
+        return captured.list.stream()
+                .filter(event -> event.getLevel() == Level.ERROR)
+                .toList();
+    }
+
+    /**
+     * 断言失败点<b>逐条</b>产生 ERROR 且各自带稳定操作文本 —— 只断言「不含 raw key」会放过
+     * 「把 ERROR 日志整段删掉」的回归;每个 fragment 必须命中不同事件。
+     */
+    private void assertErrorSites(ListAppender<ILoggingEvent> captured, String... fragments) {
+        List<ILoggingEvent> errors = errorEvents(captured);
+        assertThat(errors)
+                .as("每个失败点必须恰好产生一条 ERROR")
+                .hasSize(fragments.length);
+        for (String fragment : fragments) {
+            assertThat(errors)
+                    .as("缺少失败点 ERROR 文本: %s", fragment)
+                    .anyMatch(event -> event.getFormattedMessage().contains(fragment));
+        }
+        assertThat(errors)
+                .as("ERROR 必须渲染异常类型链")
+                .allMatch(event -> event.getFormattedMessage().contains("IllegalStateException"));
+        assertThat(warnAndErrorText(captured))
+                .as("WARN/ERROR 不得包含 raw key 或异常 message(ADR-0001 §15)")
+                .doesNotContain(SECRET_KEY)
+                .doesNotContain("boom");
+    }
+
+    private void assertDebugKeepsStack(ListAppender<ILoggingEvent> captured) {
+        assertThat(captured.list)
+                .as("完整栈必须保留在 DEBUG 供关联")
+                .anyMatch(event -> event.getLevel() == Level.DEBUG
+                        && event.getThrowableProxy() != null);
     }
 
     /**
@@ -228,12 +265,9 @@ class FailureLogKeyPrivacyTest {
 
             assertThat(warnAndErrorText(captured))
                     .as("observer 失败的 ERROR 不得渲染异常 message/栈(ADR-0001 §15)")
-                    .doesNotContain(SECRET_KEY)
-                    .doesNotContain("observer boom");
-            assertThat(captured.list)
-                    .as("完整栈必须保留在 DEBUG 供关联")
-                    .anyMatch(event -> event.getLevel() == Level.DEBUG
-                            && event.getThrowableProxy() != null);
+                    .doesNotContain(SECRET_KEY);
+            assertErrorSites(captured, "onChainStart failed");
+            assertDebugKeepsStack(captured);
         } finally {
             detach(ChainEngine.class, captured);
             restoreLevel(ChainEngine.class, previous);
@@ -270,12 +304,11 @@ class FailureLogKeyPrivacyTest {
             support.add("privacy-cache", SECRET_KEY);
             support.clear("privacy-cache");
 
-            assertThat(warnAndErrorText(captured))
-                    .doesNotContain(SECRET_KEY)
-                    .doesNotContain("boom");
-            assertThat(captured.list)
-                    .anyMatch(event -> event.getLevel() == Level.DEBUG
-                            && event.getThrowableProxy() != null);
+            assertErrorSites(captured,
+                    "mightContain failed, defaulting to may-contain",
+                    "Bloom filter add failed",
+                    "Bloom filter clear failed");
+            assertDebugKeepsStack(captured);
         } finally {
             detach(BloomSupport.class, captured);
             restoreLevel(BloomSupport.class, previous);
@@ -294,8 +327,9 @@ class FailureLogKeyPrivacyTest {
                     .thenThrow(new IllegalStateException("bloom redis boom for key " + SECRET_KEY));
             when(redisTemplate.delete(anyString()))
                     .thenThrow(new IllegalStateException("bloom redis delete boom for key " + SECRET_KEY));
+            SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
             RedisBloomIFilter filter = new RedisBloomIFilter(
-                    redisTemplate, new BloomFilterConfig("bf:", 4096, 3, 64), null);
+                    redisTemplate, new BloomFilterConfig("bf:", 4096, 3, 64), meterRegistry);
             filter.init();
 
             filter.add("privacy-cache", SECRET_KEY);
@@ -304,12 +338,17 @@ class FailureLogKeyPrivacyTest {
                     .isTrue();
             filter.clear("privacy-cache");
 
-            assertThat(warnAndErrorText(captured))
-                    .doesNotContain(SECRET_KEY)
-                    .doesNotContain("boom");
-            assertThat(captured.list)
-                    .anyMatch(event -> event.getLevel() == Level.DEBUG
-                            && event.getThrowableProxy() != null);
+            assertErrorSites(captured,
+                    "Bloom filter add failed",
+                    "Bloom filter check failed",
+                    "Bloom filter delete failed");
+            assertDebugKeepsStack(captured);
+            assertThat(meterRegistry.get("bloomsift.add.failures").counter().count())
+                    .as("add 失败计数必须仍然自增")
+                    .isEqualTo(1.0);
+            assertThat(meterRegistry.get("bloomsift.check.failures").counter().count())
+                    .as("check 失败计数必须仍然自增")
+                    .isEqualTo(1.0);
         } finally {
             detach(RedisBloomIFilter.class, captured);
             restoreLevel(RedisBloomIFilter.class, previous);
