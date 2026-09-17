@@ -55,7 +55,7 @@ class CacheValueCodecRoundTripIntegrationTest extends AbstractRedisIntegrationTe
     private RedisTemplate<String, Object> redisCacheTemplate;
 
     @Autowired
-    private TypeSupport typeSupport;
+    private CacheValueCodec valueCodec;
 
     private ValueOperations<String, Object> valueOps;
     private Cache cache;
@@ -123,7 +123,7 @@ class CacheValueCodecRoundTripIntegrationTest extends AbstractRedisIntegrationTe
     @Test
     @DisplayName("incompatible serializer bytes fail fast with SerializationException, not silently")
     void incompatibleBytesFailFast() {
-        assertThatThrownBy(() -> typeSupport.deserializeFromBytes(new byte[] {0x01, 0x02, 0x03}))
+        assertThatThrownBy(() -> valueCodec.fromValueBytes(new byte[] {0x01, 0x02, 0x03}))
                 .as("non-JSON, non-NullValue bytes must surface as a typed serialization failure")
                 .isInstanceOf(io.github.davidhlp.spring.cache.redis.serialization.SerializationException.class);
     }

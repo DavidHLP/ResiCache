@@ -10,34 +10,29 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 /**
- * Null-aware 字节编码器 seam — 单一职责:把"是否将 {@code null} 编码为
- * {@link NullValue#INSTANCE}"的 null 决策与"实际字节生产"两类职责解耦。
+ * Null-aware 字节编码器 seam — 单一职责:把“是否将 {@code null} 编码为
+ * {@link NullValue#INSTANCE}”的 null 决策与实际字节生产解耦。
  *
  * <p>本类承接 null 决策层:{@code value == null ⇒ NullValue.INSTANCE}。
- * 字节生产由 {@link TypeSupport} 完成(经 {@code SecureNullValueDeserializer}
- * 走白名单往返);本类作为决策层,不强求知晓字节内部细节。
+ * 字节生产由 {@link CacheValueCodec} 完成;本类不持有 value 字节格式细节。
  *
- * <p><b>依赖方向</b>:{@code NullValueEncoder} → {@code TypeSupport}(单向,
- * 无循环)。{@code TypeSupport} 不感知上层 null 决策,两条流水线各司其职。
- *
- * <p>{@code NullValueHandler} 负责 null 缓存决策;字节编码是实现细节,不属于可替换策略面
- * (对齐 {@code SecureNullValueDeserializer} 的 final 工具类纪律)。
+ * <p>{@code NullValueHandler} 负责 null 缓存决策;字节编码是实现细节,不属于可替换策略面。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 class NullValueEncoder {
 
-    private final TypeSupport typeSupport;
+    private final CacheValueCodec valueCodec;
 
     /**
      * 将缓存返回值编码为字节,完成 null 决策的最后一英里。
      *
      * <p>contract:
      * <ul>
-     *   <li>{@code value == null} ⇒ 返回 {@link NullValue#INSTANCE} 的字节(由
-     *       {@code TypeSupport.serializeToBytes} 内部识别 + 安全 Java 序列化往返)</li>
-     *   <li>{@code value != null} ⇒ 原值直通 {@code TypeSupport.serializeToBytes}</li>
+     *   <li>{@code value == null} ⇒ 先决策为 {@link NullValue#INSTANCE},再由
+     *       {@link CacheValueCodec} 使用受限 Java 序列化</li>
+     *   <li>{@code value != null} ⇒ 原值交由 {@link CacheValueCodec} 编码</li>
      * </ul>
      *
      * @param value 缓存返回值(可为 {@code null} 或任意类型)
@@ -53,8 +48,8 @@ class NullValueEncoder {
                     "Returning null value in standard format: cacheName={}, key={}",
                     cacheName,
                     key);
-            return typeSupport.serializeToBytes(NullValue.INSTANCE);
+            return valueCodec.toValueBytes(NullValue.INSTANCE);
         }
-        return typeSupport.serializeToBytes(value);
+        return valueCodec.toValueBytes(value);
     }
 }

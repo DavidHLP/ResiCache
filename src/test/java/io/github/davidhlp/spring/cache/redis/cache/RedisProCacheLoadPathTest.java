@@ -52,6 +52,9 @@ class RedisProCacheLoadPathTest {
     private TypeSupport typeSupport;
 
     @Mock
+    private CacheValueCodec valueCodec;
+
+    @Mock
     private CacheHandlerChainFactory chainFactory;
 
     @Mock
@@ -164,6 +167,7 @@ class RedisProCacheLoadPathTest {
         return new RedisProCacheWriter(
                 statistics,
                 typeSupport,
+                valueCodec,
                 chainFactory,
                 null);
     }

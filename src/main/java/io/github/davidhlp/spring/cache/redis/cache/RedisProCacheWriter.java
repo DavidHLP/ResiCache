@@ -41,20 +41,23 @@ class RedisProCacheWriter implements RedisCacheWriter {
     private final CacheOperationResolver operationResolver;
     private final CacheStatisticsCollector statistics;
     private final TypeSupport typeSupport;
+    private final CacheValueCodec valueCodec;
     private final CacheHandlerChainFactory chainFactory;
 
     /** 缓存的责任链实例 */
     private final CacheHandlerChain cachedChain;
 
     /**
-     * 构造函数，初始化缓存责任链
+     * 构造函数，初始化缓存责任链。
      */
     public RedisProCacheWriter(CacheStatisticsCollector statistics,
                                TypeSupport typeSupport,
+                               CacheValueCodec valueCodec,
                                CacheHandlerChainFactory chainFactory,
                                CacheOperationResolver operationResolver) {
         this.statistics = statistics;
         this.typeSupport = typeSupport;
+        this.valueCodec = valueCodec;
         this.chainFactory = chainFactory;
         this.operationResolver = operationResolver;
         log.debug("Initializing handler chain for RedisProCacheWriter");
@@ -250,6 +253,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
         return new RedisProCacheWriter(
                 cacheStatisticsCollector,
                 typeSupport,
+                valueCodec,
                 chainFactory,
                 operationResolver);
     }
@@ -357,7 +361,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
         String redisKey = typeSupport.bytesToString(key);
         String actualKey = extractActualKey(name, redisKey);
         Object deserializedValue =
-                valueBytes != null ? typeSupport.deserializeFromBytes(valueBytes) : null;
+                valueBytes != null ? valueCodec.fromValueBytes(valueBytes) : null;
         CacheContext context = buildContext(
                 operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl,
                 resolveOperation(name, operation), null);

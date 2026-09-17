@@ -29,8 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>本版 wiring(满足"真实链"要求):</b> {@code @Autowired} 生产 {@link RedisProCacheWriter} bean ——
  * 它由 {@code RedisProCacheConfiguration} 用真实 {@code CacheHandlerChainFactory}(自动注入全部真实
- * CacheHandler,终止于真实 {@code ActualCacheHandler})+ 真实 {@link TypeSupport} 装配。所有操作
- * 经真实责任链执行并落盘到真实 Redis 容器。
+ * CacheHandler,终止于真实 {@link ActualCacheHandler})+ 真实 {@link CacheValueCodec} 装配。
+ * 所有操作经真实责任链执行并落盘到真实 Redis 容器。
  *
  * <p><b>断言范式转变:</b> 原版用 {@link org.mockito.ArgumentCaptor} 捕获传给 chain 的 context
  * 字段(operation / cacheName / redisKey / actualKey / ttl / keyPattern)。本版改为验证<b>真实效果</b>
@@ -51,7 +51,7 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Autowired
-    private TypeSupport typeSupport;
+    private CacheValueCodec valueCodec;
 
     @Autowired
     private CacheStatisticsCollector statistics;
@@ -72,14 +72,14 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
         @Test
         @DisplayName("get returns the stored value after put (real chain round-trip)")
         void get_afterPut_returnsValue() {
-            byte[] value = typeSupport.serializeToBytes("value");
+            byte[] value = valueCodec.toValueBytes("value");
             writer.put(NAME, KEY, value, Duration.ofSeconds(60));
 
             byte[] result = writer.get(NAME, KEY);
 
             // 真实往返:GET 经真实责任链读到 ActualCacheHandler 命中,返回非空且可还原为原值
             assertThat(result).isNotNull();
-            assertThat(typeSupport.deserializeFromBytes(result)).isEqualTo("value");
+            assertThat(valueCodec.fromValueBytes(result)).isEqualTo("value");
         }
 
         @Test
@@ -98,7 +98,7 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
         @Test
         @DisplayName("put persists value to Redis at the derived key with the given TTL")
         void put_withTtl_persistsValueAndTtl() {
-            byte[] value = typeSupport.serializeToBytes("value");
+            byte[] value = valueCodec.toValueBytes("value");
             Duration ttl = Duration.ofSeconds(60);
 
             writer.put(NAME, KEY, value, ttl);
@@ -115,7 +115,7 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
         @Test
         @DisplayName("put persists the value through the chain (SDR entry point)")
         void put_persistsValue() {
-            byte[] value = typeSupport.serializeToBytes("value");
+            byte[] value = valueCodec.toValueBytes("value");
 
             writer.put(NAME, KEY, value, Duration.ofSeconds(60));
 
@@ -134,7 +134,7 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
         @Test
         @DisplayName("putIfAbsent stores when key absent (real SETNX success)")
         void putIfAbsent_whenAbsent_stores() {
-            byte[] value = typeSupport.serializeToBytes("value");
+            byte[] value = valueCodec.toValueBytes("value");
 
             byte[] result = writer.putIfAbsent(NAME, KEY, value, null);
 
@@ -148,12 +148,12 @@ class RedisProCacheWriterIntegrationTest extends AbstractRedisIntegrationTest {
         void putIfAbsent_whenExists_returnsExisting() {
             // 真实预置已存在的值 → SETNX 自然失败 → 返回现值,且现值不被覆盖
             valueOperations.set(REDIS_KEY, CachedValue.of("existing", 60));
-            byte[] value = typeSupport.serializeToBytes("newValue");
+            byte[] value = valueCodec.toValueBytes("newValue");
 
             byte[] result = writer.putIfAbsent(NAME, KEY, value, null);
 
             assertThat(result).isNotNull();
-            assertThat(typeSupport.deserializeFromBytes(result)).isEqualTo("existing");
+            assertThat(valueCodec.fromValueBytes(result)).isEqualTo("existing");
             // 真实:现值未被覆盖
             Object stored = valueOperations.get(REDIS_KEY);
             assertThat(stored).isInstanceOf(CachedValue.class);
