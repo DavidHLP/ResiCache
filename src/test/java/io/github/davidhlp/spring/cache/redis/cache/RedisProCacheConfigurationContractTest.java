@@ -71,6 +71,29 @@ class RedisProCacheConfigurationContractTest {
                 registry.find("resicache.cache.put").timer()).isNotNull());
     }
 
+    @Test
+    void metricsEnabled_withoutMeterRegistry_keepsNoOpChoice() {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withPropertyValues("resi-cache.metrics.enabled=true")
+                    .withBean(RedisProCacheWriter.class,
+                            () -> org.mockito.Mockito.mock(RedisProCacheWriter.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        assertThat(context).doesNotHaveBean(MeterRegistry.class);
+                        assertThat(context).hasSingleBean(ResolvedMetrics.class);
+                        assertThat(context.getBean(ResolvedMetrics.class).meterRegistry())
+                                .isNull();
+                    });
+        }
+    }
+
     private void assertMetricsAssembly(
             boolean enabled,
             Consumer<SimpleMeterRegistry> assertion) throws Exception {
