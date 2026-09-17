@@ -63,9 +63,7 @@ import org.springframework.stereotype.Component;
  * 子链以 {@link ChainContinuation} 形态交给正在执行的 handler。
  *
  * <p><b>Observer 列表管理委派</b>:{@code addObserver} / {@code observers}
- * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam,与
- * {@code handler.AnnotationChainEngine} 共用,消除两 engine 间的 observer
- * 列表样板重复。
+ * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam。
  */
 @Slf4j
 @Component

@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.AnnotationCacheOperationSource;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.lang.Nullable;
+import org.springframework.util.StringUtils;
 
 /**
  * Redis缓存操作源.
@@ -23,12 +24,12 @@ import org.springframework.lang.Nullable;
  * {@code getCacheOperations}),内部以组合方式委托三个无 Spring 继承负担的纯 POJO
  * 协作器完成实际工作:
  * <ul>
- *   <li>{@link AnnotationParser} —— ResiCache 注解解析(职责1)</li>
- *   <li>{@link OperationValidator} —— 操作合法性校验(职责3)</li>
+ *   <li>{@link AnnotationParser} —— ResiCache 注解解析与策略快照生成(职责1)</li>
+ *   <li>本类私有校验 seam —— 操作合法性校验(职责3)</li>
  *   <li>{@link SpringAnnotationAdapter} —— Spring 原生注解兼容(职责2)</li>
  * </ul>
  *
- * <p>编排顺序不可颠倒:AnnotationParser 先解析 ResiCache 注解 → Validator 校验每个 op
+ * <p>编排顺序不可颠倒:AnnotationParser 先解析 ResiCache 注解 → 本类校验每个 op
  * → SpringAnnotationAdapter 后追加 Spring 原生注解(SELECTIVE 去重依赖 ResiCache 已入 ops)。
  *
  * <p>支持 Spring 原生注解 {@code @Cacheable}, {@code @CachePut}, {@code @CacheEvict}
@@ -38,7 +39,6 @@ import org.springframework.lang.Nullable;
 class RedisCacheOperationSource extends AnnotationCacheOperationSource {
 
     private final AnnotationParser annotationParser;
-    private final OperationValidator operationValidator;
     private final SpringAnnotationAdapter springAnnotationAdapter;
     private RedisCacheRegister redisCacheRegister;
 
@@ -63,7 +63,6 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
             RedisCacheRegister redisCacheRegister) {
         super(false);
         this.annotationParser = annotationParser;
-        this.operationValidator = new OperationValidator();
         this.springAnnotationAdapter = new SpringAnnotationAdapter(nativeAnnotationMode);
         this.redisCacheRegister = redisCacheRegister;
     }
@@ -99,7 +98,7 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         final List<CacheOperation> ops = new ArrayList<>(parsed.operations());
 
         for (final CacheOperation op : ops) {
-            operationValidator.validate(target, op);
+            validate(target, op);
         }
 
         springAnnotationAdapter.addSpringNativeOperations(target, ops);
@@ -117,5 +116,43 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         }
 
         return snapshot.operations().isEmpty() ? null : snapshot.operations();
+    }
+
+    /**
+     * 校验单个缓存操作的合法性,保留注解入口原有失败消息与异常语义。
+     *
+     * @param target 方法或类对象
+     * @param operation 缓存操作
+     * @throws IllegalStateException 如果配置无效
+     */
+    private void validate(final Object target, final CacheOperation operation) {
+        log.trace("Validating cache operation for target: {}", target);
+
+        if (StringUtils.hasText(operation.getKey())
+                && StringUtils.hasText(operation.getKeyGenerator())) {
+            final String errorMsg = "Invalid cache annotation configuration on '"
+                    + target + "'. Both 'key' and 'keyGenerator' attributes "
+                    + "have been set. These attributes are mutually exclusive.";
+            log.error(errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+
+        if (StringUtils.hasText(operation.getCacheManager())
+                && StringUtils.hasText(operation.getCacheResolver())) {
+            final String errorMsg = "Invalid cache annotation configuration on '"
+                    + target + "'. Both 'cacheManager' and 'cacheResolver' "
+                    + "attributes have been set.";
+            log.error(errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+
+        if (operation.getCacheNames().isEmpty()) {
+            final String errorMsg = "Invalid cache annotation configuration on '"
+                    + target + "'. At least one cache name must be specified.";
+            log.error(errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+
+        log.debug("Cache operation validation passed for target: {}", target);
     }
 }

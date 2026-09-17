@@ -1,33 +1,24 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import java.lang.reflect.Method;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.interceptor.CacheOperation;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * OperationValidator 单元测试
- *
- * <p>覆盖三条违例路径(key/keyGenerator 互斥、cacheManager/cacheResolver 互斥、cacheNames 空)
- * 与一条合法路径。纯校验逻辑,无 Spring/testcontainers 依赖。这是 C05 抽出 OperationValidator
- * 的直接单测收益(原本埋在 565 行 god class 内,无法独立断言)。
+ * RedisCacheOperationSource validation seam tests.
  */
-@DisplayName("OperationValidator Tests")
-class OperationValidatorTest {
+@DisplayName("RedisCacheOperationSource validation")
+class RedisCacheOperationSourceValidationTest {
 
-    private final OperationValidator validator = new OperationValidator();
-    private final Object target = this;
-
-    /** 构造一个带指定字段的 CacheOperation(其余字段为空,模拟最小合法/非法配置) */
     private CacheOperation opWith(String key, String keyGenerator,
-                                  String cacheManager, String cacheResolver,
-                                  String... cacheNames) {
+                                   String cacheManager, String cacheResolver,
+                                   String... cacheNames) {
         RedisCacheableOperation.Builder builder = RedisCacheableOperation.builder().name("test");
         if (cacheNames != null && cacheNames.length > 0) {
             builder.cacheNames(cacheNames);
@@ -47,12 +38,36 @@ class OperationValidatorTest {
         return builder.build();
     }
 
+    private RedisCacheOperationSource sourceFor(CacheOperation operation) {
+        AnnotationParser parser = new AnnotationParser() {
+            @Override
+            ParsedAnnotations parse(Object target) {
+                return new ParsedAnnotations(List.of(operation), List.of());
+            }
+        };
+        return new RedisCacheOperationSource(
+                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, parser, null);
+    }
+
+    private Method targetMethod() {
+        try {
+            return RedisCacheOperationSourceValidationTest.class.getDeclaredMethod("targetMethod");
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private void targetMethod() {
+    }
+
     @Test
     @DisplayName("valid configuration passes validation")
     void validate_validConfig_passes() {
         CacheOperation op = opWith("myKey", null, null, null, "cache1");
 
-        assertThatCode(() -> validator.validate(target, op)).doesNotThrowAnyException();
+        assertThatCode(() -> sourceFor(op).findCacheOperations(targetMethod()))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -60,7 +75,7 @@ class OperationValidatorTest {
     void validate_keyAndKeyGenerator_throws() {
         CacheOperation op = opWith("myKey", "myKeyGenerator", null, null, "cache1");
 
-        assertThatThrownBy(() -> validator.validate(target, op))
+        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(targetMethod()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("key")
                 .hasMessageContaining("keyGenerator");
@@ -71,7 +86,7 @@ class OperationValidatorTest {
     void validate_cacheManagerAndCacheResolver_throws() {
         CacheOperation op = opWith(null, null, "myCacheManager", "myCacheResolver", "cache1");
 
-        assertThatThrownBy(() -> validator.validate(target, op))
+        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(targetMethod()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("cacheManager")
                 .hasMessageContaining("cacheResolver");
@@ -82,7 +97,7 @@ class OperationValidatorTest {
     void validate_emptyCacheNames_throws() {
         CacheOperation op = opWith(null, null, null, null);
 
-        assertThatThrownBy(() -> validator.validate(target, op))
+        assertThatThrownBy(() -> sourceFor(op).findCacheOperations(targetMethod()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("cache name");
     }

@@ -17,24 +17,21 @@ import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CachePutOperation;
-import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.expression.AnnotatedElementKey;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
  * AOP 注解管线行为矩阵 —— 在策略快照合并前锁定可观察契约。
  *
- * <p>同一组方法同时经过 Spring operation source 与 annotation chain，验证两侧的
+ * <p>同一组方法同时经过生产 AnnotationParser 快照与 Spring operation source,验证两侧的
  * operation 类型、key/condition、命名空间选择及增强策略字段。
  */
 @DisplayName("AOP annotation behavior matrix")
 class AnnotationAopBehaviorMatrixTest {
 
     private RedisCacheRegister register;
-    private AnnotationChainEngine annotationChainEngine;
     private CacheOperationResolver resolver;
     private RedisCacheOperationSource operationSource;
     private MethodMetadataResolver metadataResolver;
@@ -42,15 +39,6 @@ class AnnotationAopBehaviorMatrixTest {
     @BeforeEach
     void setUp() {
         register = new RedisCacheRegister();
-        KeyGenerator keyGenerator = Mockito.mock(KeyGenerator.class);
-        when(keyGenerator.generate(any(), any(), any())).thenReturn("generated-key");
-        RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
-        SpringCacheableAdapter springAdapter = Mockito.mock(SpringCacheableAdapter.class);
-        annotationChainEngine = new AnnotationChainEngine(List.of(
-                new CacheableAnnotationHandler(register, keyGenerator, projector, springAdapter),
-                new EvictAnnotationHandler(register, keyGenerator, projector),
-                new CachePutAnnotationHandler(register, keyGenerator, projector),
-                new CachingAnnotationHandler(register, keyGenerator, projector)));
         metadataResolver = Mockito.mock(MethodMetadataResolver.class);
         resolver = new CacheOperationResolver(metadataResolver, register);
         operationSource = new RedisCacheOperationSource(
@@ -164,8 +152,10 @@ class AnnotationAopBehaviorMatrixTest {
     }
 
     private List<CacheOperation> execute(Method method) {
+        AnnotationParser.ParsedAnnotations parsed = new AnnotationParser().parse(method);
+        register.registerSnapshot(method, Matrix.class, parsed);
         when(metadataResolver.currentKey()).thenReturn(new AnnotatedElementKey(method, Matrix.class));
-        return annotationChainEngine.execute(method, new Matrix(), new Object[]{"id"});
+        return parsed.policyOperations();
     }
 
     private CachePolicyView.Source resolve(

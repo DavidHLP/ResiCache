@@ -1,10 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,11 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 解析命名空间契约 —— 每个链侧操作读<b>自己</b>注解声明的策略。
  *
- * <p>此前解析恒查 {@code CACHEABLE} 命名空间:{@code @RedisCachePut} 的 ttl/bloom/sync
- * 虽然注册进 register,却没有任何读取者,只在 {@code @RedisCachePut} 单独使用时静默失效
- * (写入落回 cache 级 TTL、bloom 位不回填 → 读侧 bloom 短路会把已写入的数据判成 miss)。
- *
- * <p>本测试锁定修复后的规则:
+ * <p>测试通过生产 {@link RedisCacheRegister#registerSnapshot} seam 写入快照，锁定：
  * <ol>
  *   <li>GET → CACHEABLE,PUT / PUT_IF_ABSENT → CACHE_PUT,REMOVE / CLEAN → CACHE_EVICT</li>
  *   <li>写路径在自身命名空间未命中时回退 CACHEABLE —— 读穿透写回由 {@code @RedisCacheable}
@@ -64,11 +59,16 @@ class CacheOperationResolverNamespaceTest {
                 .name("m").cacheNames(CACHE).key("k").ttl(ttl).build();
     }
 
+    private void registerSnapshot(CacheOperation... operations) {
+        List<CacheOperation> snapshotOperations = Arrays.asList(operations);
+        register.registerSnapshot(method(), CacheOperationResolverNamespaceTest.class,
+                new AnnotationParser.ParsedAnnotations(snapshotOperations, snapshotOperations));
+    }
+
     @Test
     @DisplayName("PUT 读 @RedisCachePut 自己的声明(修复前恒为 null)")
     void putOperation_resolvesPutDeclaration() {
-        register.register(method(), CacheOperationResolverNamespaceTest.class, put(120),
-                OperationKind.CACHE_PUT);
+        registerSnapshot(put(120));
 
         assertThat(resolver.resolve(CACHE, CacheOperation.PUT)).isSameAs(
                 register.get(CACHE, elementKey, OperationKind.CACHE_PUT));
@@ -80,8 +80,7 @@ class CacheOperationResolverNamespaceTest {
     @Test
     @DisplayName("GET 仍读 @RedisCacheable")
     void getOperation_resolvesCacheableDeclaration() {
-        register.register(method(), CacheOperationResolverNamespaceTest.class, cacheable(300),
-                OperationKind.CACHEABLE);
+        registerSnapshot(cacheable(300));
 
         assertThat(resolver.resolve(CACHE, CacheOperation.GET).getTtl()).isEqualTo(300L);
     }
@@ -89,8 +88,7 @@ class CacheOperationResolverNamespaceTest {
     @Test
     @DisplayName("写路径回退:只有 @RedisCacheable 时,PUT/PUT_IF_ABSENT 沿用读侧策略")
     void writeOperation_fallsBackToCacheable() {
-        register.register(method(), CacheOperationResolverNamespaceTest.class, cacheable(300),
-                OperationKind.CACHEABLE);
+        registerSnapshot(cacheable(300));
 
         assertThat(resolver.resolve(CACHE, CacheOperation.PUT))
                 .as("读穿透写回的策略来自 @RedisCacheable 声明,不得丢失")
@@ -101,10 +99,7 @@ class CacheOperationResolverNamespaceTest {
     @Test
     @DisplayName("同方法两种声明时,读侧声明优先 —— 读穿透写回不得被写侧默认值改写")
     void bothDeclarations_readDeclarationWins() {
-        register.register(method(), CacheOperationResolverNamespaceTest.class, cacheable(300),
-                OperationKind.CACHEABLE);
-        register.register(method(), CacheOperationResolverNamespaceTest.class, put(60),
-                OperationKind.CACHE_PUT);
+        registerSnapshot(cacheable(300), put(60));
 
         assertThat(resolver.resolve(CACHE, CacheOperation.GET).getTtl()).isEqualTo(300L);
         assertThat(resolver.resolve(CACHE, CacheOperation.PUT).getTtl())
@@ -115,10 +110,7 @@ class CacheOperationResolverNamespaceTest {
     @Test
     @DisplayName("REMOVE/CLEAN 无策略命名空间(不查,也不回退到写侧)")
     void evictOperations_resolveNothing() {
-        register.register(method(), CacheOperationResolverNamespaceTest.class, put(60),
-                OperationKind.CACHE_PUT);
-        register.register(method(), CacheOperationResolverNamespaceTest.class, cacheable(300),
-                OperationKind.CACHEABLE);
+        registerSnapshot(put(60), cacheable(300));
 
         assertThat(OperationKind.forCacheOperation(CacheOperation.REMOVE)).isNull();
         assertThat(OperationKind.forCacheOperation(CacheOperation.CLEAN)).isNull();
