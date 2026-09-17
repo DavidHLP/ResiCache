@@ -112,7 +112,11 @@ class CacheValueCodecRoundTripIntegrationTest extends AbstractRedisIntegrationTe
                 .as("the chain stores the envelope-shaped Map as CachedValue.value "
                         + "(T0 hypothesis to verify/refute)")
                 .isInstanceOf(Map.class);
-        assertThat((Map<?, ?>) storedValue)
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> storedMap = (Map<String, Object>) storedValue;
+        assertThat(storedMap)
+                .as("the stored map must expose the envelope keys")
                 .containsKeys("version", "payload");
     }
 
