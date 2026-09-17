@@ -101,6 +101,11 @@ Current milestones:
   lock acquire/release, `SyncRole` leader/follower failures, the async
   early-expiration retry path, chain post-processing, and the migration
   engine's fingerprint helper (now one implementation).
+- **Redacted diagnostics at every failure site** — the chain’s observer dispatch and
+  all six Bloom failure paths now render only the exception type chain at WARN/ERROR
+  (`FailureDiagnostics.sanitizedFailure`) and keep the full stack at DEBUG, closing the
+  remaining ADR-0001 §15 gaps. Fail-open behavior and the Bloom failure counters are
+  unchanged.
 - **Sync early-expiration answers with a miss** — a synchronous early-expiration
   skip (`EarlyExpirationMode.SYNC`) now returns `CacheResult.miss()` through the
   chain instead of a null-byte `success`: `EarlyExpirationHandler` advances to
