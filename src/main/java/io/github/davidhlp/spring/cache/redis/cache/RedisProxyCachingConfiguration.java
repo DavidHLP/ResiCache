@@ -13,12 +13,10 @@ import org.springframework.context.annotation.Role;
 
 /**
  * Redis缓存代理配置类 提供基于代理的Redis缓存注解驱动支持。
- *
  * <p>代理 bean 与 {@code RedisProCacheConfiguration.cacheManager()} 使用同一个选择门:
- * {@code @ConditionalOnMissingBean(CacheManager.class)}。这不是直接依赖
- * {@code RedisProCacheManager} 的 {@code @ConditionalOnBean};后者在解析
- * {@code @Import} 时早于宿主配置的 {@code @Bean} 方法注册,会把默认代理误判为不满足。
- * 用户提供任意 {@code CacheManager} 时,默认 manager 与代理一起 back off。
+ * 缺少用户提供的 {@code CacheManager} 时启用,但忽略库自身的
+ * {@code RedisProCacheManager}。这避免默认 manager 已注册后代理条件被误判为不满足;
+ * 用户提供任意其他 {@code CacheManager} 时,默认 manager 与代理一起 back off。
  */
 @Configuration(proxyBeanMethods = false)
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
@@ -31,7 +29,9 @@ class RedisProxyCachingConfiguration {
     // 用户自定义 CacheManager → 库 cacheManager back-off → RedisProCacheManager
     // 不存在。advisor/interceptor 必须随之退场(用户自行接管 Spring Cache),
     // 否则启动期 UnsatisfiedDependency 直接失败(RM-005 探针发现)。
-    @ConditionalOnMissingBean(org.springframework.cache.CacheManager.class)
+    @ConditionalOnMissingBean(
+            value = org.springframework.cache.CacheManager.class,
+            ignored = RedisProCacheManager.class)
     public BeanFactoryCacheOperationSourceAdvisor redisCacheAdvisor(
             @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
                     CacheOperationSource redisCacheOperationSource,
@@ -57,7 +57,9 @@ class RedisProxyCachingConfiguration {
      */
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    @ConditionalOnMissingBean(org.springframework.cache.CacheManager.class)
+    @ConditionalOnMissingBean(
+            value = org.springframework.cache.CacheManager.class,
+            ignored = RedisProCacheManager.class)
     public RedisCacheInterceptor redisCacheInterceptor(
             @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
                     CacheOperationSource redisCacheOperationSource,
