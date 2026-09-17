@@ -1,0 +1,40 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheValueCodec.java
+  h_77173abe25c3ff 1-72
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/NullValueEncoder.java
+  h_77173abe25c3ff 13-14,17,19,26,33-35,51,53
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfiguration.java
+  h_77173abe25c3ff 55,160,167
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriter.java
+  h_77173abe25c3ff 44,51,55,60,256,364
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/TypeSupport.java
+  h_77173abe25c3ff 8,10-11,17
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheValueCodecRoundTripIntegrationTest.java
+  h_77173abe25c3ff 58,126
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheValueCodecTest.java
+  h_77173abe25c3ff 1-198
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/NullValueEncoderTest.java
+  h_77173abe25c3ff 20,27,33,44,49-50,54,58,63-64,68,71,76,84,89
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheLoadPathTest.java
+  h_77173abe25c3ff 54-56,170
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterConstructionTest.java
+  h_77173abe25c3ff 28
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterFailureTest.java
+  h_77173abe25c3ff 32-34,48,71
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterIntegrationTest.java
+  h_77173abe25c3ff 32-33,54,75,82,101,118,137,151,156
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterStatisticsTest.java
+  h_77173abe25c3ff 30-32,46-47,53-54
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/TypeSupportTest.java
+  h_77173abe25c3ff 5,9,14,16-19,22-25,28-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "365dfc69ded936a9660b8612ffe30153293612ea",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
