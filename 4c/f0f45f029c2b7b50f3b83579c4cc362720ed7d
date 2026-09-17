@@ -1,0 +1,16 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfigurationContractTest.java
+  h_77173abe25c3ff 74-96
+src/test/java/io/github/davidhlp/spring/cache/redis/serialization/migration/SerializationMigrationCliContractTest.java
+  h_77173abe25c3ff 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4cf0f45f029c2b7b50f3b83579c4cc362720ed7d",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
