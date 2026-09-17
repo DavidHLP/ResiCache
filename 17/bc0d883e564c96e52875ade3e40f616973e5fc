@@ -1,0 +1,16 @@
+CHANGELOG.md
+  h_77173abe25c3ff 104-110
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandler.java
+  h_77173abe25c3ff 25-26,51,80-84,88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17bc0d883e564c96e52875ade3e40f616973e5fc",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
