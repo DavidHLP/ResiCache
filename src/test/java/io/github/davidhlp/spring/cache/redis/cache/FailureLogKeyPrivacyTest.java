@@ -73,6 +73,21 @@ class FailureLogKeyPrivacyTest {
     }
 
     /**
+     * 临时把某个 logger 提升到 DEBUG —— Spring 测试默认 INFO,否则「栈保留在 DEBUG」的契约不可断言。
+     * 返回原 level(null 表示继承),调用方在 finally 里还原。
+     */
+    private Level enableDebug(Class<?> loggerOwner) {
+        Logger logger = (Logger) LoggerFactory.getLogger(loggerOwner);
+        Level previous = logger.getLevel();
+        logger.setLevel(Level.DEBUG);
+        return previous;
+    }
+
+    private void restoreLevel(Class<?> loggerOwner, Level previous) {
+        ((Logger) LoggerFactory.getLogger(loggerOwner)).setLevel(previous);
+    }
+
+    /**
      * 拼接全部 WARN/ERROR 事件的<b>完整渲染</b>:格式化消息 + 每个 throwable 的类型与 message
      * (含 cause 链)。
      *
@@ -188,6 +203,7 @@ class FailureLogKeyPrivacyTest {
     @DisplayName("ChainEngine:observer 失败 ERROR 只渲染异常类型链,栈保留在 DEBUG")
     void chainEngine_observerFailure_omitsRawKey() {
         ListAppender<ILoggingEvent> captured = attach(ChainEngine.class);
+        Level previous = enableDebug(ChainEngine.class);
         try {
             ChainEngine engine = new ChainEngine();
             engine.addObserver(new ChainObserver() {
@@ -220,6 +236,7 @@ class FailureLogKeyPrivacyTest {
                             && event.getThrowableProxy() != null);
         } finally {
             detach(ChainEngine.class, captured);
+            restoreLevel(ChainEngine.class, previous);
         }
     }
 
@@ -227,6 +244,7 @@ class FailureLogKeyPrivacyTest {
     @DisplayName("BloomSupport:三处 fail-open ERROR 只渲染类型链,栈保留在 DEBUG")
     void bloomSupport_failOpen_omitsRawKey() {
         ListAppender<ILoggingEvent> captured = attach(BloomSupport.class);
+        Level previous = enableDebug(BloomSupport.class);
         try {
             BloomIFilter broken = new BloomIFilter() {
                 @Override
@@ -260,6 +278,7 @@ class FailureLogKeyPrivacyTest {
                             && event.getThrowableProxy() != null);
         } finally {
             detach(BloomSupport.class, captured);
+            restoreLevel(BloomSupport.class, previous);
         }
     }
 
@@ -267,6 +286,7 @@ class FailureLogKeyPrivacyTest {
     @DisplayName("RedisBloomIFilter:三个失败点 ERROR 只渲染类型链,栈保留在 DEBUG")
     void redisBloomIFilter_failures_omitRawKey() {
         ListAppender<ILoggingEvent> captured = attach(RedisBloomIFilter.class);
+        Level previous = enableDebug(RedisBloomIFilter.class);
         try {
             @SuppressWarnings("unchecked")
             RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
@@ -292,6 +312,7 @@ class FailureLogKeyPrivacyTest {
                             && event.getThrowableProxy() != null);
         } finally {
             detach(RedisBloomIFilter.class, captured);
+            restoreLevel(RedisBloomIFilter.class, previous);
         }
     }
 
