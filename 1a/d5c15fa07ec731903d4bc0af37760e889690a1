@@ -1,0 +1,20 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactory.java
+  h_77173abe25c3ff 56-57,110,117-118,129-130,141,143,146,192
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfiguration.java
+  h_77173abe25c3ff 60-67,91,93,99,101,112-113,151,154,203,212,284,290
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResolvedMetrics.java
+  h_77173abe25c3ff 1-27
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationEngine.java
+  h_77173abe25c3ff 25,52,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ad5c15fa07ec731903d4bc0af37760e889690a1",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
