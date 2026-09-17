@@ -290,6 +290,34 @@ class CacheErrorHandlerTest {
             assertThat(result.resultBytes()).isNull();
         }
     }
+    @Test
+    @DisplayName("finalizeFailure centralizes typed FAIL_FAST completion")
+    void finalizeFailure_failFast_throwsTypedExceptionWithoutRawKey() {
+        String rawKey = "secret-customer-key-42";
+        IllegalStateException cause = new IllegalStateException("redis failed for " + rawKey);
+        CacheResult result = CacheResult.failure(
+                CacheOperation.PUT, CacheResult.FailureKind.REDIS, cause);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> CacheErrorHandler.finalizeFailure(CacheOperation.PUT, "cache", result))
+                .isInstanceOf(CacheOperationException.class)
+                .hasCauseReference(cause)
+                .hasMessageNotContaining(rawKey);
+    }
+
+    @Test
+    @DisplayName("finalizeFailure keeps best-effort operations non-throwing")
+    void finalizeFailure_remove_doesNotThrow() {
+        CacheResult result = CacheResult.failure(
+                CacheOperation.REMOVE,
+                CacheResult.FailureKind.REDIS,
+                new IllegalStateException("redis down"));
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> CacheErrorHandler.finalizeFailure(CacheOperation.REMOVE, "cache", result))
+                .doesNotThrowAnyException();
+    }
+
 
     @Nested
     @DisplayName("ADR-06 count-once failure metric")

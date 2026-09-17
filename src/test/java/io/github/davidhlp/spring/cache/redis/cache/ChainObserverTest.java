@@ -27,8 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>每个 observer 独立测试其特定钩子的行为（MDC stamp / DEBUG log / Timer / fired counter），
  * 验证与 Engine 解耦后能正确实现单一职责。空 observer 列表的"什么都不做"语义由
- * {@link io.github.davidhlp.spring.cache.redis.cache.ChainEngine} 的 ObserverRegistry
- * 空列表分支承载(空观测无需占位单例)。
+ * {@link io.github.davidhlp.spring.cache.redis.cache.ChainEngine} 的空列表分支承载
+ * (空观测无需占位单例)。
  */
 @DisplayName("ChainObserver Implementations")
 class ChainObserverTest {

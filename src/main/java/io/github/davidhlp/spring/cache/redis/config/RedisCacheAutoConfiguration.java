@@ -26,9 +26,17 @@ import org.springframework.data.redis.core.RedisOperations;
 @ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)
 @ComponentScan(
         basePackages = "io.github.davidhlp.spring.cache.redis.cache",
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.REGEX,
-                pattern = ".*Test.*"))
+        excludeFilters = {
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = ".*Test.*"),
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = ".*RedisProxyCachingConfiguration"),
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = ".*SerializationMigrationEngine")
+        })
 public class RedisCacheAutoConfiguration {
 
 }

@@ -1,5 +1,4 @@
 cache.AbstractCacheHandler$CounterMetadata
-cache.AttributePopulator$FieldSink
 cache.BuilderPopulator$TextField
 cache.CacheErrorHandler$ErrorStrategy
 cache.CacheInput$Builder

@@ -12,6 +12,7 @@ import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -54,23 +55,23 @@ import org.springframework.stereotype.Component;
  * 引擎不再持任何静态状态,handler 不再反查引擎,fragment API 与测试专用 setter 一并消失。
  *
  * <p><b>线程安全</b>：Engine 单例 Bean，{@link #observers} 字段为
- * {@link ObserverRegistry}（内部 {@code CopyOnWriteArrayList}，启动期单写、热期
- * 多读），observer 自身必须线程安全。Handler 列表由 {@link CacheHandlerChain}
+ * {@link java.util.concurrent.CopyOnWriteArrayList}（启动期单写、热期多读），
+ * observer 自身必须线程安全。Handler 列表由 {@link CacheHandlerChain}
  * 完全持有;Engine 内部不修改该列表。
  *
  * <p><b>快照归属</b>:链 list 单一真理源完全收敛在 {@code CacheHandlerChain},
  * Engine 通过 {@link #execute(List, CacheContext)} 接收快照参数,并把「当前节点之后」的
  * 子链以 {@link ChainContinuation} 形态交给正在执行的 handler。
  *
- * <p><b>Observer 列表管理委派</b>:{@code addObserver} / {@code observers}
- * / 遍历逻辑委派到 {@link ObserverRegistry} 单一 seam。
+ * <p><b>Observer 列表管理</b>:{@code addObserver} / 遍历逻辑均由 Engine
+ * 持有的 CopyOnWriteArrayList 完成。
  */
 @Slf4j
 @Component
 class ChainEngine {
 
-    /** 注册的 observer 列表 — 委派到 {@link ObserverRegistry} 单一 seam. */
-    private final ObserverRegistry observers = new ObserverRegistry();
+    /** 注册的 observer 列表 — 启动期单写、热期多读。 */
+    private final List<ChainObserver> observers = new CopyOnWriteArrayList<>();
 
     public ChainEngine() {
         // observers 由外部 addObserver(...) 注入；ChainHandlerChainFactory 在装配时调用
@@ -85,17 +86,12 @@ class ChainEngine {
      * @throws IllegalArgumentException 若 observer 为 null
      */
     public void addObserver(ChainObserver observer) {
+        if (observer == null) {
+            throw new IllegalArgumentException("observer must not be null");
+        }
         observers.add(observer);
     }
 
-    /**
-     * 暴露当前已注册的 observer 列表（只读快照）。测试与诊断用；运行期勿修改。
-     *
-     * @return 不可变 observer 列表快照
-     */
-    public List<ChainObserver> observers() {
-        return observers.snapshot();
-    }
 
     /**
      * 执行责任链 — 整条 chain 全生命周期(head handle + post-process + 观测)。
@@ -276,11 +272,11 @@ class ChainEngine {
      */
     private final class ChainLifecycle {
 
-        private final ObserverRegistry observers;
+        private final List<ChainObserver> observers;
         private final List<CacheHandler> snapshot;
         private final CacheContext context;
 
-        ChainLifecycle(ObserverRegistry observers,
+        ChainLifecycle(List<ChainObserver> observers,
                        List<CacheHandler> snapshot,
                        CacheContext context) {
             this.observers = observers;
@@ -360,22 +356,23 @@ class ChainEngine {
          */
         private void runPostProcess(CacheResult mainResult) {
             for (CacheHandler handler : snapshot) {
-                if (handler.requiresPostProcess(context)) {
-                    try {
-                        handler.afterChainExecution(context, mainResult);
-                        log.debug("Post-processing executed for: {}",
-                                handler.getClass().getSimpleName());
-                    } catch (Exception e) {
-                        // ADR-0001 §15 key 隐私:ERROR 只带 cacheName + 异常类型链,不带 raw key;
-                        // 完整栈留 DEBUG(异常 message 可能内嵌 key)。
-                        log.error("Post-processing failed for: {}, operation: {}, cacheName: {}, cause={}",
-                                handler.getClass().getSimpleName(),
-                                context.getOperation(),
-                                context.getCacheName(),
-                                FailureDiagnostics.sanitizedFailure(e));
-                        log.debug("Post-processing failure detail: cacheName={}",
-                                context.getCacheName(), e);
+                try {
+                    if (!handler.requiresPostProcess(context)) {
+                        continue;
                     }
+                    handler.afterChainExecution(context, mainResult);
+                    log.debug("Post-processing executed for: {}",
+                            handler.getClass().getSimpleName());
+                } catch (Exception e) {
+                    // ADR-0001 §15 key 隐私:ERROR 只带 cacheName + 异常类型链,不带 raw key;
+                    // 完整栈留 DEBUG(异常 message 可能内嵌 key)。
+                    log.error("Post-processing failed for: {}, operation: {}, cacheName: {}, cause={}",
+                            handler.getClass().getSimpleName(),
+                            context.getOperation(),
+                            context.getCacheName(),
+                            FailureDiagnostics.sanitizedFailure(e));
+                    log.debug("Post-processing failure detail: cacheName={}",
+                            context.getCacheName(), e);
                 }
             }
         }
@@ -386,7 +383,7 @@ class ChainEngine {
          */
         private final class ObserverDispatch {
 
-            private final List<ChainObserver> observerList = observers.snapshot();
+            private final List<ChainObserver> observerList = List.copyOf(observers);
 
             Object[] start(String hookName, ObserverStartHook hook) {
                 Object[] scopeTokens = new Object[observerList.size()];

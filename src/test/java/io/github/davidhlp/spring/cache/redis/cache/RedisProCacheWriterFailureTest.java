@@ -26,8 +26,6 @@ class RedisProCacheWriterFailureTest {
     @Mock
     private CacheStatisticsCollector statistics;
 
-    @Mock
-    private TypeSupport typeSupport;
 
     @Mock
     private CacheValueCodec valueCodec;
@@ -43,9 +41,8 @@ class RedisProCacheWriterFailureTest {
     @BeforeEach
     void setUp() {
         when(chainFactory.createChain()).thenReturn(chain);
-        when(typeSupport.bytesToString(any())).thenReturn("cache::key");
         writer = new RedisProCacheWriter(
-                statistics, typeSupport, valueCodec, chainFactory, null);
+                statistics, valueCodec, chainFactory, null);
     }
 
     @Test

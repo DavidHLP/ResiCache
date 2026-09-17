@@ -30,7 +30,7 @@ import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationM
  * drift hazard. It earns its keep.
  *
  * @see RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)
- * @see AttributePopulator
+ * @see RedisCacheAttributes
  */
 interface RedisCacheAttributeSink {
 

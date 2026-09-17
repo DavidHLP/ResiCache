@@ -28,8 +28,8 @@ import org.springframework.lang.NonNull;
  *   <li>{@link RefreshRetryPolicy} —— 同步重试循环（纯函数，独立可测）</li>
  *   <li>{@link RefreshTaskMetrics} —— Micrometer 指标注册与计数（无锁）</li>
  * </ul>
- * 去重提交（{@code inFlight} + {@code executorService}）与生命周期（清理调度、shutdown）
- * 因与反射可见的 {@code executorService}/{@code cleanupScheduler} 字段（测试断言用）紧耦合而保留在此。
+ * 去重提交({@code inFlight} + {@code executorService})与生命周期(清理调度、shutdown)
+ * 均属于本实现，不向测试或跨包调用暴露内部线程池字段。
  *
  * <p>失败的任务由 {@link RefreshRetryPolicy} 自动重试，最多 {@value RefreshRetryPolicy#MAX_RETRY_COUNT} 次。
  */
@@ -218,22 +218,6 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         }
     }
 
-    /**
-     * 获取线程池的统计信息
-     *
-     * @return 包含活动线程数、池大小、队列大小和已完成任务数的字符串
-     */
-    public String getStats() {
-        if (executorService instanceof ThreadPoolExecutor tpe) {
-            return String.format(
-                    "EarlyExpirationThreadPool[active=%d, poolSize=%d, queueSize=%d, completed=%d]",
-                    tpe.getActiveCount(),
-                    tpe.getPoolSize(),
-                    tpe.getQueue().size(),
-                    tpe.getCompletedTaskCount());
-        }
-        return "EarlyExpirationThreadPool[unknown]";
-    }
 
     /**
      * 启动定期清理调度器

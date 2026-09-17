@@ -24,8 +24,6 @@ class RedisProCacheWriterStatisticsTest {
 
     private CacheStatisticsCollector oldCollector;
 
-    @Mock
-    private TypeSupport typeSupport;
 
     @Mock
     private CacheValueCodec valueCodec;
@@ -42,16 +40,15 @@ class RedisProCacheWriterStatisticsTest {
     void setUp() {
         oldCollector = CacheStatisticsCollector.create();
         when(chainFactory.createChain()).thenReturn(chain);
-        when(typeSupport.bytesToString(any())).thenReturn("stats-cache::key");
         writer = new RedisProCacheWriter(
-                oldCollector, typeSupport, valueCodec, chainFactory, null);
+                oldCollector, valueCodec, chainFactory, null);
     }
 
     @Test
     void writerOperations_recordSpringStatisticsAtOperationBoundary() {
         CacheStatisticsCollector collector = CacheStatisticsCollector.create();
         writer = new RedisProCacheWriter(
-                collector, typeSupport, valueCodec, chainFactory, null);
+                collector, valueCodec, chainFactory, null);
 
         when(chain.execute(any())).thenReturn(CacheResult.miss());
         assertThat(writer.get(CACHE_NAME, KEY)).isNull();

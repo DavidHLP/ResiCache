@@ -48,8 +48,6 @@ class RedisProCacheLoadPathTest {
     @Mock
     private CacheStatisticsCollector statistics;
 
-    @Mock
-    private TypeSupport typeSupport;
 
     @Mock
     private CacheValueCodec valueCodec;
@@ -149,8 +147,6 @@ class RedisProCacheLoadPathTest {
 
     private RedisProCacheWriter writerWithPutFailure(boolean illegalArgument) {
         when(chainFactory.createChain()).thenReturn(chain);
-        when(typeSupport.bytesToString(any())).thenAnswer(invocation ->
-                new String(invocation.getArgument(0), StandardCharsets.UTF_8));
         when(chain.execute(any(CacheContext.class))).thenAnswer(invocation -> {
             CacheContext context = invocation.getArgument(0);
             if (context.getOperation() == CacheOperation.GET) {
@@ -166,7 +162,6 @@ class RedisProCacheLoadPathTest {
         });
         return new RedisProCacheWriter(
                 statistics,
-                typeSupport,
                 valueCodec,
                 chainFactory,
                 null);

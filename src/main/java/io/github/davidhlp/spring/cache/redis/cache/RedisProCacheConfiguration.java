@@ -50,10 +50,10 @@ import org.springframework.lang.Nullable;
         EarlyExpirationHandler.class,
         SecureJacksonSerializerFactory.class,
         CacheValueCodec.class,
-        TypeSupport.class,
         SerializationPreFlightProbe.class,
         SerializerWhitelistStartupGuard.class,
-        TlsConfigurationValidator.class
+        TlsConfigurationValidator.class,
+        RedisProxyCachingConfiguration.class
 })
 @EnableConfigurationProperties(RedisProCacheProperties.class)
 class RedisProCacheConfiguration {
@@ -157,14 +157,12 @@ class RedisProCacheConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public RedisProCacheWriter redisProCacheWriter(
-            TypeSupport typeSupport,
             CacheValueCodec valueCodec,
             CacheHandlerChainFactory chainFactory,
             CacheStatisticsCollector cacheStatisticsCollector,
             CacheOperationResolver operationResolver) {
         RedisProCacheWriter writer = new RedisProCacheWriter(
                 cacheStatisticsCollector,
-                typeSupport,
                 valueCodec,
                 chainFactory,
                 operationResolver);

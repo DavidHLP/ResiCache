@@ -44,7 +44,7 @@ class AnnotationParser {
 
     AnnotationParser() {
         this.projector = new RedisCacheAttributesProjector();
-        this.springCacheableAdapter = new SpringCacheableAdapter(projector);
+        this.springCacheableAdapter = new SpringCacheableAdapter();
     }
 
     AnnotationParser(
@@ -109,15 +109,6 @@ class AnnotationParser {
         return new ParsedAnnotations(operations, policyOperations);
     }
 
-    /**
-     * 解析目标(Method 或 Class)上的所有 ResiCache 注解.
-     *
-     * @param target 方法或类对象
-     * @return 缓存操作集合(可能为空,但不会为 null)
-     */
-    List<CacheOperation> parseResiCacheAnnotations(final Object target) {
-        return parse(target).operations();
-    }
 
     private void addPolicy(
             List<CacheOperation> policies, RedisCacheable annotation, Object target) {

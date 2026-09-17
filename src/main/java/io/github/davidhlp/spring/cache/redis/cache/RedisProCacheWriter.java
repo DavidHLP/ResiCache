@@ -10,6 +10,7 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -27,8 +28,9 @@ import org.springframework.lang.Nullable;
  * <p>核心功能： - 使用责任链模式处理缓存操作 - 支持布隆过滤器（防止缓存穿透） - 支持同步锁（防止缓存击穿） - 支持 TTL 随机化（防止缓存雪崩） - 支持缓存提前过期 -
  * 支持空值缓存
  *
- * <p>责任链顺序： BloomFilterHandler → SyncLockHandler → TtlHandler → NullValueHandler →
- * ActualCacheHandler
+ * <p>责任链顺序(由 {@link io.github.davidhlp.spring.cache.redis.chain.HandlerOrder} 定义)：
+ * BloomFilterHandler → SyncLockHandler → EarlyExpirationHandler → TtlHandler →
+ * NullValueHandler → ActualCacheHandler
  *
  * <p>本类持有单一 {@link CacheOperationResolver} seam —— 消除两处镜像
  * "读 ThreadLocal key → 查 register"协议(本类 {@code resolveOperation} 与
@@ -40,7 +42,6 @@ class RedisProCacheWriter implements RedisCacheWriter {
 
     private final CacheOperationResolver operationResolver;
     private final CacheStatisticsCollector statistics;
-    private final TypeSupport typeSupport;
     private final CacheValueCodec valueCodec;
     private final CacheHandlerChainFactory chainFactory;
 
@@ -51,12 +52,10 @@ class RedisProCacheWriter implements RedisCacheWriter {
      * 构造函数，初始化缓存责任链。
      */
     public RedisProCacheWriter(CacheStatisticsCollector statistics,
-                               TypeSupport typeSupport,
                                CacheValueCodec valueCodec,
                                CacheHandlerChainFactory chainFactory,
                                CacheOperationResolver operationResolver) {
         this.statistics = statistics;
-        this.typeSupport = typeSupport;
         this.valueCodec = valueCodec;
         this.chainFactory = chainFactory;
         this.operationResolver = operationResolver;
@@ -167,7 +166,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] value,
             @Nullable Duration ttl) {
         CacheResult result = executeChain(CacheOperation.PUT, name, key, value, ttl);
-        requireSuccessful(CacheOperation.PUT, name, key, result);
+        CacheErrorHandler.finalizeFailure(CacheOperation.PUT, name, result);
         if (result.isSuccess()) {
             statistics.incPuts(name);
         }
@@ -202,7 +201,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] value,
             @Nullable Duration ttl) {
         CacheResult result = executeChain(CacheOperation.PUT_IF_ABSENT, name, key, value, ttl);
-        requireSuccessful(CacheOperation.PUT_IF_ABSENT, name, key, result);
+        CacheErrorHandler.finalizeFailure(CacheOperation.PUT_IF_ABSENT, name, result);
         if (result.outcome() == CacheResult.Outcome.INSERTED) {
             statistics.incPuts(name);
         }
@@ -214,7 +213,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
         // SDR 4.0 abstract entry point (replaces the deprecated remove default);
         // route through the same responsibility-chain logic.
         CacheResult result = executeChain(CacheOperation.REMOVE, name, key, null, null);
-        requireSuccessful(CacheOperation.REMOVE, name, key, result);
+        CacheErrorHandler.finalizeFailure(CacheOperation.REMOVE, name, result);
         if (result.isSuccess()) {
             statistics.incDeletes(name);
         }
@@ -224,7 +223,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
     public void clear(@NonNull String name, @NonNull byte[] pattern) {
         // SDR 4.0 abstract entry point (replaces the deprecated clean default);
         // route through the same responsibility-chain logic.
-        String keyPattern = typeSupport.bytesToString(pattern);
+        String keyPattern = new String(pattern, StandardCharsets.UTF_8);
         String actualKey = extractActualKey(name, keyPattern);
 
         // 构建上下文 —— keyPattern 前置进 buildContext,避免后置 mutate
@@ -233,7 +232,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
                 null, null, null, resolveOperation(name, CacheOperation.CLEAN), keyPattern);
 
         CacheResult result = executeContext(context);
-        requireSuccessful(CacheOperation.CLEAN, name, keyPattern, result);
+        CacheErrorHandler.finalizeFailure(CacheOperation.CLEAN, name, result);
         if (result.isSuccess()) {
             recordCleanDeletes(name, result.deletedCount());
         }
@@ -252,7 +251,6 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull CacheStatisticsCollector cacheStatisticsCollector) {
         return new RedisProCacheWriter(
                 cacheStatisticsCollector,
-                typeSupport,
                 valueCodec,
                 chainFactory,
                 operationResolver);
@@ -358,7 +356,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @Nullable byte[] valueBytes,
             @Nullable Duration ttl) {
-        String redisKey = typeSupport.bytesToString(key);
+        String redisKey = new String(key, StandardCharsets.UTF_8);
         String actualKey = extractActualKey(name, redisKey);
         Object deserializedValue =
                 valueBytes != null ? valueCodec.fromValueBytes(valueBytes) : null;
@@ -369,7 +367,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     private CacheResult executeContext(CacheContext context) {
-        return getChain().execute(context);
+        return cachedChain.execute(context);
     }
 
     private void recordGetStatistics(
@@ -394,42 +392,4 @@ class RedisProCacheWriter implements RedisCacheWriter {
         statistics.incDeletesBy(cacheName, (int) remaining);
     }
 
-    /**
-     * 获取缓存的责任链实例（饿汉式单例）
-     *
-     * @return 责任链实例
-     */
-    private CacheHandlerChain getChain() {
-        return cachedChain;
-    }
-
-    private void requireSuccessful(
-            CacheOperation operation, String cacheName, byte[] key, CacheResult result) {
-        if (!result.isSuccess()) {
-            requireSuccessful(operation, cacheName, typeSupport.bytesToString(key), result);
-        }
-    }
-
-    private void requireSuccessful(
-            CacheOperation operation, String cacheName, String key, CacheResult result) {
-        if (result.isSuccess()) {
-            return;
-        }
-        // FAIL_FAST 之外的策略(REMOVE 的 SILENT / GET 的 GRACEFUL)只记录并继续 ——
-        // 由 CacheErrorHandler 的策略表单一裁定,本类不再硬编码「哪个 operation 只 WARN」。
-        if (CacheErrorHandler.strategyFor(operation) != CacheErrorHandler.ErrorStrategy.FAIL_FAST) {
-            log.warn("Cache {} failed; continuing best-effort: cacheName={}, kind={}, cause={}",
-                    operation,
-                    cacheName,
-                    result.failureKind(),
-                    FailureDiagnostics.sanitizedFailure(result.cause()));
-            return;
-        }
-        // ADR-07/06:typed 异常不含 raw key(message 亦不含)
-        throw new CacheOperationException(
-                operation,
-                result.failureKind(),
-                cacheName,
-                result.cause());
-    }
 }

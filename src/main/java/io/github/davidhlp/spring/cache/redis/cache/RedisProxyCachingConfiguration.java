@@ -14,11 +14,11 @@ import org.springframework.context.annotation.Role;
 /**
  * Redis缓存代理配置类 提供基于代理的Redis缓存注解驱动支持。
  *
- * <p>装配顺序依赖(由 RedisProCacheConfigurationContractTest 行为探针钉住):
- * 本类在内部扫描中按类名字典序排在 {@code RedisProCacheConfiguration} 之后解析,
+ * <p>装配顺序由 {@link RedisProCacheConfiguration} 的显式 {@code @Import} 保证,
+ * 不依赖 component scan 的类名字典序。manager 定义在 proxy 配置解析前已注册,
  * 因此 {@code @ConditionalOnBean(RedisProCacheManager.class)} 能看到已注册的
- * cacheManager 定义;用户 CacheManager 存在时库 cacheManager back-off,
- * advisor/interceptor 随之退场。若重命名本类打破该字典序,需改用显式顺序契约。
+ * {@code cacheManager} 定义;用户 CacheManager 存在时库 cacheManager back-off,
+ * advisor/interceptor 随之退场。
  */
 @Configuration(proxyBeanMethods = false)
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)

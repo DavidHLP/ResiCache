@@ -6,7 +6,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
@@ -26,11 +25,6 @@ import org.springframework.stereotype.Component;
 @Component
 class SpringCacheableAdapter {
 
-    private final RedisCacheAttributesProjector projector;
-
-    public SpringCacheableAdapter(RedisCacheAttributesProjector projector) {
-        this.projector = projector;
-    }
 
     public RedisCacheableOperation create(Method method, Cacheable annotation, String key) {
         RedisCacheAttributes a = toAttributes(annotation);
@@ -102,8 +96,4 @@ class SpringCacheableAdapter {
         return s != null && !s.isEmpty();
     }
 
-    // Visible for testing
-    static String[] nonEmpty(String[] in) {
-        return in == null ? new String[0] : Arrays.copyOf(in, in.length);
-    }
 }

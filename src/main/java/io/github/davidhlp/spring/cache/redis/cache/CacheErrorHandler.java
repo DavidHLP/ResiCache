@@ -62,7 +62,7 @@ class CacheErrorHandler {
      *
      * <p>package-private static:策略是 operation 的静态知识(表本身即 static),调用方
      * 只需策略、不需要本类的日志/指标副作用时直接读表 ——
-     * {@link RedisProCacheWriter#requireSuccessful} 据此决定 FAIL_FAST 抛出 vs 其余记录并继续,
+     * {@link #finalizeFailure} 据此决定 FAIL_FAST 抛出 vs 其余记录并继续,
      * 不再自行硬编码「哪个 operation 只 WARN」。指标上报仍只发生在
      * {@link #handleError}(即链内唯一失败出口),本方法不产生任何副作用。
      *
@@ -74,6 +74,36 @@ class CacheErrorHandler {
                 ? ErrorStrategy.FAIL_FAST
                 : STRATEGIES.getOrDefault(operation, ErrorStrategy.FAIL_FAST);
     }
+    /**
+     * 完成 writer 侧的不可变失败结果：FAIL_FAST 抛 typed exception，其余策略记录并继续。
+     *
+     * <p>这里是策略表的唯一最终化入口。链内 {@link #handleError} 已完成失败分类、
+     * 计数与 {@link CacheResult} 构造；本方法只消费结果，不重复上报指标。
+     *
+     * @param operation 失败的缓存操作
+     * @param cacheName 缓存名称
+     * @param result 链返回的不可变结果
+     */
+    static void finalizeFailure(
+            CacheOperation operation, String cacheName, CacheResult result) {
+        if (result == null || result.isSuccess()) {
+            return;
+        }
+        if (strategyFor(operation) != ErrorStrategy.FAIL_FAST) {
+            log.warn("Cache {} failed; continuing best-effort: cacheName={}, kind={}, cause={}",
+                    operation,
+                    cacheName,
+                    result.failureKind(),
+                    FailureDiagnostics.sanitizedFailure(result.cause()));
+            return;
+        }
+        throw new CacheOperationException(
+                operation,
+                result.failureKind(),
+                cacheName,
+                result.cause());
+    }
+
 
     /**
      * 统一失败指标上报(ADR-06)— null 表示未装配(测试/registry 缺失 → no-op)。

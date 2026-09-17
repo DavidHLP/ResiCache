@@ -3,10 +3,8 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.SerializerProperties;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import io.github.davidhlp.spring.cache.redis.serialization.SerializationException.EnvelopeCodec;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -32,7 +30,6 @@ import org.springframework.stereotype.Component;
 @Component
 class SerializationPreFlightProbe {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ObjectProvider<RedisConnectionFactory> connectionFactoryProvider;
     private final RedisProCacheProperties properties;
@@ -84,8 +81,10 @@ class SerializationPreFlightProbe {
                 }
             }
         } catch (Exception e) {
-            log.warn("[ResiCache] Serialization pre-flight probe failed to scan Redis (non-fatal): {}",
-                    e.getMessage());
+            log.warn("[ResiCache] Serialization pre-flight probe failed to scan Redis "
+                            + "(non-fatal): {}",
+                    FailureDiagnostics.sanitizedFailure(e));
+            log.debug("[ResiCache] Serialization pre-flight probe failure detail", e);
             return;
         }
         if (nonEnvelope > 0) {
@@ -104,14 +103,6 @@ class SerializationPreFlightProbe {
      * 非 JSON(如 JDK 序列化)或缺少这两个字段的 JSON 视为非 envelope(遗留/外来格式)。
      */
     public static boolean isEnvelope(byte[] bytes) {
-        if (bytes == null || bytes.length == 0) {
-            return false;
-        }
-        try {
-            JsonNode node = JSON.readTree(bytes);
-            return node != null && node.isObject() && node.has("version") && node.has("payload");
-        } catch (Exception e) {
-            return false;
-        }
+        return EnvelopeCodec.isEnvelope(bytes);
     }
 }

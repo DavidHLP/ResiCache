@@ -79,13 +79,12 @@ class CacheHandlerChainTest {
         }
 
         @Test
-        @DisplayName("addHandler 同步刷新 Engine 持有的链快照")
-        void addHandler_refreshesEngineSnapshot() {
+        @DisplayName("addHandler 同步刷新 facade 持有的链快照")
+        void addHandler_refreshesFacadeSnapshot() {
             chain.addHandler(new TestCacheHandler());
-            // Engine 应能从 snapshot 读到这个 handler —— execute 行为可观察
-            assertThat(engine.observers()).isEmpty(); // observers 仍空（facade 不注册）
-            // snapshot 已就绪 — 跑一次 execute 不报"空链"
+
             CacheResult result = chain.execute(createTestContext());
+
             assertThat(result.isSuccess()).isTrue();
         }
     }

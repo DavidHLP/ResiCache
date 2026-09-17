@@ -24,7 +24,6 @@ class RedisProCacheWriterConstructionTest {
         assertThat(constructors[0].getParameterTypes())
                 .containsExactly(
                         CacheStatisticsCollector.class,
-                        TypeSupport.class,
                         CacheValueCodec.class,
                         CacheHandlerChainFactory.class,
                         CacheOperationResolver.class)

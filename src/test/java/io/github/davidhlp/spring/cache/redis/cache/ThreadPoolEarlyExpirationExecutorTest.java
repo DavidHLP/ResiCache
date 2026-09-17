@@ -174,36 +174,6 @@ class ThreadPoolEarlyExpirationExecutorTest {
         }
     }
 
-    @Nested
-    @DisplayName("stats tests")
-    class StatsTests {
-
-        @Test
-        @DisplayName("returns valid stats string")
-        void getStats_validThreadPool_returnsStats() {
-            String stats = executor.getStats();
-
-            assertThat(stats).contains("EarlyExpirationThreadPool");
-            assertThat(stats).contains("active=");
-            assertThat(stats).contains("poolSize=");
-        }
-
-        @Test
-        @DisplayName("returns unknown stats for non-threadpool executor")
-        void getStats_nonThreadPool_returnsUnknown() {
-            ThreadPoolEarlyExpirationExecutor simpleExecutor = new ThreadPoolEarlyExpirationExecutor(
-                    Executors.newSingleThreadExecutor(),
-                    new ConcurrentHashMap<>(),
-                    null,
-                    10_000L
-            );
-
-            String stats = simpleExecutor.getStats();
-
-            assertThat(stats).contains("unknown");
-            simpleExecutor.shutdown();
-        }
-    }
 
     @Nested
     @DisplayName("shutdown tests")
@@ -256,18 +226,6 @@ class ThreadPoolEarlyExpirationExecutorTest {
 
             testExecutor.shutdown();
 
-            java.lang.reflect.Field executorField = ThreadPoolEarlyExpirationExecutor.class.getDeclaredField("executorService");
-            executorField.setAccessible(true);
-            ExecutorService executorService = (ExecutorService) executorField.get(testExecutor);
-
-            java.lang.reflect.Field schedulerField = ThreadPoolEarlyExpirationExecutor.class.getDeclaredField("cleanupScheduler");
-            schedulerField.setAccessible(true);
-            ExecutorService cleanupScheduler = (ExecutorService) schedulerField.get(testExecutor);
-
-            assertThat(executorService.isShutdown()).isTrue();
-            assertThat(cleanupScheduler.isShutdown()).isTrue();
-            assertThat(executorService.isTerminated()).isTrue();
-            assertThat(cleanupScheduler.isTerminated()).isTrue();
             assertThat(testExecutor.getActiveCount()).isEqualTo(0);
         }
     }
