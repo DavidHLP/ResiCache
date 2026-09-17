@@ -72,7 +72,7 @@ class RedisProCacheConfigurationContractTest {
     }
 
     @Test
-    void metricsEnabled_withoutMeterRegistry_keepsNoOpChoice() {
+    void metricsEnabled_withoutMeterRegistry_keepsNoOpChoice() throws Exception {
         try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
                 new org.springframework.boot.test.context.FilteredClassLoader(
                         org.redisson.api.RedissonClient.class)) {
