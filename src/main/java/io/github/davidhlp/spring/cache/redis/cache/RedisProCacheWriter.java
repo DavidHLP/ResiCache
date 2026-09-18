@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.data.redis.cache.CacheStatistics;
@@ -150,13 +151,15 @@ class RedisProCacheWriter implements RedisCacheWriter {
     @NonNull
     public CompletableFuture<byte[]> retrieve(
             @NonNull String name, @NonNull byte[] key, @Nullable Duration ttl) {
+        return submitAsync(() -> get(name, key, ttl));
+    }
+
+    private <T> CompletableFuture<T> submitAsync(Supplier<T> work) {
         MethodSnapshot snapshot = operationResolver == null ? null : operationResolver.capture();
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        return CompletableFuture.supplyAsync(
-                () -> operationResolver == null
-                        ? get(name, key, ttl)
-                        : operationResolver.runWithSnapshot(
-                                snapshot, mdcSnapshot, () -> get(name, key, ttl)));
+        return CompletableFuture.supplyAsync(() -> operationResolver == null
+                ? work.get()
+                : operationResolver.runWithSnapshot(snapshot, mdcSnapshot, work));
     }
 
     @Override
@@ -179,17 +182,9 @@ class RedisProCacheWriter implements RedisCacheWriter {
             @NonNull byte[] key,
             @NonNull byte[] value,
             @Nullable Duration ttl) {
-        MethodSnapshot snapshot = operationResolver == null ? null : operationResolver.capture();
-        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        return CompletableFuture.runAsync(() -> {
-            if (operationResolver == null) {
-                put(name, key, value, ttl);
-                return;
-            }
-            operationResolver.runWithSnapshot(snapshot, mdcSnapshot, () -> {
-                put(name, key, value, ttl);
-                return null;
-            });
+        return submitAsync(() -> {
+            put(name, key, value, ttl);
+            return null;
         });
     }
 
