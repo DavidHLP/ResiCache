@@ -144,10 +144,12 @@ resi-cache:
 `spring.data.redis.*` 与 `resi-cache.redis.*` 配置的是相互独立的客户端。
 `spring.data.redis.*` 配置 ResiCache 缓存 I/O 使用的 Spring Data Redis
 连接工厂。`resi-cache.redis.*` 配置分布式锁和同步能力使用的 Redisson
-部署；`resi-cache.redisson.*` 控制其连接池、超时和重试设置。在 single
-模式下，如果对应的 `resi-cache.redis.*` 值未设置，Redisson 可能回退使用
-Spring Data Redis 的 host、port、database 和 password 值。使用 `sync=true`
-时应保持最终生效的端点和凭据一致。
+部署；`resi-cache.redisson.*` 控制其连接池、超时和重试设置。`resi-cache.redis.*`
+的默认 host、port、database 分别为 `localhost`、`6379`、`0`，因此省略
+端点字段不会继承 `spring.data.redis.*`。在 single 模式下，如果
+`resi-cache.redis.password` 未设置，Redisson 可能回退使用 Spring Data Redis
+密码。使用 `sync=true` 时，对于 single、cluster 或 sentinel 部署，都必须在
+两个命名空间中显式配置匹配的端点或拓扑；不要依赖一个命名空间配置另一个。
 
 ResiCache 通过 Spring Boot 自动配置入口 `RedisCacheAutoConfiguration` 被发现。
 它不会替应用添加 `@EnableCaching`；是否启用 Spring Cache 仍由应用负责。
@@ -258,13 +260,14 @@ resi-cache:
 
 `native-annotation-mode` 控制 Spring 原生缓存注解：
 
-- `SELECTIVE`（默认）：没有 ResiCache 注解的方法保留在 Spring 原生路径；
-  存在 ResiCache 注解时，仅在对应 ResiCache operation 不存在时转换原生
-  operation。混用或不对应的注解组合仍可能产生多个 operation 或 Advisor
-  拦截；同一方法不要混用注解，除非已经验证实际结果。
-- `FULL`：即使存在 ResiCache 注解，也转换所有受支持的 Spring 原生缓存
-  注解；混用或不对应的注解可能产生多个 operation 或 Advisor 拦截，应测试
-  这些组合。
+- `SELECTIVE`（默认）：没有 ResiCache 注解的纯原生方法保留在 Spring
+  原生路径中，不会被 ResiCache operation source 转换。存在 ResiCache 注解
+  时，匹配的原生 operation 会被 ResiCache 转换器跳过（这是内部转换去重），
+  但显式混用注解的方法仍可能同时被 ResiCache Advisor 和 Spring 原生缓存
+  Advisor 看到；同一方法不要混用注解，除非已经验证实际结果。
+- `FULL`：转换所有受支持的 Spring 原生缓存注解，包括只有原生注解的方法。
+  当 `@EnableCaching` 或其他 Spring 原生 Advisor 生效时，这些方法也可能被
+  两个 Advisor 处理；只有在明确需要并测试了这种重复拦截或执行时才应启用。
 - `NONE`：在 ResiCache operation source 中忽略 Spring 原生缓存注解。
 
 ### 全局配置
@@ -344,11 +347,14 @@ resi-cache:
 
 部署配置会在绑定阶段校验与模式相关的字段。`resi-cache.redis.*` 是
 Redisson 部署配置路径；`spring.data.redis.*` 配置缓存 I/O 使用的独立连接
-工厂。在 single 模式下，如果对应的 `resi-cache.redis.*` 值未设置，Redisson
-可能回退使用 Spring Data Redis 的 host、port、database 和 password 值。
-`resi-cache.redisson.*` 控制 Redisson 连接池、超时和重试设置。使用
-`sync=true` 时应保持最终生效的端点配置一致。生产环境凭据应交由应用的密钥
-管理系统处理，不要写入提交的 README 示例。
+工厂。`resi-cache.redis.host`、`port`、`database` 的默认值分别为
+`localhost`、`6379`、`0`，因此省略端点字段不会采用 Spring Data Redis 的值。
+在 single 模式下，如果 `resi-cache.redis.password` 未设置，Redisson 可能
+回退使用 Spring Data Redis 密码。使用 `sync=true` 时，对于 single、cluster
+或 sentinel 部署，都必须在两个命名空间中显式配置匹配的端点或拓扑；不要
+依赖一个命名空间配置另一个。`resi-cache.redisson.*` 控制 Redisson 连接池、
+超时和重试设置。生产环境凭据应交由应用的密钥管理系统处理，不要写入提交的
+README 示例。
 
 ### 序列化安全
 

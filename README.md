@@ -154,10 +154,13 @@ resi-cache:
 `spring.data.redis.*` configures the Spring Data Redis connection factory used
 for ResiCache cache I/O. `resi-cache.redis.*` configures the Redisson deployment
 used by distributed locking and synchronization; `resi-cache.redisson.*`
-controls its pool, timeout, and retry settings. In single mode, Redisson may
-fall back to Spring Data Redis host, port, database, and password values when
-the corresponding `resi-cache.redis.*` values are unset. Keep the effective
-endpoints and credentials aligned when using `sync=true`.
+controls its pool, timeout, and retry settings. The `resi-cache.redis.*` defaults
+are `localhost:6379` and database `0`, so omitted endpoint fields do not inherit
+`spring.data.redis.*`. In single mode, an absent `resi-cache.redis.password` may
+fall back to the Spring Data Redis password. For single, cluster, or sentinel
+deployments, configure matching endpoints or topology explicitly in both
+namespaces when using `sync=true`; do not rely on one namespace to configure the
+other.
 
 ResiCache is discovered through Spring Boot auto-configuration via
 `RedisCacheAutoConfiguration`. It does not add `@EnableCaching` for the
@@ -279,15 +282,17 @@ switch is `false`.
 
 `native-annotation-mode` controls Spring's native cache annotations:
 
-- `SELECTIVE` (default): leaves methods with no ResiCache annotation on
-  Spring's native path and skips a native operation when the corresponding
-  ResiCache operation is present. Mixed or non-corresponding annotation
-  combinations can still produce multiple operations or advisor interception;
-  do not mix annotations on one method without testing the result.
-- `FULL`: converts all supported Spring cache annotations, including when
-  ResiCache annotations are present; mixed or non-corresponding annotations
-  can produce multiple operations or advisor interception, so test those
-  combinations.
+- `SELECTIVE` (default): pure-native methods with no ResiCache annotation remain
+  on Spring's native path and are not converted by the ResiCache operation
+  source. When a ResiCache annotation is present, a matching native operation
+  is skipped by ResiCache's converter (internal conversion de-duplication).
+  An explicitly mixed method can still be seen by both the ResiCache advisor
+  and Spring's native cache advisor; do not mix annotations on one method
+  without testing the result.
+- `FULL`: converts all supported Spring cache annotations, including plain
+  native-only methods. When `@EnableCaching` or another Spring native advisor
+  is active, those methods can also be handled by both advisors; enable `FULL`
+  only when that duplicate interception or execution is intentional and tested.
 - `NONE`: ignores native Spring cache annotations in the ResiCache operation
   source.
 
@@ -371,13 +376,16 @@ resi-cache:
 
 The deployment validator checks mode-specific fields during configuration
 binding. `resi-cache.redis.*` is the Redisson deployment path; `spring.data.redis.*`
-configures the separate connection factory used for cache I/O. In single mode,
-Redisson may fall back to Spring Data Redis host, port, database, and password
-values when the corresponding `resi-cache.redis.*` values are unset. The
+configures the separate connection factory used for cache I/O. The
+`resi-cache.redis.host`, `port`, and `database` defaults are `localhost`, `6379`,
+and `0`, so omitted endpoint fields do not adopt Spring Data Redis values. In
+single mode, an absent `resi-cache.redis.password` may fall back to the Spring
+Data Redis password. For single, cluster, or sentinel deployments, explicitly
+configure matching endpoints or topology in both namespaces when using
+`sync=true`; do not rely on one namespace to configure the other. The
 `resi-cache.redisson.*` namespace controls Redisson pool, timeout, and retry
-settings. Keep the effective endpoint configurations aligned when `sync=true`.
-Credentials, when needed, belong in the application's secret management system
-rather than in a committed README snippet.
+settings. Credentials, when needed, belong in the application's secret
+management system rather than in a committed README snippet.
 
 ### Serialization safety
 
