@@ -57,8 +57,11 @@ import org.springframework.lang.Nullable;
  * </ul>
  *
  * <p><b>一条协议,两个入口</b>:cache 与 writer 入口都走 {@link #readThrough} —
- * 同一套 double-check 语义、同一套写回容错和单点 WARN。两者只在读值表示与 loader
- * 异常翻译上不同;sync 路径另外把 cache 协议跑在 {@link SyncSupport} 的分布式锁内。
+ * 同一套 double-check 语义、同一套写回容错和单点脱敏 WARN。若写回经由 writer 的 PUT
+ * chain 失败,失败指标已在 {@link CacheErrorHandler} 出口上报一次;本编排器只观察并返回
+ * tolerated outcome,不再次上报。
+ * 两者只在读值表示与 loader 异常翻译上不同;sync 路径另外把 cache 协议跑在
+ * {@link SyncSupport} 的分布式锁内。
  *
  * <p><b>状态</b>:无可变状态。3 个共享依赖和 3 个 cache-specific callback 由
  * {@code RedisProCache} 在构造期一次性绑定(指向 {@code super.createCacheKey} /
@@ -66,7 +69,7 @@ import org.springframework.lang.Nullable;
  * loader 和 operation。
  *
  * <p><b>契约保真</b>:异常翻译、键派生({@link CacheKeys})、{@code -1} 永久缓存哨兵、
- * null-value 缓存等契约逐字保留;caller-side switch 的 metric 自增保证各路径恰好 1 次 miss 计数。
+ * caller-side switch 的 miss counter 自增保证各路径恰好 1 次 miss 计数。
  */
 @Slf4j
 final class LoaderOrchestrator {
@@ -98,7 +101,8 @@ final class LoaderOrchestrator {
      * loader 成功,但缓存写回失败(ADR-02 availability-first)。
      *
      * <p>{@code value} 仍为 loader 产出的业务值,必须返回给调用方;{@code cause}
-     * 为写回失败的原始异常,供 caller 记录诊断与失败指标,不覆盖返回值。
+     * 为写回失败的原始异常,供 caller 记录诊断;若失败来自 writer PUT chain,指标已由
+     * {@link CacheErrorHandler} 上报一次,本 outcome 不重复计数。
      * 锁内 double-check 命中(他线程已加载)不会产生本 outcome —— 该路径无写回。
      */
     public record LoadedWithWriteBackFailure<T>(@Nullable T value, Throwable cause)
@@ -273,8 +277,10 @@ final class LoaderOrchestrator {
      *
      * <p>读侧表示({@code R})和业务值表示({@code T})由 caller 显式适配;因此
      * {@link Cache.ValueWrapper} 与 writer 的 {@code byte[]} 不需要各自复制协议。
-     * 写回失败只在此处容忍并发出一次脱敏 WARN;{@link IllegalArgumentException} 保持为
-     * {@link LoadOutcome.LoadFailed},由 caller 原样抛出。
+     * 写回若经由 writer 的 PUT chain 失败,链内 {@link CacheErrorHandler} 已完成一次
+     * failure metric 上报;此处只容忍该失败并发出一次脱敏 WARN,返回
+     * {@link LoadedWithWriteBackFailure},不再次调用 reporter。{@link IllegalArgumentException}
+     * 保持为 {@link LoadOutcome.LoadFailed},由 caller 原样抛出。
      *
      * @param cacheName         缓存名称,仅用于脱敏诊断
      * @param read              读原语
