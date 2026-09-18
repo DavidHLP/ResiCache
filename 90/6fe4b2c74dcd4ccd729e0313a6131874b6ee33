@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheFailureReporter.java
+  h_77173abe25c3ff 23-25
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheLoadPathTest.java
+  h_77173abe25c3ff 140-144,147,149,151,155-163,165-167,176-179,189-200,265-266,272-273,277,286-287,298,327-328,340-341
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "906fe4b2c74dcd4ccd729e0313a6131874b6ee33",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
