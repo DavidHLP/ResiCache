@@ -20,9 +20,9 @@ import java.util.concurrent.ConcurrentMap;
  * {@code strategy}({@link ErrorStrategy})。禁止 cacheName / key / message tag
  * (高基数),WARN/ERROR 日志与异常消息默认不含 raw key(由调用方保证)。
  *
- * <p>计数去重:同一失败事件只经本类一次上报 — 调用方(链层
- * {@code CacheErrorHandler}、read-through write-back)各自在<b>唯一</b>失败出口
- * 调用一次,不重复计数。
+ * <p>计数去重:由 writer PUT chain 产生的写回失败只经本类一次上报 — 链内
+ * {@code CacheErrorHandler} 是唯一报告出口;{@code LoaderOrchestrator} 只保留脱敏 WARN
+ * 与 {@code LoadedWithWriteBackFailure},不重复计数。
  *
  * <p><b>边界(ADR-06)</b>:本指标只统计<b>缓存操作失败</b>(GET degrade / 写 fail-fast /
  * REMOVE best-effort / write-back failure)。Bloom 过滤器底层 Redis 位操作的

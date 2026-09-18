@@ -131,7 +131,9 @@ class RedisProCacheConfigurationContractTest {
 
         assertThat(configurationImport).isNotNull();
         assertThat(configurationImport.value())
-                .contains(RedisProxyCachingConfiguration.class, ResolvedMetricsConfiguration.class);
+                .containsExactlyInAnyOrder(
+                        RedisProxyCachingConfiguration.class,
+                        ResolvedMetricsConfiguration.class);
     }
 
     @Test
@@ -232,6 +234,9 @@ class RedisProCacheConfigurationContractTest {
                         assertThat(context).hasBean("cacheManager");
                         assertThat(context).hasBean("redisCacheAdvisor");
                         assertThat(context).hasBean("redisCacheInterceptor");
+                        assertThat(context).hasSingleBean(CacheHandlerChainFactory.class);
+                        assertThat(context).hasSingleBean(ChainEngine.class);
+                        assertThat(context).doesNotHaveBean(CacheHandlerChain.class);
                     });
         }
     }
