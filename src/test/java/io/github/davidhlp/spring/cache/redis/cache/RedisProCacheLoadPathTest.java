@@ -137,16 +137,34 @@ class RedisProCacheLoadPathTest {
     }
 
     private RedisProCache cacheWith(RedisCacheWriter writer) {
+        return cacheWith(writer, new SimpleMeterRegistry());
+    }
+
+    private RedisProCache cacheWith(
+            RedisCacheWriter writer, SimpleMeterRegistry registry) {
         return new RedisProCache(CACHE_NAME, writer,
                 RedisCacheConfiguration.defaultCacheConfig(),
-                ResiCacheFeatures.builder().meterRegistry(new SimpleMeterRegistry()).build());
+                ResiCacheFeatures.builder().meterRegistry(registry).build());
     }
+
     private RedisProCacheWriter writerWithPutFailure() {
-        return writerWithPutFailure(false);
+        return writerWithPutFailure(null, false);
     }
 
     private RedisProCacheWriter writerWithPutFailure(boolean illegalArgument) {
+        return writerWithPutFailure(null, illegalArgument);
+    }
+
+    private RedisProCacheWriter writerWithPutFailure(SimpleMeterRegistry registry) {
+        return writerWithPutFailure(registry, false);
+    }
+
+    private RedisProCacheWriter writerWithPutFailure(
+            SimpleMeterRegistry registry, boolean illegalArgument) {
         when(chainFactory.createChain()).thenReturn(chain);
+        CacheErrorHandler errorHandler = registry == null
+                ? new CacheErrorHandler()
+                : new CacheErrorHandler(new CacheFailureReporter(registry));
         when(chain.execute(any(CacheContext.class))).thenAnswer(invocation -> {
             CacheContext context = invocation.getArgument(0);
             if (context.getOperation() == CacheOperation.GET) {
@@ -155,9 +173,10 @@ class RedisProCacheLoadPathTest {
             if (illegalArgument) {
                 throw new IllegalArgumentException("invalid write-back configuration");
             }
-            return CacheResult.failure(
-                    CacheOperation.PUT,
-                    CacheResult.FailureKind.REDIS,
+            return errorHandler.handleError(
+                    context.getOperation(),
+                    context.getCacheName(),
+                    context.getRedisKey(),
                     new IllegalStateException("redis put failed for key " + SENTINEL_KEY));
         });
         return new RedisProCacheWriter(
@@ -165,6 +184,18 @@ class RedisProCacheLoadPathTest {
                 valueCodec,
                 chainFactory,
                 null);
+    }
+
+    private void assertSinglePutFailureCounter(SimpleMeterRegistry registry) {
+        assertThat(registry.find(CacheFailureReporter.METRIC_NAME).counters())
+                .hasSize(1);
+        var counter = registry.find(CacheFailureReporter.METRIC_NAME)
+                .tag("operation", "PUT")
+                .tag("kind", "REDIS")
+                .tag("strategy", "FAIL_FAST")
+                .counter();
+        assertThat(counter).isNotNull();
+        assertThat(counter.count()).isEqualTo(1.0);
     }
 
     @Test
@@ -231,17 +262,19 @@ class RedisProCacheLoadPathTest {
         }
     }
     @Test
-    @DisplayName("cache 与 native writer 分别各写出一个规范 WARN")
-    void cacheAndWriter_eachEntryEmitsOneCanonicalWarning() {
+    @DisplayName("cache 与 native writer 的 chain 写回失败均保留值且 PUT failure 只计一次")
+    void chainWriteBackFailure_preservesValueAndReportsPutExactlyOnce() {
         Logger logger = (Logger) LoggerFactory.getLogger(LoaderOrchestrator.class);
         ListAppender<ILoggingEvent> cacheAppender = new ListAppender<>();
         cacheAppender.start();
         logger.addAppender(cacheAppender);
         try {
-            RedisProCache cache = cacheWith(new MemoryWriter(null, true));
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            RedisProCache cache = cacheWith(writerWithPutFailure(registry), registry);
             assertThat(cache.get(SENTINEL_KEY, () -> "business-value"))
                     .isEqualTo("business-value");
             assertSingleCanonicalWarning(cacheAppender);
+            assertSinglePutFailureCounter(registry);
         } finally {
             logger.detachAppender(cacheAppender);
         }
@@ -250,7 +283,8 @@ class RedisProCacheLoadPathTest {
         writerAppender.start();
         logger.addAppender(writerAppender);
         try {
-            RedisProCacheWriter writer = writerWithPutFailure();
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            RedisProCacheWriter writer = writerWithPutFailure(registry);
             byte[] writerValue = writer.get(
                     CACHE_NAME,
                     SENTINEL_KEY.getBytes(StandardCharsets.UTF_8),
@@ -261,6 +295,7 @@ class RedisProCacheLoadPathTest {
             assertThat(new String(writerValue, StandardCharsets.UTF_8))
                     .isEqualTo("business-value");
             assertSingleCanonicalWarning(writerAppender);
+            assertSinglePutFailureCounter(registry);
         } finally {
             logger.detachAppender(writerAppender);
         }
@@ -289,7 +324,8 @@ class RedisProCacheLoadPathTest {
         writerAppender.start();
         logger.addAppender(writerAppender);
         try {
-            RedisProCacheWriter writer = writerWithPutFailure(true);
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            RedisProCacheWriter writer = writerWithPutFailure(registry, true);
             assertThatThrownBy(() -> writer.get(
                     CACHE_NAME,
                     SENTINEL_KEY.getBytes(StandardCharsets.UTF_8),
@@ -300,6 +336,8 @@ class RedisProCacheLoadPathTest {
                     .hasMessage("invalid write-back configuration");
             assertThat(writerAppender.list)
                     .filteredOn(event -> event.getLevel() == Level.WARN)
+                    .isEmpty();
+            assertThat(registry.find(CacheFailureReporter.METRIC_NAME).meters())
                     .isEmpty();
         } finally {
             logger.detachAppender(writerAppender);
