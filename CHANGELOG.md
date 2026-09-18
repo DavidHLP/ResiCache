@@ -5,13 +5,13 @@ All notable changes to ResiCache are documented here. Format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the
 pre-1.0 caveat below.
 
-## Pre-1.0 caveat
+While the version is `0.x`, behavior and APIs outside the surfaces explicitly
+covered by [`STABILITY.md`](./STABILITY.md) may change in any release,
+including patch releases. Breaking changes are marked with ⚠️ in this
+changelog. The stable 0.x surfaces and their exceptions are defined by
+`STABILITY.md`; do not use this general pre-1.0 caveat to override that
+contract.
 
-While the version is `0.x`, **APIs may change in any release — including
-patch releases.** Breaking changes are marked with ⚠️ in this changelog.
-API stability is only guaranteed from `1.0.0` onward; see
-[`STABILITY.md`](./STABILITY.md) for the contract that defines which
-surfaces are stable in 0.x and which change.
 > No local `v1.0` release tag is treated as an API-stability baseline here.
 > Maven Central publishes `io.github.davidhlp:ResiCache` 0.0.1–0.0.5, 0.0.7,
 > and 3.2.4, but every version (verified 2026-09-05 from the published
@@ -66,9 +66,10 @@ Current milestones:
   `resi-cache.sync-lock.local-only=true` for explicit single-instance
   degradation.
 - ⚠️ **Bloom CLEAN semantics** — ordinary cache eviction no longer clears the
-   Bloom filter or relies on a rebuilding marker/TTL window. Bloom bits describe
-   possible data-source membership, so retained bits can only create
-   false-positives; valid loader calls are not blocked by false-negatives.
+  Bloom filter or relies on a rebuilding marker/TTL window. Bloom bits describe
+  possible data-source membership: false-positives are safe, but a missing
+  membership bit can short-circuit Redis lookup and loader execution. Seed or
+  maintain membership before enabling it for an existing data set.
 - ⚠️ **Read-through is availability-first** — `get(key, loader)` (default and
    sync paths) always returns a successful loader value; a cache write-back
    failure after a successful load is logged (redacted, no raw key) and never
@@ -102,7 +103,7 @@ Current milestones:
   same put metrics as the sync path. Failing write-backs are still logged
   redacted and never override the loaded value.
 - **Key privacy in failure diagnostics** — WARN/ERROR logs and typed exception
-  messages omit the raw key (ADR-0001 §15); where no `cacheName` is available
+  messages omit the raw key; where no `cacheName` is available
   they carry `FailureDiagnostics.keyFingerprint` instead. Covers distributed
   lock acquire/release, `SyncRole` leader/follower failures, the async
   early-expiration retry path, chain post-processing, and the migration
@@ -110,13 +111,13 @@ Current milestones:
 - **Redacted diagnostics at every failure site** — the chain’s observer dispatch and
   all six Bloom failure paths now render only the exception type chain at WARN/ERROR
   (`FailureDiagnostics.sanitizedFailure`) and keep the full stack at DEBUG, closing the
-  remaining ADR-0001 §15 gaps. Fail-open behavior and the Bloom failure counters are
+  remaining key-privacy gaps. Fail-open behavior and the Bloom failure counters are
   unchanged.
 - **Sync early-expiration answers with a miss** — a synchronous early-expiration
   skip (`EarlyExpirationMode.SYNC`) now returns `CacheResult.miss()` through the
   chain instead of a null-byte `success`: `EarlyExpirationHandler` advances to
   `ActualCacheHandler`, which consumes the documented `PrefetchDecision` and
-  answers the miss its Javadoc and ADR-0001 §22 describe. Writer and Spring
+  answers the miss its Javadoc and current handler contract describe. Writer and Spring
   behavior is unchanged (null bytes, miss statistics, loader refresh); chain
   observers and SPI callers now receive `Outcome.MISS`.
 - ⚠️ **`@RedisCachePut` metadata now resolves** — the chain used to read only
@@ -150,7 +151,7 @@ Current milestones:
   one evaluation, publishes the typed `PrefetchDecision` (so the value the
   decision read is reused instead of fetched twice) and maps the outcome to
   `SKIP_ALL`/`CONTINUE`. The executor, retry policy and cancellation seam are
-  unchanged (ADR-0001 §11).
+  unchanged (see [`STABILITY.md`](./STABILITY.md)).
 - **Nested chain advancement is explicit (SPI addition, compatible)** —
   `CacheHandler` gains `default HandlerResult handle(CacheContext,
   ChainContinuation next)`; the default ignores `next` and delegates to

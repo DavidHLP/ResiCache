@@ -2,156 +2,86 @@
 
 ## Agent workflow
 
-- Start with the requested outcome and inspect the affected files. For a small,
-  clear task, proceed directly; use a plan or broader investigation when scope,
-  dependencies, or risk warrant it.
-- Choose tools that answer the current question. Prefer the code graph for
-  structural discovery when available; use direct reads or search for known
-  paths, literals, configuration, and documentation. If graph results are
-  unavailable, stale, or incomplete, verify the relevant source and continue.
-  Check coverage when relying on graph evidence; an empty result alone does not
-  establish that code is absent.
-- At session start or after compaction, confirm the graph project, root, and
-  index generation with `list_projects` or `index_status`. Use Tier 2 verification
-  by default: `search_graph` for symbols, `trace_path` for relevant callers or
-  callees, and `get_code_snippet` for material source evidence. Check pagination
-  and call `check_index_coverage` for all evidence paths (plus bounded scopes
-  for absence claims). Read current source for stale, excluded, partial, or
-  unknown coverage; a clean coverage result is not proof of completeness.
-- Treat memory and documentation as context. Resolve conflicts against current
-  source, configuration, and observed behavior. Distinguish verified facts,
-  assumptions, and unknowns; never invent tool results or completed checks.
-- Reuse existing patterns and make the smallest change that satisfies the task.
-  Preserve unrelated work. Ask for clarification when ambiguity materially
-  changes the outcome or an action exceeds the user's authorization; otherwise
-  use a reasonable default.
+- Start from the requested outcome and inspect the affected files. Use a plan
+  when scope, dependencies, or risk warrant it; otherwise make the smallest
+  change that satisfies the task.
+- At session start or after compaction, confirm the ResiCache code-graph project
+  and index status. Use graph queries for structural code discovery when the
+  result is available, then verify relevant source directly. A clean or partial
+  index is not proof that a symbol or file is absent.
+- Treat documentation and memory as context, not executable truth. Resolve
+  conflicts against current source, build configuration, contracts, tests, and
+  observed behavior. Distinguish verified facts, assumptions, and unknowns.
+- Preserve unrelated work. Do not change product code, public APIs,
+  dependencies, runtime configuration, or external systems unless the task
+  explicitly includes them.
 - Run checks appropriate to the change. Documentation-only edits normally need
-  a diff and link review, not a Java build. For behavior changes, run focused
-  tests and applicable project gates; report what ran and any remaining limits.
-- Stop investigating when there is enough evidence to implement and validate
-  the requested change. Repeat a check only for new changes, failures, or an
-  unresolved question. If a tool repeatedly fails, change approach or report
-  the blocker instead of retrying unchanged.
+  a diff and link/reference review plus the docs contract script, not a Java
+  build. Report environment blockers separately from test failures.
 
-## Tech Stack
+## Documentation authorities and reading route
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Language | Java | 21 |
-| Framework | Spring Boot | 4.0.0 |
-| Cache | Spring Cache + Spring Data Redis | - |
-| Distributed Lock | Redisson | 3.50.0 |
-| Local Cache | Caffeine | 3.1.8 |
-| Build | Maven | 3.x |
-| Testing | JUnit 5 + Testcontainers + AssertJ + Awaitility | - |
+The progressive-disclosure entry point is [`docs/README.md`](docs/README.md):
 
-> Tech Stack 表为单构建口径(Boot 4.0 / Java 21 / Redisson 3.50.0 单构建线)。重构后已无 `wrapper/`/`spi/`/`event/`/`evaluator/`/`CacheMetricsRecorder`,目录树见下方 Project Structure + 已移除 callout。
+1. read this instruction surface and `AGENTS.md`;
+2. read the documentation map and current local task ledger when present;
+3. read only the relevant current-state document;
+4. verify claims against source, build files, tests, and scripts;
+5. read changelog entries or generated reports only for needed history.
 
-## Code Style
+Canonical ownership is:
 
-- **Naming**: Java standard PascalCase for classes, camelCase for methods/fields
-- **Checkstyle**: Enforced by `./mvnw checkstyle:check -B`
-- **Lombok**: Used throughout - `@Data`, `@Getter`, `@Setter`, `@Builder`
-- **Javadoc**: Chinese comments explaining design rationale in key classes
+- public overview and quick start: `README.md`; `README.zh-CN.md` is the
+  translated companion and does not override the English contract;
+- current product, architecture, development, operations, and reference:
+  `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`,
+  `docs/OPERATIONS.md`, and `docs/REFERENCE.md`;
+- stable public surface: `STABILITY.md`; supported build line and limits:
+  `COMPATIBILITY.md`;
+- current architecture and design rationale: `docs/ARCHITECTURE.md`;
+  versioned history: `CHANGELOG.md`; historical performance evidence:
+  `PERFORMANCE.md`;
+- contributor and security policy: `CONTRIBUTING.md` and `SECURITY.md`;
+- current local task/deferred status: `.agent/tasks/resicache-maturity.yaml`.
 
-## Documentation authorities
+The task ledger is ignored and may be absent in a fresh clone. It is status,
+not a design or contract source. Closed plans, checkpoints, and review notes
+are not recreated after their facts have been absorbed into the current
+documentation and source.
 
-Keep one canonical owner per topic; linked documents provide navigation, not a
-second copy of the contract:
+## Tech stack and exact sources
 
-- Public overview and quick start: `README.md`; `README.zh-CN.md` is the
-  translated companion and does not override the English contract.
-- Stable public surface: `STABILITY.md`; supported build line and runtime
-  limitations: `COMPATIBILITY.md`.
-- Accepted design rationale: `docs/adr/README.md`; change history:
-  `CHANGELOG.md`; contributor workflow: `CONTRIBUTING.md`.
-- Current local task/deferred status: `.agent/tasks/resicache-maturity.yaml`.
-  Closed plans, checkpoints, and review notes are not recreated after their
-  durable facts have been absorbed into the sources above.
+| Layer | Technology | Exact source |
+|---|---|---|
+| Language | Java 21 | `pom.xml` and Maven Enforcer |
+| Framework | Spring Boot 4.0.0 / Spring 7 | `pom.xml` |
+| Cache | Spring Cache + Spring Data Redis 4.0.x | `pom.xml` |
+| Distributed lock | optional Redisson 3.50.0 | `pom.xml` |
+| Local support | Caffeine 3.1.8 | `pom.xml` |
+| Build | Maven 3.x / `./mvnw` | root POM and wrapper |
+| Tests | JUnit 5, Testcontainers, AssertJ, Awaitility | `pom.xml` and `src/test/` |
 
-## Testing
+Do not copy dependency versions into a second contract. The current source tree
+and module ownership are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Only the documented stable seams (`BloomIFilter`, `LockManager`, and the
+handler/observer/value contracts) are replaceable; `cache/` is an internal
+runtime module.
 
-- **Run tests**: `./mvnw test`
-- **No-Docker unit tests**: `./mvnw -Punit test -B`; this profile excludes
-  `**/*IntegrationTest*.java`, including nested integration test classes.
-  Passing it does not establish real Redis or Cluster behavior.
-- **Run with coverage**: `./mvnw verify` (JaCoCo enforced at 70% line / 40% branch coverage)
-- **Integration tests**: Use Testcontainers for Redis, extend `AbstractRedisIntegrationTest`
-- **Pattern**: Test classes mirror source structure under `src/test/java/`
-- **Container-test naming check**: `bash scripts/ci/check-test-names.sh`.
-  Container-backed tests must use `*IntegrationTest.java`, subject to the
-  script's explicit fixture/helper exceptions.
+## Coding and verification conventions
 
-Use JDK 21. Full verification needs a working Docker environment and the
-Testcontainers images; report an environment blocker separately from a test
-failure. Checkstyle is a separate gate, not part of Maven `verify`.
+- Use Java naming and existing Lombok patterns.
+- Keep public API Javadoc and explain non-obvious design rationale near the
+  source; keep current behavior in the canonical docs.
+- Handler ordering comes from `@HandlerPriority(HandlerOrder)` in
+  `chain/HandlerOrder.java`; do not duplicate numeric priorities.
+- Integration tests use Testcontainers fixtures and the `*IntegrationTest.java`
+  suffix. The naming guard is `bash scripts/ci/check-test-names.sh`.
+- Unit path: `./mvnw -Punit test -B`.
+- Full Redis/coverage path: `./mvnw clean verify -B` (70% line / 40% branch).
+- Separate style gate: `./mvnw checkstyle:check -B`.
+- Packaged public-consumer gate: `bash scripts/ci/check-external-consumer.sh`.
+- Documentation/source guard: `bash scripts/ci/check-docs-contracts.sh`.
 
-## Build & Run
-
-- **Dev build**: `./mvnw clean compile`
-- **Full verify**: `./mvnw clean verify -B`
-- **Checkstyle only**: `./mvnw checkstyle:check -B`
-- **Package**: `./mvnw clean package -DskipTests`
-
-## Project Structure
-
-```
-ResiCache/
-├── resicache-bench/        # Standalone JMH micro-benchmark module (JMH 1.37, shade fat-jar, 5 benchmark suites)
-└── src/main/java/io/github/davidhlp/spring/cache/redis/
-    ├── annotation/          # @RedisCacheable/Put/Evict/Caching stable annotations
-    ├── cache/               # package-private runtime module: AOP, chain, operations, protections, serialization, assembly
-    ├── chain/               # stable CacheHandler/Operation/Result contracts and typed decision views
-    ├── config/              # RedisCacheAutoConfiguration + RedisProCacheProperties + metrics/enablement entries
-    ├── protection/          # stable BloomIFilter, LockManager, EarlyExpirationMode contracts
-    └── serialization/       # public SerializationException + operator migration contracts and wire envelope
-```
-
-> 已移除(不在源码中):`wrapper/`(熔断/限流)、`spi/`(ServiceLoader)、`event/`、独立 `evaluator/`、`CacheMetricsRecorder`、`BloomRebuilder`，以及已收拢至 package-private `cache/` 的旧实现子包。文档始终以实际源码为准。
-
-### Test Structure
-
-```
-src/test/java/io/github/davidhlp/spring/cache/redis/
-├── cache/                       # implementation unit/integration tests + Testcontainers fixtures
-├── chain/ + config/             # stable contract and configuration tests
-├── PublicSurfaceContractTest.java # top-level and nested public-surface manifest
-└── com/example/                 # external-consumer and serializer domain fixtures
-```
-> Redis integration tests now live beside the internal cache module; all use the
-> `*IntegrationTest.java` suffix. The naming guard checks container markers and
-> rejects container-backed tests with other names, including `*IT.java`.
-## Key Architecture: Chain of Responsibility
-
-Cache operations that use ResiCache go through a chain of handlers (in order):
-
-1. **BloomFilterHandler** (100) - Checks if key exists in bloom filter, blocks cache penetration
-2. **SyncLockHandler** (200) - Acquires distributed lock, prevents cache breakdown
-3. **EarlyExpirationHandler** (250) - Triggers async early refresh for hot keys
-4. **TtlHandler** (300) - Applies TTL variation to prevent cache avalanche
-5. **NullValueHandler** (400) - Caches null values to prevent cache penetration
-6. **ActualCacheHandler** (500) - Executes actual Redis PUT
-
-Each handler implements `CacheHandler` interface with `handle()` method.
-
-## Conventions
-
-- **Handler ordering**: Defined by `@HandlerPriority(HandlerOrder)` enum in `chain/HandlerOrder.java` (gap=100, single source of truth)
-- **Configuration properties**: Use `@ConfigurationProperties(prefix = "resi-cache")` with nested properties classes
-- **Checkstyle**: Runs through the explicit `checkstyle:check` command, not as part of `verify`.
-- **Strategy replacement**: only documented stable seams (`BloomIFilter` and `LockManager`)
-  are replaceable. Other policies, handlers, metadata, and serializers are package-private
-  implementation details assembled by the internal `cache` module. The public auto-configuration
-  scans that internal package with a test-class exclusion; no root-package scan is used.
-
-## Where to Look
-
-| I want to... | Look at... |
-|--------------|-----------|
-| Understand the chain / a mechanism | stable contracts in `chain/`, runtime handlers in `cache/`, and replaceable seams in `protection/` |
-| Understand a module | the package itself under `src/main/java/.../`; module layout is in Project Structure above |
-| Add a new cache protection handler | internal `cache/` runtime + implement `CacheHandler`, annotate `@HandlerPriority(HandlerOrder.X)` |
-| Modify annotation processing | internal `cache/` annotation pipeline |
-| Change Redis connection config | internal `cache/RedisConnectionConfiguration.java` |
-| Configure behavior | `config/RedisProCacheProperties.java` (`resi-cache.*` prefix) |
-| Add integration tests | internal `cache/` test fixtures + Testcontainers |
+Full command semantics, test layers, CI, and contribution checks live in
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md).

@@ -15,7 +15,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
 /**
- * Bloom 失败日志 key 隐私契约(ADR-06)。
+ * Bloom 失败日志 key 隐私契约。
  *
  * <p>Bloom add/check/clear 失败时,ERROR 日志不得包含 raw key(测试 key 必须不出现);
  * cacheName(配置级低基数)可保留。用 Logback {@link ListAppender} 捕获日志事件断言。
@@ -52,7 +52,7 @@ class BloomFailureLogKeyPrivacyTest {
                     .map(ILoggingEvent::getFormattedMessage)
                     .reduce("", String::concat);
             assertThat(allLogs)
-                    .as("ERROR 日志不得包含 raw key(ADR-06 key 隐私)")
+                    .as("ERROR 日志不得包含 raw key(key-privacy contract)")
                     .doesNotContain(SECRET_KEY);
         } finally {
             ((Logger) LoggerFactory.getLogger(BloomSupport.class.getName())).detachAppender(captured);
@@ -85,7 +85,7 @@ class BloomFailureLogKeyPrivacyTest {
                     .map(ILoggingEvent::getFormattedMessage)
                     .reduce("", String::concat);
             assertThat(allLogs)
-                    .as("ERROR 日志不得包含 raw key(ADR-06 key 隐私)")
+                    .as("ERROR 日志不得包含 raw key(key-privacy contract)")
                     .doesNotContain(SECRET_KEY);
         } finally {
             ((Logger) LoggerFactory.getLogger(RedisBloomIFilter.class.getName())).detachAppender(captured);

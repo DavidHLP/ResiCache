@@ -47,7 +47,7 @@ final class RefreshRetryPolicy {
                 return; // 成功，退出
             } catch (Exception ex) {
                 lastException = ex;
-                // ADR-0001 §15 key 隐私:WARN/ERROR 只带 keyFingerprint,不带 raw key
+                // Key-privacy contract: WARN/ERROR includes only keyFingerprint, never raw key
                 log.warn("Async early-expiration failed (attempt {}/{}): keyFingerprint={}, cause={}",
                         attempt, MAX_RETRY_COUNT, FailureDiagnostics.keyFingerprint(key),
                         FailureDiagnostics.sanitizedFailure(ex));

@@ -167,7 +167,7 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
                                         inFlight.remove(k, created);
                                         metrics.recordCompleted();
                                         if (throwable != null) {
-                                            // ADR-0001 §15 key 隐私:ERROR 只带 keyFingerprint
+                                            // Key-privacy contract: ERROR includes only keyFingerprint
                                             log.error("Async early-expiration failed after all retries: "
                                                             + "keyFingerprint={}, cause={}",
                                                     FailureDiagnostics.keyFingerprint(k),

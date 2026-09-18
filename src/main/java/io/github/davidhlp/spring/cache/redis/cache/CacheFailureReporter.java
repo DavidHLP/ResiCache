@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * 内部失败上报单点(ADR-06)— 不进入 public allowlist。
+ * 内部失败上报单点— 不进入 public allowlist。
  *
  * <p>唯一指标 {@code resicache.cache.failure},tag 仅低基数有限枚举:
  * {@code operation}({@link CacheOperation})、{@code kind}({@link FailureKind})、
@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentMap;
  * {@code CacheErrorHandler} 是唯一报告出口;{@code LoaderOrchestrator} 只保留脱敏 WARN
  * 与 {@code LoadedWithWriteBackFailure},不重复计数。
  *
- * <p><b>边界(ADR-06)</b>:本指标只统计<b>缓存操作失败</b>(GET degrade / 写 fail-fast /
+ * <p><b>边界</b>:本指标只统计<b>缓存操作失败</b>(GET degrade / 写 fail-fast /
  * REMOVE best-effort / write-back failure)。Bloom 过滤器底层 Redis 位操作的
  * {@code bloomsift.*} counter 与 fail-open 路径({@code BloomSupport} 吞异常放行 loader)
  * <b>不属于</b>本指标 — fail-open 是成功的保护行为而非缓存失败,误报会污染降级告警。

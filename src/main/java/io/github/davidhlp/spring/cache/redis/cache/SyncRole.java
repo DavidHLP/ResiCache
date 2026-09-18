@@ -93,7 +93,7 @@ sealed interface SyncRole<T>
                 failure = e;
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
-                // ADR-0001 §15:异常 message 不带 raw key,只带 keyFingerprint
+                // Key-privacy contract: exception message omits raw key and keeps keyFingerprint
                 failure = new IllegalStateException(
                         "Thread interrupted while acquiring distributed lock: keyFingerprint="
                                 + FailureDiagnostics.keyFingerprint(key), e);
@@ -143,7 +143,7 @@ sealed interface SyncRole<T>
             long timeoutSeconds = timeout.seconds();
             try {
                 if (timeoutSeconds <= 0 && !leader.isDone()) {
-                    // ADR-0001 §15:异常 message 不带 raw key,只带 keyFingerprint
+                    // Key-privacy contract: exception message omits raw key and keeps keyFingerprint
                     throw new IllegalStateException(
                             "In-flight single-flight loader still running; waitTimeoutSeconds="
                                     + timeoutSeconds
@@ -261,7 +261,7 @@ final class SyncRoleLockExecutor {
         try (LockStack lockStack = new LockStack(log)) {
             for (LockManager manager : distributedManagers) {
                 manager.tryAcquire(key, timeout.seconds()).ifPresentOrElse(lockStack::push, () -> {
-                    // ADR-0001 §15 key 隐私:WARN 只带 keyFingerprint
+                    // Key-privacy contract: WARN includes only keyFingerprint
                     log.warn("Lock manager {} failed to acquire distributed lock: keyFingerprint={}",
                             manager.getClass().getSimpleName(),
                             FailureDiagnostics.keyFingerprint(key));

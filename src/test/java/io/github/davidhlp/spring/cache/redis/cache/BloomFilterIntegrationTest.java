@@ -43,8 +43,8 @@ class BloomFilterIntegrationTest extends AbstractRedisIntegrationTest {
     /**
      * 断言 Redis 中不存在任何 rebuilding marker 键(无 marker I/O 架构约束)。
      *
-     * <p>ADR-01 删除 rebuilding marker/window 后,任何 Bloom 操作都不得读写
-     * {@code *rebuild*} marker 键空间。flushDb 后该 keyspace 必须始终为空。
+     * Marker-free Bloom semantics: after removing the rebuilding marker/window,
+     * Bloom operations must never read or write the {@code *rebuild*} marker keyspace.
      */
     private void assertNoRebuildMarkerKeys() {
         assertThat(redisTemplate.keys("*rebuild*")).isEmpty();
@@ -205,7 +205,7 @@ class BloomFilterIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("Marker-free Bloom semantics (ADR-01)")
+    @DisplayName("Marker-free Bloom semantics")
     class MarkerFreeSemanticsTests {
 
         @Test

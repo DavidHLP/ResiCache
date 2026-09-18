@@ -320,11 +320,11 @@ class CacheErrorHandlerTest {
 
 
     @Nested
-    @DisplayName("ADR-06 count-once failure metric")
+    @DisplayName("count-once failure metric")
     class FailureMetricTests {
 
         @Test
-        @DisplayName("cache-path WARN/ERROR 日志不含 raw key / exception message(ADR-06)")
+        @DisplayName("cache-path WARN/ERROR 日志不含 raw key / exception message")
         void cachePathLogs_omitRawKeyAndCauseMessage() {
             String secretKey = "secret-cache-key-77";
             ch.qos.logback.classic.Logger logger =

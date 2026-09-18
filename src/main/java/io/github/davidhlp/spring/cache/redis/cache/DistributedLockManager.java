@@ -64,7 +64,7 @@ class DistributedLockManager implements LockManager {
         try {
             boolean acquired = lock.tryLock(timeoutSeconds, leaseTimeSeconds, TimeUnit.SECONDS);
             if (!acquired) {
-                // ADR-0001 §15 key 隐私:WARN 只带 keyFingerprint(关联令牌),不带 raw key / lockKey
+                // Key-privacy contract: WARN includes only keyFingerprint, never raw key / lockKey
                 log.warn(
                         "Failed to acquire distributed lock within {}s: keyFingerprint={}",
                         timeoutSeconds,
@@ -77,7 +77,7 @@ class DistributedLockManager implements LockManager {
             return Optional.of(new RedissonLockHandle(lock, key));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            // ADR-0001 §15 key 隐私:ERROR 与异常 message 均不带 raw key
+            // Key-privacy contract: ERROR and exception messages never include raw key
             log.error("Interrupted while waiting for distributed lock: keyFingerprint={}, cause={}",
                     FailureDiagnostics.keyFingerprint(key),
                     FailureDiagnostics.sanitizedFailure(e));
@@ -178,7 +178,7 @@ class DistributedLockManager implements LockManager {
                     return;
                 } catch (Exception e) {
                     if (attempt == MAX_UNLOCK_RETRIES) {
-                        // ADR-0001 §15 key 隐私:ERROR/WARN 只带 keyFingerprint
+                        // Key-privacy contract: ERROR/WARN includes only keyFingerprint
                         log.error("Failed to release distributed lock after {} attempts: "
                                         + "keyFingerprint={}, cause={}",
                                 MAX_UNLOCK_RETRIES,

@@ -39,8 +39,8 @@
 !SECURITY.md
 !PERFORMANCE.md
 !docs/
-!docs/adr/
-
+docs/adr/
+docs/plans/
 # --- 项目配置 ---
 !.editorconfig
 !.cbmignore

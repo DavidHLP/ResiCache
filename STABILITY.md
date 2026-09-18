@@ -215,6 +215,6 @@ notes is published in `COMPATIBILITY.md`.
 - [`CHANGELOG.md`](./CHANGELOG.md) — per-version changelog including
   ⚠️ BREAKING markers.
 
-> Accepted architecture decisions and their rationale live in the
-> [`docs/adr/`](./docs/adr/README.md) index; Git history records ordinary
-> implementation history and commit-level details.
+> Current architecture ownership and design constraints live in
+> [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md); Git history records
+> ordinary implementation history and commit-level details.

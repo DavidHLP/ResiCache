@@ -41,7 +41,7 @@ advisory (with credit, if desired) will follow once the report is confirmed.
   deserialization to `resi-cache.serializer.allowed-package-prefixes`
   (default: `io.github.davidhlp`). You **must** add your own package prefixes
   for custom cached types, otherwise deserialization throws. See
-  [README → Serialization](README.md#serialization-safety).
+  [configuration and serialization reference](docs/REFERENCE.md#serialization-and-compatibility).
 - **Redisson config file path**
   (`resi-cache.redis.redisson-config-path`) is read via `Config.fromYAML` and
   **must only come from trusted ops/deploy sources** (application.yml,

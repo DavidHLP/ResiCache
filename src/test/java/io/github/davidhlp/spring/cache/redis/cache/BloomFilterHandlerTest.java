@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * BloomFilterHandler 单元测试 — marker-free 语义(ADR-01)。
+ * BloomFilterHandler 单元测试 — marker-free 语义。
  *
  * <p>锁定契约:
  * <ul>
@@ -300,7 +300,7 @@ class BloomFilterHandlerTest {
     }
 
     @Nested
-    @DisplayName("CLEAN→GET scenarios (ADR-01)")
+    @DisplayName("CLEAN→GET scenarios (marker-free)")
     class CleanGetScenarios {
 
         /**

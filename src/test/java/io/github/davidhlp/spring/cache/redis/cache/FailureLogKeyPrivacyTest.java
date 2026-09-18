@@ -39,7 +39,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 失败诊断 key 隐私回归(ADR-0001 §15)。
+ * 失败诊断 key 隐私回归(key-privacy contract)。
  *
  * <p>契约:WARN/ERROR 日志与 typed exception message <b>不得</b>出现 raw key;
  * 配置级低基数的 {@code cacheName} 或 {@link FailureDiagnostics#keyFingerprint} 关联令牌可保留。
@@ -47,7 +47,7 @@ import static org.mockito.Mockito.when;
  * <p>本测试覆盖此前直接打印 raw key 的路径:分布式锁获取/释放、single-flight 角色失败、
  * 异步提前过期重试、链后置处理。每条路径用 logback {@link ListAppender} 捕获实际日志事件断言。
  */
-@DisplayName("Failure Log Key Privacy Tests (ADR-0001 §15)")
+@DisplayName("Failure Log Key Privacy Tests (key-privacy contract)")
 class FailureLogKeyPrivacyTest {
 
     /** 必须不出现的原始 key(测试专用哨兵值)。 */
@@ -118,7 +118,7 @@ class FailureLogKeyPrivacyTest {
                 .as("ERROR 必须渲染异常类型链")
                 .allMatch(event -> event.getFormattedMessage().contains("IllegalStateException"));
         assertThat(warnAndErrorText(captured))
-                .as("WARN/ERROR 不得包含 raw key 或异常 message(ADR-0001 §15)")
+                .as("WARN/ERROR 不得包含 raw key 或异常 message(key-privacy contract)")
                 .doesNotContain(SECRET_KEY)
                 .doesNotContain("boom");
     }
@@ -210,7 +210,7 @@ class FailureLogKeyPrivacyTest {
 
             assertThat(attempts.get()).isEqualTo(RefreshRetryPolicy.MAX_RETRY_COUNT);
             assertThat(warnAndErrorText(captured))
-                    .as("WARN/ERROR 不得包含 raw key(ADR-0001 §15)")
+                    .as("WARN/ERROR 不得包含 raw key(key-privacy contract)")
                     .doesNotContain(SECRET_KEY)
                     .contains(FailureDiagnostics.keyFingerprint(SECRET_KEY));
         } finally {
@@ -320,7 +320,7 @@ class FailureLogKeyPrivacyTest {
             }), context);
 
             assertThat(warnAndErrorText(captured))
-                    .as("observer 失败的 ERROR 不得渲染异常 message/栈(ADR-0001 §15)")
+                    .as("observer 失败的 ERROR 不得渲染异常 message/栈(key-privacy contract)")
                     .doesNotContain(SECRET_KEY);
             assertErrorSites(captured, "onChainStart failed");
             assertDebugKeepsStack(captured, "onChainStart failure detail");

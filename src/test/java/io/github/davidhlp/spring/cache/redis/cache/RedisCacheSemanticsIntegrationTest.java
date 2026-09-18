@@ -174,7 +174,7 @@ class RedisCacheSemanticsIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("ADR-01 CLEAN/GET race 与多上下文(marker-free)")
+    @DisplayName("CLEAN/GET race 与多上下文(marker-free)")
     class CleanGetRaceTests {
         /**
          * 同一 key:CLEAN 并发于 GET —— loader 永不因空 Bloom 被短路。

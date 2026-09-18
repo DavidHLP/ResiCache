@@ -364,7 +364,7 @@ class ChainEngine {
                     log.debug("Post-processing executed for: {}",
                             CacheHandlerChain.handlerTag(handler));
                 } catch (Exception e) {
-                    // ADR-0001 §15 key 隐私:ERROR 只带 cacheName + 异常类型链,不带 raw key;
+                    // Key-privacy contract: ERROR includes cacheName and exception types only;
                     // 完整栈留 DEBUG(异常 message 可能内嵌 key)。
                     log.error("Post-processing failed for: {}, operation: {}, cacheName: {}, cause={}",
                             CacheHandlerChain.handlerTag(handler),
@@ -421,7 +421,7 @@ class ChainEngine {
             }
 
             private void logFailure(ChainObserver observer, String hookName, Exception ex) {
-                // ADR-0001 §15:ERROR 只渲染异常类型链(异常 message 可能内嵌 raw key),完整栈留 DEBUG
+                // Key-privacy contract: ERROR renders only exception types;
                 log.error("Observer {} {} failed: {}",
                         observer.getClass().getSimpleName(), hookName,
                         FailureDiagnostics.sanitizedFailure(ex));

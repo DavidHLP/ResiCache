@@ -83,7 +83,7 @@ class RedisProCacheConfiguration {
     @ConditionalOnMissingBean(CacheErrorHandler.class)
     public CacheErrorHandler cacheErrorHandler(ResolvedMetrics resolvedMetrics) {
         MeterRegistry registry = resolvedMetrics.meterRegistry();
-        // ADR-06:统一失败指标 reporter(registry 缺失 → 内部 no-op)
+        // Failure-metrics contract:统一失败指标 reporter(registry 缺失 → 内部 no-op)
         return new CacheErrorHandler(
                 registry == null ? null
                         : new io.github.davidhlp.spring.cache.redis.cache.CacheFailureReporter(registry));

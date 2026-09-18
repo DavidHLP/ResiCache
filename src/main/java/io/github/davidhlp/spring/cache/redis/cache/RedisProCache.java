@@ -194,7 +194,7 @@ public class RedisProCache extends RedisCache {
      */
     RuntimeException translateFailure(Throwable cause, String cacheName) {
         if (cause instanceof Cache.ValueRetrievalException vre) {
-            // ADR-06 key 隐私:重建 VRE,key 位以 cacheName 代替原始 raw key,
+            // Key-privacy contract:重建 VRE,key 位以 cacheName 代替原始 raw key,
             // 保留类型(Spring 抽象层契约)与原始 cause。
             return new Cache.ValueRetrievalException(cacheName, null, vre.getCause());
         }

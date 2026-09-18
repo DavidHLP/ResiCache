@@ -98,7 +98,7 @@ final class LoaderOrchestrator {
     }
 
     /**
-     * loader 成功,但缓存写回失败(ADR-02 availability-first)。
+     * loader 成功,但缓存写回失败(availability-first read-through contract)。
      *
      * <p>{@code value} 仍为 loader 产出的业务值,必须返回给调用方;{@code cause}
      * 为写回失败的原始异常,供 caller 记录诊断;若失败来自 writer PUT chain,指标已由

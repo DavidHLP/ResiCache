@@ -81,7 +81,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * Read-through loader 入口 —— availability-first(ADR-0001 §13)。
+     * Read-through loader 入口 —— availability-first read-through contract。
      *
      * <p>{@code RedisProCache.get(key, loader)} 与本方法都委派
      * {@link LoaderOrchestrator#readThrough} 的同一条「读 → 回源 → 写回」协议。

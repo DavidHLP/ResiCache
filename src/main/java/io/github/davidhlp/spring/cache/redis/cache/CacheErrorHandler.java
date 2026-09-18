@@ -34,7 +34,7 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #handleError} 方法 → per-operation 调度失去入口。两条路径都让 seam
  * 失去价值 — 真 seam。
  *
- * <p><b>typed failure(ADR-03)</b>:本类产出 {@link CacheResult#failure(CacheOperation, FailureKind, Throwable)}
+ * <p><b>typed failure contract</b>:本类产出 {@link CacheResult#failure(CacheOperation, FailureKind, Throwable)}
  * — operation/kind 均为 typed 枚举,失败必须可归类、可分流。
  */
 @Slf4j
@@ -106,7 +106,7 @@ class CacheErrorHandler {
 
 
     /**
-     * 统一失败指标上报(ADR-06)— null 表示未装配(测试/registry 缺失 → no-op)。
+     * 统一失败指标上报 contract— null 表示未装配(测试/registry 缺失 → no-op)。
      * 每个失败事件在此唯一出口上报一次,不重复计数。
      */
     private final io.github.davidhlp.spring.cache.redis.cache.CacheFailureReporter failureReporter;
@@ -160,13 +160,13 @@ class CacheErrorHandler {
             FailureKind failureKind) {
         CacheResult result = CacheResult.failure(operation, failureKind, e);
         String operationName = operation == null ? "UNKNOWN" : operation.name();
-        // ADR-06:每次失败恰好一次统一指标(operation/kind/strategy 有限枚举 tag)
+        // Failure-metrics contract:每次失败恰好一次统一指标(operation/kind/strategy 有限枚举 tag)
         if (failureReporter != null) {
             failureReporter.report(operation, failureKind, strategy);
         }
         return switch (strategy) {
             case FAIL_FAST -> {
-                // ADR-06 key 隐私:ERROR 不打印 raw key / 异常 message(可能嵌 key);
+                // Key-privacy contract:ERROR 不打印 raw key / 异常 message(可能嵌 key);
                 // 完整栈(含 cause message)仅留 DEBUG 供开发诊断
                 log.error("Cache {} failed: cacheName={}, kind={}, cause={}",
                         operationName, cacheName, failureKind,
@@ -176,7 +176,7 @@ class CacheErrorHandler {
                 yield result;
             }
             case GRACEFUL_DEGRADATION -> {
-                // key 隐私:WARN 不打印 raw key / exception message(ADR-06)
+                // Key-privacy contract:WARN 不打印 raw key / exception message
                 log.warn("Cache {} failed, degrading to miss: cacheName={}, kind={}, cause={}",
                         operationName, cacheName, failureKind,
                         e == null ? "null" : e.getClass().getSimpleName());
