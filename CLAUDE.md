@@ -1,5 +1,38 @@
 # Project Instructions
 
+## Agent workflow
+
+- Start with the requested outcome and inspect the affected files. For a small,
+  clear task, proceed directly; use a plan or broader investigation when scope,
+  dependencies, or risk warrant it.
+- Choose tools that answer the current question. Prefer the code graph for
+  structural discovery when available; use direct reads or search for known
+  paths, literals, configuration, and documentation. If graph results are
+  unavailable, stale, or incomplete, verify the relevant source and continue.
+  Check coverage when relying on graph evidence; an empty result alone does not
+  establish that code is absent.
+- At session start or after compaction, confirm the graph project, root, and
+  index generation with `list_projects` or `index_status`. Use Tier 2 verification
+  by default: `search_graph` for symbols, `trace_path` for relevant callers or
+  callees, and `get_code_snippet` for material source evidence. Check pagination
+  and call `check_index_coverage` for all evidence paths (plus bounded scopes
+  for absence claims). Read current source for stale, excluded, partial, or
+  unknown coverage; a clean coverage result is not proof of completeness.
+- Treat memory and documentation as context. Resolve conflicts against current
+  source, configuration, and observed behavior. Distinguish verified facts,
+  assumptions, and unknowns; never invent tool results or completed checks.
+- Reuse existing patterns and make the smallest change that satisfies the task.
+  Preserve unrelated work. Ask for clarification when ambiguity materially
+  changes the outcome or an action exceeds the user's authorization; otherwise
+  use a reasonable default.
+- Run checks appropriate to the change. Documentation-only edits normally need
+  a diff and link review, not a Java build. For behavior changes, run focused
+  tests and applicable project gates; report what ran and any remaining limits.
+- Stop investigating when there is enough evidence to implement and validate
+  the requested change. Repeat a check only for new changes, failures, or an
+  unresolved question. If a tool repeatedly fails, change approach or report
+  the blocker instead of retrying unchanged.
+
 ## Tech Stack
 
 | Layer | Technology | Version |
@@ -39,9 +72,19 @@ second copy of the contract:
 ## Testing
 
 - **Run tests**: `./mvnw test`
+- **No-Docker unit tests**: `./mvnw -Punit test -B`; this profile excludes
+  `**/*IntegrationTest*.java`, including nested integration test classes.
+  Passing it does not establish real Redis or Cluster behavior.
 - **Run with coverage**: `./mvnw verify` (JaCoCo enforced at 70% line / 40% branch coverage)
 - **Integration tests**: Use Testcontainers for Redis, extend `AbstractRedisIntegrationTest`
 - **Pattern**: Test classes mirror source structure under `src/test/java/`
+- **Container-test naming check**: `bash scripts/ci/check-test-names.sh`.
+  Container-backed tests must use `*IntegrationTest.java`, subject to the
+  script's explicit fixture/helper exceptions.
+
+Use JDK 21. Full verification needs a working Docker environment and the
+Testcontainers images; report an environment blocker separately from a test
+failure. Checkstyle is a separate gate, not part of Maven `verify`.
 
 ## Build & Run
 
@@ -76,8 +119,8 @@ src/test/java/io/github/davidhlp/spring/cache/redis/
 └── com/example/                 # external-consumer and serializer domain fixtures
 ```
 > Redis integration tests now live beside the internal cache module; all use the
-> `*IntegrationTest.java` suffix. The naming guard
-> rejects `*IT.java` and is enforced in local/CI flows.
+> `*IntegrationTest.java` suffix. The naming guard checks container markers and
+> rejects container-backed tests with other names, including `*IT.java`.
 ## Key Architecture: Chain of Responsibility
 
 Cache operations that use ResiCache go through a chain of handlers (in order):

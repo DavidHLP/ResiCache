@@ -1,22 +1,11 @@
 # Agent Project Instructions
 
-**This file is reconciled with [CLAUDE.md](./CLAUDE.md) (canonical).**
+Project conventions live in [CLAUDE.md](./CLAUDE.md), including the
+task-scoped agent workflow. Read the relevant sections for the current task;
+linked documents are references, not a mandatory reading checklist.
 
-As of 2026-06-29 the canonical project instructions live in `CLAUDE.md`.
-`AGENTS.md` is kept here for tool compatibility — its full content previously
-duplicated `CLAUDE.md` and drifted (stale Java 17+, Spring Boot 3.4.13,
-Redisson 3.27.0, plus a Project Structure tree that still listed the removed
-`wrapper/`, `spi/`, `event/`, `evaluator/`, and `CacheMetricsRecorder`).
-To avoid future drift, this file is a thin
-pointer instead of a duplicate.
+Keep shared project instructions in `CLAUDE.md` and this file as the entry point.
 
-See [CLAUDE.md](./CLAUDE.md) for:
-
-- Tech Stack (current versions)
-- Project Structure (current directory tree + 已移除 callout)
-- Key Architecture: Chain of Responsibility
-- Conventions (handler ordering, properties, context, strategy replacement)
-- Where to Look table
-
-If you find yourself wanting to edit project-instructions content, edit
-`CLAUDE.md` — do **not** re-expand this file into a duplicate.
+For documentation maintenance, verify commands and versions against `pom.xml`
+and the relevant CI scripts. Preserve existing local edits and update the
+canonical document instead of duplicating its rules here.
