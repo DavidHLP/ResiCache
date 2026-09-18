@@ -5,16 +5,21 @@
 - Start from the requested outcome and inspect the affected files. Use a plan
   when scope, dependencies, or risk warrant it; otherwise make the smallest
   change that satisfies the task.
-- At session start or after compaction, confirm the ResiCache code-graph project
-  and index status. Use graph queries for structural code discovery when the
-  result is available, then verify relevant source directly. A clean or partial
-  index is not proof that a symbol or file is absent.
+- When structural code discovery is needed, confirm the ResiCache code-graph
+  project and index status, then verify relevant source directly. If graph
+  tools are unavailable or stale, use direct source evidence and disclose the
+  limitation; do not block otherwise executable work solely on graph availability.
+  Non-code instruction and documentation work may use direct file inspection.
+  A clean or partial index is not proof that a symbol or file is absent.
 - Treat documentation and memory as context, not executable truth. Resolve
   conflicts against current source, build configuration, contracts, tests, and
   observed behavior. Distinguish verified facts, assumptions, and unknowns.
-- Preserve unrelated work. Do not change product code, public APIs,
-  dependencies, runtime configuration, or external systems unless the task
-  explicitly includes them.
+- Preserve unrelated work. A request to implement or fix behavior authorizes
+  necessary local code, test, and documentation changes within that scope.
+  Ask before materially expanding scope, making incompatible public API changes,
+  adding dependencies, or changing runtime configuration or external systems
+  when those actions are not already authorized. Explicit review-only and
+  approval requirements remain binding.
 - Run checks appropriate to the change. Documentation-only edits normally need
   a diff and link/reference review plus the docs contract script, not a Java
   build. Report environment blockers separately from test failures.
