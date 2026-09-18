@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/LoaderOrchestrator.java
+  h_77173abe25c3ff 60-64,72,104-105,280-283
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisDownFaultInjectionIntegrationTest.java
+  h_77173abe25c3ff 6,31-33,45-56,66,72-74,127,139-141,173,179-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1364bba1b3a52aa33dbab9c7e65bdf13b011e446",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
