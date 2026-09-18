@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.config.CachingEnablementValidation;
 import io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
@@ -70,6 +71,29 @@ class RedisProCacheConfigurationContractTest {
                 registry.find("resicache.cache.put").timer()).isNotNull());
     }
 
+    @Test
+    void metricsEnabled_withoutMeterRegistry_keepsNoOpChoice() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withPropertyValues("resi-cache.metrics.enabled=true")
+                    .withBean(RedisProCacheWriter.class,
+                            () -> org.mockito.Mockito.mock(RedisProCacheWriter.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        assertThat(context).doesNotHaveBean(MeterRegistry.class);
+                        assertThat(context).hasSingleBean(ResolvedMetrics.class);
+                        assertThat(context.getBean(ResolvedMetrics.class).meterRegistry())
+                                .isNull();
+                    });
+        }
+    }
+
     private void assertMetricsAssembly(
             boolean enabled,
             Consumer<SimpleMeterRegistry> assertion) throws Exception {
@@ -100,25 +124,28 @@ class RedisProCacheConfigurationContractTest {
         assertThat(RedisProCacheConfiguration.class.isAnnotationPresent(ComponentScan.class)).isFalse();
     }
     @Test
-    void productionConfiguration_importsProxyConfigurationExplicitly() {
+    void productionConfiguration_importsInternalConfigurationsExplicitly() {
         org.springframework.context.annotation.Import configurationImport =
                 RedisProCacheConfiguration.class.getAnnotation(
                         org.springframework.context.annotation.Import.class);
 
         assertThat(configurationImport).isNotNull();
-        assertThat(configurationImport.value()).contains(RedisProxyCachingConfiguration.class);
+        assertThat(configurationImport.value())
+                .contains(RedisProxyCachingConfiguration.class, ResolvedMetricsConfiguration.class);
     }
 
     @Test
     void entry_componentScan_excludesOperatorAndExplicitlyImportedConfigurations() {
         ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
-
         assertThat(scan.excludeFilters())
                 .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*RedisProxyCachingConfiguration"));
+                        .containsExactly(".*RedisProxyCachingConfiguration.*"));
         assertThat(scan.excludeFilters())
                 .anySatisfy(filter -> assertThat(filter.pattern())
                         .containsExactly(".*SerializationMigrationEngine"));
+        assertThat(scan.excludeFilters())
+                .anySatisfy(filter -> assertThat(filter.pattern())
+                        .containsExactly(".*ResolvedMetricsConfiguration"));
     }
 
     @Test
@@ -181,6 +208,7 @@ class RedisProCacheConfigurationContractTest {
                                 io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager.class)).isEmpty();
                         assertThat(context).doesNotHaveBean("redisCacheAdvisor");
                         assertThat(context).doesNotHaveBean("redisCacheInterceptor");
+                        assertThat(context).hasBean("redisCacheOperationSource");
                         assertThat(context).hasBean("unrelatedHostBean");
                     });
         }
@@ -205,6 +233,38 @@ class RedisProCacheConfigurationContractTest {
                         assertThat(context).hasBean("redisCacheAdvisor");
                         assertThat(context).hasBean("redisCacheInterceptor");
                     });
+        }
+    }
+
+    @Test
+    void operationSource_wiringProvidesRegisterForSnapshotRegistration() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        RedisCacheOperationSource source = context.getBean(
+                                "redisCacheOperationSource", RedisCacheOperationSource.class);
+                        Method method = SpringWiredService.class.getMethod("read", String.class);
+
+                        assertThat(source.getCacheOperations(method, SpringWiredService.class))
+                                .isNotEmpty();
+                        assertThat(context.getBean(RedisCacheRegister.class)
+                                .getSnapshot(method, SpringWiredService.class))
+                                .isNotNull();
+                    });
+        }
+    }
+
+    static class SpringWiredService {
+        @RedisCacheable("spring-wiring-cache")
+        public String read(String value) {
+            return value;
         }
     }
 

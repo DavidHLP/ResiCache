@@ -32,7 +32,10 @@ import org.springframework.data.redis.core.RedisOperations;
                         pattern = ".*Test.*"),
                 @ComponentScan.Filter(
                         type = FilterType.REGEX,
-                        pattern = ".*RedisProxyCachingConfiguration"),
+                        pattern = ".*RedisProxyCachingConfiguration.*"),
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = ".*ResolvedMetricsConfiguration"),
                 @ComponentScan.Filter(
                         type = FilterType.REGEX,
                         pattern = ".*SerializationMigrationEngine")

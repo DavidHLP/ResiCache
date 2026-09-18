@@ -24,53 +24,60 @@ class RedisProxyCachingConfiguration {
 
     public static final String REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME = "redisCacheOperationSource";
 
-    @Bean(name = "redisCacheAdvisor")
-    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    // 用户自定义 CacheManager → 库 cacheManager back-off → RedisProCacheManager
-    // 不存在。advisor/interceptor 必须随之退场(用户自行接管 Spring Cache),
-    // 否则启动期 UnsatisfiedDependency 直接失败(RM-005 探针发现)。
-    @ConditionalOnMissingBean(
-            value = org.springframework.cache.CacheManager.class,
-            ignored = RedisProCacheManager.class)
-    public BeanFactoryCacheOperationSourceAdvisor redisCacheAdvisor(
-            @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
-                    CacheOperationSource redisCacheOperationSource,
-            RedisCacheInterceptor redisCacheInterceptor) {
-        BeanFactoryCacheOperationSourceAdvisor advisor =
-                new BeanFactoryCacheOperationSourceAdvisor();
-        advisor.setCacheOperationSource(redisCacheOperationSource);
-        // 单一 advice seam — advisor 直接持有 RedisCacheInterceptor
-        advisor.setAdvice(redisCacheInterceptor);
-        advisor.setOrder(50);
-        return advisor;
-    }
-
     @Bean(name = REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     public CacheOperationSource redisCacheOperationSource(
-            RedisProCacheProperties redisProCacheProperties) {
-        return new RedisCacheOperationSource(redisProCacheProperties.getNativeAnnotationMode());
+            RedisProCacheProperties redisProCacheProperties,
+            RedisCacheRegister redisCacheRegister) {
+        return new RedisCacheOperationSource(
+                redisProCacheProperties.getNativeAnnotationMode(), redisCacheRegister);
     }
 
     /**
-     * 单一 advice —— advisor 直接持有的拦截器,装配职责与拦截职责收口到同一处。
+     * One eligibility gate owns the proxy advisor and interceptor together.
+     *
+     * <p>The gate matches {@code RedisProCacheConfiguration.cacheManager()} exactly:
+     * user-provided {@code CacheManager} beans back off the library proxy, while
+     * the library's own {@code RedisProCacheManager} remains ignored.
      */
-    @Bean
+    @Configuration(proxyBeanMethods = false)
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     @ConditionalOnMissingBean(
             value = org.springframework.cache.CacheManager.class,
             ignored = RedisProCacheManager.class)
-    public RedisCacheInterceptor redisCacheInterceptor(
-            @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
-                    CacheOperationSource redisCacheOperationSource,
-            RedisProCacheManager cacheManager,
-            KeyGenerator keyGenerator,
-            MethodMetadataResolver methodMetadataResolver) {
+    static class ProxyEligibilityConfiguration {
 
-        return new RedisCacheInterceptor(
-                redisCacheOperationSource,
-                cacheManager,
-                keyGenerator,
-                methodMetadataResolver);
+        @Bean(name = "redisCacheAdvisor")
+        @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+        public BeanFactoryCacheOperationSourceAdvisor redisCacheAdvisor(
+                @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
+                        CacheOperationSource redisCacheOperationSource,
+                RedisCacheInterceptor redisCacheInterceptor) {
+            BeanFactoryCacheOperationSourceAdvisor advisor =
+                    new BeanFactoryCacheOperationSourceAdvisor();
+            advisor.setCacheOperationSource(redisCacheOperationSource);
+            // 单一 advice seam — advisor 直接持有 RedisCacheInterceptor
+            advisor.setAdvice(redisCacheInterceptor);
+            advisor.setOrder(50);
+            return advisor;
+        }
+
+        /**
+         * 单一 advice —— advisor 直接持有的拦截器,装配职责与拦截职责收口到同一处。
+         */
+        @Bean
+        @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+        public RedisCacheInterceptor redisCacheInterceptor(
+                @Qualifier(REDIS_CACHE_OPERATION_SOURCE_BEAN_NAME)
+                        CacheOperationSource redisCacheOperationSource,
+                RedisProCacheManager cacheManager,
+                KeyGenerator keyGenerator,
+                MethodMetadataResolver methodMetadataResolver) {
+            return new RedisCacheInterceptor(
+                    redisCacheOperationSource,
+                    cacheManager,
+                    keyGenerator,
+                    methodMetadataResolver);
+        }
     }
 }

@@ -13,8 +13,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisClusterConnection;
 import org.springframework.data.redis.connection.RedisClusterNode;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -50,16 +48,14 @@ class SerializationMigrationEngine
             ObjectMapper objectMapper,
             RedisProCacheProperties properties,
             SecureJacksonSerializerFactory serializerFactory,
-            ObjectProvider<MeterRegistry> meterRegistryProvider,
-            Environment environment) {
+            ResolvedMetrics resolvedMetrics) {
         this.connectionFactory = connectionFactory;
         var serializer = properties.getSerializer();
         this.currentSerializer = serializerFactory.create(objectMapper, serializer);
         this.legacyDecoder = new LegacyValueDecoder(
                 objectMapper, serializer.getAllowedPackagePrefixes(), serializer.getTypeProperty());
         this.migration = serializer.getMigration();
-        this.meterRegistry = RedisProCacheConfiguration.metricsRegistry(
-                meterRegistryProvider, environment);
+        this.meterRegistry = resolvedMetrics.meterRegistry();
     }
 
     /**
