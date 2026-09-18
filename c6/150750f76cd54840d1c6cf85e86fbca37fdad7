@@ -1,0 +1,31 @@
+AGENTS.md
+  s_fa7950687c0dec::t_9cd8009f09acec 3-5,7
+  s_ce659e169156de::t_0814d838991277 9-11
+CLAUDE.md
+  s_ce659e169156de::t_0814d838991277 14-20,75-77,81-87,122-123
+  s_fa7950687c0dec::t_9cd8009f09acec 3-13,21-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6150750f76cd54840d1c6cf85e86fbca37fdad7",
+  "prompts": {},
+  "sessions": {
+    "s_ce659e169156de": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0afcc-15ca-73f0-b08c-26dd7930b82a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    },
+    "s_fa7950687c0dec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0af81-59c9-7292-90ab-bcbe2239367f",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
