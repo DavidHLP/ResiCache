@@ -1,138 +1,112 @@
 # Contributing to ResiCache
 
-Thanks for your interest in improving ResiCache! This is a small,
-single-maintainer, **Non-SLA best-effort** project — PRs of all sizes are
-welcome, and the bar below keeps the project healthy.
+Thanks for improving ResiCache. This is a small, single-maintainer,
+**non-SLA best-effort** project. The repository prefers a small change that
+fits the existing contracts over speculative framework surface.
 
 ## Before you start
 
-- ResiCache is **pre-1.0**: APIs may change. If your change alters a public API,
-  please open an issue to discuss it first.
-- Read [README.md](README.md) (Known Limitations + Not in Scope) and
-  [CLAUDE.md](CLAUDE.md) (Project Structure + Key Architecture) so your change
-  fits the architecture.
+- ResiCache is pre-1.0. If a change alters a documented public API, property
+  key, wire format, or SPI behavior, open an issue before implementation.
+- Read [`README.md`](README.md) for the runnable entry point and
+  [`docs/PRODUCT.md`](docs/PRODUCT.md) for scope and non-goals.
+- Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for ownership and
+  [`STABILITY.md`](STABILITY.md) before depending on a public type.
+- Check the existing issues, architecture map, and change history before
+  adding a new extension point or repeating a closed design.
 
-## Development setup
+## Development setup and checks
 
-Requirements: **JDK 21** (matches `pom.xml` `<java.version>21</java.version>`),
-**Maven 3.x** (the wrapper `./mvnw` is bundled),
-**Docker** (for Testcontainers-based integration tests).
+Requirements are **JDK 21**, **Maven 3.x** (the bundled `./mvnw` is preferred),
+and **Docker** for Testcontainers-backed Redis and Cluster tests. The command
+matrix and evidence boundaries are in
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+At minimum, run the checks relevant to the change:
 
 ```bash
-./mvnw clean verify -B
 ./mvnw -Punit test -B
+./mvnw clean verify -B
 ./mvnw checkstyle:check -B
-./mvnw clean package -DskipTests -B
 bash scripts/ci/check-test-names.sh
+bash scripts/ci/check-docs-contracts.sh
 ```
 
-`./mvnw -Punit test -B` is the no-Docker daily path. It does not verify real
-Redis/Cluster behavior and is not a release gate; `./mvnw clean verify -B`
-remains the full Redis proof.
-
-The `verify` goal enforces a JaCoCo coverage gate:
-
-- **70% line coverage**
-- **40% branch coverage**
-
-A PR that drops below these thresholds will fail CI. **If you add code, add
-tests.**
-
-- [ ] `./mvnw clean verify -B` passes locally (including the coverage gate).
-- [ ] `./mvnw checkstyle:check -B` passes locally.
-- [ ] New behavior has tests; bug fixes have a regression test.
-- [ ] Integration tests touching Redis extend `AbstractRedisIntegrationTest`
-      (Testcontainers — Docker must be running).
-- [ ] No over-engineering: features that belong in
-      [Resilience4j](https://resilience4j.readthedocs.io/) (circuit breaking /
-      rate limiting) or [Caffeine](https://github.com/ben-manes/caffeine)
-      (multi-level caching) are **out of scope** — see README "Not in Scope".
-- [ ] Javadoc on public API; Chinese rationale comments are welcome for design
-      decisions (matching the existing codebase style).
-- [ ] Commit messages follow
-      [Conventional Commits](https://www.conventionalcommits.org/):
-      `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `ci:`, `chore:`.
+The unit profile is a no-Docker path and excludes `**/*IntegrationTest*.java`;
+it does not prove real Redis behavior. `clean verify` is the full Redis and
+coverage path and enforces 70% line / 40% branch coverage. If code changes,
+add or update tests; if a bug is fixed, add a regression test when the failure
+is reproducible.
 
 ## Architecture pointers
 
-| You're touching... | Start here |
+| Change | Start here |
 |---|---|
-| A protection mechanism | internal `cache/` runtime + `chain/CacheHandlerChainFactory` |
+| Product behavior or a new capability | [`docs/PRODUCT.md`](docs/PRODUCT.md) |
+| Module boundary or handler order | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and `chain/HandlerOrder.java` |
+| Protection mechanism | internal `cache/` runtime and `CacheHandlerChainFactory` |
 | Annotation handling | internal `cache/` annotation pipeline |
-| Auto-configuration | `config/RedisCacheAutoConfiguration` + `RedisProCacheProperties` |
-| Serialization | `serialization/SecureJackson*` |
+| Auto-configuration or properties | `config/RedisCacheAutoConfiguration` and `RedisProCacheProperties` |
+| Serialization | `serialization/` and the serializer tests |
 | Cache core | `cache/RedisProCache`, `RedisProCacheManager`, `RedisProCacheWriter` |
-
-See [CLAUDE.md](CLAUDE.md) (Key Architecture + Where to Look) for the design
-rationale and source pointers.
+| Runtime/migration behavior | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) and [`docs/REFERENCE.md`](docs/REFERENCE.md) |
 
 ## Adding a protection handler
 
-1. Create a class in the internal `cache/` runtime implementing `CacheHandler`
-   (extend `AbstractCacheHandler`).
-2. Annotate it `@HandlerPriority(HandlerOrder.YOUR_ORDER)` — `HandlerOrder` is
-   the single source of truth for ordering (gap = 100, extend the enum to insert).
-3. Annotate it `@Component` — the internal `cache/` runtime package is the
-   only package `RedisCacheAutoConfiguration` scans (test classes excluded);
-   no root-package scan is used. Internal `@Configuration` classes inside
-   `cache/` are picked up by the same internal-only scan.
-4. Add tests; document the mechanism's design rationale in Javadoc on the
-   handler class (matching the existing codebase style).
+1. Add the implementation to the internal `cache/` runtime and implement
+   `CacheHandler` (extend `AbstractCacheHandler` when its behavior fits).
+2. Use `@HandlerPriority(HandlerOrder.YOUR_ORDER)`; `HandlerOrder` is the single
+   ordering source and leaves gaps for intentional insertion.
+3. Register the handler as an internal `@Component`. The library scan covers
+   only the internal runtime package and excludes test classes; host handlers
+   must be discovered by the host application or supplied as a bean.
+4. Add focused tests and document non-obvious design rationale in public
+   Javadoc or the owning current-state document.
 
-The full extension protocol (non-null `HandlerResult`, `FlowControl`
-semantics, post-process isolation, observer hook order, scope tokens,
-thread safety, nested public type classification) is normative in
-[`STABILITY.md`](./STABILITY.md) §4; the nested public type list is pinned
-by `src/test/resources/allowlist/public-surface-nested.txt` and
-`PublicSurfaceContractTest`.
+The handler/observer protocol, non-null results, flow control, post-processing,
+thread-safety, scope tokens, and nested advancement rules are normative in
+[`STABILITY.md`](STABILITY.md). The public nested-type list is pinned by the
+allowlist and `PublicSurfaceContractTest`.
 
-See [CLAUDE.md](CLAUDE.md) § Key Architecture: Chain of Responsibility for the
-handler-ordering model, and the `protection/` packages for worked examples of
-existing handlers.
+## Documentation changes
 
-## Code of conduct
+Update the existing canonical page named in [`docs/README.md`](docs/README.md).
+Keep README focused on adoption and quick start; do not create a task-, date-,
+phase-, or session-specific permanent guide. If a new current-state document is
+truly necessary, document its reader, distinct responsibility, and lifecycle in
+the documentation map. Preserve changelog history, performance evidence, and
+unresolved task entries.
+
+## Pull requests
+
+Use the repository PR template. Summarize the behavior and evidence, identify
+compatibility impact, and state what was not run. Documentation-only changes
+still need link/reference review and the docs contract check.
 
 Be respectful and constructive. This is a best-effort project; assume good
-intent and keep discussions focused on the code.
+intent and keep discussions focused on the code and its evidence.
 
-## Maintainers & bus factor
+## Maintainers and bus factor
 
 ResiCache is currently a **single-maintainer project** — all merges, releases,
 and architectural decisions flow through `DavidHLP` (the only committer with
 `CODEOWNERS` write access on `main`; `master` is retained only where legacy
 workflow references still exist).
 
-**Bus factor: 1** (current). This is honest, not aspirational.
+**Bus factor: 1** is the current state, not an aspirational promise. Before a
+`1.0.0` tag, this section must document either a named successor or a
+succession plan. Pre-1.0, the project remains explicitly best-effort with no
+SLA and no pinned production-adopter guarantee.
 
-We publicly track this because it matters for downstream evaluation. See
-[`STABILITY.md`](STABILITY.md) §4 1.0 graduation criterion #6 — graduation
-requires either a **named successor** (someone who can carry the project
-forward if the maintainer disappears) **or** a **documented succession plan**
-(e.g. an org transfer, a publisher hard-takeover clause, or a fork governance
-agreement).
+## Releases and CI infrastructure
 
-What this means in practice today:
-
-- **Pre-1.0**: bus factor 1 is acceptable. The project is explicitly
-  best-effort, no SLA, no production adopters are pinned to it.
-- **At 1.0 graduation**: this section must be rewritten to document either a
-  successor or a plan before the `1.0.0` tag is cut. The graduation criteria
-  are an explicit pre-flight checklist for this kind of risk.
-
-If a serious downstream evaluation finds bus factor 1 unacceptable, file an
-issue — the maintainer is open to succession conversations and to a publisher
-hand-off, not to abandoning the project.
-
-## Releases & CI infrastructure
-
-CI runs on every push to `main` or `master` and every PR via
+CI runs on pushes to `main` or `master` and on pull requests through
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
-[`.github/workflows/pr.yml`](.github/workflows/pr.yml). The composite action
-[`.github/actions/setup-jdk-21/action.yml`](.github/actions/setup-jdk-21/action.yml)
-centralizes the JDK distribution and Maven cache configuration. The POM's
-`<java.version>21</java.version>` remains the compiler and Enforcer source of
-truth; CI must keep the action input aligned.
+[`.github/workflows/pr.yml`](.github/workflows/pr.yml). The composite
+[setup-jdk-21 action](.github/actions/setup-jdk-21/action.yml) centralizes JDK
+and Maven cache setup; `pom.xml` remains the Java-version source of truth.
 
-Release-time secrets (`OSSRH_*`, `GPG_*`) are configured at the repository /
-environment level out of band by the maintainer. Do not edit `release.yml`
-to add secrets — open an issue first.
+Release-time `OSSRH_*` and `GPG_*` secrets are configured at repository or
+environment level out of band. Do not edit `release.yml` to add secrets; open
+an issue first. Release behavior and the current publication boundary are in
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md).

@@ -345,7 +345,7 @@ class LoaderOrchestratorTest {
         }
 
         @Test
-        @DisplayName("write-back fails after loader success → LoadedWithWriteBackFailure carrying value + cause (ADR-02)")
+        @DisplayName("write-back fails after loader success → LoadedWithWriteBackFailure carrying value + cause")
         void writeBackFails_returnsLoadedWithWriteBackFailure() {
             RedisCacheableOperation op = operation(false, true);
             when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
@@ -521,7 +521,7 @@ class LoaderOrchestratorTest {
         }
 
         @Test
-        @DisplayName("write-back fails after loader success → LoadedWithWriteBackFailure (ADR-02 同 sync 路径)")
+        @DisplayName("write-back fails after loader success → LoadedWithWriteBackFailure (same default path)")
         void writeBackFails_defaultPathReturnsLoadedWithWriteBackFailure() {
             RedisCacheableOperation op = operation(false, false);
             RuntimeException putBoom = new RuntimeException("redis put failed");

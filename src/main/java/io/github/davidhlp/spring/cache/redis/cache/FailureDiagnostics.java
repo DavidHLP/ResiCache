@@ -6,7 +6,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 import org.springframework.lang.Nullable;
 
 /**
- * 失败诊断的 key 隐私 helper(ADR-0001 §15)— 唯一 key 脱敏单点。
+ * 失败诊断的 key 隐私 helper(key-privacy contract)— 唯一 key 脱敏单点。
  *
  * <p><b>契约</b>:WARN/ERROR 与 typed exception message 不得出现 raw key;配置级低基数的
  * {@code cacheName} 保留用于关联。当一条诊断既没有 cacheName、又需要与 DEBUG 原始日志关联时,

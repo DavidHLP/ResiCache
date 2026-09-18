@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheResult 单元测试 — 合法状态模型(ADR-03)。
+ * CacheResult 单元测试 — 合法状态模型。
  *
  * <p>锁定契约:
  * <ul>

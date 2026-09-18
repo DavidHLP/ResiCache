@@ -34,7 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * 统一 read-through load 协议(ADR-0001 §13)在 cache 入口的契约测试 —— 无容器。
+ * 统一 read-through load 协议在 cache 入口的契约测试 —— 无容器。
  *
  * <p>两条 loader 路径(sync / 非 sync)共用 {@code LoaderOrchestrator} 内的同一协议,
  * 因此非 sync 路径也必须:走带 metrics 的 {@code put} 写回、缓存命中不调 loader、
@@ -246,7 +246,7 @@ class RedisProCacheLoadPathTest {
             String value = cache.get(SENTINEL_KEY, () -> "business-value");
 
             assertThat(value)
-                    .as("availability-first:写回失败不得覆盖已加载值(ADR-02)")
+                    .as("availability-first:写回失败不得覆盖已加载值")
                     .isEqualTo("business-value");
 
             String warnText = captured.list.stream()
@@ -255,7 +255,7 @@ class RedisProCacheLoadPathTest {
             assertThat(warnText)
                     .as("写回失败必须可观测")
                     .contains("write-back failed")
-                    .as("ADR-0001 §15:WARN 不带 raw key")
+                    .as("key-privacy contract: WARN 不带 raw key")
                     .doesNotContain(SENTINEL_KEY);
         } finally {
             logger.detachAppender(captured);

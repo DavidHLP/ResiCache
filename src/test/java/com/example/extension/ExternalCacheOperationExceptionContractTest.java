@@ -13,13 +13,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 外部包 typed-exception 契约测试(ADR-07) — 外部扩展方可捕获并按 operation/kind 分流。
+ * 外部包 typed-exception 契约测试 — 外部扩展方可捕获并按 operation/kind 分流。
  *
  * <p>从 {@code com.example.extension}(框架根包之外)验证:
  * <ul>
  *   <li>{@link CacheOperationException} 是 public final,可捕获</li>
  *   <li>getOperation()/getFailureKind()/cause 可用(typed 枚举)</li>
- *   <li>message/toString 不含 raw key(ADR-06 隐私)</li>
+ *   <li>message/toString 不含 raw key(隐私 contract)</li>
  *   <li>构造器不可从外部访问(不能伪造)</li>
  * </ul>
  */

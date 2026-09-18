@@ -125,7 +125,7 @@ class PathCAopContractIntegrationTest extends AbstractRedisIntegrationTest {
     }
 
     @Nested
-    @DisplayName("ADR-01 CLEAN 不改变 Bloom(marker-free 语义)")
+    @DisplayName("CLEAN 不改变 Bloom(marker-free 语义)")
     class CleanDoesNotChangeBloomTests {
 
         @Test
@@ -134,7 +134,7 @@ class PathCAopContractIntegrationTest extends AbstractRedisIntegrationTest {
             cacheService.getByIdWithBloomFilter(1L);
             assertThat(cacheService.getCallCount()).isEqualTo(1);
 
-            // 缓存数据层清空(布隆位保留 — ADR-01: CLEAN 不清布隆)
+            // 缓存数据层清空(布隆位保留 — CLEAN 不清布隆)
             cacheService.evictAll();
             assertThat(redisCacheTemplate.opsForValue().get("testCache::1")).isNull();
 

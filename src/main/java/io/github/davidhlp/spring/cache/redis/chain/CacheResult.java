@@ -10,7 +10,7 @@ import org.springframework.lang.Nullable;
 /**
  * 缓存操作结果 — 责任链出口的不可变值类型。
  *
- * <p><b>合法状态模型(ADR-03)</b>:本类是不可变 {@code final} 值类型,合法状态由
+ * <p><b>合法状态模型</b>:本类是不可变 {@code final} 值类型,合法状态由
  * 受控静态工厂 + 嵌套 {@link Outcome} / {@link FailureKind} 枚举表达,非法组合
  * (如「失败但没有 kind」「success + failure 字段并存」)在类型层面不可表示:
  *

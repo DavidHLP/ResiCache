@@ -12,10 +12,10 @@ import org.springframework.lang.Nullable;
  * Typed failure for a cache write operation that cannot be reported as success.
  *
  * <p>调用方可捕获本异常并按 {@link #getOperation()} / {@link #getFailureKind()} / cause
- * 分流(ADR-07)。GET 失败有意不翻译为本异常 — 读降级为 miss,诊断留在
+ * 分流(typed-exception contract)。GET 失败有意不翻译为本异常 — 读降级为 miss,诊断留在
  * {@code CacheResult}。
  *
- * <p><b>Key 隐私(ADR-06)</b>:本异常<b>不</b>持有/暴露 raw key;message 也不含 raw key —
+ * <p><b>Key 隐私</b>:本异常<b>不</b>持有/暴露 raw key;message 也不含 raw key —
  * 仅 operation/kind 与 cacheName(配置级低基数)。调用方如需关联具体请求,用 MDC requestId。
  *
  * <p><b>构造限制</b>:构造器 package-private — 仅框架内部(cache writer)可创建;
@@ -41,7 +41,7 @@ public final class CacheOperationException extends RuntimeException {
     private static String message(
             CacheOperation operation, FailureKind failureKind, String cacheName) {
         String kind = failureKind == null ? "UNKNOWN" : failureKind.name();
-        // 不含 raw key — ADR-06 key 隐私
+        // 不含 raw key — key-privacy contract
         return "Cache " + operation + " failed (" + kind + ") for cacheName=" + cacheName;
     }
 

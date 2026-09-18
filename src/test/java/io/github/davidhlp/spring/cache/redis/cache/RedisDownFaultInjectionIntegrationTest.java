@@ -120,7 +120,7 @@ class RedisDownFaultInjectionIntegrationTest extends AbstractRedisIntegrationTes
     }
 
     @Test
-    @DisplayName("RedisDown-4: writer-level read-through keeps the loaded bytes on write-back failure (ADR-02)")
+    @DisplayName("RedisDown-4: writer-level read-through keeps the loaded bytes on write-back failure")
     void redisDown_writerReadThrough_loaderValueSurvivesWriteBackFailure() {
         // writer 级入口(getNativeCache() 可达):缓存读 miss → loader 成功 → 写回失败。
         // availability-first:必须返回 loader 值,不得被写回失败覆盖。

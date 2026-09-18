@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 /**
- * Public-surface allowlist Gate(ADR-04)。
+ * Public-surface allowlist Gate。
  *
  * <p>编译后反射枚举 {@code io.github.davidhlp.spring.cache.redis} 下所有 public 顶层类型,
  * 与审定 allowlist({@code src/test/resources/allowlist/public-surface.txt})精确比较。

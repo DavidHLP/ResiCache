@@ -64,7 +64,7 @@ public class TestCacheService {
     }
 
     /**
-     * CLEAN(allEntries) + useBloomFilter —— ADR-01 场景契约。
+     * CLEAN(allEntries) + useBloomFilter —— 场景契约。
      *
      * <p>与普通 CLEAN 相同(注解使用方仍需显式开启 bloom 才会触发
      * {@code BloomFilterHandler});本方法用于验证 CLEAN 即便启用 bloom

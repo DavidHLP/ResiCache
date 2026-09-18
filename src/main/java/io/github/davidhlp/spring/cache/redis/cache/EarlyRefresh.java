@@ -35,9 +35,10 @@ import org.springframework.stereotype.Component;
  *   <li><b>testability</b>:异步刷新任务体({@link #performAsyncRefresh})可在无责任链的情况下直接驱动</li>
  * </ul>
  *
- * <p><b>边界(ADR-0001 §11)</b>:线程池 / 去重 / 重试 / 清理调度 / shutdown 仍归
- * {@link ThreadPoolEarlyExpirationExecutor};chain 侧取消仍只经 {@link RefreshCancellation}
- * 单一方法 seam。本模块不新增对外 SPI,只是把「谁拥有提前过期这个概念」讲清楚。
+ * <p><b>Boundary</b>: thread pool / deduplication / retry / cleanup scheduling /
+ * shutdown remain owned by {@link ThreadPoolEarlyExpirationExecutor}; chain-side
+ * cancellation still goes through the single {@link RefreshCancellation} method seam.
+ * This module only clarifies ownership of the early-expiration concept.
  */
 @Slf4j
 @Component
@@ -266,7 +267,7 @@ class EarlyRefresh {
                 log.debug("Async early-expiration skipped: value changed: {}", redisKey);
             }
         } catch (Exception ex) {
-            // ADR-0001 §15 key 隐私:ERROR 只带 cacheName + keyFingerprint + 异常类型链 ——
+            // Key-privacy contract: ERROR includes only cacheName + keyFingerprint + exception type chain —
             // 异常 message / 栈可能内嵌 raw key(如 Cache.ValueRetrievalException),故不进 ERROR;
             // 完整栈留 DEBUG 供诊断。
             log.error("Async early-expiration failed: cacheName={}, keyFingerprint={}, cause={}",

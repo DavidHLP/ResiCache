@@ -33,6 +33,7 @@ baseline.
 | Redis Server | 7.x | 7.x |
 | Redisson | 3.50.0 | 3.50.0 |
 | Caffeine | 3.1.8 | 3.1.8 |
+| Testcontainers | 1.20.6 (test scope) | CI/integration tests |
 
 ## Spring Boot version policy
 
@@ -56,7 +57,8 @@ baseline.
   explicitly configured. |
 | **Micrometer / Actuator** | Optional | Cache metrics require
   `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`.
-  `RedisCacheHealthIndicator` requires Actuator. |
+  `RedisCacheHealthIndicator` additionally requires Actuator, the
+  `HealthIndicator` class, and the same metrics property set to `true`. |
 | **Caffeine** | Bundled | Used internally for the local hash cache and
   bloom-filter bitset; not exposed as a multi-level cache. |
 
@@ -117,8 +119,9 @@ not require a cache flush.
   has no unrelated absolute 60-second bypass.
 - **Bloom CLEAN semantics**: Bloom tracks possible data-source membership,
   not current cache entries. CLEAN preserves existing bits and never uses a
-  rebuilding marker or TTL window; false-positives are safe, while loader
-  execution must not be blocked by a Bloom false-negative.
+  rebuilding marker or TTL window; false-positives are safe, but a missing bit
+  may short-circuit Redis lookup and loader execution. Seed or maintain Bloom
+  membership before enabling it for an existing data set.
 - **User `CacheManager` opt-out**: defining your own `CacheManager` bean backs
   off the library's `RedisProCacheManager` and, with it, the ResiCache
   annotation proxy (`redisCacheAdvisor`/`redisCacheInterceptor`); your Spring

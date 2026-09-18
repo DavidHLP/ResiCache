@@ -157,7 +157,7 @@ class SyncSupport {
                         FailureDiagnostics.keyFingerprint(key));
                 return state.executeLocalOnly(key, timeout, work);
             }
-            // ADR-0001 §15:异常 message 不带 raw key。
+            // Key-privacy contract: exception message omits raw key.
             throw new IllegalStateException(
                     "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
                             + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"

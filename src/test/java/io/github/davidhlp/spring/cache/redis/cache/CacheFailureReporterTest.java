@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CacheFailureReporter 单元测试(ADR-06)。
+ * CacheFailureReporter 单元测试。
  *
  * <p>锁定契约:
  * <ul>
