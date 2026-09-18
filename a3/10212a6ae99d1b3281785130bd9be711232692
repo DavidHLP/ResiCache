@@ -1,0 +1,16 @@
+README.md
+  h_77173abe25c3ff 117-133,143-150,153-161,282-290,373-380,438-443
+README.zh-CN.md
+  h_77173abe25c3ff 110-123,134-141,144-151,261-267,345-350,408-412
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a310212a6ae99d1b3281785130bd9be711232692",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
