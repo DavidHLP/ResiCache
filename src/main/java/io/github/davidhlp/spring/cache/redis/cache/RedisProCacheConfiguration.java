@@ -29,27 +29,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Slf4j
 @Configuration(proxyBeanMethods = false)
 @Import({
-        RedisCacheAttributesProjector.class,
-        SpringCacheableAdapter.class,
-        CacheHandlerChain.class,
-        CacheHandlerChainFactory.class,
-        ChainEngine.class,
-        ActualCacheHandler.class,
-        TtlHandler.class,
-        NullValueEncoder.class,
-        NullValueHandler.class,
-        BloomFilterHandler.class,
-        BloomGate.class,
-        BloomSupport.class,
-        SyncLockHandler.class,
-        SyncLockTimeout.class,
-        SyncSupport.class,
-        EarlyExpirationHandler.class,
-        SecureJacksonSerializerFactory.class,
-        CacheValueCodec.class,
-        SerializationPreFlightProbe.class,
-        SerializerWhitelistStartupGuard.class,
-        TlsConfigurationValidator.class,
+        // RedisCacheAutoConfiguration scans the internal runtime package. These two
+        // configurations are the intentional scan exclusions and remain explicit.
         ResolvedMetricsConfiguration.class,
         RedisProxyCachingConfiguration.class
 })
