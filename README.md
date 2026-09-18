@@ -114,8 +114,23 @@ cd ResiCache
 The first command is the no-Docker contributor check. The second installs the
 current source checkout into the local Maven repository for a local consumer;
 it does not publish an artifact. Do not confuse that local build with the
-historical `0.0.2` artifact on Maven Central. The full Redis and Redis Cluster
-verification command is documented in [Development](#development).
+historical `0.0.2` artifact on Maven Central.
+
+For a local consumer application, add the current checkout's coordinates to
+that application's `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>io.github.davidhlp</groupId>
+    <artifactId>ResiCache</artifactId>
+    <version>0.0.2</version> <!-- keep in sync with this checkout's root pom.xml -->
+</dependency>
+```
+
+The dependency resolves from the local Maven repository. Continue with the
+configuration and application examples below in that consumer application,
+not in the ResiCache checkout. The full Redis and Redis Cluster verification
+command is documented in [Development](#development).
 
 ### 2. Configure Redis
 
@@ -125,7 +140,24 @@ spring:
     redis:
       host: localhost
       port: 6379
+      # timeout: 2s
+resi-cache:
+  redis:
+    mode: single
+    host: localhost
+    port: 6379
+    database: 0
+    tls-enabled: false
 ```
+
+`spring.data.redis.*` and `resi-cache.redis.*` configure separate clients.
+`spring.data.redis.*` configures the Spring Data Redis connection factory used
+for ResiCache cache I/O. `resi-cache.redis.*` configures the Redisson deployment
+used by distributed locking and synchronization; `resi-cache.redisson.*`
+controls its pool, timeout, and retry settings. In single mode, Redisson may
+fall back to Spring Data Redis host, port, database, and password values when
+the corresponding `resi-cache.redis.*` values are unset. Keep the effective
+endpoints and credentials aligned when using `sync=true`.
 
 ResiCache is discovered through Spring Boot auto-configuration via
 `RedisCacheAutoConfiguration`. It does not add `@EnableCaching` for the
@@ -247,9 +279,15 @@ switch is `false`.
 
 `native-annotation-mode` controls Spring's native cache annotations:
 
-- `SELECTIVE` (default): only converts native annotations when a ResiCache
-  annotation is also present, avoiding a dual-advisor path.
-- `FULL`: converts all supported Spring cache annotations.
+- `SELECTIVE` (default): leaves methods with no ResiCache annotation on
+  Spring's native path and skips a native operation when the corresponding
+  ResiCache operation is present. Mixed or non-corresponding annotation
+  combinations can still produce multiple operations or advisor interception;
+  do not mix annotations on one method without testing the result.
+- `FULL`: converts all supported Spring cache annotations, including when
+  ResiCache annotations are present; mixed or non-corresponding annotations
+  can produce multiple operations or advisor interception, so test those
+  combinations.
 - `NONE`: ignores native Spring cache annotations in the ResiCache operation
   source.
 
@@ -332,8 +370,14 @@ resi-cache:
 ```
 
 The deployment validator checks mode-specific fields during configuration
-binding. Credentials, when needed, belong in the application's secret
-management system rather than in a committed README snippet.
+binding. `resi-cache.redis.*` is the Redisson deployment path; `spring.data.redis.*`
+configures the separate connection factory used for cache I/O. In single mode,
+Redisson may fall back to Spring Data Redis host, port, database, and password
+values when the corresponding `resi-cache.redis.*` values are unset. The
+`resi-cache.redisson.*` namespace controls Redisson pool, timeout, and retry
+settings. Keep the effective endpoint configurations aligned when `sync=true`.
+Credentials, when needed, belong in the application's secret management system
+rather than in a committed README snippet.
 
 ### Serialization safety
 
@@ -390,6 +434,12 @@ The public annotation family mirrors Spring Cache operations:
 - `@RedisCacheEvict` for cache removal.
 - `@RedisCaching` for grouping multiple ResiCache operations on one method or
   type.
+
+`@RedisCaching` can expose operations at type level, but the protection-policy
+fields inside its composed annotations are evaluated at method level. A
+type-level declaration does not apply those fields to otherwise unannotated
+methods; repeat the relevant `@RedisCacheable`, `@RedisCachePut`, or
+`@RedisCacheEvict` at method level when the method needs that policy.
 
 ### Custom handlers
 

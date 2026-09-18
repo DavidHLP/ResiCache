@@ -107,7 +107,20 @@ cd ResiCache
 
 第一条命令是不依赖 Docker 的贡献者检查；第二条命令会把当前源码按 POM
 版本安装到本地 Maven 仓库，供本地消费者试用，不会发布产物。不要把这个本地
-构建与 Maven Central 上历史版本的 `0.0.2` 混淆。完整的 Redis 与 Redis
+构建与 Maven Central 上历史版本的 `0.0.2` 混淆。
+
+对于本地消费者应用，将当前检出版本的坐标加入该应用的 `pom.xml`：
+
+```xml
+<dependency>
+    <groupId>io.github.davidhlp</groupId>
+    <artifactId>ResiCache</artifactId>
+    <version>0.0.2</version> <!-- 与本检出目录根 pom.xml 保持一致 -->
+</dependency>
+```
+
+该依赖从本地 Maven 仓库解析。下面的配置和应用示例都应在这个消费者应用
+中执行，而不是在 ResiCache 源码检出目录中执行。完整的 Redis 与 Redis
 Cluster 验证命令见[开发与验证](#开发与验证)。
 
 ### 2. 配置 Redis
@@ -118,7 +131,23 @@ spring:
     redis:
       host: localhost
       port: 6379
+      # timeout: 2s
+resi-cache:
+  redis:
+    mode: single
+    host: localhost
+    port: 6379
+    database: 0
+    tls-enabled: false
 ```
+
+`spring.data.redis.*` 与 `resi-cache.redis.*` 配置的是相互独立的客户端。
+`spring.data.redis.*` 配置 ResiCache 缓存 I/O 使用的 Spring Data Redis
+连接工厂。`resi-cache.redis.*` 配置分布式锁和同步能力使用的 Redisson
+部署；`resi-cache.redisson.*` 控制其连接池、超时和重试设置。在 single
+模式下，如果对应的 `resi-cache.redis.*` 值未设置，Redisson 可能回退使用
+Spring Data Redis 的 host、port、database 和 password 值。使用 `sync=true`
+时应保持最终生效的端点和凭据一致。
 
 ResiCache 通过 Spring Boot 自动配置入口 `RedisCacheAutoConfiguration` 被发现。
 它不会替应用添加 `@EnableCaching`；是否启用 Spring Cache 仍由应用负责。
@@ -229,9 +258,13 @@ resi-cache:
 
 `native-annotation-mode` 控制 Spring 原生缓存注解：
 
-- `SELECTIVE`（默认）：仅在同时存在 ResiCache 注解时转换原生注解，避免双
-  Advisor 路径。
-- `FULL`：转换所有受支持的 Spring 缓存注解。
+- `SELECTIVE`（默认）：没有 ResiCache 注解的方法保留在 Spring 原生路径；
+  存在 ResiCache 注解时，仅在对应 ResiCache operation 不存在时转换原生
+  operation。混用或不对应的注解组合仍可能产生多个 operation 或 Advisor
+  拦截；同一方法不要混用注解，除非已经验证实际结果。
+- `FULL`：即使存在 ResiCache 注解，也转换所有受支持的 Spring 原生缓存
+  注解；混用或不对应的注解可能产生多个 operation 或 Advisor 拦截，应测试
+  这些组合。
 - `NONE`：在 ResiCache operation source 中忽略 Spring 原生缓存注解。
 
 ### 全局配置
@@ -309,7 +342,12 @@ resi-cache:
     # sentinel-nodes: [host1:26379]
 ```
 
-部署配置会在绑定阶段校验与模式相关的字段。生产环境凭据应交由应用的密钥
+部署配置会在绑定阶段校验与模式相关的字段。`resi-cache.redis.*` 是
+Redisson 部署配置路径；`spring.data.redis.*` 配置缓存 I/O 使用的独立连接
+工厂。在 single 模式下，如果对应的 `resi-cache.redis.*` 值未设置，Redisson
+可能回退使用 Spring Data Redis 的 host、port、database 和 password 值。
+`resi-cache.redisson.*` 控制 Redisson 连接池、超时和重试设置。使用
+`sync=true` 时应保持最终生效的端点配置一致。生产环境凭据应交由应用的密钥
 管理系统处理，不要写入提交的 README 示例。
 
 ### 序列化安全
@@ -366,6 +404,11 @@ resi-cache:
 - `@RedisCachePut`：显式写入缓存。
 - `@RedisCacheEvict`：移除缓存。
 - `@RedisCaching`：在一个方法或类型上组合多个 ResiCache 操作。
+
+`@RedisCaching` 可以在类型级别暴露操作，但其中组合注解的保护策略字段按
+方法级别求值。仅有类型级声明不会把这些字段应用到未添加方法级注解的方法；
+如果某个方法需要该策略，请在方法级别重复相关的 `@RedisCacheable`、
+`@RedisCachePut` 或 `@RedisCacheEvict`。
 
 ### 自定义 Handler
 
