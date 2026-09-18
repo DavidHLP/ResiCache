@@ -343,14 +343,19 @@ not re-validated.
 
 **Context**: Failures were scattered across `CacheErrorHandler`, Bloom and
 read-through paths, counted mainly by logs; WARN/ERROR and exception messages
-carried raw keys.
+carried raw keys. The read-through write-back path may surface a writer
+PUT-chain failure, so its metric ownership must remain explicit.
 
 **Decision**: A single internal `CacheFailureReporter` (not public, not in the
 allowlist) exposes one metric `resicache.cache.failure` tagged only by finite
 enums `operation`, `kind`, `strategy`. `CacheErrorHandler` is the single
-count-once exit for all chain failures. WARN/ERROR and typed exception
-messages omit the raw key; `cacheName` (config-level, low cardinality) is kept
-for correlation. `CacheOperationException` carries no raw-key field/getter.
+count-once exit for chain failures, including read-through write-back failures
+that go through the writer's PUT chain. `LoaderOrchestrator` does not call the
+reporter; it only emits a redacted WARN and returns
+`LoadedWithWriteBackFailure`. Exceptions outside that chain are not implicitly
+reclassified by this metric. WARN/ERROR and typed exception messages omit the
+raw key; `cacheName` (config-level, low cardinality) is kept for correlation.
+`CacheOperationException` carries no raw-key field/getter.
 
 Where a diagnostic has no `cacheName` (distributed-lock keys, single-flight
 role failures, async early-expiration retries) the raw key is replaced by
@@ -368,10 +373,13 @@ and the full stack goes to DEBUG, because exception messages can embed the key
 stack with the message.
 
 **Consequences**: GET degrade, write fail-fast, REMOVE best-effort and
-read-through write-back failures are alertable by bounded tags. The Bloom
-filter's own `bloomsift.*` counters and fail-open paths are deliberately
-*not* routed here — fail-open is a successful protection behavior, not a
-cache-operation failure, so reporting it would corrupt degradation alerts.
+writer-PUT-chain-originated read-through write-back failures are alertable by
+bounded tags. `LoaderOrchestrator` preserves loaded values and emits only the
+redacted tolerated-outcome warning, so the same failure is not counted twice.
+The Bloom filter's own `bloomsift.*` counters and fail-open paths are
+deliberately *not* routed here — fail-open is a successful protection behavior,
+not a cache-operation failure, so reporting it would corrupt degradation
+alerts.
 
 **Known limitation**: No per-key alerting; correlation relies on MDC
 requestId or the `keyFingerprint` token.
