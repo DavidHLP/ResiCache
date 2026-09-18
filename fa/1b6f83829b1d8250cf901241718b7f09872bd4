@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_9f7ccc68b86921::t_b7151741e28049 8-13,17-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa1b6f83829b1d8250cf901241718b7f09872bd4",
+  "prompts": {},
+  "sessions": {
+    "s_9f7ccc68b86921": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0b55d-648f-7c03-92cf-e1bc3341793f",
+        "model": "unknown"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
