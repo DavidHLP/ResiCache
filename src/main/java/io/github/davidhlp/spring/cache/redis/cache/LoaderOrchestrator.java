@@ -6,6 +6,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -39,15 +40,16 @@ import org.springframework.lang.Nullable;
  *   <li><b>locality</b>:bloom + sync + load 协议 + 异常翻译规则全部内聚在一处文件,
  *       无需在 {@code RedisProCache} 与若干 seam 间跳转</li>
  *   <li><b>testability</b>:orchestrator 仅依赖 {@link BloomGate} / {@link SyncSupport} /
- *       {@link SyncLockTimeout} + 3 个 callback(redisKey / doubleCheck / putAfterLoad);
+ *       {@link SyncLockTimeout} + 3 个构造期绑定的 callback(redisKey / doubleCheck / putAfterLoad);
  *       单测可零 RedisProCache fixture 验证决策分支({@code BloomShortCircuited} /
  *       {@code Loaded} / {@code LoadedWithWriteBackFailure} / {@code LoadFailed})</li>
  *   <li><b>leverage</b>:{@code RedisProCache.get(key, loader)} 主体仅 1 行委派 + switch 翻译</li>
  * </ul>
  *
  * <p><b>callback 协议</b>:orchestrator 不继承 {@code RedisCache},因此需要 cache-specific 操作
- * (key 派生 / 双检 / 写回)以 callback 形式由 {@code RedisProCache} 注入;writer 入口则直接
- * 使用静态 {@link #readThrough} 并传入字节适配:
+ * (key 派生 / 双检 / 写回)以 callback 形式在构造期由 {@code RedisProCache} 绑定;三个 callback
+ * 均为必需,缺失属于装配错误,构造时用 {@link Objects#requireNonNull} 带参数名拒绝。
+ * writer 入口不构造本类,直接使用静态 {@link #readThrough} 并传入字节适配:
  * <ul>
  *   <li>{@code Function<Object, String> redisKeyFn} — 派生 Redis key 用于 BloomGate 与 SyncSupport</li>
  *   <li>{@code Function<Object, Cache.ValueWrapper> doubleCheckFn} — 缓存读原语(走
@@ -125,98 +127,56 @@ final class LoaderOrchestrator {
     private final Function<Object, Cache.ValueWrapper> boundDoubleCheckFn;
     private final BiConsumer<Object, Object> boundPutAfterLoad;
 
-    public LoaderOrchestrator(@Nullable BloomGate bloomGate,
-                              @Nullable SyncSupport syncSupport,
-                              @Nullable SyncLockTimeout syncLockTimeout) {
-        this(bloomGate, syncSupport, syncLockTimeout, null, null, null);
-    }
-
     /**
-     * 生产构造:一次性绑定 cache-specific 回调,隐藏 loader 编排的 callback 组装细节。
+     * 生产构造:一次性绑定保护依赖与 cache-specific 回调,隐藏 loader 编排的 callback 组装细节。
+     *
+     * <p>3 个回调是 loader 路径的必需操作,构造期分别以 {@link Objects#requireNonNull} 校验,
+     * 缺失即抛带参数名的 {@link NullPointerException};可选保护依赖保持既有可空语义。
      */
     LoaderOrchestrator(
             @Nullable BloomGate bloomGate,
             @Nullable SyncSupport syncSupport,
             @Nullable SyncLockTimeout syncLockTimeout,
-            @Nullable Function<Object, String> redisKeyFn,
-            @Nullable Function<Object, Cache.ValueWrapper> doubleCheckFn,
-            @Nullable BiConsumer<Object, Object> putAfterLoad) {
+            Function<Object, String> redisKeyFn,
+            Function<Object, Cache.ValueWrapper> doubleCheckFn,
+            BiConsumer<Object, Object> putAfterLoad) {
         this.bloomGate = bloomGate;
         this.syncSupport = syncSupport;
         this.syncLockTimeout = syncLockTimeout;
-        this.boundRedisKeyFn = redisKeyFn;
-        this.boundDoubleCheckFn = doubleCheckFn;
-        this.boundPutAfterLoad = putAfterLoad;
+        this.boundRedisKeyFn = Objects.requireNonNull(redisKeyFn, "redisKeyFn");
+        this.boundDoubleCheckFn = Objects.requireNonNull(doubleCheckFn, "doubleCheckFn");
+        this.boundPutAfterLoad = Objects.requireNonNull(putAfterLoad, "putAfterLoad");
     }
 
     /**
-     * 生产调用入口:使用构造期绑定的 callbacks 执行 loader 路径。
+     * 唯一实例入口:编排 loader 路径 — bloom 短路 → sync 路径(sync=true) → default
+     * 路径(同一协议,无锁);cache-specific 操作使用构造期绑定的回调。
      *
-     * @param cacheName 缓存名
-     * @param loader    Spring Cache loader
-     * @param key       用户缓存 key
-     * @param operation 方法级缓存 operation,可为 null
+     * @param cacheName 缓存名(供 BloomGate 区分 cache;非 key 派生)
+     * @param loader    Spring Cache {@link Callable} loader
+     * @param key       缓存 key(用户传入的原始 key;由绑定的 redisKeyFn 派生 Redis key)
+     * @param operation 方法级策略视图(可为 null,视作「无增强属性」→ 不走 bloom / sync)
      * @param <T>       加载结果类型
-     * @return 编排结果
+     * @return {@link LoadOutcome} 四态之一
      */
     <T> LoadOutcome<T> orchestrate(
             String cacheName,
             Callable<T> loader,
             Object key,
             @Nullable CachePolicyView.Source operation) {
-        if (boundRedisKeyFn == null
-                || boundDoubleCheckFn == null
-                || boundPutAfterLoad == null) {
-            throw new IllegalStateException("LoaderOrchestrator callbacks are not bound");
-        }
-        return orchestrate(
-                cacheName,
-                boundRedisKeyFn,
-                boundDoubleCheckFn,
-                boundPutAfterLoad,
-                loader,
-                key,
-                operation);
-    }
-
-    /**
-     * 编排 loader 路径:bloom 短路 → sync 路径(sync=true) → default 路径(同一协议,无锁)。
-     *
-     * @param cacheName        缓存名(供 BloomGate 区分 cache;非 key 派生)
-     * @param redisKeyFn       派生 Redis key(callback;caller 传 {@code key -> super.createCacheKey(key)})
-     * @param doubleCheckFn    缓存读原语(callback;caller 传 {@code key -> super.get(key)};
-     *                         含链 GET + null round-trip,无 metrics — metrics 在外层记)
-     * @param putAfterLoad     load 成功后写回缓存的 callback(caller 传 {@code (k, v) -> put(k, v)}
-     *                         闭包 → 走 override 保留 putTimer + putCounter 指标)
-     * @param loader           Spring Cache {@link Callable} loader
-     * @param key              缓存 key(用户传入的原始 key;由 redisKeyFn 派生 Redis key)
-     * @param operation        方法级策略视图(可为 null,视作「无增强属性」→ 不走 bloom / sync)
-     * @param <T>              加载结果类型
-     * @return {@link LoadOutcome} 四态之一
-     */
-    @SuppressWarnings("unchecked")
-    public <T> LoadOutcome<T> orchestrate(
-            String cacheName,
-            Function<Object, String> redisKeyFn,
-            Function<Object, Cache.ValueWrapper> doubleCheckFn,
-            BiConsumer<Object, Object> putAfterLoad,
-            Callable<T> loader,
-            Object key,
-            @Nullable CachePolicyView.Source operation) {
 
         // 1) Bloom 短路检查 — caller 据 BloomShortCircuited 自增 miss counter
-        if (isBloomShortCircuited(cacheName, redisKeyFn.apply(key), operation)) {
+        if (isBloomShortCircuited(cacheName, boundRedisKeyFn.apply(key), operation)) {
             return new BloomShortCircuited<>();
         }
 
         // 2) Sync 路径 — sync=true 且 SyncSupport 在场才走;否则降级 default 路径
         if (operation != null && operation.isSync() && syncSupport != null) {
-            return executeSyncLoad(cacheName, redisKeyFn, doubleCheckFn, putAfterLoad,
-                    loader, key, operation);
+            return executeSyncLoad(cacheName, loader, key, operation);
         }
 
         // 3) Default 路径 — 与 sync 路径同一 load 协议,只是不跑在分布式锁内
-        return executeLoad(cacheName, doubleCheckFn, putAfterLoad, loader, key);
+        return executeLoad(cacheName, loader, key);
     }
 
     /**
@@ -227,9 +187,6 @@ final class LoaderOrchestrator {
      */
     private <T> LoadOutcome<T> executeSyncLoad(
             String cacheName,
-            Function<Object, String> redisKeyFn,
-            Function<Object, Cache.ValueWrapper> doubleCheckFn,
-            BiConsumer<Object, Object> putAfterLoad,
             Callable<T> loader,
             Object key,
             CachePolicyView.Source operation) {
@@ -238,10 +195,10 @@ final class LoaderOrchestrator {
                 : SyncLockTimeout.Resolved.fromSeconds(
                         SyncLockTimeout.DEFAULT_LOCK_TIMEOUT_SECONDS);
         try {
-            String lockKey = redisKeyFn.apply(key);
+            String lockKey = boundRedisKeyFn.apply(key);
             return syncSupport.executeSync(
                     lockKey,
-                    () -> executeLoad(cacheName, doubleCheckFn, putAfterLoad, loader, key),
+                    () -> executeLoad(cacheName, loader, key),
                     timeout);
         } catch (Throwable cause) {
             return new LoadFailed<>(cause);
@@ -258,17 +215,15 @@ final class LoaderOrchestrator {
     @SuppressWarnings("unchecked")
     private <T> LoadOutcome<T> executeLoad(
             String cacheName,
-            Function<Object, Cache.ValueWrapper> doubleCheckFn,
-            BiConsumer<Object, Object> putAfterLoad,
             Callable<T> loader,
             Object key) {
         return readThrough(
                 cacheName,
-                () -> doubleCheckFn.apply(key),
+                () -> boundDoubleCheckFn.apply(key),
                 cached -> cached != null,
                 cached -> (T) cached.get(),
                 loader::call,
-                value -> putAfterLoad.accept(key, value),
+                value -> boundPutAfterLoad.accept(key, value),
                 cause -> translateCacheLoaderFailure(key, loader, cause));
     }
 
