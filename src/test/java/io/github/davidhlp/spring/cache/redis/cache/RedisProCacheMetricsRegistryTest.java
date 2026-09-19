@@ -278,6 +278,22 @@ class RedisProCacheMetricsRegistryTest {
             assertThat(putTimer.count()).isEqualTo(1);
             assertThat(putCounter.count()).isEqualTo(1.0);
         }
+        @Test
+        @DisplayName("recordEvict body 抛异常 — 异常透传,timer + counter 仍记录(原 try-finally 字节级等价)")
+        void recordEvict_bodyException_propagatesAndRecords() {
+            Timer evictTimer = meterRegistry.find("resicache.cache.evict")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
+            Counter evictCounter = meterRegistry.find("resicache.cache.evict.count")
+                    .tag(CACHE_TAG, CACHE_NAME).counter();
+
+            assertThatThrownBy(() -> registry.recordEvict(() -> {
+                throw new RuntimeException("evict boom");
+            })).isInstanceOf(RuntimeException.class)
+                    .hasMessage("evict boom");
+
+            assertThat(evictTimer.count()).isEqualTo(1);
+            assertThat(evictCounter.count()).isEqualTo(1.0);
+        }
 
         @Test
         @DisplayName("null registry — recordPut/recordEvict 走 fallback 路径(body 执行 + counter 仍尝试自增,null counter no-op)")
