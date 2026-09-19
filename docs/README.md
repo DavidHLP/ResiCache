@@ -27,7 +27,7 @@ be absent in a fresh clone; do not infer task state from its historical copy.
 
 | Role | Canonical source | What it owns |
 |---|---|---|
-| Constitution | `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `SECURITY.md` | rules, contribution boundaries, and policy |
+| Constitution | `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md` | rules, contribution boundaries, and policy |
 | Map | this file | navigation and authority assignment |
 | Status | `.agent/tasks/resicache-maturity.yaml` when present | active work, deferred work, and blockers |
 | History | `CHANGELOG.md`, `PERFORMANCE.md` | durable changes and versioned evidence |
@@ -81,7 +81,7 @@ machine-checkable behavior by itself.
 
 ## Agent reading order
 
-1. Read the applicable `AGENTS.md` / `CLAUDE.md` instructions.
+1. Read the applicable `AGENTS.md` instructions.
 2. Read this map and the current task ledger when it exists.
 3. Read only the core document(s) for the task.
 4. Verify claims against the relevant source, contract, tests, and command.

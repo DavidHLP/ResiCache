@@ -4,13 +4,13 @@ set -euo pipefail
 # Keep this guard small: source/configuration remain the exact contract, while
 # this script catches missing entry points and known documentation drift.
 docs=(
-  README.md README.zh-CN.md AGENTS.md CLAUDE.md
+  README.md README.zh-CN.md AGENTS.md
   STABILITY.md COMPATIBILITY.md CHANGELOG.md CONTRIBUTING.md SECURITY.md PERFORMANCE.md
   docs/README.md docs/PRODUCT.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
   docs/OPERATIONS.md docs/REFERENCE.md
 )
 required_docs=(
-  README.md README.zh-CN.md AGENTS.md CLAUDE.md
+  README.md README.zh-CN.md AGENTS.md
   STABILITY.md COMPATIBILITY.md CHANGELOG.md CONTRIBUTING.md SECURITY.md PERFORMANCE.md
   docs/README.md docs/PRODUCT.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
   docs/OPERATIONS.md docs/REFERENCE.md
