@@ -14,32 +14,32 @@ import org.springframework.lang.Nullable;
 
 /**
  * 缓存操作输入参数（不可变）
- * 
+ *
  * 包含请求的原始数据，在整个责任链中只读。
  * 设计为 record 确保不可变性。
  */
 record CacheInput(
     /** 缓存操作类型 */
     CacheOperation operation,
-    
+
     /** 缓存名称 */
     String cacheName,
-    
+
     /** Redis 完整 key */
     String redisKey,
-    
+
     /** 实际 key（去除前缀） */
     String actualKey,
-    
+
     /** 缓存值（字节数组） */
     @Nullable byte[] valueBytes,
-    
+
     /** 反序列化后的值 */
     @Nullable Object deserializedValue,
-    
+
     /** TTL */
     @Nullable Duration ttl,
-    
+
     /** 缓存操作配置 */
     @Nullable CachePolicyView.Source cacheOperation
 ) implements CacheContext.InputView {
@@ -69,10 +69,10 @@ record CacheInput(
         public Builder deserializedValue(Object value) { this.deserializedValue = value; return this; }
         public Builder ttl(Duration ttl) { this.ttl = ttl; return this; }
         public Builder cacheOperation(CachePolicyView.Source op) { this.cacheOperation = op; return this; }
-        
+
         public CacheInput build() {
             return new CacheInput(
-                operation, cacheName, redisKey, actualKey, 
+                operation, cacheName, redisKey, actualKey,
                 valueBytes, deserializedValue, ttl, cacheOperation
             );
         }

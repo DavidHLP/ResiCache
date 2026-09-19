@@ -3,7 +3,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import java.util.stream.Stream;
@@ -19,12 +18,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * CacheErrorHandler 单元测试。
  *
- * <p>单 {@link CacheErrorHandler#handleError(CacheOperation, String, String, Exception)}
+ * <p>单 {@link CacheErrorHandler#handleError(CacheOperation, String, Exception)}
  * 入口,per-operation 策略集中到 {@code STRATEGIES} 不可变 Map。本测试：
  *
  * <ul>
- *   <li>{@code handleException} 直策略调用测试（{@link StrategyDispatchTests}）</li>
- *   <li>1 个 parametric 测试（{@link PerOperationStrategyTests}）— 单一事实源 + pin 全部 op→策略映射</li>
+ *   <li>真实 operation 的失败结果与分类断言（{@link StrategyDispatchTests}）</li>
+ *   <li>1 个 parametric 测试（{@link PerOperationStrategyTests}）— 经 handleError + 指标 tags
+ *       pin 全部 op→策略映射，期望策略以字面量写在参数表中</li>
  *   <li>{@link StrategySelectionTests} 作为策略语义总览</li>
  * </ul>
  *
@@ -45,17 +45,19 @@ class CacheErrorHandlerTest {
         return new RuntimeException(message);
     }
 
+    /**
+     * 失败结果与分类断言 —— 全部经真实 operation 的 handleError 出口，不再使用显式策略入口。
+     */
     @Nested
-    @DisplayName("handleException with explicit strategy")
+    @DisplayName("handleError failure semantics via real operations")
     class StrategyDispatchTests {
 
         @Test
-        @DisplayName("FAIL_FAST returns failure result with original cause")
-        void handleException_failFast_returnsFailure() {
+        @DisplayName("FAIL_FAST operation returns failure result with original cause")
+        void failFast_returnsFailurePreservingCause() {
             Exception e = createException("Connection refused");
 
-            CacheResult result = handler.handleException(CacheOperation.GET, "test-cache", "key", e,
-                    CacheErrorHandler.ErrorStrategy.FAIL_FAST);
+            CacheResult result = handler.handleError(CacheOperation.PUT, "test-cache", e);
 
             assertThat(result.isSuccess()).isFalse();
             assertThat(result.cause()).isSameAs(e);
@@ -63,35 +65,32 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("FAIL_FAST preserves operation metadata")
-        void handleException_failFast_preservesOperation() {
+        @DisplayName("FAIL_FAST operation preserves operation metadata")
+        void failFast_preservesOperation() {
             Exception e = createException("Error");
 
-            CacheResult result = handler.handleException(CacheOperation.PUT, "cache", "key", e,
-                    CacheErrorHandler.ErrorStrategy.FAIL_FAST);
+            CacheResult result = handler.handleError(CacheOperation.PUT, "cache", e);
 
             assertThat(result.operation()).isEqualTo(CacheOperation.PUT);
             assertThat(result.outcome()).isEqualTo(CacheResult.Outcome.FAILURE);
         }
 
         @Test
-        @DisplayName("FAIL_FAST sets success false on failure")
-        void handleException_failFast_setsSuccessFalse() {
+        @DisplayName("FAIL_FAST operation sets success false")
+        void failFast_setsSuccessFalse() {
             Exception e = createException("Error");
 
-            CacheResult result = handler.handleException(CacheOperation.PUT, "cache", "key", e,
-                    CacheErrorHandler.ErrorStrategy.FAIL_FAST);
+            CacheResult result = handler.handleError(CacheOperation.PUT, "cache", e);
 
             assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
-        @DisplayName("GRACEFUL_DEGRADATION returns a miss with failure status")
-        void handleException_gracefulDegradation_returnsFailureMiss() {
+        @DisplayName("GET degrades to a miss with failure status")
+        void gracefulDegradation_returnsFailureMiss() {
             Exception e = createException("Timeout");
 
-            CacheResult result = handler.handleException(CacheOperation.GET, "test-cache", "key", e,
-                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
+            CacheResult result = handler.handleError(CacheOperation.GET, "test-cache", e);
 
             assertThat(result.isSuccess()).isFalse();
             assertThat(result.resultBytes()).isNull();
@@ -100,59 +99,62 @@ class CacheErrorHandlerTest {
         }
 
         @Test
-        @DisplayName("SILENT returns an observable best-effort failure")
-        void handleException_silent_returnsFailure() {
+        @DisplayName("REMOVE returns an observable best-effort failure")
+        void silent_returnsFailure() {
             Exception e = createException("Silent error");
 
-            CacheResult result = handler.handleException(CacheOperation.REMOVE, "test-cache", "key", e,
-                    CacheErrorHandler.ErrorStrategy.SILENT);
+            CacheResult result = handler.handleError(CacheOperation.REMOVE, "test-cache", e);
 
             assertThat(result.isSuccess()).isFalse();
             assertThat(result.cause()).isSameAs(e);
         }
 
         @Test
-        @DisplayName("SILENT does not throw exception")
-        void handleException_silent_doesNotThrow() {
+        @DisplayName("REMOVE best-effort does not throw")
+        void silent_doesNotThrow() {
             Exception e = createException("Silent");
 
-            CacheResult result = handler.handleException(CacheOperation.CLEAN, "cache", "pattern", e,
-                    CacheErrorHandler.ErrorStrategy.SILENT);
+            org.assertj.core.api.Assertions.assertThatCode(
+                            () -> handler.handleError(CacheOperation.REMOVE, "cache", e))
+                    .doesNotThrowAnyException();
 
+            CacheResult result = handler.handleError(CacheOperation.REMOVE, "cache", e);
             assertThat(result).isNotNull();
             assertThat(result.isSuccess()).isFalse();
         }
 
         @Test
-        @DisplayName("classifies timeout, cancellation, and serialization failures")
-        void handleException_classifiesFailureKinds() {
-            CacheResult timeout = handler.handleException(CacheOperation.GET, "cache", "key", new java.util.concurrent.TimeoutException("timeout"),
-                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
-            CacheResult cancellation = handler.handleException(CacheOperation.GET, "cache", "key", new java.util.concurrent.CancellationException("cancelled"),
-                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
-            CacheResult serialization = handler.handleException(CacheOperation.GET, "cache", "key",
-                    new io.github.davidhlp.spring.cache.redis.serialization.SerializationException("bad"),
-                    CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION);
+        @DisplayName("classifies timeout, cancellation, serialization and generic failures")
+        void classifiesFailureKinds() {
+            CacheResult timeout = handler.handleError(CacheOperation.GET, "cache",
+                    new java.util.concurrent.TimeoutException("timeout"));
+            CacheResult cancellation = handler.handleError(CacheOperation.GET, "cache",
+                    new java.util.concurrent.CancellationException("cancelled"));
+            CacheResult serialization = handler.handleError(CacheOperation.GET, "cache",
+                    new io.github.davidhlp.spring.cache.redis.serialization.SerializationException("bad"));
+            CacheResult generic = handler.handleError(CacheOperation.GET, "cache",
+                    createException("boom"));
 
             assertThat(timeout.failureKind()).isEqualTo(CacheResult.FailureKind.TIMEOUT);
             assertThat(cancellation.failureKind()).isEqualTo(CacheResult.FailureKind.CANCELLATION);
             assertThat(serialization.failureKind()).isEqualTo(CacheResult.FailureKind.SERIALIZATION);
+            assertThat(generic.failureKind()).isEqualTo(CacheResult.FailureKind.REDIS);
         }
 
     }
 
     /**
-     * 单一事实源 pin — 每个 operation 的策略 + 期望 success 状态。
+     * 单一事实源 pin — 每个 operation 的期望策略（以字面量写死，不调用生产 strategyFor）。
      * 新增 operation 时，{@link CacheOperation} 加枚举值 + {@code STRATEGIES} 加一行 + 本测试
      * 加一行参数,3 处同步驱动。
      */
     static Stream<Arguments> perOperationStrategies() {
         return Stream.of(
-                Arguments.of(CacheOperation.GET, false),
-                Arguments.of(CacheOperation.PUT, false),
-                Arguments.of(CacheOperation.PUT_IF_ABSENT, false),
-                Arguments.of(CacheOperation.REMOVE, false),
-                Arguments.of(CacheOperation.CLEAN, false));
+                Arguments.of(CacheOperation.GET, CacheErrorHandler.ErrorStrategy.GRACEFUL_DEGRADATION),
+                Arguments.of(CacheOperation.PUT, CacheErrorHandler.ErrorStrategy.FAIL_FAST),
+                Arguments.of(CacheOperation.PUT_IF_ABSENT, CacheErrorHandler.ErrorStrategy.FAIL_FAST),
+                Arguments.of(CacheOperation.REMOVE, CacheErrorHandler.ErrorStrategy.SILENT),
+                Arguments.of(CacheOperation.CLEAN, CacheErrorHandler.ErrorStrategy.FAIL_FAST));
     }
 
 
@@ -175,79 +177,61 @@ class CacheErrorHandlerTest {
                     .isEqualTo(CacheErrorHandler.ErrorStrategy.FAIL_FAST);
         }
 
-        @ParameterizedTest(name = "{0} → success={1}")
+        @ParameterizedTest(name = "{0} → {1}")
         @MethodSource("io.github.davidhlp.spring.cache.redis.cache.CacheErrorHandlerTest#perOperationStrategies")
-        @DisplayName("dispatches STRATEGIES map to handleException correctly")
-        void handleError_dispatchesPerOperationStrategy(CacheOperation operation, boolean expectedSuccess) {
+        @DisplayName("handleError selects the operation's strategy; proven via metric tags")
+        void handleError_dispatchesPerOperationStrategy(
+                CacheOperation operation, CacheErrorHandler.ErrorStrategy expectedStrategy) {
+            io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+                    new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+            CacheErrorHandler reportingHandler = new CacheErrorHandler(new CacheFailureReporter(registry));
             Exception e = createException("Redis error for " + operation);
 
-            CacheResult result = handler.handleError(operation, "test-cache", "key", e);
-
-            assertThat(result.isSuccess()).isEqualTo(expectedSuccess);
-        }
-        @Test
-        @DisplayName("GET uses GRACEFUL_DEGRADATION with failure status")
-        void handleError_get_returnsObservableMiss() {
-            Exception e = createException("Redis error");
-
-            CacheResult result = handler.handleError(CacheOperation.GET, "test-cache", "key", e);
-
-            assertThat(result.isSuccess()).isFalse();
-            assertThat(result.resultBytes()).isNull();
-            assertThat(result.failureKind()).isEqualTo(CacheResult.FailureKind.REDIS);
-        }
-
-        @Test
-        @DisplayName("PUT uses FAIL_FAST (returns failure, success=false)")
-        void handleError_put_returnsFailure() {
-            Exception e = createException("Redis error");
-
-            CacheResult result = handler.handleError(CacheOperation.PUT, "test-cache", "key", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-
-        @Test
-        @DisplayName("PUT_IF_ABSENT uses FAIL_FAST")
-        void handleError_putIfAbsent_returnsFailure() {
-            Exception e = createException("Redis error");
-
-            CacheResult result = handler.handleError(CacheOperation.PUT_IF_ABSENT, "test-cache", "key", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-
-        @Test
-        @DisplayName("REMOVE uses observable best-effort failure")
-        void handleError_remove_returnsFailureWithoutThrowing() {
-            Exception e = createException("Redis error");
-
-            CacheResult result = handler.handleError(CacheOperation.REMOVE, "test-cache", "key", e);
+            CacheResult result = reportingHandler.handleError(operation, "test-cache", e);
 
             assertThat(result.isSuccess()).isFalse();
             assertThat(result.failureKind()).isEqualTo(CacheResult.FailureKind.REDIS);
-            assertThat(result.cause()).isSameAs(e);
+            var counters = registry.find(CacheFailureReporter.METRIC_NAME).counters();
+            assertThat(counters).hasSize(1);
+            io.micrometer.core.instrument.Counter counter = counters.iterator().next();
+            assertThat(counter.count()).isEqualTo(1.0);
+            assertThat(counter.getId().getTag("operation")).isEqualTo(operation.name());
+            assertThat(counter.getId().getTag("kind")).isEqualTo("REDIS");
+            assertThat(counter.getId().getTag("strategy")).isEqualTo(expectedStrategy.name());
         }
 
         @Test
-        @DisplayName("CLEAN uses FAIL_FAST")
-        void handleError_clean_returnsFailure() {
-            Exception e = createException("Redis error");
+        @DisplayName("CLEAN partial failure keeps the explicit PARTIAL_CLEAN kind")
+        void handleError_clean_preservesExplicitPartialCleanKind() {
+            io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+                    new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+            CacheErrorHandler reportingHandler = new CacheErrorHandler(new CacheFailureReporter(registry));
+            // 普通 RuntimeException 若被自动分类会得到 REDIS；typed-kind 入口必须保留 PARTIAL_CLEAN
+            RuntimeException cause = new RuntimeException("deleted some keys then failed");
 
-            CacheResult result = handler.handleError(CacheOperation.CLEAN, "test-cache", "pattern:*", e);
-
-            assertThat(result.isSuccess()).isFalse();
-        }
-
-        @Test
-        @DisplayName("CLEAN accepts pattern as key parameter")
-        void handleError_clean_acceptsPattern() {
-            Exception e = createException("Redis error");
-            String pattern = "cache:keys:*";
-
-            CacheResult result = handler.handleError(CacheOperation.CLEAN, "cache", pattern, e);
+            CacheResult result = reportingHandler.handleError(
+                    CacheOperation.CLEAN, "test-cache", CacheResult.FailureKind.PARTIAL_CLEAN, cause);
 
             assertThat(result.isSuccess()).isFalse();
+            assertThat(result.failureKind()).isEqualTo(CacheResult.FailureKind.PARTIAL_CLEAN);
+            assertThat(result.cause()).isSameAs(cause);
+
+            CacheOperationException thrown = org.assertj.core.api.Assertions.catchThrowableOfType(
+                    () -> CacheErrorHandler.finalizeFailure(CacheOperation.CLEAN, "test-cache", result),
+                    CacheOperationException.class);
+            assertThat(thrown.getOperation()).isEqualTo(CacheOperation.CLEAN);
+            assertThat(thrown.getFailureKind()).isEqualTo(CacheResult.FailureKind.PARTIAL_CLEAN);
+            assertThat(thrown.getCause()).isSameAs(cause);
+
+            var counters = registry.find(CacheFailureReporter.METRIC_NAME).counters();
+            assertThat(counters).hasSize(1);
+            io.micrometer.core.instrument.Counter counter = counters.iterator().next();
+            assertThat(counter.count())
+                    .as("finalizeFailure 不得重复计数")
+                    .isEqualTo(1.0);
+            assertThat(counter.getId().getTag("operation")).isEqualTo("CLEAN");
+            assertThat(counter.getId().getTag("kind")).isEqualTo("PARTIAL_CLEAN");
+            assertThat(counter.getId().getTag("strategy")).isEqualTo("FAIL_FAST");
         }
     }
 
@@ -260,9 +244,9 @@ class CacheErrorHandlerTest {
         void failFast_appropriateForWrites() {
             Exception e = createException("Error");
 
-            CacheResult putResult = handler.handleError(CacheOperation.PUT, "cache", "key", e);
-            CacheResult putIfAbsentResult = handler.handleError(CacheOperation.PUT_IF_ABSENT, "cache", "key", e);
-            CacheResult cleanResult = handler.handleError(CacheOperation.CLEAN, "cache", "pattern", e);
+            CacheResult putResult = handler.handleError(CacheOperation.PUT, "cache", e);
+            CacheResult putIfAbsentResult = handler.handleError(CacheOperation.PUT_IF_ABSENT, "cache", e);
+            CacheResult cleanResult = handler.handleError(CacheOperation.CLEAN, "cache", e);
 
             assertThat(putResult.isSuccess()).isFalse();
             assertThat(putIfAbsentResult.isSuccess()).isFalse();
@@ -274,7 +258,7 @@ class CacheErrorHandlerTest {
         void silent_appropriateForRemoves() {
             Exception e = createException("Error");
 
-            CacheResult result = handler.handleError(CacheOperation.REMOVE, "cache", "key", e);
+            CacheResult result = handler.handleError(CacheOperation.REMOVE, "cache", e);
 
             assertThat(result.isSuccess()).isFalse();
         }
@@ -284,7 +268,7 @@ class CacheErrorHandlerTest {
         void gracefulDegradation_appropriateForReads() {
             Exception e = createException("Error");
 
-            CacheResult result = handler.handleError(CacheOperation.GET, "cache", "key", e);
+            CacheResult result = handler.handleError(CacheOperation.GET, "cache", e);
 
             assertThat(result.isSuccess()).isFalse();
             assertThat(result.resultBytes()).isNull();
@@ -335,15 +319,16 @@ class CacheErrorHandlerTest {
             captured.start();
             logger.addAppender(captured);
             try {
+                // 敏感 sentinel 现在只存在于异常 message（key 参数已删除）
                 Exception e = new IllegalStateException("redis failed for key " + secretKey);
-                handler.handleError(CacheOperation.PUT, "cache", secretKey, e);
+                handler.handleError(CacheOperation.PUT, "cache", e);
 
                 assertThat(captured.list).isNotEmpty();
                 String logs = captured.list.stream()
                         .map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
                         .reduce("", String::concat);
                 assertThat(logs)
-                        .as("WARN/ERROR 日志不得含 raw key 或 cause message")
+                        .as("WARN/ERROR 日志不得含异常 message（可能嵌入 key）")
                         .doesNotContain(secretKey)
                         .doesNotContain("redis failed for key");
             } finally {
@@ -361,7 +346,7 @@ class CacheErrorHandlerTest {
 
             Exception e = createException("boom");
             // 同一事件只经 handleError 一次 → 计数恰好 1
-            reportingHandler.handleError(CacheOperation.PUT, "cache", "key", e);
+            reportingHandler.handleError(CacheOperation.PUT, "cache", e);
 
             var counters = registry.find(
                     "resicache.cache.failure").counters();
@@ -379,9 +364,33 @@ class CacheErrorHandlerTest {
             CacheErrorHandler plainHandler = new CacheErrorHandler(null);
             Exception e = createException("boom");
 
-            CacheResult result = plainHandler.handleError(CacheOperation.GET, "cache", "key", e);
+            CacheResult result = plainHandler.handleError(CacheOperation.GET, "cache", e);
 
             assertThat(result.isSuccess()).isFalse();
+        }
+
+        @Test
+        @DisplayName("null operation / kind / cause 被拒绝，且不产生失败计数")
+        void nullInputs_rejectWithoutCounting() {
+            io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+                    new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+            CacheErrorHandler reportingHandler = new CacheErrorHandler(new CacheFailureReporter(registry));
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () -> reportingHandler.handleError(null, "cache", createException("boom")))
+                    .isInstanceOf(NullPointerException.class);
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () -> reportingHandler.handleError(CacheOperation.GET, "cache", (Exception) null))
+                    .isInstanceOf(NullPointerException.class);
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () -> reportingHandler.handleError(
+                                    CacheOperation.GET, "cache", (CacheResult.FailureKind) null,
+                                    createException("boom")))
+                    .isInstanceOf(NullPointerException.class);
+
+            assertThat(registry.find(CacheFailureReporter.METRIC_NAME).counters())
+                    .as("构造失败结果前抛错 → 不进入指标上报")
+                    .isEmpty();
         }
     }
 }

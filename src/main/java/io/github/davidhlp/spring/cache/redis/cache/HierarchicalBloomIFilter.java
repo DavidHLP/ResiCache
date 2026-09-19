@@ -9,14 +9,14 @@ import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * JVM + Redis 双层布隆过滤器，优先使用 JVM 过滤结果，必要时回退 Redis。
- * 
+ *
  * <p>设计说明：
  * <ul>
  *   <li>本地布隆过滤器用于快速检查，减少 Redis 访问</li>
  *   <li>Redis 布隆过滤器作为权威数据源，在集群间共享</li>
  *   <li>缓存驱逐时需要调用 clear() 同步清除两个过滤器</li>
  * </ul>
- * 
+ *
  * <p>注意事项：
  * <ul>
  *   <li>布隆过滤器本身存在误判率（false positive），这是预期行为</li>

@@ -5,16 +5,16 @@ package io.github.davidhlp.spring.cache.redis.chain;
 /**
  * 责任链控制流决策 — 与 {@code chain/model/} 下的数据型 {@code *Decision} record
  * (Ttl/Null/Prefetch/EarlyExpiration 不同概念族)正交,重命名以消解词法碰撞。
- * 
+ *
  * <p>明确控制责任链的执行流程，避免隐式终止条件。
  */
 public enum FlowControl {
     /** 继续执行下一个 Handler */
     CONTINUE,
-    
+
     /** 终止责任链，返回当前结果 */
     TERMINATE,
-    
+
     /** 跳过剩余处理器，返回成功。
      *  <p>不变式：返回 {@code SKIP_ALL} 等价于请求引擎跳过剩余 handler，
      *  并由引擎在遇到该决策时单点置 {@code CacheContext.skipRemaining=true}
