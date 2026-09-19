@@ -10,6 +10,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
@@ -403,6 +404,164 @@ class RedisProCacheMetricsRegistryTest {
             assertThat(before.hitCount()).isEqualTo(1L);
             // 新 snapshot 反映最新值
             assertThat(registry.metrics().hitCount()).isEqualTo(3L);
+        }
+    }
+
+    // ==================== primitive contract at registry seam ====================
+
+    @Nested
+    @DisplayName("Primitive contract at registry seam")
+    class PrimitiveContractTests {
+
+        @Test
+        @DisplayName("null MeterRegistry disables timer and counter registration")
+        void nullMeterRegistry_disablesPrimitiveMetrics() {
+            RedisProCacheMetricsRegistry emptyRegistry =
+                    new RedisProCacheMetricsRegistry(null, CACHE_NAME);
+            AtomicInteger invocations = new AtomicInteger();
+
+            String result = emptyRegistry.recordGet(() -> {
+                invocations.incrementAndGet();
+                return "hello";
+            });
+            emptyRegistry.recordClear(invocations::incrementAndGet);
+            emptyRegistry.recordHit();
+            emptyRegistry.recordMiss();
+
+            assertThat(result).isEqualTo("hello");
+            assertThat(invocations.get()).isEqualTo(2);
+            assertThat(emptyRegistry.metrics().hitCount()).isZero();
+            assertThat(emptyRegistry.metrics().missCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("non-null registry registers Timer with cache tag and description")
+        void nonNullRegistry_registersTimerWithTagAndDescription() {
+            Timer timer = meterRegistry.find("resicache.cache.get")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
+
+            assertThat(timer).isNotNull();
+            assertThat(timer.getId().getName()).isEqualTo("resicache.cache.get");
+            assertThat(timer.getId().getTag(CACHE_TAG)).isEqualTo(CACHE_NAME);
+            assertThat(timer.getId().getDescription())
+                    .isEqualTo("Time spent getting cache entries");
+        }
+
+        @Test
+        @DisplayName("non-null registry registers Counter with cache tag and description")
+        void nonNullRegistry_registersCounterWithTagAndDescription() {
+            Counter counter = meterRegistry.find("resicache.cache.hit")
+                    .tag(CACHE_TAG, CACHE_NAME).counter();
+
+            assertThat(counter).isNotNull();
+            assertThat(counter.getId().getName()).isEqualTo("resicache.cache.hit");
+            assertThat(counter.getId().getTag(CACHE_TAG)).isEqualTo(CACHE_NAME);
+            assertThat(counter.getId().getDescription()).isEqualTo("Cache hit count");
+        }
+
+        @Test
+        @DisplayName("null counter operations are silent no-ops")
+        void nullCounters_areSilentNoOps() {
+            RedisProCacheMetricsRegistry emptyRegistry =
+                    new RedisProCacheMetricsRegistry(null, CACHE_NAME);
+
+            emptyRegistry.recordHit();
+            emptyRegistry.recordMiss();
+
+            assertThat(emptyRegistry.metrics().hitCount()).isZero();
+            assertThat(emptyRegistry.metrics().missCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("non-null counter operations increment the registered counter")
+        void nonNullCounter_increments() {
+            Counter counter = meterRegistry.find("resicache.cache.hit")
+                    .tag(CACHE_TAG, CACHE_NAME).counter();
+
+            registry.recordHit();
+            registry.recordHit();
+
+            assertThat(counter.count()).isEqualTo(2.0);
+        }
+
+        @Test
+        @DisplayName("null timer executes void body without recording")
+        void nullTimer_executesVoidBodyWithoutRecording() {
+            RedisProCacheMetricsRegistry emptyRegistry =
+                    new RedisProCacheMetricsRegistry(null, CACHE_NAME);
+            AtomicInteger invocations = new AtomicInteger();
+
+            emptyRegistry.recordClear(invocations::incrementAndGet);
+
+            assertThat(invocations.get()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("non-null timer records one void timing sample")
+        void nonNullTimer_recordsVoidTiming() {
+            Timer timer = meterRegistry.find("resicache.cache.evict")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
+            AtomicInteger invocations = new AtomicInteger();
+
+            registry.recordClear(invocations::incrementAndGet);
+
+            assertThat(invocations.get()).isEqualTo(1);
+            assertThat(timer.count()).isEqualTo(1);
+            assertThat(timer.totalTime(TimeUnit.NANOSECONDS)).isGreaterThanOrEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("void body exception propagates and timer still records")
+        void voidBodyException_propagatesAndStillRecords() {
+            Timer timer = meterRegistry.find("resicache.cache.evict")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
+
+            assertThatThrownBy(() -> registry.recordClear(() -> {
+                throw new IllegalStateException("boom");
+            })).isInstanceOf(IllegalStateException.class)
+                    .hasMessage("boom");
+
+            assertThat(timer.count()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("null timer forwards supplier result without recording")
+        void nullTimer_forwardsSupplierResult() {
+            RedisProCacheMetricsRegistry emptyRegistry =
+                    new RedisProCacheMetricsRegistry(null, CACHE_NAME);
+
+            String result = emptyRegistry.recordGet(() -> "hello");
+
+            assertThat(result).isEqualTo("hello");
+        }
+
+        @Test
+        @DisplayName("non-null timer records and forwards supplier result")
+        void nonNullTimer_recordsAndForwardsSupplierResult() {
+            Timer timer = meterRegistry.find("resicache.cache.get")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
+
+            String result = registry.recordGet(() -> "computed-value");
+
+            assertThat(result).isEqualTo("computed-value");
+            assertThat(timer.count()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("supplier exception propagates and timer still records")
+        void supplierException_propagatesAndStillRecords() {
+            Timer timer = meterRegistry.find("resicache.cache.get")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
+            AtomicReference<String> sideEffect = new AtomicReference<>();
+
+            assertThatThrownBy(() -> registry.recordGet(() -> {
+                sideEffect.set("body-was-called");
+                throw new RuntimeException("from supplier");
+            })).isInstanceOf(RuntimeException.class)
+                    .hasMessage("from supplier");
+
+            assertThat(sideEffect.get()).isEqualTo("body-was-called");
+            assertThat(timer.count()).isEqualTo(1);
         }
     }
 
