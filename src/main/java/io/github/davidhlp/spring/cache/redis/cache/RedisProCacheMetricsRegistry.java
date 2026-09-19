@@ -22,11 +22,8 @@ import org.springframework.lang.Nullable;
  * <p><b>与 {@link CacheMetrics} 的对称性</b>：本 seam 是"写侧"（注册 + 记录），与读侧
  * 快照（{@link CacheMetrics}）配对形成<em>指标领域</em> 完整边界。读侧只读、写侧只写 — 关注点分离。
  *
- * <p><b>与 {@link RedisProCacheTimers} 的关系</b>：{@link RedisProCacheTimers} 是 metric 原语
- * helper（{@code registerTimer} / {@code registerCounter} / {@code timed} / {@code timedGet} /
- * {@code safeIncrement}），本身是工具类无状态。本类是 metric 集合的<em>容器</em>（6 字段 + 6
- * 业务语义方法），把原语按"缓存实例"的语义组装起来。两层 seam 形成 composition — 删除任意
- * 一层，复杂度上浮。
+ * <p>本类在 metric ownership seam 内部封装注册、自增与计时原语，并按缓存实例语义组装。
+ * 所有 record 方法复用这些私有 helper，保持 null-safe 与异常传播行为。
  *
  * <p><b>公开方法（业务语义）</b>：
  * <ul>
@@ -89,20 +86,19 @@ final class RedisProCacheMetricsRegistry {
     /**
      * 构造期一次性注册 6 个 metric — 在 cache 构造期调用一次，运行期 record 路径直接复用。
      *
-     * <p>内部委派 {@link RedisProCacheTimers} 原语（registerTimer / registerCounter）保证 null-safe 语义。
-     *
+     * <p>内部注册 helper 保证 {@code meterRegistry == null} 时所有字段保持 null。
      * @param meterRegistry Micrometer 注册表（可为 null → 全部 6 字段为 null）
      * @param cacheName     cache 标识，作为 {@code tags("cache", cacheName)} 写入每个 metric
      */
     public RedisProCacheMetricsRegistry(@Nullable MeterRegistry meterRegistry, String cacheName) {
         this.cacheName = cacheName;
-        this.getTimer = RedisProCacheTimers.registerTimer(meterRegistry, TIMER_GET, DESC_GET_TIMER, cacheName);
-        this.putTimer = RedisProCacheTimers.registerTimer(meterRegistry, TIMER_PUT, DESC_PUT_TIMER, cacheName);
-        this.evictTimer = RedisProCacheTimers.registerTimer(meterRegistry, TIMER_EVICT, DESC_EVICT_TIMER, cacheName);
-        this.hitCounter = RedisProCacheTimers.registerCounter(meterRegistry, COUNTER_HIT, DESC_HIT, cacheName);
-        this.missCounter = RedisProCacheTimers.registerCounter(meterRegistry, COUNTER_MISS, DESC_MISS, cacheName);
-        this.putCounter = RedisProCacheTimers.registerCounter(meterRegistry, COUNTER_PUT, DESC_PUT, cacheName);
-        this.evictCounter = RedisProCacheTimers.registerCounter(meterRegistry, COUNTER_EVICT, DESC_EVICT, cacheName);
+        this.getTimer = registerTimer(meterRegistry, TIMER_GET, DESC_GET_TIMER, cacheName);
+        this.putTimer = registerTimer(meterRegistry, TIMER_PUT, DESC_PUT_TIMER, cacheName);
+        this.evictTimer = registerTimer(meterRegistry, TIMER_EVICT, DESC_EVICT_TIMER, cacheName);
+        this.hitCounter = registerCounter(meterRegistry, COUNTER_HIT, DESC_HIT, cacheName);
+        this.missCounter = registerCounter(meterRegistry, COUNTER_MISS, DESC_MISS, cacheName);
+        this.putCounter = registerCounter(meterRegistry, COUNTER_PUT, DESC_PUT, cacheName);
+        this.evictCounter = registerCounter(meterRegistry, COUNTER_EVICT, DESC_EVICT, cacheName);
     }
 
     // ==================== 业务方法（get / put / evict / clear） ====================
@@ -120,21 +116,21 @@ final class RedisProCacheMetricsRegistry {
      * @return body.get() 的结果
      */
     public <T> T recordGet(Supplier<T> body) {
-        return RedisProCacheTimers.timedGet(getTimer, body);
+        return timedGet(getTimer, body);
     }
 
     /**
      * 记录 hit 计数（get 返回非 null 时调用）— null-safe。
      */
     public void recordHit() {
-        RedisProCacheTimers.safeIncrement(hitCounter);
+        safeIncrement(hitCounter);
     }
 
     /**
      * 记录 miss 计数（get 返回 null 时调用）— null-safe。
      */
     public void recordMiss() {
-        RedisProCacheTimers.safeIncrement(missCounter);
+        safeIncrement(missCounter);
     }
 
     /**
@@ -145,7 +141,7 @@ final class RedisProCacheMetricsRegistry {
     public void recordPut(Runnable body) {
         if (putTimer == null) {
             body.run();
-            increment(putCounter);
+            safeIncrement(putCounter);
             return;
         }
         long start = System.nanoTime();
@@ -153,7 +149,7 @@ final class RedisProCacheMetricsRegistry {
             body.run();
         } finally {
             putTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
-            increment(putCounter);
+            safeIncrement(putCounter);
         }
     }
 
@@ -165,7 +161,7 @@ final class RedisProCacheMetricsRegistry {
     public void recordEvict(Runnable body) {
         if (evictTimer == null) {
             body.run();
-            increment(evictCounter);
+            safeIncrement(evictCounter);
             return;
         }
         long start = System.nanoTime();
@@ -173,7 +169,7 @@ final class RedisProCacheMetricsRegistry {
             body.run();
         } finally {
             evictTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
-            increment(evictCounter);
+            safeIncrement(evictCounter);
         }
     }
 
@@ -183,7 +179,7 @@ final class RedisProCacheMetricsRegistry {
      * @param body 实际的 clear 操作（不可为 null）
      */
     public void recordClear(Runnable body) {
-        RedisProCacheTimers.timed(evictTimer, body);
+        timed(evictTimer, body);
     }
 
     /**
@@ -212,8 +208,57 @@ final class RedisProCacheMetricsRegistry {
 
     // ==================== 私有 helper ====================
 
-    private static void increment(@Nullable Counter counter) {
-        RedisProCacheTimers.safeIncrement(counter);
+    private static Timer registerTimer(@Nullable MeterRegistry registry, String name,
+                                       String description, String cacheName) {
+        if (registry == null) {
+            return null;
+        }
+        return Timer.builder(name)
+                .tag("cache", cacheName)
+                .description(description)
+                .register(registry);
+    }
+
+    private static Counter registerCounter(@Nullable MeterRegistry registry, String name,
+                                           String description, String cacheName) {
+        if (registry == null) {
+            return null;
+        }
+        return Counter.builder(name)
+                .tag("cache", cacheName)
+                .description(description)
+                .register(registry);
+    }
+
+    private static void safeIncrement(@Nullable Counter counter) {
+        if (counter != null) {
+            counter.increment();
+        }
+    }
+
+    private static void timed(@Nullable Timer timer, Runnable body) {
+        if (timer == null) {
+            body.run();
+            return;
+        }
+        long start = System.nanoTime();
+        try {
+            body.run();
+        } finally {
+            timer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+        }
+    }
+
+    private static <T> T timedGet(@Nullable Timer timer, Supplier<T> body) {
+        if (timer == null) {
+            return body.get();
+        }
+        long start = System.nanoTime();
+        try {
+            return body.get();
+        } finally {
+            timer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+        }
     }
 
     private static long countOf(@Nullable Counter counter) {
