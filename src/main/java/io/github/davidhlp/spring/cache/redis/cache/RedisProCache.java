@@ -37,9 +37,9 @@ import org.springframework.data.redis.cache.RedisCacheWriter;
 public class RedisProCache extends RedisCache {
 
     /**
-     * 指标写侧 seam — 6 个 metric 的注册 + null-safe 记录 + 快照读取全部收口在本字段。
+     * 指标写侧 seam — 7 个 metric 的注册 + null-safe 记录 + 快照读取全部收口在本字段。
      *
-     * <p>{@code MeterRegistry} 缺失时本字段构造为空 registry(全部 6 字段为 null),record 方法全 no-op。
+     * <p>{@code MeterRegistry} 缺失时本字段构造为空 registry(全部 7 字段为 null),record 方法全 no-op。
      */
     private final RedisProCacheMetricsRegistry metricsRegistry;
 
@@ -69,7 +69,7 @@ public class RedisProCache extends RedisCache {
      *
      * <p>构造期委派 3 个 deep seam:
      * <ol>
-     *   <li>{@link RedisProCacheMetricsRegistry} — 6 metric 注册</li>
+     *   <li>{@link RedisProCacheMetricsRegistry} — 7 metric 注册</li>
      *   <li>{@link CacheOperationResolver} — operation 解析</li>
      *   <li>{@link LoaderOrchestrator} — loader 路径编排</li>
      * </ol>

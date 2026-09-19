@@ -11,7 +11,8 @@ package io.github.davidhlp.spring.cache.redis.cache.metrics;
  * <ul>
  *   <li>调用方关心「这个 cache 的指标快照」语义而非多个独立 getter — deep 方法</li>
  *   <li>派生字段(hitRate)由 record 工厂方法计算,调用方不写算术</li>
- *   <li>Counter/Timer 字段由 {@code RedisProCacheTimers} 维护 null-safe 语义,
+ *   <li>Counter/Timer 字段由
+ *       {@link io.github.davidhlp.spring.cache.redis.cache.RedisProCacheMetricsRegistry} 维护 null-safe 语义,
  *       本 record 工厂方法对 {@code null} Counter 返回 {@code 0L}</li>
  *   <li>新增指标(hit-ratio / 复合 timer 等)只在本 record 加字段 + 工厂方法加一行,
  *       不污染 RedisProCache public surface</li>
