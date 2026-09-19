@@ -1,0 +1,20 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandler.java
+  h_77173abe25c3ff 133,193,233,257,320
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheErrorHandler.java
+  h_77173abe25c3ff 27,126-127,138,142-143
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandlerIntegrationTest.java
+  h_77173abe25c3ff 181,250,309,342
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheErrorHandlerTest.java
+  h_77173abe25c3ff 21,25-27,48-50,52,56-57,60,68-69,72,79-80,83,89-90,93,102-103,106,113-114,117-119,121,127-136,141,147,153-157,180,182-187,190,194-200,204-210,212-213,216-217,219-224,226-234,247-249,261,271,322,324,331,349,367,371-394
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c32097dd3dfa6052e6999707198829d5fc4b040c",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
