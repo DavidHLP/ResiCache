@@ -24,7 +24,7 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>按 operation 调度策略 + 应用策略（日志级别 + CacheResult 形态）</li>
  * </ol>
  *
- * <p>单一入口 {@link #handleError(CacheOperation, String, String, Exception)} +
+ * <p>单一入口 {@link #handleError(CacheOperation, String, Exception)} +
  * per-operation 策略集中到 {@link #STRATEGIES} 不可变 Map。调用方只需传
  * {@link CacheContext#getOperation() context.getOperation()}，无需记忆具体方法名；
  * 新增 operation 只需在 {@link CacheOperation} 追加枚举值 + 在 {@link #STRATEGIES} 追加一行。
@@ -123,8 +123,8 @@ class CacheErrorHandler {
     /**
      * 按 operation 调度错误策略并保留诊断信息(typed kind)。
      */
-    public CacheResult handleError(CacheOperation operation, String cacheName, String key, Exception e) {
-        return handleException(operation, cacheName, key, e, strategyFor(operation), classify(e));
+    public CacheResult handleError(CacheOperation operation, String cacheName, Exception e) {
+        return handleException(operation, cacheName, e, strategyFor(operation), classify(e));
     }
 
     /**
@@ -133,28 +133,18 @@ class CacheErrorHandler {
     CacheResult handleError(
             CacheOperation operation,
             String cacheName,
-            String key,
             FailureKind failureKind,
             Exception e) {
-        return handleException(operation, cacheName, key, e, strategyFor(operation), failureKind);
+        return handleException(operation, cacheName, e, strategyFor(operation), failureKind);
     }
 
     /**
-     * 直接应用指定策略,供测试和显式内部调用使用。
+     * 应用策略并完成分类、日志与单次计数 —— 链内唯一失败出口。策略与 typed kind 由上面的
+     * {@code handleError} 重载按 operation 选定,不再对外暴露显式策略入口。
      */
-    public CacheResult handleException(
-            CacheOperation operation,
-            String cacheName,
-            String key,
-            Exception e,
-            ErrorStrategy strategy) {
-        return handleException(operation, cacheName, key, e, strategy, classify(e));
-    }
-
     private CacheResult handleException(
             CacheOperation operation,
             String cacheName,
-            String key,
             Exception e,
             ErrorStrategy strategy,
             FailureKind failureKind) {
