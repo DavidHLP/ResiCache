@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistry.java
+  h_77173abe25c3ff 25-26,89,95-101,119,126,133,144,152,164,172,182,211-261
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/metrics/CacheMetrics.java
+  h_77173abe25c3ff 14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "029af279e9c7ae1c8c30f82995a47e410d741be1",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
