@@ -1,0 +1,14 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistryTest.java
+  h_77173abe25c3ff 281-296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5da1ae85c9f94a4f2e34f9e910963f9d60c23a01",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
