@@ -103,7 +103,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
 
     /**
      * 处理 GET 操作
-     * 
+     *
      * 注意：锁逻辑已由 SyncLockHandler 处理，这里直接执行 Redis 操作
      */
     private CacheResult handleGet(CacheContext context) {

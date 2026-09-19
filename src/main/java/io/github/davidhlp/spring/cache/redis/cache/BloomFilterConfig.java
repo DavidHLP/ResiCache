@@ -16,18 +16,18 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 class BloomFilterConfig {
 
-	private final String keyPrefix;
-	private final int bitSize;
-	private final int hashFunctions;
-	private final int hashCacheSize;
+    private final String keyPrefix;
+    private final int bitSize;
+    private final int hashFunctions;
+    private final int hashCacheSize;
 
-	public BloomFilterConfig(
-			String keyPrefix, int bitSize, int hashFunctions, int hashCacheSize) {
-		this.keyPrefix = keyPrefix;
-		this.bitSize = Math.max(1, bitSize);
-		this.hashFunctions = Math.max(1, hashFunctions);
-		this.hashCacheSize = Math.max(1, hashCacheSize);
-	}
+    public BloomFilterConfig(
+            String keyPrefix, int bitSize, int hashFunctions, int hashCacheSize) {
+        this.keyPrefix = keyPrefix;
+        this.bitSize = Math.max(1, bitSize);
+        this.hashFunctions = Math.max(1, hashFunctions);
+        this.hashCacheSize = Math.max(1, hashCacheSize);
+    }
 
     int[] positionsFor(String key) {
         if (key == null) {
