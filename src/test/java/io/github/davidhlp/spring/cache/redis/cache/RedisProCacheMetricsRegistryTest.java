@@ -25,8 +25,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>本测试独立验证 registry seam 的 6 大契约:
  * <ol>
- *   <li><b>构造期注册</b> — 6 个 metric(3 Timer + 4 Counter)在构造期一次性注册,带 cache tag
- *       和正确描述;{@code MeterRegistry} 缺失时全 6 字段为 null(全 no-op 路径)</li>
+ *   <li><b>构造期注册</b> — 7 个 metric(3 Timer + 4 Counter)在构造期一次性注册,带 cache tag
+ *       和正确描述;{@code MeterRegistry} 缺失时全 7 字段为 null(全 no-op 路径)</li>
  *   <li><b>recordGet timing</b> — 计时 + 返回值透传;null timer 时直接执行 body 不计时</li>
  *   <li><b>recordHit / recordMiss</b> — Counter null-safe 自增;null counter 时静默 no-op</li>
  *   <li><b>recordPut / recordEvict</b> — 计时 + 写/淘汰 counter 自增;null timer 时直接执行 body
@@ -110,11 +110,26 @@ class RedisProCacheMetricsRegistryTest {
         void metricsHaveDescriptions() {
             Timer getTimer = meterRegistry.find("resicache.cache.get")
                     .tag(CACHE_TAG, CACHE_NAME).timer();
+            Timer putTimer = meterRegistry.find("resicache.cache.put")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
+            Timer evictTimer = meterRegistry.find("resicache.cache.evict")
+                    .tag(CACHE_TAG, CACHE_NAME).timer();
             Counter hitCounter = meterRegistry.find("resicache.cache.hit")
+                    .tag(CACHE_TAG, CACHE_NAME).counter();
+            Counter missCounter = meterRegistry.find("resicache.cache.miss")
+                    .tag(CACHE_TAG, CACHE_NAME).counter();
+            Counter putCounter = meterRegistry.find("resicache.cache.put.count")
+                    .tag(CACHE_TAG, CACHE_NAME).counter();
+            Counter evictCounter = meterRegistry.find("resicache.cache.evict.count")
                     .tag(CACHE_TAG, CACHE_NAME).counter();
 
             assertThat(getTimer.getId().getDescription()).isEqualTo("Time spent getting cache entries");
+            assertThat(putTimer.getId().getDescription()).isEqualTo("Time spent putting cache entries");
+            assertThat(evictTimer.getId().getDescription()).isEqualTo("Time spent evicting cache entries");
             assertThat(hitCounter.getId().getDescription()).isEqualTo("Cache hit count");
+            assertThat(missCounter.getId().getDescription()).isEqualTo("Cache miss count");
+            assertThat(putCounter.getId().getDescription()).isEqualTo("Cache put count");
+            assertThat(evictCounter.getId().getDescription()).isEqualTo("Cache evict count");
         }
 
         @Test
@@ -124,7 +139,7 @@ class RedisProCacheMetricsRegistryTest {
             RedisProCacheMetricsRegistry registry2 =
                     new RedisProCacheMetricsRegistry(meterRegistry, CACHE_NAME);
 
-            // 6 metric 仍各 1 个(无重复)
+            // 7 metric 仍各 1 个(无重复)
             assertThat(meterRegistry.getMeters().stream()
                     .filter(m -> m.getId().getTag(CACHE_TAG) != null
                             && CACHE_NAME.equals(m.getId().getTag(CACHE_TAG)))

@@ -23,7 +23,8 @@ import org.springframework.lang.Nullable;
  * 快照（{@link CacheMetrics}）配对形成<em>指标领域</em> 完整边界。读侧只读、写侧只写 — 关注点分离。
  *
  * <p>本类在 metric ownership seam 内部封装注册、自增与计时原语，并按缓存实例语义组装。
- * 所有 record 方法复用这些私有 helper，保持 null-safe 与异常传播行为。
+ * record 方法复用这些私有 helper；recordPut/recordEvict 保留计时启用时将 operation counter
+ * 放在 finally 中的局部结构，以维持异常路径的计数语义。
  *
  * <p><b>公开方法（业务语义）</b>：
  * <ul>
@@ -34,7 +35,7 @@ import org.springframework.lang.Nullable;
  *   <li>{@link #metrics()} — 返回当前 cache 实例的不可变指标快照</li>
  * </ul>
  *
- * <p><b>null-safe 语义</b>：{@link MeterRegistry} 为 null 时（即未启用指标），全部 6 个内部
+ * <p><b>null-safe 语义</b>：{@link MeterRegistry} 为 null 时（即未启用指标），全部 7 个内部
  * 字段为 null，所有 record 方法走 no-op 路径。
  *
  * <p><b>线程安全</b>：本类仅在 cache 构造期由单线程初始化；运行期 record 方法调
@@ -66,7 +67,7 @@ final class RedisProCacheMetricsRegistry {
 
     private final String cacheName;
 
-    // 写侧 6 字段：3 Timer + 4 Counter
+    // 写侧 7 字段：3 Timer + 4 Counter
     // 注：clear 路径无 Counter（batch 操作语义不适合计数），仅 Timer
     @Nullable
     private final Timer getTimer;
@@ -84,10 +85,10 @@ final class RedisProCacheMetricsRegistry {
     private final Counter evictCounter;
 
     /**
-     * 构造期一次性注册 6 个 metric — 在 cache 构造期调用一次，运行期 record 路径直接复用。
+     * 构造期一次性注册 7 个 metric — 在 cache 构造期调用一次，运行期 record 路径直接复用。
      *
      * <p>内部注册 helper 保证 {@code meterRegistry == null} 时所有字段保持 null。
-     * @param meterRegistry Micrometer 注册表（可为 null → 全部 6 字段为 null）
+     * @param meterRegistry Micrometer 注册表（可为 null → 全部 7 字段为 null）
      * @param cacheName     cache 标识，作为 {@code tags("cache", cacheName)} 写入每个 metric
      */
     public RedisProCacheMetricsRegistry(@Nullable MeterRegistry meterRegistry, String cacheName) {
