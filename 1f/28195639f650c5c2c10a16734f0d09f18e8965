@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/LoaderOrchestrator.java
+  h_77173abe25c3ff 9,43,50-52,131-134,140-142,146-148,152-153,155-158,162,169,175,179,198,201,222,226
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/LoaderOrchestratorTest.java
+  h_77173abe25c3ff 11-12,14,16-17,31,41,45-46,60-61,67-68,70,82-88,102,114,119,124,129-130,132-134,146,176,189-190,193,226-228,245-247,249-252,254-258,262,278,280-281,304,325-327,350-352,371,379,386-404,411-415,425,428-431,435,450,459,465-467,481-483,494-568
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f28195639f650c5c2c10a16734f0d09f18e8965",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
