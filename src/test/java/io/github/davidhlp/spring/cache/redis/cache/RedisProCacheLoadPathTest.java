@@ -176,7 +176,6 @@ class RedisProCacheLoadPathTest {
             return errorHandler.handleError(
                     context.getOperation(),
                     context.getCacheName(),
-                    context.getRedisKey(),
                     new IllegalStateException("redis put failed for key " + SENTINEL_KEY));
         });
         return new RedisProCacheWriter(

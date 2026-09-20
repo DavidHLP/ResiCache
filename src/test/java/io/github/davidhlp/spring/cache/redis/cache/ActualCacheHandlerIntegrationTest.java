@@ -178,7 +178,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             CacheResult errorResult = CacheResult.miss();
             ActualCacheHandler faultHandler = faultHandler(exception, null, null);
             when(errorHandler.handleError(eq(CacheOperation.GET), eq("test-cache"),
-                    eq("test:key"), eq(exception))).thenReturn(errorResult);
+                    eq(exception))).thenReturn(errorResult);
 
             HandlerResult result = faultHandler.handle(createContext(CacheOperation.GET));
 
@@ -247,7 +247,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             CacheResult errorResult = CacheResult.failure(CacheOperation.PUT, CacheResult.FailureKind.REDIS, new IllegalStateException("down"));
             ActualCacheHandler faultHandler = faultHandler(null, exception, null);
             when(errorHandler.handleError(eq(CacheOperation.PUT), eq("test-cache"),
-                    eq("test:key"), eq(exception))).thenReturn(errorResult);
+                    eq(exception))).thenReturn(errorResult);
 
             CacheContext context = createContext(CacheOperation.PUT);
             context.setTtlDecision(TtlDecision.skipped());
@@ -306,7 +306,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             CacheResult errorResult = CacheResult.failure(CacheOperation.PUT_IF_ABSENT, CacheResult.FailureKind.REDIS, new IllegalStateException("down"));
             ActualCacheHandler faultHandler = faultHandler(exception, null, null);
             when(errorHandler.handleError(eq(CacheOperation.PUT_IF_ABSENT), eq("test-cache"),
-                    eq("test:key"), eq(exception))).thenReturn(errorResult);
+                    eq(exception))).thenReturn(errorResult);
 
             HandlerResult result = faultHandler.handle(createContext(CacheOperation.PUT_IF_ABSENT));
 
@@ -339,7 +339,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
             CacheResult errorResult = CacheResult.failure(CacheOperation.REMOVE, CacheResult.FailureKind.REDIS, new IllegalStateException("down"));
             ActualCacheHandler faultHandler = faultHandler(null, null, exception);
             when(errorHandler.handleError(eq(CacheOperation.REMOVE), eq("test-cache"),
-                    eq("test:key"), eq(exception))).thenReturn(errorResult);
+                    eq(exception))).thenReturn(errorResult);
 
             HandlerResult result = faultHandler.handle(createContext(CacheOperation.REMOVE));
 

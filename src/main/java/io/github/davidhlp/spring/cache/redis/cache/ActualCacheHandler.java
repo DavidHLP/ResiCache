@@ -103,7 +103,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
 
     /**
      * 处理 GET 操作
-     * 
+     *
      * 注意：锁逻辑已由 SyncLockHandler 处理，这里直接执行 Redis 操作
      */
     private CacheResult handleGet(CacheContext context) {
@@ -130,7 +130,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.miss();
 
         } catch (Exception e) {
-            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), e);
         }
     }
 
@@ -190,7 +190,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.success();
 
         } catch (Exception e) {
-            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), e);
         }
     }
 
@@ -230,7 +230,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.existing(null);
 
         } catch (Exception e) {
-            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), e);
         }
     }
 
@@ -254,7 +254,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
             return CacheResult.success();
 
         } catch (Exception e) {
-            return errorHandler.handleError(context.getOperation(), context.getCacheName(), context.getRedisKey(), e);
+            return errorHandler.handleError(context.getOperation(), context.getCacheName(), e);
         }
     }
 
@@ -317,7 +317,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
                     ? CacheResult.FailureKind.PARTIAL_CLEAN
                     : CacheResult.FailureKind.REDIS;
             return errorHandler.handleError(
-                    context.getOperation(), context.getCacheName(), keyPattern, failureKind, e);
+                    context.getOperation(), context.getCacheName(), failureKind, e);
         }
     }
 
