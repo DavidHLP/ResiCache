@@ -153,7 +153,7 @@ class RedisProCacheConfigurationContractTest {
         ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
         assertThat(java.util.Arrays.stream(scan.excludeFilters())
                 .filter(filter -> filter.type() == FilterType.REGEX)
-                .map(ComponentScan.Filter::pattern)
+                .flatMap(filter -> java.util.Arrays.stream(filter.pattern()))
                 .toList())
                 .containsExactly(".*Test.*");
     }
