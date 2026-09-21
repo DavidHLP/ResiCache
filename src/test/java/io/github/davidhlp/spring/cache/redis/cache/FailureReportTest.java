@@ -80,8 +80,8 @@ class FailureReportTest {
 
             assertThat(capture.events(Level.WARN)).hasSize(1);
             assertThat(capture.events(Level.DEBUG)).isEmpty();
-            assertThat(capture.highLevelText())
-                    .isEqualTo("Failed to acquire distributed lock within 5s: keyFingerprint="
+            assertThat(capture.formattedMessages(Level.WARN))
+                    .containsExactly("Failed to acquire distributed lock within 5s: keyFingerprint="
                             + FailureReport.fingerprint(SECRET_KEY));
         }
     }
@@ -191,7 +191,8 @@ class FailureReportTest {
     void syncSupportLocalOnly_reportsFingerprint() {
         RedisProCacheProperties properties = new RedisProCacheProperties();
         properties.getSyncLock().setLocalOnly(true);
-        try (Capture capture = new Capture(SyncSupport.class.getName())) {
+        // 降级 WARN 走角色自己的 logger(Leader 持 key 上下文),不是 SyncSupport 的 logger。
+        try (Capture capture = new Capture(SyncRole.class.getName() + "$Leader")) {
             SyncSupport support = new SyncSupport(new ArrayList<>(), properties);
 
             assertThat(support.executeSync(SECRET_KEY, () -> "v", 5)).isEqualTo("v");
