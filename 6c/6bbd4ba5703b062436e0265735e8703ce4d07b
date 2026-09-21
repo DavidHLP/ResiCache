@@ -1,0 +1,16 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/TtlHandlerTest.java
+  h_77173abe25c3ff 18-19,46,68,82-96,135,139,141,150,152,163,174,185,197
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/TtlPolicyTest.java
+  h_77173abe25c3ff 1-202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c6bbd4ba5703b062436e0265735e8703ce4d07b",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
