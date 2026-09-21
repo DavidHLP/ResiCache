@@ -1,0 +1,14 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/FailureReportTest.java
+  h_77173abe25c3ff 18,29,31-34,36-37,41-43,45-71,75-85,89-95,97-108,113-115,117-119,121-122,125-142,144-166,170-172,182-185,190-195,197,199-203,208-224,232-239,243-258,261-262,265-266,269-270,273-281,283-284,287-290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa482794ce0bb08c99a51a44fe0c5fb3aa89af62",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
