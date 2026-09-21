@@ -8,7 +8,6 @@ import org.springframework.cache.interceptor.BeanFactoryCacheOperationSourceAdvi
 import org.springframework.cache.interceptor.CacheOperationSource;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
 
 /**
@@ -17,8 +16,10 @@ import org.springframework.context.annotation.Role;
  * 缺少用户提供的 {@code CacheManager} 时启用,但忽略库自身的
  * {@code RedisProCacheManager}。这避免默认 manager 已注册后代理条件被误判为不满足;
  * 用户提供任意其他 {@code CacheManager} 时,默认 manager 与代理一起 back off。
+ *
+ * <p>由 {@code RedisProCacheConfiguration} 显式 {@code @Import} 注册,故内层同样不带组件注解:
+ * 组件扫描不会重复注册该选择门。
  */
-@Configuration(proxyBeanMethods = false)
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 class RedisProxyCachingConfiguration {
 
@@ -40,7 +41,6 @@ class RedisProxyCachingConfiguration {
      * user-provided {@code CacheManager} beans back off the library proxy, while
      * the library's own {@code RedisProCacheManager} remains ignored.
      */
-    @Configuration(proxyBeanMethods = false)
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     @ConditionalOnMissingBean(
             value = org.springframework.cache.CacheManager.class,

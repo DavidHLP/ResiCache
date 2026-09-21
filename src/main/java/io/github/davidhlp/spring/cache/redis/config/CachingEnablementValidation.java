@@ -4,19 +4,19 @@ package io.github.davidhlp.spring.cache.redis.config;
 
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 /**
  * 缓存启用状态验证配置.
  *
- * <p>在应用启动时检查是否已启用 @EnableCaching.
+ * <p>在应用启动时检查是否已启用 @EnableCaching。{@code resi-cache.enabled} 启用门由运行时
+ * 装配根 {@link RedisCacheAutoConfiguration} 单一声明,本类只由该入口导入,不单独注册为
+ * 自动配置 —— 关闭主开关时校验器同样不参与装配。
  */
 @Slf4j
-@AutoConfiguration
-@ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)
+@Configuration(proxyBeanMethods = false)
 public class CachingEnablementValidation {
 
     /**

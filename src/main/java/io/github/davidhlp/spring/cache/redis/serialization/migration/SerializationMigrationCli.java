@@ -3,6 +3,8 @@ package io.github.davidhlp.spring.cache.redis.serialization.migration;
 
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.davidhlp.spring.cache.redis.cache.SerializationMigrationOperatorConfiguration;
+import io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import org.springframework.boot.Banner;
 import org.springframework.boot.WebApplicationType;
@@ -12,9 +14,8 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.FilterType;
+import org.springframework.context.annotation.Import;
 
 /**
  * Standalone operator entry point for serialization migration.
@@ -37,11 +38,7 @@ public final class SerializationMigrationCli {
                 CliConfiguration.class)
                 .web(WebApplicationType.NONE)
                 .bannerMode(Banner.Mode.OFF)
-                .properties(
-                        "spring.main.lazy-initialization=true",
-                        "spring.autoconfigure.exclude="
-                                + "io.github.davidhlp.spring.cache.redis.config."
-                                + "RedisCacheAutoConfiguration")
+                .properties("spring.main.lazy-initialization=true")
                 .run(args)) {
             SerializationMigrationReport report = context
                     .getBean(SerializationMigrationRunner.class).migrate();
@@ -53,16 +50,14 @@ public final class SerializationMigrationCli {
         }
     }
 
-    /** Minimal CLI context: Redis connection + migration beans, no cache/AOP runtime. */
+    /**
+     * Operator 边界装配根：Redis 连接 + 迁移 bean,按类点名,不做包扫描;
+     * 运行时自动配置按类排除,CLI 上下文因此不会装配缓存/AOP 运行时。
+     */
     @Configuration(proxyBeanMethods = false)
-    @EnableAutoConfiguration
+    @EnableAutoConfiguration(exclude = RedisCacheAutoConfiguration.class)
     @EnableConfigurationProperties(RedisProCacheProperties.class)
-    @ComponentScan(
-            basePackages = "io.github.davidhlp.spring.cache.redis.cache",
-            useDefaultFilters = false,
-            includeFilters = @ComponentScan.Filter(
-                    type = FilterType.REGEX,
-                    pattern = ".*(SerializationMigrationEngine|SecureJacksonSerializerFactory|ResolvedMetricsConfiguration)"))
+    @Import(SerializationMigrationOperatorConfiguration.class)
     static class CliConfiguration {
         @Bean
         @ConditionalOnMissingBean(ObjectMapper.class)

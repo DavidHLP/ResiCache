@@ -26,8 +26,17 @@ RedisCacheAutoConfiguration
 `RedisCacheAutoConfiguration` is conditional on Redis classes and
 `resi-cache.enabled`; it does not add `@EnableCaching`. The internal component
 scan is deliberately limited to `io.github.davidhlp.spring.cache.redis.cache`
-and excludes tests and operator-only/configuration seams listed in the source.
-Host application packages are not scanned by the library.
+and excludes test classes plus the operator-boundary assembly root, which is
+named by class. Configurations registered by an explicit import carry no
+component stereotype, so no name pattern stands in for class identity — a
+class rename fails compilation instead of silently changing a context. Host
+application packages are not scanned by the library.
+
+The operator CLI (`SerializationMigrationCli`) is the second assembly
+boundary: its context names the internal migration beans by class through
+`SerializationMigrationOperatorConfiguration` and excludes
+`RedisCacheAutoConfiguration` by class, so it never assembles the cache/AOP
+runtime and needs no enablement gate.
 
 ## Module ownership
 
