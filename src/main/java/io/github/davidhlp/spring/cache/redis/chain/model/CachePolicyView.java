@@ -7,7 +7,7 @@ package io.github.davidhlp.spring.cache.redis.chain.model;
  * {@code RedisCacheableOperation} 的泄漏。稳定扩展 {@link io.github.davidhlp.spring.cache.redis.chain.CacheHandler}
  * 只应读取本视图承载的有限策略字段,不依赖内部 operation 类型。
  *
- * @param ttl                     方法级 TTL 秒数;{@code 0} = 未配置(走参数/默认 TTL)
+ * @param ttl                     方法级 TTL 秒数(注解 {@code ttl} 属性原值,不是 Duration);{@code 0} = 不采用方法级 TTL(回退调用方参数或兜底默认)
  * @param randomTtl               是否启用 TTL 随机化(防雪崩)
  * @param variance                TTL 随机化范围
  * @param useBloomFilter          是否启用布隆穿透防护
