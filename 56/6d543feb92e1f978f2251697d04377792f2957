@@ -1,0 +1,46 @@
+docs/ARCHITECTURE.md
+  h_77173abe25c3ff 92-96
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomSupport.java
+  h_77173abe25c3ff 58-59,76,92
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheErrorHandler.java
+  h_77173abe25c3ff 93-95,159-160,164-166,170-173
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 367-370,419-420
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManager.java
+  h_77173abe25c3ff 67-68,77,79,173-175,178-181,186
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/EarlyRefresh.java
+  h_77173abe25c3ff 270
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/FailureDiagnostics.java
+  h_77173abe25c3ff 9,15-17,24-26
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/FailureReport.java
+  h_77173abe25c3ff 1-120
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/LoaderOrchestrator.java
+  h_77173abe25c3ff 281-282
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisBloomIFilter.java
+  h_77173abe25c3ff 92,138,158
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RefreshRetryPolicy.java
+  h_77173abe25c3ff 50-52,59,68-69
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationEngine.java
+  h_77173abe25c3ff 133,179
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationPreFlightProbe.java
+  h_77173abe25c3ff 85-86
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncRole.java
+  h_77173abe25c3ff 98,103,149,159,170,175,217,262-265,300
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupport.java
+  h_77173abe25c3ff 155-158,166,296,301,307
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ThreadPoolEarlyExpirationExecutor.java
+  h_77173abe25c3ff 170-172
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheLoadPathTest.java
+  h_77173abe25c3ff 353
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "566d543feb92e1f978f2251697d04377792f2957",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
