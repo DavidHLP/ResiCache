@@ -1,0 +1,21 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlPolicy.java
+  h_77173abe25c3ff 1-112
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/model/CachePolicyView.java
+  h_77173abe25c3ff 10
+docs/ARCHITECTURE.md
+  h_77173abe25c3ff 58
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlHandler.java
+  h_77173abe25c3ff 23-24,60-61,63-65,68-69,74,77,81-82,88-89
+  h_77173abe25c3ff 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34473e7b9b9367989b97d52ffe3f62f6ab3ca943",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
