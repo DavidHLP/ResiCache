@@ -10,6 +10,10 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import lombok.Builder;
 import lombok.Value;
+import org.springframework.cache.interceptor.CacheEvictOperation;
+import org.springframework.cache.interceptor.CacheOperation;
+import org.springframework.cache.interceptor.CachePutOperation;
+import org.springframework.cache.interceptor.CacheableOperation;
 
 /**
  * Redis 缓存注解的<strong>内部投影层</strong>：把三个公开注解（{@code @RedisCacheable} /
@@ -45,6 +49,11 @@ import lombok.Value;
  * {@code fromAttributes} 字段映射委托给 {@code COMMON_SINKS} 与各 {@code applyTo(B)}
  * 重载；共享字段的 setter 契约由 {@link RedisCacheAttributeSink} 统一声明，差异字段由
  * 各重载末尾的链式 setter 处理。
+ *
+ * <p><strong>两面一源</strong>：{@code applyTo} 重载同时覆盖 policy 面（{@code Redis*Operation.Builder}）
+ * 与 AOP 面（Spring 原生 {@code CacheableOperation.Builder} 等）。同一个注解只投影成本类
+ * 一个实例，两面再从这个实例派生，因此 AOP operation 与 policy operation 对同一字段
+ * 不可能给出不同解释。
  *
  * <p><strong>共享字段 vs 差异字段</strong>: 14 个共享字段由本类的 {@code COMMON_SINKS}
  * 与 {@code populate} 统一迭代；差异字段由各 {@code applyTo} 重载末尾链式 setter 管理。
@@ -248,5 +257,67 @@ class RedisCacheAttributes {
         return b
                 .allEntries(allEntries)
                 .beforeInvocation(beforeInvocation);
+    }
+
+    // ======================= AOP 面适配器 =======================
+
+    /**
+     * AOP 面共享字段的<b>单一</b>声明 —— 三副 Spring builder 的共同父类
+     * {@link CacheOperation.Builder} 承载 {@code cacheNames} + 6 文本字段,故只写一遍;
+     * 文本字段保留 AOP 路径一贯的 {@code hasText} 守卫(Spring builder 视空串为"未设置")。
+     *
+     * <p>新增一个 AOP 面共享字段 = 本方法 1 行,三个注解族同时生效。
+     */
+    private void applyToSpringCommonFields(CacheOperation.Builder b) {
+        b.setCacheNames(cacheNames);
+        BuilderPopulator.applyText(b, key, CacheOperation.Builder::setKey);
+        BuilderPopulator.applyText(b, condition, CacheOperation.Builder::setCondition);
+        BuilderPopulator.applyText(b, keyGenerator, CacheOperation.Builder::setKeyGenerator);
+        BuilderPopulator.applyText(b, cacheManager, CacheOperation.Builder::setCacheManager);
+        BuilderPopulator.applyText(b, cacheResolver, CacheOperation.Builder::setCacheResolver);
+    }
+
+    /**
+     * 本值对象的 AOP 面 → {@link CacheableOperation.Builder}。
+     *
+     * <p><b>为什么 AOP 面不能直接用 policy op</b>:{@code CacheAspectSupport.CacheOperationContexts}
+     * 以 {@code op.getClass()} 为桶键(按 {@code CacheableOperation.class} /
+     * {@code CachePutOperation.class} / {@code CacheEvictOperation.class} 取用),所以 AOP 面
+     * 必须是 Spring 原生 operation —— {@link RedisCacheableOperation} 会落进没有读取方的桶。
+     * 两面因此都从<b>同一份</b>{@link RedisCacheAttributes} 派生:同一个注解只投影一次,
+     * AOP 面与 policy 面对同一字段不可能给出不同解释。{@code name} 由 caller 预置。
+     *
+     * <p>注:传入 {@link RedisCacheableOperation.Builder} 时重载解析选中更具体的 policy 面
+     * {@link #applyTo(RedisCacheableOperation.Builder)} —— 编译期规则,非隐式行为。
+     */
+    public CacheableOperation.Builder applyTo(CacheableOperation.Builder b) {
+        applyToSpringCommonFields(b);
+        BuilderPopulator.applyText(b, unless, CacheableOperation.Builder::setUnless);
+        b.setSync(sync);
+        return b;
+    }
+
+    /**
+     * 本值对象的 AOP 面 → {@link CachePutOperation.Builder}。
+     *
+     * <p>{@code sync} 不是 Spring {@code CachePutOperation} 的概念,故不进这一面(仍进 policy 面)。
+     */
+    public CachePutOperation.Builder applyTo(CachePutOperation.Builder b) {
+        applyToSpringCommonFields(b);
+        BuilderPopulator.applyText(b, unless, CachePutOperation.Builder::setUnless);
+        return b;
+    }
+
+    /**
+     * 本值对象的 AOP 面 → {@link CacheEvictOperation.Builder}。
+     *
+     * <p>Cachable/Put 面的子集 + Evict-only:{@code unless} 无槽位,{@code allEntries} /
+     * {@code beforeInvocation} 落进 Spring 的 {@code cacheWide} / {@code beforeInvocation}。
+     */
+    public CacheEvictOperation.Builder applyTo(CacheEvictOperation.Builder b) {
+        applyToSpringCommonFields(b);
+        b.setCacheWide(allEntries);
+        b.setBeforeInvocation(beforeInvocation);
+        return b;
     }
 }

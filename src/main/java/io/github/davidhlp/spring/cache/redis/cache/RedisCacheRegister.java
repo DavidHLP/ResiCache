@@ -2,7 +2,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import java.lang.reflect.Method;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -144,10 +143,11 @@ class RedisCacheRegister {
     // ============================ 查询（单一 seam）============================
 
     /**
-     * 查询一个缓存操作 —— 从元素快照按 kind + cacheName 过滤。
+     * 查询一个缓存操作 —— 从元素快照按 kind + cacheName 查索引。
      *
-     * <p>类型不匹配或未命中视为未命中;同一 kind/cacheName 的多次注册
-     * 保持覆盖语义,返回最新 operation。
+     * <p>类型不匹配或未命中视为未命中;同一 kind/cacheName 的多次声明保持覆盖语义
+     * (后声明者胜),该语义由 {@link AnnotationParser.PolicyIndex} 在快照构造时一次建定,
+     * 读取侧不再依赖列表扫描顺序。
      */
     @SuppressWarnings("unchecked")
     public <O extends CacheOperation> O get(String name, AnnotatedElementKey elementKey, OperationKind kind) {
@@ -155,15 +155,9 @@ class RedisCacheRegister {
         Class<?> targetClass = MetadataKeys.extractTargetClass(elementKey);
         AnnotationParser.ParsedAnnotations snapshot =
                 method == null || targetClass == null ? null : getSnapshot(method, targetClass);
-        if (snapshot != null) {
-            List<CacheOperation> policies = snapshot.policyOperations();
-            for (int i = policies.size() - 1; i >= 0; i--) {
-                CacheOperation operation = policies.get(i);
-                if (kind.operationType().isInstance(operation)
-                        && operation.getCacheNames().contains(name)) {
-                    return (O) operation;
-                }
-            }
+        final CacheOperation operation = snapshot == null ? null : snapshot.policy(kind, name);
+        if (operation != null) {
+            return (O) operation;
         }
         log.debug("{} operation not found: name={}, elementKey={}", kind.tag(), name, elementKey);
         return null;

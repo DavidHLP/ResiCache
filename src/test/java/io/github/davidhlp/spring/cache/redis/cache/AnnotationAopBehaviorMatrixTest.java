@@ -151,6 +151,47 @@ class AnnotationAopBehaviorMatrixTest {
                 .containsExactly(CacheableOperation.class, CacheEvictOperation.class, CachePutOperation.class);
     }
 
+    @Test
+    @DisplayName("both faces of one annotation come from one projection")
+    void bothFacesComeFromOneProjection() throws Exception {
+        Method method = method("read");
+
+        RedisCacheableOperation policy = (RedisCacheableOperation) execute(method).get(0);
+        CacheableOperation aop = (CacheableOperation)
+                operationSource.getCacheOperations(method, Matrix.class).iterator().next();
+
+        assertThat(aop.getCacheNames()).isEqualTo(policy.getCacheNames());
+        assertThat(aop.getKey()).isEqualTo(policy.getKey());
+        assertThat(aop.getCondition()).isEqualTo(policy.getCondition());
+        assertThat(aop.getUnless()).isEqualTo(policy.getUnless());
+        assertThat(aop.isSync()).isEqualTo(policy.isSync());
+    }
+
+    @Test
+    @DisplayName("value/cacheNames alias resolution is shared by both faces")
+    void aliasResolutionIsSharedByBothFaces() throws Exception {
+        Method method = method("aliased");
+
+        RedisCacheableOperation policy = (RedisCacheableOperation) execute(method).get(0);
+        CacheableOperation aop = (CacheableOperation)
+                operationSource.getCacheOperations(method, Matrix.class).iterator().next();
+
+        assertThat(aop.getCacheNames()).containsExactly("alias-cache");
+        assertThat(policy.getCacheNames()).containsExactly("alias-cache");
+        assertThat(resolve("alias-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+                .isSameAs(policy);
+    }
+
+    @Test
+    @DisplayName("repeated declarations for one kind and cache name resolve to the last")
+    void repeatedDeclarationsResolveToLast() throws Exception {
+        Method method = method("repeated");
+
+        assertThat(execute(method)).hasSize(2);
+        assertThat(resolve("repeat-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET)
+                .getTtl()).isEqualTo(2L);
+    }
+
     private List<CacheOperation> execute(Method method) {
         AnnotationParser.ParsedAnnotations parsed = new AnnotationParser().parse(method);
         register.registerSnapshot(method, Matrix.class, parsed);
@@ -210,6 +251,18 @@ class AnnotationAopBehaviorMatrixTest {
                 redisCacheEvict = @RedisCacheEvict(cacheNames = "composite-evict", key = "#id"),
                 redisCachePut = @RedisCachePut(cacheNames = "composite-write", key = "#id"))
         public String composite(String id) {
+            return id;
+        }
+
+        @RedisCacheable(value = "alias-value", cacheNames = "alias-cache", key = "#id", ttl = 77)
+        public String aliased(String id) {
+            return id;
+        }
+
+        @RedisCaching(redisCacheable = {
+                @RedisCacheable(cacheNames = "repeat-cache", key = "#id", ttl = 1),
+                @RedisCacheable(cacheNames = "repeat-cache", key = "#id", ttl = 2)})
+        public String repeated(String id) {
             return id;
         }
     }
