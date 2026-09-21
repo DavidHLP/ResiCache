@@ -297,7 +297,7 @@ final class SyncRoleLockExecutor {
                 try {
                     handle.close();
                 } catch (Exception e) {
-                    FailureReport.error(log, "Failed to release distributed lock", null, key, e);
+                    FailureReport.error(log, "Failed to release distributed lock", e);
                 }
             }
         }
