@@ -1,0 +1,30 @@
+docs/ARCHITECTURE.md
+  h_77173abe25c3ff 80-85
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  h_77173abe25c3ff 10,12-13,15,22,31-34,55-56,66,71,78,84,91,94,97,105,107,109-113,115,117,119-120,123-128,132,134-138,140,145,150-151,154-159,163,165-169,171,176,179-180,183-260
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/BuilderPopulator.java
+  h_77173abe25c3ff 18-19,27-29,34-35,41,55-56,59,63,73,168-169
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributeSink.java
+  h_77173abe25c3ff 15-18
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributes.java
+  h_77173abe25c3ff 13-16,53-57,261-322
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributesProjector.java
+  h_77173abe25c3ff 29-47,53-57
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheRegister.java
+  h_77173abe25c3ff 146,148-150,158-160
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SpringCacheableAdapter.java
+  h_77173abe25c3ff 23-24
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationAopBehaviorMatrixTest.java
+  h_77173abe25c3ff 154-194,256-267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e854a8a0bcf2bddfef2bd50e89f92495702c4b05",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
