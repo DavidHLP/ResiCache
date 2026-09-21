@@ -89,9 +89,7 @@ class RedisBloomIFilter implements BloomIFilter {
                     key,
                     Arrays.toString(positions));
         } catch (Exception e) {
-            log.error("Bloom filter add failed: cacheName={}, cause={}",
-                    cacheName, FailureDiagnostics.sanitizedFailure(e));
-            log.debug("Bloom filter add failure detail: cacheName={}", cacheName, e);
+            FailureReport.error(log, "Bloom filter add failed", cacheName, null, e);
             if (addFailureCounter != null) {
                 addFailureCounter.increment();
             }
@@ -137,9 +135,7 @@ class RedisBloomIFilter implements BloomIFilter {
             log.debug("Bloom filter hit (might exist): cacheName={}, key={}", cacheName, key);
             return true;
         } catch (Exception e) {
-            log.error("Bloom filter check failed: cacheName={}, cause={}",
-                    cacheName, FailureDiagnostics.sanitizedFailure(e));
-            log.debug("Bloom filter check failure detail: cacheName={}", cacheName, e);
+            FailureReport.error(log, "Bloom filter check failed", cacheName, null, e);
             if (checkFailureCounter != null) {
                 checkFailureCounter.increment();
             }
@@ -159,9 +155,7 @@ class RedisBloomIFilter implements BloomIFilter {
             redisTemplate.delete(bloomKey);
             log.debug("Bloom filter deleted: cacheName={}", cacheName);
         } catch (Exception e) {
-            log.error("Bloom filter delete failed: cacheName={}, cause={}",
-                    cacheName, FailureDiagnostics.sanitizedFailure(e));
-            log.debug("Bloom filter delete failure detail: cacheName={}", cacheName, e);
+            FailureReport.error(log, "Bloom filter delete failed", cacheName, null, e);
         }
     }
 

@@ -267,13 +267,7 @@ class EarlyRefresh {
                 log.debug("Async early-expiration skipped: value changed: {}", redisKey);
             }
         } catch (Exception ex) {
-            // Key-privacy contract: ERROR includes only cacheName + keyFingerprint + exception type chain —
-            // 异常 message / 栈可能内嵌 raw key(如 Cache.ValueRetrievalException),故不进 ERROR;
-            // 完整栈留 DEBUG 供诊断。
-            log.error("Async early-expiration failed: cacheName={}, keyFingerprint={}, cause={}",
-                    cacheName, FailureDiagnostics.keyFingerprint(redisKey),
-                    FailureDiagnostics.sanitizedFailure(ex));
-            log.debug("Async early-expiration failure detail: cacheName={}", cacheName, ex);
+            FailureReport.error(log, "Async early-expiration failed", cacheName, redisKey, ex);
         }
     }
 

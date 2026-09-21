@@ -278,11 +278,8 @@ final class LoaderOrchestrator {
         } catch (IllegalArgumentException configError) {
             return new LoadFailed<>(configError);
         } catch (RuntimeException writeBackFailure) {
-            log.warn(
-                    "Cache write-back failed after successful load; returning loaded value: "
-                            + "cacheName={}, failure={}",
-                    cacheName,
-                    FailureDiagnostics.sanitizedFailure(writeBackFailure));
+            FailureReport.warn(log, "Cache write-back failed after successful load; returning loaded value",
+                    cacheName, null, writeBackFailure);
             return new LoadedWithWriteBackFailure<>(loaded, writeBackFailure);
         } catch (Throwable cause) {
             return new LoadFailed<>(cause);

@@ -64,11 +64,8 @@ class DistributedLockManager implements LockManager {
         try {
             boolean acquired = lock.tryLock(timeoutSeconds, leaseTimeSeconds, TimeUnit.SECONDS);
             if (!acquired) {
-                // Key-privacy contract: WARN includes only keyFingerprint, never raw key / lockKey
-                log.warn(
-                        "Failed to acquire distributed lock within {}s: keyFingerprint={}",
-                        timeoutSeconds,
-                        FailureDiagnostics.keyFingerprint(key));
+                FailureReport.warn(log, "Failed to acquire distributed lock within " + timeoutSeconds + "s",
+                        null, key);
                 return Optional.empty();
             }
 
@@ -77,14 +74,9 @@ class DistributedLockManager implements LockManager {
             return Optional.of(new RedissonLockHandle(lock, key));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            // Key-privacy contract: ERROR and exception messages never include raw key
-            log.error("Interrupted while waiting for distributed lock: keyFingerprint={}, cause={}",
-                    FailureDiagnostics.keyFingerprint(key),
-                    FailureDiagnostics.sanitizedFailure(e));
-            log.debug("Distributed lock wait interrupted detail: keyFingerprint={}",
-                    FailureDiagnostics.keyFingerprint(key), e);
+            FailureReport.error(log, "Interrupted while waiting for distributed lock", null, key, e);
             throw new RuntimeException("Interrupted while waiting for distributed lock: keyFingerprint="
-                    + FailureDiagnostics.keyFingerprint(key), e);
+                    + FailureReport.fingerprint(key), e);
         }
     }
 
@@ -178,27 +170,20 @@ class DistributedLockManager implements LockManager {
                     return;
                 } catch (Exception e) {
                     if (attempt == MAX_UNLOCK_RETRIES) {
-                        // Key-privacy contract: ERROR/WARN includes only keyFingerprint
-                        log.error("Failed to release distributed lock after {} attempts: "
-                                        + "keyFingerprint={}, cause={}",
-                                MAX_UNLOCK_RETRIES,
-                                FailureDiagnostics.keyFingerprint(key),
-                                FailureDiagnostics.sanitizedFailure(e));
-                        log.debug("Distributed lock release failure detail: keyFingerprint={}",
-                                FailureDiagnostics.keyFingerprint(key), e);
+                        FailureReport.error(log,
+                                "Failed to release distributed lock after " + MAX_UNLOCK_RETRIES + " attempts",
+                                null, key, e);
                         return;
                     }
-                    log.warn("Failed to release distributed lock on attempt {}, retrying in {}ms: "
-                                    + "keyFingerprint={}",
-                            attempt, UNLOCK_RETRY_INTERVAL_MS,
-                            FailureDiagnostics.keyFingerprint(key));
+                    FailureReport.warn(log,
+                            "Failed to release distributed lock on attempt " + attempt
+                                    + ", retrying in " + UNLOCK_RETRY_INTERVAL_MS + "ms",
+                            null, key);
                     try {
                         Thread.sleep(UNLOCK_RETRY_INTERVAL_MS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.error("Interrupted while retrying lock release: keyFingerprint={}, cause={}",
-                                FailureDiagnostics.keyFingerprint(key),
-                                FailureDiagnostics.sanitizedFailure(ie));
+                        FailureReport.error(log, "Interrupted while retrying lock release", null, key, ie);
                         return;
                     }
                 }

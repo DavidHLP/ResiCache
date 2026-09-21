@@ -364,15 +364,10 @@ class ChainEngine {
                     log.debug("Post-processing executed for: {}",
                             CacheHandlerChain.handlerTag(handler));
                 } catch (Exception e) {
-                    // Key-privacy contract: ERROR includes cacheName and exception types only;
-                    // 完整栈留 DEBUG(异常 message 可能内嵌 key)。
-                    log.error("Post-processing failed for: {}, operation: {}, cacheName: {}, cause={}",
-                            CacheHandlerChain.handlerTag(handler),
-                            context.getOperation(),
-                            context.getCacheName(),
-                            FailureDiagnostics.sanitizedFailure(e));
-                    log.debug("Post-processing failure detail: cacheName={}",
-                            context.getCacheName(), e);
+                    FailureReport.error(log,
+                            "Post-processing failed for " + CacheHandlerChain.handlerTag(handler)
+                                    + ", operation: " + context.getOperation(),
+                            context.getCacheName(), null, e);
                 }
             }
         }
@@ -421,12 +416,8 @@ class ChainEngine {
             }
 
             private void logFailure(ChainObserver observer, String hookName, Exception ex) {
-                // Key-privacy contract: ERROR renders only exception types;
-                log.error("Observer {} {} failed: {}",
-                        observer.getClass().getSimpleName(), hookName,
-                        FailureDiagnostics.sanitizedFailure(ex));
-                log.debug("Observer {} {} failure detail",
-                        observer.getClass().getSimpleName(), hookName, ex);
+                FailureReport.error(log,
+                        "Observer " + observer.getClass().getSimpleName() + " " + hookName + " failed", ex);
             }
 
             @FunctionalInterface

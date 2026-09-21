@@ -350,6 +350,6 @@ class RedisProCacheLoadPathTest {
                 .containsExactly(
                         "Cache write-back failed after successful load; returning loaded value: "
                                 + "cacheName=" + CACHE_NAME
-                                + ", failure=CacheOperationException <- IllegalStateException");
+                                + ", cause=CacheOperationException <- IllegalStateException");
     }
 }
