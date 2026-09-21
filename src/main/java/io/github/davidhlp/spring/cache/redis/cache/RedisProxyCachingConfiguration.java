@@ -8,6 +8,7 @@ import org.springframework.cache.interceptor.BeanFactoryCacheOperationSourceAdvi
 import org.springframework.cache.interceptor.CacheOperationSource;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
 
 /**
@@ -17,9 +18,10 @@ import org.springframework.context.annotation.Role;
  * {@code RedisProCacheManager}。这避免默认 manager 已注册后代理条件被误判为不满足;
  * 用户提供任意其他 {@code CacheManager} 时,默认 manager 与代理一起 back off。
  *
- * <p>由 {@code RedisProCacheConfiguration} 显式 {@code @Import} 注册,故内层同样不带组件注解:
- * 组件扫描不会重复注册该选择门。
+ * <p>本类保持 @Configuration:内层选择门是成员类,只有带组件注解的配置类才会被递归处理。
+ * 内层不带组件注解,因此组件扫描只注册本类一次,选择门只经由成员类处理一次。
  */
+@Configuration(proxyBeanMethods = false)
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 class RedisProxyCachingConfiguration {
 

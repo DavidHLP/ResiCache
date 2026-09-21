@@ -29,8 +29,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Slf4j
 @Configuration(proxyBeanMethods = false)
 @Import({
-        // RedisCacheAutoConfiguration scans the internal runtime package. These two
-        // configurations are the intentional scan exclusions and remain explicit.
+        // 显式导入:ResolvedMetricsConfiguration 不是扫描候选,RedisProxyCachingConfiguration
+        // 必须在不做内部包扫描的上下文里同样完成装配。
         ResolvedMetricsConfiguration.class,
         RedisProxyCachingConfiguration.class
 })

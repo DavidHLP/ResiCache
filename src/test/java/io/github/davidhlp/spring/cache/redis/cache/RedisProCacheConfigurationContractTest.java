@@ -142,7 +142,7 @@ class RedisProCacheConfigurationContractTest {
         assertThat(scan).isNotNull();
         assertThat(java.util.Arrays.stream(scan.excludeFilters())
                 .filter(filter -> filter.type() == FilterType.ASSIGNABLE_TYPE)
-                .flatMap(filter -> java.util.Arrays.stream(filter.value()))
+                .flatMap(filter -> java.util.Arrays.stream(filter.classes()))
                 .toList())
                 .containsExactly(SerializationMigrationOperatorConfiguration.class);
     }
