@@ -11,6 +11,7 @@ import io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.Method;
 import java.util.function.Consumer;
@@ -88,8 +89,33 @@ class RedisProCacheConfigurationContractTest {
                         assertThat(context).hasNotFailed();
                         assertThat(context).doesNotHaveBean(MeterRegistry.class);
                         assertThat(context).hasSingleBean(ResolvedMetrics.class);
+                        MeterRegistry seam = context.getBean(ResolvedMetrics.class).meterRegistry();
+                        assertThat(seam).isInstanceOf(CompositeMeterRegistry.class);
+                        assertThat(((CompositeMeterRegistry) seam).getRegistries()).isEmpty();
+                    });
+        }
+    }
+
+    @Test
+    void metricsDisabled_withAmbiguousMeterRegistries_stillAssembles() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withBean("firstRegistry", MeterRegistry.class, SimpleMeterRegistry::new)
+                    .withBean("secondRegistry", MeterRegistry.class, SimpleMeterRegistry::new)
+                    .withBean(RedisProCacheWriter.class,
+                            () -> org.mockito.Mockito.mock(RedisProCacheWriter.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        // 未启用 metrics 时不解析 provider:多个非 primary MeterRegistry 不得让装配失败
+                        assertThat(context).hasNotFailed();
                         assertThat(context.getBean(ResolvedMetrics.class).meterRegistry())
-                                .isSameAs(ResolvedMetrics.NOOP_REGISTRY);
+                                .isNotSameAs(context.getBean("firstRegistry"))
+                                .isNotSameAs(context.getBean("secondRegistry"));
                     });
         }
     }
@@ -334,8 +360,8 @@ class RedisProCacheConfigurationContractTest {
                         .as("observer factory must be a bean method")
                         .isNotNull());
 
-        // 顺序契约必须落在工厂 CacheHandlerChainFactory#observerOrder 真正读取的那一处 ——
-        // observer 类级 @Order,而非 @Bean 方法上的注解(工厂不看方法注解)。
+        // 顺序契约落在 observer 类级 @Order —— Spring 解析注入列表时读取该注解;
+        // 工厂保持注入序,不再按实例可见的类级注解二次排序。
         var observerClasses = observerMethods.stream()
                 .map(java.lang.reflect.Method::getReturnType)
                 .toList();

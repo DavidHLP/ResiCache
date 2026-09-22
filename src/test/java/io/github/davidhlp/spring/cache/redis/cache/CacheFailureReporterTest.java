@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -84,7 +85,8 @@ class CacheFailureReporterTest {
     @Test
     @DisplayName("no-op seam → 不抛异常,且不向应用 registry 注册任何 meter")
     void noopRegistry_noOp() {
-        CacheFailureReporter noRegistry = new CacheFailureReporter(ResolvedMetrics.NOOP_REGISTRY);
+        CacheFailureReporter noRegistry = new CacheFailureReporter(
+                ResolvedMetrics.resolve(null, new MockEnvironment()).meterRegistry());
         noRegistry.report(CacheOperation.PUT, FailureKind.REDIS, ErrorStrategy.FAIL_FAST);
         assertThat(registry.getMeters()).isEmpty();
     }

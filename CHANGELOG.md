@@ -248,7 +248,10 @@ Current milestones:
   (field order and punctuation) is now produced by the one owner.
 - **Metrics resolved at one non-null seam (c2)** — `resi-cache.metrics.enabled`
   is read in exactly one place and handed to every caller as a non-null metrics
-  seam, with a no-op adapter for the disabled case; the opt-in is declared in
+  seam; when the opt-in is off (or no `MeterRegistry` bean exists) that seam
+  publishes nothing and the application's registry beans are not even resolved,
+  so an ambiguous registry set cannot fail an assembly that disabled metrics.
+  The opt-in is declared in
   `additional-spring-configuration-metadata.json`. The key has no
   `RedisProCacheProperties` field: it is fixed, and binding it would require a
   tenth public nested type (`STABILITY.md` §4 churn) for an assembly detail.
@@ -256,9 +259,12 @@ Current milestones:
   `RedisCacheHealthIndicator` now reports Redis connectivity and protection
   degradation regardless of `resi-cache.metrics.enabled`; previously the
   unrelated metrics switch could suppress the indicator.
-- **Observer order owned by the observer class (c3)** — the dispatch sort reads
-  a class-level `@Order` that is actually declared instead of a `@Bean`-method
-  annotation the factory never consulted; the documented hook protocol,
+- **Observer order owned by the observer class (c3)** — the four standard
+  observers declare `@Order(1..4)` on the class instead of on their `@Bean`
+  methods, and the factory registers observers in the Spring-resolved injection
+  order instead of re-sorting by an annotation only it could see; observers
+  ordered through `Ordered`, a `@Bean`-method `@Order`, a meta-annotation or a
+  proxy keep the position Spring gave them. The documented hook protocol,
   `beforeNode` and the scope-token types are unchanged.
 - **Handler identity declared once (c4)** — order slot, protection disable name,
   metric/log tag and the ordering requirement of each slot are declared
