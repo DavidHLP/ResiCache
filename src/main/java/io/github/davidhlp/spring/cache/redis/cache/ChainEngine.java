@@ -158,6 +158,12 @@ class ChainEngine {
                         "CacheHandler returned null HandlerResult: "
                                 + current.getClass().getName());
             }
+            if (result.decision() == null) {
+                // SPI 协议要求 HandlerResult 携带非 null decision,否则引擎无法分发控制流。
+                throw new IllegalStateException(
+                        "CacheHandler returned HandlerResult with null decision: "
+                                + current.getClass().getName());
+            }
             switch (result.decision()) {
                 case CONTINUE:
                     if (next.advanced()) {

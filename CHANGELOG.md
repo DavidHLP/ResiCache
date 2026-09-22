@@ -237,6 +237,56 @@ Current milestones:
   technical increment is **Bloom + TTL jitter + pluggable responsibility
   chain**.
 
+### Architecture remediation (2026-09-22 review, c1–c9)
+
+- **One owner for failure reporting (c1)** — package-private `FailureReport`
+  emits the sanctioned WARN/ERROR plus paired DEBUG line for every failure site,
+  so callers state what failed instead of choosing log levels and re-deriving
+  the fingerprint rule; no `keyFingerprint` concatenation or hand-paired DEBUG
+  remains in `src/main`. Levels, count-once accounting, the failure metric
+  dimensions and the raw-key privacy rule are unchanged; message rendering
+  (field order and punctuation) is now produced by the one owner.
+- **Metrics resolved at one non-null seam (c2)** — `resi-cache.metrics.enabled`
+  is read in exactly one place and handed to every caller as a non-null metrics
+  seam, with a no-op adapter for the disabled case; the opt-in is declared in
+  `additional-spring-configuration-metadata.json`. The key has no
+  `RedisProCacheProperties` field: it is fixed, and binding it would require a
+  tenth public nested type (`STABILITY.md` §4 churn) for an assembly detail.
+- ⚠️ **Protection health is no longer gated by the metrics opt-in (c2)** —
+  `RedisCacheHealthIndicator` now reports Redis connectivity and protection
+  degradation regardless of `resi-cache.metrics.enabled`; previously the
+  unrelated metrics switch could suppress the indicator.
+- **Observer order owned by the observer class (c3)** — the dispatch sort reads
+  a class-level `@Order` that is actually declared instead of a `@Bean`-method
+  annotation the factory never consulted; the documented hook protocol,
+  `beforeNode` and the scope-token types are unchanged.
+- **Handler identity declared once (c4)** — order slot, protection disable name,
+  metric/log tag and the ordering requirement of each slot are declared
+  alongside `HandlerOrder` and resolved by `cache/HandlerIdentity`; emitted tag
+  values are unchanged, and a handler with no declared identity keeps the
+  previous class-simple-name tag.
+- **One assembly root per boundary (c5)** — the runtime context and the operator
+  CLI each name the beans they own by class instead of regex package-scan
+  patterns, `resi-cache.enabled` is declared once, and the bean-backoff
+  invariant enumerates `@Bean` methods.
+- **One projection feeds both operation views (c6)** — the AOP operation and the
+  policy view are derived from one `RedisCacheAttributes` instance per
+  annotation, so a new annotation field has one mapping site and the policy
+  lookup no longer depends on declaration order; the Spring/policy view split
+  itself is retained.
+- **Unreachable degradation modes deleted (c7)** — dead null guards, the
+  `NullValueEncoder` wrapper and test-only factory surface are gone. The
+  engine-side rejection of a malformed `HandlerResult` is retained because
+  `STABILITY.md` §4 documents it.
+- **TTL precedence in one module (c8)** — `TtlPolicy` owns the ordered
+  resolution and both defaults; every path keeps its previous effective TTL and
+  no default changed. See [`COMPATIBILITY.md`](./COMPATIBILITY.md) and
+  [`docs/REFERENCE.md`](docs/REFERENCE.md).
+- **Synchronization lifecycle owned by its state (c9)** — the single-flight
+  lifecycle (enter → complete → exit → cleanup, exactly once) now lives with the
+  state it mutates and the seven-argument static re-entry is gone; lock
+  acquire/release order and failure paths are unchanged.
+
 ### Fixed
 
 - **`resi-cache.serializer.*` properties were silently dropped by the
