@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>When many cache entries are written with the same TTL they expire in a
  * burst, causing a mass DB stampede (cache avalanche). ResiCache's
- * {@link TtlHandler} adds a configurable random jitter to each entry's
+ * {@link TtlPolicy} adds a configurable random jitter to each entry's
  * TTL so expirations are spread evenly over time.
  *
  * <p>We measure:
@@ -34,7 +34,6 @@ import java.util.concurrent.TimeUnit;
 @Fork(1)
 public class TtlJitterBenchmark {
 
-    private TtlHandler ttlHandler;
     private long baseTtlSeconds;
 
     /**
@@ -46,7 +45,6 @@ public class TtlJitterBenchmark {
 
     @Setup(Level.Trial)
     public void setup() {
-        ttlHandler = new TtlHandler();
         baseTtlSeconds = 600L;
     }
 
@@ -56,7 +54,7 @@ public class TtlJitterBenchmark {
      */
     @Benchmark
     public long ttlJitter_compute() {
-        return ttlHandler.calculateFinalTtl(baseTtlSeconds, true, jitterRatio);
+        return TtlPolicy.calculateFinalTtl(baseTtlSeconds, true, jitterRatio);
     }
 
     /**
@@ -65,18 +63,18 @@ public class TtlJitterBenchmark {
      */
     @Benchmark
     public long ttlBaseline() {
-        return ttlHandler.calculateFinalTtl(baseTtlSeconds, false, 0.0f);
+        return TtlPolicy.calculateFinalTtl(baseTtlSeconds, false, 0.0f);
     }
 
     /**
      * Multi-threaded uniformity: 8 threads compute jitter concurrently.
-     * Validates that {@link ThreadLocalRandom} usage inside the handler
+     * Validates that {@link ThreadLocalRandom} usage inside the policy
      * has no contention under parallel write pressure.
      */
     @Benchmark
     @Threads(8)
     public void ttlJitter_concurrent_uniformity(Blackhole bh) {
-        long jittered = ttlHandler.calculateFinalTtl(baseTtlSeconds, true, jitterRatio);
+        long jittered = TtlPolicy.calculateFinalTtl(baseTtlSeconds, true, jitterRatio);
         bh.consume(jittered);
     }
 }
