@@ -15,20 +15,22 @@ class SerializationMigrationCliContractTest {
     void cliContext_resolvesMetricsChoiceWithUserRegistry() {
         new ApplicationContextRunner()
                 .withUserConfiguration(SerializationMigrationCli.CliConfiguration.class)
-                .withPropertyValues(
-                        "spring.autoconfigure.exclude="
-                                + "io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration",
-                        "resi-cache.metrics.enabled=true")
+                .withPropertyValues("resi-cache.metrics.enabled=true")
                 .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
                 .withBean(RedisConnectionFactory.class, () -> mock(RedisConnectionFactory.class))
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+                    // operator 装配根按类点名:迁移 bean 齐备,CLI 上下文才可用
                     assertThat(context)
                             .hasSingleBean(SerializationMigrationCli.SerializationMigrationRunner.class);
                     assertThat(context).hasBean("resolvedMetrics");
                     assertThat(context.getBean("resolvedMetrics"))
                             .hasFieldOrPropertyWithValue(
                                     "meterRegistry", context.getBean(MeterRegistry.class));
+                    // 运行时自动配置被按类排除:CLI 上下文不装配缓存/AOP 运行时
+                    assertThat(context)
+                            .doesNotHaveBean(
+                                    io.github.davidhlp.spring.cache.redis.cache.RedisProCacheManager.class);
                 });
     }
 }

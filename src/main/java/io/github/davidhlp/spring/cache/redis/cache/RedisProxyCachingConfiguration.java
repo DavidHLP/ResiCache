@@ -17,6 +17,9 @@ import org.springframework.context.annotation.Role;
  * 缺少用户提供的 {@code CacheManager} 时启用,但忽略库自身的
  * {@code RedisProCacheManager}。这避免默认 manager 已注册后代理条件被误判为不满足;
  * 用户提供任意其他 {@code CacheManager} 时,默认 manager 与代理一起 back off。
+ *
+ * <p>本类保持 @Configuration:内层选择门是成员类,只有带组件注解的配置类才会被递归处理。
+ * 内层不带组件注解,因此组件扫描只注册本类一次,选择门只经由成员类处理一次。
  */
 @Configuration(proxyBeanMethods = false)
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
@@ -40,7 +43,6 @@ class RedisProxyCachingConfiguration {
      * user-provided {@code CacheManager} beans back off the library proxy, while
      * the library's own {@code RedisProCacheManager} remains ignored.
      */
-    @Configuration(proxyBeanMethods = false)
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     @ConditionalOnMissingBean(
             value = org.springframework.cache.CacheManager.class,

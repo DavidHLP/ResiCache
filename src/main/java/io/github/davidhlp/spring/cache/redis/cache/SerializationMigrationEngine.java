@@ -22,13 +22,15 @@ import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.types.Expiration;
-import org.springframework.stereotype.Component;
 
 /**
  * Bounded, resumable legacy-value migration engine used by the operator CLI.
+ *
+ * <p>Registered by the operator-boundary assembly root
+ * ({@link SerializationMigrationOperatorConfiguration}); it carries no component
+ * stereotype so the runtime context never assembles it.
  */
 @Slf4j
-@Component
 class SerializationMigrationEngine
         implements io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli.SerializationMigrationRunner {
 

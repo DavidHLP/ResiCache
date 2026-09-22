@@ -22,6 +22,7 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,9 +42,7 @@ class RedisProCacheConfigurationContractTest {
     @Test
     void disabledMasterSwitch_alsoSkipsMetricsConfiguration() {
         new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(
-                        RedisCacheAutoConfiguration.class,
-                        CachingEnablementValidation.class))
+                .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
                 .withPropertyValues(
                         "resi-cache.enabled=false",
                         "resi-cache.metrics.enabled=true")
@@ -52,6 +51,7 @@ class RedisProCacheConfigurationContractTest {
                     assertThat(context)
                             .doesNotHaveBean(
                                     io.github.davidhlp.spring.cache.redis.cache.RedisCacheHealthIndicator.class);
+                    // 启用门只在运行时装配根声明一次:关闭主开关即不再导入启用校验
                     assertThat(context)
                             .doesNotHaveBean(
                                     CachingEnablementValidation.CachingEnabledValidator.class);
@@ -137,17 +137,40 @@ class RedisProCacheConfigurationContractTest {
     }
 
     @Test
-    void entry_componentScan_excludesOperatorAndExplicitlyImportedConfigurations() {
+    void entry_componentScan_excludesOperatorBoundaryByClass() {
         ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
-        assertThat(scan.excludeFilters())
-                .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*RedisProxyCachingConfiguration.*"));
-        assertThat(scan.excludeFilters())
-                .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*SerializationMigrationEngine"));
-        assertThat(scan.excludeFilters())
-                .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*ResolvedMetricsConfiguration"));
+        assertThat(scan).isNotNull();
+        assertThat(java.util.Arrays.stream(scan.excludeFilters())
+                .filter(filter -> filter.type() == FilterType.ASSIGNABLE_TYPE)
+                .flatMap(filter -> java.util.Arrays.stream(filter.classes()))
+                .toList())
+                .containsExactly(SerializationMigrationOperatorConfiguration.class);
+    }
+
+    @Test
+    void entry_componentScan_usesNoOwnershipNamePattern() {
+        // 仅保留同包测试类过滤;bean 归属不再由类名正则表达
+        ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
+        assertThat(java.util.Arrays.stream(scan.excludeFilters())
+                .filter(filter -> filter.type() == FilterType.REGEX)
+                .flatMap(filter -> java.util.Arrays.stream(filter.pattern()))
+                .toList())
+                .containsExactly(".*Test.*");
+    }
+
+    @Test
+    void autoConfigurationImports_registerOnlyTheRuntimeRoot() throws Exception {
+        try (java.io.InputStream imports = RedisCacheAutoConfiguration.class.getResourceAsStream(
+                "/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports")) {
+            assertThat(imports).as("auto-configuration imports resource").isNotNull();
+            assertThat(new java.io.BufferedReader(
+                            new java.io.InputStreamReader(imports, java.nio.charset.StandardCharsets.UTF_8))
+                    .lines()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty())
+                    .toList())
+                    .containsExactly(RedisCacheAutoConfiguration.class.getName());
+        }
     }
 
     @Test
@@ -327,26 +350,21 @@ class RedisProCacheConfigurationContractTest {
 
     @Test
     void everyDefaultBeanDeclaresBackoff() {
-        String[] defaultBeanMethods = {
-                "methodMetadataResolver",
-                "cacheErrorHandler",
-                "cacheOperationResolver",
-                "bloomFilterConfig",
-                "bloomIFilter",
-                "redisProCacheWriter",
-                "defaultRedisCacheConfiguration",
-                "cacheManager",
-                "keyGenerator",
-                "cacheStatisticsCollector",
-                "systemClock",
-                "earlyExpirationExecutor"
-        };
+        java.util.List<Method> beanMethods = java.util.Arrays.stream(
+                        RedisProCacheConfiguration.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(Bean.class))
+                .toList();
 
-        for (String methodName : defaultBeanMethods) {
-            assertThat(conditionOn(methodName))
-                    .as("default bean method %s", methodName)
-                    .isNotNull();
-        }
+        assertThat(beanMethods).isNotEmpty();
+        // 标准 observer 是叠加钩子(用户 observer 与它们共存),不是可替换默认 bean;
+        // 该集合由 standardObserverBeans_areDeclaredWithOrder 固定为 4 个。
+        // 其余每个 @Bean 方法都必须按类型 back off —— 新增服务 bean 缺少注解除即失败。
+        assertThat(beanMethods)
+                .filteredOn(method -> !io.github.davidhlp.spring.cache.redis.chain.observer
+                        .ChainObserver.class.isAssignableFrom(method.getReturnType()))
+                .allSatisfy(method -> assertThat(method.getAnnotation(ConditionalOnMissingBean.class))
+                        .as("default bean method %s must back off by type", method.getName())
+                        .isNotNull());
     }
 
     private ConditionalOnMissingBean conditionOn(String methodName) {
