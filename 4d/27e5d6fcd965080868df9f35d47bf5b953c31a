@@ -1,0 +1,19 @@
+resicache-bench/src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlJitterBenchmark.java
+  s_40765406dcdea6::t_cf5cd85adcb7f8 13,57,66,71,77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d27e5d6fcd965080868df9f35d47bf5b953c31a",
+  "prompts": {},
+  "sessions": {
+    "s_40765406dcdea6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db3544fb-0f65-4b67-8f14-eb941fd77316",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
