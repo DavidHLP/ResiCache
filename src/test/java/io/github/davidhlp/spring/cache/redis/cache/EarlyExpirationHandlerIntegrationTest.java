@@ -29,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -305,7 +306,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     new TtlHandler(),              // 300 — write-path only
                     handler);                      // 250 — EarlyExpirationHandler, the producer
             return new CacheHandlerChainFactory(unordered, new RedisProCacheProperties(),
-                    ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of()).createChain();
+                    ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of()).createChain();
         }
 
         @Test
