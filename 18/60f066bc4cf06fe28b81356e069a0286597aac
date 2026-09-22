@@ -1,0 +1,22 @@
+docs/ARCHITECTURE.md
+  h_77173abe25c3ff 76-78
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChain.java
+  h_77173abe25c3ff 73
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactory.java
+  h_77173abe25c3ff 173,175,180,182-183,192-193
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/HandlerIdentity.java
+  h_77173abe25c3ff 1-46
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java
+  h_77173abe25c3ff 10-11,14-19,25-26,28,32,42-43,54-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1860f066bc4cf06fe28b81356e069a0286597aac",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
