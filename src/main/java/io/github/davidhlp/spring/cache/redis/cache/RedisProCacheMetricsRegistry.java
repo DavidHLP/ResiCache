@@ -35,8 +35,10 @@ import org.springframework.lang.Nullable;
  *   <li>{@link #metrics()} — 返回当前 cache 实例的不可变指标快照</li>
  * </ul>
  *
- * <p><b>null-safe 语义</b>：{@link MeterRegistry} 为 null 时（即未启用指标），全部 7 个内部
- * 字段为 null，所有 record 方法走 no-op 路径。
+ * <p><b>no-op seam 语义</b>：{@link MeterRegistry} 永不为 null —— 指标未启用（或应用无
+ * {@code MeterRegistry} bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}，
+ * 唯一判据是 {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}。在该 seam 上的
+ * 7 个注册是 no-op 分配：不发布、不保留任何 meter，所有 record 方法走 no-op 路径。
  *
  * <p><b>线程安全</b>：本类仅在 cache 构造期由单线程初始化；运行期 record 方法调
  * {@link Timer#record} / {@link Counter#increment}（Micrometer 自身线程安全）。metrics() 仅读

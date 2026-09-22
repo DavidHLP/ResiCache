@@ -17,14 +17,18 @@ import org.springframework.lang.Nullable;
  * 需同时改动多个构造器 + bean 装配 + 各自 Javadoc。本值对象让该契约<b>只存在一处</b>:消费方
  * 询问本对象,而非各自记忆可空语义;新增特性只动本类一处。
  *
- * <p><b>可空语义</b>:只有 {@code meterRegistry} 为 {@code null} 表示指标禁用(no-op 降级);
- * 其余字段是生产恒装配的协作对象,消费方构造期校验非 null(装配错误即抛,不静默降级)。
+ * <p><b>no-op seam 语义</b>:只有 {@code meterRegistry} 承载「指标禁用」信息,但它永不为
+ * {@code null} —— 指标未启用（或应用无 {@code MeterRegistry} bean）时它是共享无状态的
+ * {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
+ * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），在其上的注册是 no-op
+ * 分配:不发布、不保留任何 meter;其余字段是生产恒装配的协作对象,消费方构造期校验非 null
+ * (装配错误即抛,不静默降级)。
  */
 @Value
 @Builder
 class ResiCacheFeatures {
 
-    /** 指标注册表 —— null 表示不采集 timer/counter(null-safe no-op). */
+    /** 指标注册表 —— 永不为 null;关闭路径为共享 no-op seam(不采集 timer/counter). */
     @Nullable
     MeterRegistry meterRegistry;
 

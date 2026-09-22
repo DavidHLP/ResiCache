@@ -81,12 +81,16 @@ abstract class AbstractCacheHandler implements CacheHandler {
 
     /**
      * 工厂建链阶段注入 MeterRegistry（{@code ChainHandlerChainFactory} 在
-     * {@code createChain} 中遍历进链 handler 时调用）。registry 非空时子类
-     * override {@link #semanticCounter()} 声明自身语义 counter 元数据
+     * {@code createChain} 中遍历进链 handler 时调用）。生产路径注入的 registry 永不为 null
+     * —— 指标未启用（或应用无 {@code MeterRegistry} bean）时它是共享无状态的
+     * {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
+     * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），在其上的注册是 no-op
+     * 分配：不发布、不保留任何 meter。registry 非空时子类 override
+     * {@link #semanticCounter()} 声明自身语义 counter 元数据
      * （{@link CounterMetadata}），基类从元数据构建并持有唯一 counter 字段。
      * uniform fired counter 由 {@code FiredCounterChainObserver} 按进链 handler
-     * 类统一注册，不在本方法范围。registry 缺失或子类未声明元数据时本方法为
-     * no-op。幂等：同名同 tag 重复 register 返回既有实例。
+     * 类统一注册，不在本方法范围。registry 为 null（仅测试/防御路径）或子类未声明元数据时
+     * 本方法为 no-op。幂等：同名同 tag 重复 register 返回既有实例。
      */
     public void attachMeterRegistry(MeterRegistry registry) {
         if (registry == null) {
