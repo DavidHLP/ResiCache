@@ -27,10 +27,10 @@ RedisCacheAutoConfiguration
 `resi-cache.enabled`; it does not add `@EnableCaching`. The internal component
 scan is deliberately limited to `io.github.davidhlp.spring.cache.redis.cache`
 and excludes test classes plus the operator-boundary assembly root, which is
-named by class. Configurations registered by an explicit import carry no
-component stereotype, so no name pattern stands in for class identity — a
-class rename fails compilation instead of silently changing a context. Host
-application packages are not scanned by the library.
+named by class. Runtime bean ownership is never expressed as a name pattern:
+classes that only their boundary may register carry no component stereotype,
+and a class rename fails compilation instead of silently changing the
+assembled set. Host application packages are not scanned by the library.
 
 The operator CLI (`SerializationMigrationCli`) is the second assembly
 boundary: its context names the internal migration beans by class through
