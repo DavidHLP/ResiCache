@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>唯一指标 {@code resicache.cache.failure},tag 仅 operation/kind/strategy
  *       (有限枚举低基数,无 cacheName/key/message)</li>
  *   <li>同 (op,kind,strategy) 多次上报 → 同一 counter 累加(非每事件新 counter)</li>
- *   <li>registry 缺失 → no-op 不抛</li>
+ *   <li>metrics 未启用（no-op seam）→ 不向应用 registry 注册任何 meter，也不抛</li>
  * </ul>
  */
 @DisplayName("CacheFailureReporter Tests")
@@ -82,11 +82,11 @@ class CacheFailureReporterTest {
     }
 
     @Test
-    @DisplayName("registry 缺失 → no-op 不抛")
-    void nullRegistry_noOp() {
-        CacheFailureReporter noRegistry = new CacheFailureReporter(null);
+    @DisplayName("no-op seam → 不抛异常,且不向应用 registry 注册任何 meter")
+    void noopRegistry_noOp() {
+        CacheFailureReporter noRegistry = new CacheFailureReporter(ResolvedMetrics.NOOP_REGISTRY);
         noRegistry.report(CacheOperation.PUT, FailureKind.REDIS, ErrorStrategy.FAIL_FAST);
-        // 不抛即通过
+        assertThat(registry.getMeters()).isEmpty();
     }
 
     @Test

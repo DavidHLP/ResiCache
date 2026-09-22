@@ -288,10 +288,8 @@ class SerializationMigrationEngine
     }
 
     private void record(String outcome) {
-        if (meterRegistry != null) {
-            meterRegistry.counter(METRIC_NAME,
-                    "phase", migration.getPhase().name(), "outcome", outcome).increment();
-        }
+        meterRegistry.counter(METRIC_NAME,
+                "phase", migration.getPhase().name(), "outcome", outcome).increment();
     }
 
     private static byte[] appendSuffix(byte[] key, String suffix) {

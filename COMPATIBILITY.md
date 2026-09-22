@@ -56,9 +56,10 @@ baseline.
   sync operation fails fast unless `resi-cache.sync-lock.local-only=true` is
   explicitly configured. |
 | **Micrometer / Actuator** | Optional | Cache metrics require
-  `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`.
-  `RedisCacheHealthIndicator` additionally requires Actuator, the
-  `HealthIndicator` class, and the same metrics property set to `true`. |
+  `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`;
+  otherwise the resolved metrics seam is a no-op adapter.
+  `RedisCacheHealthIndicator` requires Actuator and the `HealthIndicator`
+  class; it is not gated on the metrics property. |
 | **Caffeine** | Bundled | Used internally for the local hash cache and
   bloom-filter bitset; not exposed as a multi-level cache. |
 

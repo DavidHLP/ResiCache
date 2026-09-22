@@ -36,8 +36,15 @@ The main configuration groups are:
 - `redis.*` topology/TLS/deployment fields;
 - `serializer.*` and operator migration settings;
 - per-cache overrides under `caches.*`;
-- optional `disabled-handlers`, metrics, and feature controls defined by the
-  current source.
+- optional `disabled-handlers` and feature controls defined by the current
+  source;
+- `resi-cache.metrics.enabled` (`java.lang.Boolean`, default `false`) — the
+  metrics opt-in. It has no `RedisProCacheProperties` field: package-private
+  `ResolvedMetrics` (`cache/`) reads it in exactly one place and hands every
+  caller a non-null metrics seam — the application `MeterRegistry` when the
+  property is `true` and such a bean exists, otherwise a shared no-op adapter.
+  Its metadata comes from
+  `additional-spring-configuration-metadata.json`.
 
 Configuration is validated at binding time. Do not infer a default from an old
 README snippet when the properties class or generated metadata differs.

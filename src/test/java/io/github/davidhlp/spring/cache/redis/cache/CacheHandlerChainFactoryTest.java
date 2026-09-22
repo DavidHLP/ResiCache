@@ -19,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.mock.env.MockEnvironment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -37,7 +38,7 @@ class CacheHandlerChainFactoryTest {
     @BeforeEach
     void setUp() {
         properties = mock(RedisProCacheProperties.class);
-        factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+        factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
     }
     private CacheContext testContext() {
         return CacheContext.of(CacheInput.builder()
@@ -59,7 +60,7 @@ class CacheHandlerChainFactoryTest {
         @Test
         @DisplayName("creates empty chain when no handlers provided")
         void createChain_noHandlers_createsEmptyChain() {
-            factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(Collections.emptyList(), properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -74,7 +75,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler(),
                     new YetAnotherTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -89,7 +90,7 @@ class CacheHandlerChainFactoryTest {
                     new BloomFilterTestHandler(),
                     new SyncLockTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheResult result = factory.createChain().execute(testContext());
 
@@ -103,7 +104,7 @@ class CacheHandlerChainFactoryTest {
                     new TestCacheHandler(),
                     new PriorityTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheResult result = factory.createChain().execute(testContext());
 
@@ -117,7 +118,7 @@ class CacheHandlerChainFactoryTest {
                     new TestCacheHandler(),
                     new AnotherTestHandler()
             );
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -137,7 +138,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(List.of("test-cache"));
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -153,7 +154,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(List.of("test-cache"));
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -169,7 +170,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(Collections.emptyList());
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -185,7 +186,7 @@ class CacheHandlerChainFactoryTest {
                     new AnotherTestHandler()
             );
             when(properties.getDisabledHandlers()).thenReturn(List.of("test-cache", "another-test"));
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -208,7 +209,7 @@ class CacheHandlerChainFactoryTest {
             List<CacheHandler> handlers = List.of(
                     new BloomFilterHandler(), new SyncLockHandler(), new EarlyExpirationHandler(),
                     new TtlHandler(), new NullValueHandler(), new ActualCacheHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -224,7 +225,7 @@ class CacheHandlerChainFactoryTest {
 
             List<CacheHandler> handlers = List.of(
                     new BloomFilterHandler(), new TtlHandler(), new ActualCacheHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -336,7 +337,7 @@ class CacheHandlerChainFactoryTest {
             List<CacheHandler> handlers = List.of(new BloomFilterHandler(), new SyncLockHandler(),
                     new EarlyExpirationHandler(), new TtlHandler(), new NullValueHandler(),
                     new ActualCacheHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
             return factory.createChain();
         }
 
@@ -350,7 +351,7 @@ class CacheHandlerChainFactoryTest {
 
             List<CacheHandler> handlers = List.of(
                     new OddlyNamedBloomHandler(), new TtlHandler(), new ActualCacheHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -365,7 +366,7 @@ class CacheHandlerChainFactoryTest {
 
             List<CacheHandler> handlers = List.of(
                     new WeirdlyNamedLockHandler(), new TtlHandler());
-            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, null), new ChainEngine(), List.of());
+            factory = new CacheHandlerChainFactory(handlers, properties, ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of());
 
             CacheHandlerChain chain = factory.createChain();
 
@@ -390,7 +391,10 @@ class CacheHandlerChainFactoryTest {
             // P1-API-001-C:observer 为有序 Bean,工厂经主构造注入 List<ChainObserver> 后单一注册。
             // 主构造注入的 registry 驱动 fired counter observer bean。
             factory = new CacheHandlerChainFactory(
-                    List.of(probe), properties, ResolvedMetrics.resolve(provider, null), new ChainEngine(),
+                    List.of(probe), properties,
+                    ResolvedMetrics.resolve(provider, new MockEnvironment()
+                            .withProperty("resi-cache.metrics.enabled", "true")),
+                    new ChainEngine(),
                     List.of(new io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver(registry)));
 
             CacheHandlerChain chain = factory.createChain();

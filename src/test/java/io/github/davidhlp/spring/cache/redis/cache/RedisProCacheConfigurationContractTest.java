@@ -89,7 +89,7 @@ class RedisProCacheConfigurationContractTest {
                         assertThat(context).doesNotHaveBean(MeterRegistry.class);
                         assertThat(context).hasSingleBean(ResolvedMetrics.class);
                         assertThat(context.getBean(ResolvedMetrics.class).meterRegistry())
-                                .isNull();
+                                .isSameAs(ResolvedMetrics.NOOP_REGISTRY);
                     });
         }
     }

@@ -39,12 +39,14 @@ and must not be treated as multi-instance protection.
 
 ## Observability and diagnosis
 
-Metrics and the Redis health indicator are opt-in. Metrics require both
-`resi-cache.metrics.enabled=true` and the application's `MeterRegistry`; the
-health indicator additionally requires the optional Actuator dependency and
-the same metrics property to be enabled. Writer statistics and failure
-reporting are bounded by the contracts in `STABILITY.md` and `COMPATIBILITY.md`;
-pre-1.0 metric names and log wording are not a general compatibility promise.
+Cache metrics are opt-in: they require both `resi-cache.metrics.enabled=true`
+and the application's `MeterRegistry`, a decision resolved once during
+assembly. When either is missing the metrics seam is a no-op adapter and
+nothing is published. The Redis health indicator is not gated by that switch;
+it needs the optional Actuator dependency and reports Redis connectivity plus
+protection degradation. Writer statistics and failure reporting are bounded by
+the contracts in `STABILITY.md` and `COMPATIBILITY.md`; pre-1.0 metric names
+and log wording are not a general compatibility promise.
 
 WARN/ERROR diagnostics omit raw cache keys. The source uses cache-name or a
 short diagnostic fingerprint where available and keeps fuller detail at lower

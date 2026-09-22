@@ -30,7 +30,8 @@ import java.util.concurrent.ConcurrentMap;
  * <b>不属于</b>本指标 — fail-open 是成功的保护行为而非缓存失败,误报会污染降级告警。
  * 二者刻意分离:filter 级 telemetry 在 adapter,缓存级失败在本 reporter。
  *
- * <p>registry 缺失(null)时全程 no-op,与 ResiCache 其余 metrics 行为一致。
+ * <p>registry 由 {@link ResolvedMetrics} 单一决议,永不为 null;metrics 未启用时它是
+ * no-op seam,本 reporter 全程无副作用,与 ResiCache 其余 metrics 行为一致。
  * counter map 按 (operation, kind, strategy) 组合惰性注册 — tag 组合有界
  * (5 ops × 5 kinds × 3 strategies),cardinality 可控。
  */
@@ -56,9 +57,6 @@ final class CacheFailureReporter {
     public void report(@org.springframework.lang.Nullable CacheOperation operation,
                        @org.springframework.lang.Nullable FailureKind kind,
                        @org.springframework.lang.Nullable ErrorStrategy strategy) {
-        if (registry == null) {
-            return;
-        }
         FailureKey key = new FailureKey(
                 operation == null ? "UNKNOWN" : operation.name(),
                 kind == null ? "UNKNOWN" : kind.name(),
