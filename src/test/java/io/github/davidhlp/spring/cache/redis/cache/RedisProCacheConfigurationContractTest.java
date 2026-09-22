@@ -400,6 +400,38 @@ class RedisProCacheConfigurationContractTest {
                         .isNotNull());
     }
 
+    @Test
+    void standardObservers_injectInDeclaredOrder() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withBean(RedisProCacheWriter.class,
+                            () -> org.mockito.Mockito.mock(RedisProCacheWriter.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        // 类级 @Order 必须真的落到 Spring 的注入顺序上(工厂保持该顺序);
+                        // 若注解不生效,顺序会退化成 bean 名序(DebugLog 先于 MDC)。
+                        assertThat(context
+                                        .getBeanProvider(
+                                                io.github.davidhlp.spring.cache.redis.chain.observer
+                                                        .ChainObserver.class)
+                                        .orderedStream()
+                                        .map(observer -> observer.getClass().getSimpleName())
+                                        .toList())
+                                .containsExactly(
+                                        "MDCStampChainObserver",
+                                        "ChainDebugLogChainObserver",
+                                        "ChainTimerChainObserver",
+                                        "FiredCounterChainObserver");
+                    });
+        }
+    }
+
     private ConditionalOnMissingBean conditionOn(String methodName) {
         for (Method method : RedisProCacheConfiguration.class.getDeclaredMethods()) {
             if (method.getName().equals(methodName)) {
