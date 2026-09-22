@@ -106,6 +106,38 @@ class RedisProCacheMetricsRegistryTest {
         }
 
         @Test
+        @DisplayName("关闭 seam — 7 个 metric 全部不注册,record 走类内既有 null 短路")
+        void disabledSeam_registersNothing() {
+            RedisProCacheMetricsRegistry seamBacked =
+                    new RedisProCacheMetricsRegistry(DisabledMetricsRegistry.INSTANCE, CACHE_NAME);
+
+            assertThat(seamBacked.registeredMeterCount())
+                    .as("关闭 seam 上注册不分配任何 meter")
+                    .isZero();
+
+            // record 方法仍可用 — 走类内既有 null 短路,不触碰 seam
+            seamBacked.recordGet(() -> "value");
+            seamBacked.recordHit();
+            seamBacked.recordMiss();
+            seamBacked.recordPut(() -> { });
+            seamBacked.recordEvict(() -> { });
+            seamBacked.recordClear(() -> { });
+
+            CacheMetrics snapshot = seamBacked.metrics();
+            assertThat(snapshot.hitCount()).isZero();
+            assertThat(snapshot.missCount()).isZero();
+            assertThat(snapshot.putCount()).isZero();
+            assertThat(snapshot.evictCount()).isZero();
+            assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("启用 registry — 7 个 metric 全部注册(关闭 seam 不得改变启用路径)")
+        void enabledRegistry_registersAllSeven() {
+            assertThat(registry.registeredMeterCount()).isEqualTo(7);
+        }
+
+        @Test
         @DisplayName("每个 metric 携带 description(用于 Micrometer exposition)")
         void metricsHaveDescriptions() {
             Timer getTimer = meterRegistry.find("resicache.cache.get")
