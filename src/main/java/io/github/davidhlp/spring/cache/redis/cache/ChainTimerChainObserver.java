@@ -28,7 +28,8 @@ import java.util.concurrent.TimeUnit;
  * handler 类型、三值 decision 与应用配置的 cacheName。
  *
  * <p>线程安全：Timer map 支持并发注册；{@link TimerScope} 是单次节点调用的不可变
- * token，不在 observer 内保存共享的 per-call 状态。registry 缺失时全程 no-op。
+ * token，不在 observer 内保存共享的 per-call 状态。registry 由 {@link ResolvedMetrics}
+ * 单一决议、永不为 null；metrics 未启用时它是 no-op seam，计时样本不落任何出口。
  */
 final class ChainTimerChainObserver implements ChainObserver {
 
@@ -43,13 +44,13 @@ final class ChainTimerChainObserver implements ChainObserver {
 
     @Override
     public Object onNodeStart(CacheHandler handler, CacheContext context) {
-        return registry == null ? null : new TimerScope(System.nanoTime());
+        return new TimerScope(System.nanoTime());
     }
 
     @Override
     public void onNodeEnd(CacheHandler handler, CacheContext context,
                           Object scopeToken, HandlerResult result) {
-        if (registry == null || result == null || !(scopeToken instanceof TimerScope scope)) {
+        if (result == null || !(scopeToken instanceof TimerScope scope)) {
             return;
         }
         TimerKey key = new TimerKey(

@@ -23,7 +23,8 @@ import lombok.extern.slf4j.Slf4j;
  * 注册钩子（{@code onAttachMetrics}）。
  *
  * <p>disabled handler 语义 counter 不注册；fired 与语义
- * counter 都在 handler 进链时统一注册。registry 缺失时本 observer 全 no-op。
+ * counter 都在 handler 进链时统一注册。registry 由 {@link ResolvedMetrics} 单一决议、
+ * 永不为 null；metrics 未启用时它是 no-op seam，本 observer 无副作用。
  *
  * <p>per-handler span child 可在本类的 {@code afterNode} 内挂载，
  * 零修改 Engine 即可与本 counter 同步打点。
@@ -54,9 +55,6 @@ final class FiredCounterChainObserver implements ChainObserver {
     @Override
     public void afterNode(CacheHandler handler, CacheContext context,
                           io.github.davidhlp.spring.cache.redis.chain.HandlerResult result) {
-        if (registry == null) {
-            return;
-        }
         String handlerTag = CacheHandlerChain.handlerTag(handler);
         Counter counter = firedCounters.computeIfAbsent(handler.getClass(), klass ->
                 Counter.builder("resicache.handler.fired")

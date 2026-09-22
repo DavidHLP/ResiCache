@@ -23,6 +23,12 @@
       "type": "java.lang.Integer",
       "defaultValue": 10000,
       "description": "Maximum cached Bloom hash positions."
+    },
+    {
+      "name": "resi-cache.metrics.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "Opt-in switch for cache metrics; also requires an application MeterRegistry bean."
     }
   ]
 }

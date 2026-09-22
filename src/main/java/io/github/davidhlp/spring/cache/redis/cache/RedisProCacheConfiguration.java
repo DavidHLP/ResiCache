@@ -7,7 +7,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
-import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,7 +42,8 @@ class RedisProCacheConfiguration {
      *
      * <p>顺序(MDC → DebugLog → Timer → FiredCounter)由 {@code @Order} 显式声明:
      * MDC 先 stamp,DEBUG log 再读 requestId,Timer/FiredCounter 最后打点。
-     * registry 缺失时 Timer/FiredCounter observer 内部 no-op。
+     * registry 由 {@link ResolvedMetrics} 单一决议;metrics 未启用时它是 no-op seam,
+     * Timer/FiredCounter observer 照常装配。
      */
     @Bean
     @org.springframework.core.annotation.Order(1)
@@ -82,11 +82,11 @@ class RedisProCacheConfiguration {
     @Bean
     @ConditionalOnMissingBean(CacheErrorHandler.class)
     public CacheErrorHandler cacheErrorHandler(ResolvedMetrics resolvedMetrics) {
-        MeterRegistry registry = resolvedMetrics.meterRegistry();
-        // Failure-metrics contract:统一失败指标 reporter(registry 缺失 → 内部 no-op)
+        // Failure-metrics contract:统一失败指标 reporter;metrics 未启用时
+        // ResolvedMetrics 交出 no-op seam,此处不再按 null 分支。
         return new CacheErrorHandler(
-                registry == null ? null
-                        : new io.github.davidhlp.spring.cache.redis.cache.CacheFailureReporter(registry));
+                new io.github.davidhlp.spring.cache.redis.cache.CacheFailureReporter(
+                        resolvedMetrics.meterRegistry()));
     }
 
     @Bean
@@ -181,13 +181,8 @@ class RedisProCacheConfiguration {
         Map<String, RedisCacheConfiguration> initialCacheConfigurations =
                 buildInitialCacheConfigurations(properties, defaultRedisCacheConfiguration);
 
-        MeterRegistry meterRegistry = resolvedMetrics.meterRegistry();
-        if (meterRegistry == null) {
-            log.debug("MeterRegistry not available or metrics disabled — metrics will be disabled");
-        }
-
         ResiCacheFeatures features = ResiCacheFeatures.builder()
-                .meterRegistry(meterRegistry)
+                .meterRegistry(resolvedMetrics.meterRegistry())
                 .bloomGate(bloomGate)
                 .operationResolver(operationResolver)
                 .syncSupport(syncSupport)

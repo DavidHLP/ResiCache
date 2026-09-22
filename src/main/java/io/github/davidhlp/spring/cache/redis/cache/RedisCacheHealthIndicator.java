@@ -3,11 +3,9 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
-import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.data.redis.core.RedisCallback;
@@ -24,24 +22,23 @@ import org.springframework.stereotype.Component;
  *       报告 {@code protection.degraded=local-only}(不阻断整体 UP 状态,
  *       但暴露安全降级便于运维感知)。本类标 {@code Status.UP} + detail 记录</li>
  * </ol>
+ *
+ * <p>本指标报告的是 Redis 连通性与 protection 降级,与 metrics 无关,故只按
+ * Actuator 是否在 classpath 上启用(见 {@code @ConditionalOnClass})。
  */
 @Slf4j
 @Component
 @ConditionalOnClass(HealthIndicator.class)
-@ConditionalOnProperty(prefix = "resi-cache.metrics", name = "enabled", havingValue = "true", matchIfMissing = false)
 class RedisCacheHealthIndicator implements HealthIndicator {
 
     private final RedisTemplate<String, Object> redisCacheTemplate;
     private final SyncSupport syncSupport;
-    private final RedisProCacheProperties properties;
 
     public RedisCacheHealthIndicator(RedisTemplate<String, Object> redisCacheTemplate,
-                                     ObjectProvider<SyncSupport> syncSupportProvider,
-                                     ObjectProvider<RedisProCacheProperties> propertiesProvider) {
+                                     ObjectProvider<SyncSupport> syncSupportProvider) {
         this.redisCacheTemplate = redisCacheTemplate;
         // ObjectProvider null-safe:无 Redisson + 无 sync 配置时 SyncSupport 可能不存在
         this.syncSupport = syncSupportProvider.getIfAvailable();
-        this.properties = propertiesProvider.getIfAvailable();
     }
 
     @Override
