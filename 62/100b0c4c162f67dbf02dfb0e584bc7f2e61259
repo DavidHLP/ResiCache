@@ -1,0 +1,39 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandler.java
+  s_2b4c67baf1afa2::t_66fb408dfd51e2 98
+  s_2b4c67baf1afa2::t_a305195758d3bc 88-90,94-95
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RefreshTaskMetrics.java
+  s_2b4c67baf1afa2::t_3c99828f0575c8 97-113
+  s_2b4c67baf1afa2::t_dea86dcd9d0968 23-26
+  s_2b4c67baf1afa2::t_c20d702ded8df5 47
+  s_2b4c67baf1afa2::t_d0f0799d159297 114
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RefreshTaskMetricsTest.java
+  s_2b4c67baf1afa2::t_d747ecdfd56a76 15
+  s_2b4c67baf1afa2::t_ef4da66bf9b15a 81-107
+  s_2b4c67baf1afa2::t_26576e63c2581f 108
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandlerSemanticCounterTest.java
+  s_2b4c67baf1afa2::t_ed34fc691dbb16 126-147
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisBloomIFilterIntegrationTest.java
+  s_2b4c67baf1afa2::t_40e5ae496dd607 183-206
+  s_2b4c67baf1afa2::t_f6a6adac9640ee 6
+  s_2b4c67baf1afa2::t_0622325e6f4ca2 182,207-208
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisBloomIFilter.java
+  s_2b4c67baf1afa2::t_eb4b214a0a0d4a 165-178
+  s_2b4c67baf1afa2::t_677aa9164face2 53
+  s_2b4c67baf1afa2::t_fdf1b510ffbba6 179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "62100b0c4c162f67dbf02dfb0e584bc7f2e61259",
+  "prompts": {},
+  "sessions": {
+    "s_2b4c67baf1afa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4201cbd5-6296-436d-9d9e-8dccfcfaa3f3",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
