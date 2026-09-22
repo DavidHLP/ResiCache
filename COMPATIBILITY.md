@@ -59,7 +59,10 @@ baseline.
   `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`;
   otherwise the resolved metrics seam is a no-op adapter.
   `RedisCacheHealthIndicator` requires Actuator and the `HealthIndicator`
-  class; it is not gated on the metrics property. |
+  class; it is not gated on the metrics property, so an application with
+  Actuator and Redis assembles it and each `/actuator/health` probe issues a
+  synchronous Redis `connection.ping()` round trip (see the probe-cost note in
+  [`docs/OPERATIONS.md`](docs/OPERATIONS.md)). |
 | **Caffeine** | Bundled | Used internally for the local hash cache and
   bloom-filter bitset; not exposed as a multi-level cache. |
 
