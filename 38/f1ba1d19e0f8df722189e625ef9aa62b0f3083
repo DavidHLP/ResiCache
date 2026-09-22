@@ -1,0 +1,16 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 161-166
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/HandlerResultProtocolTest.java
+  h_77173abe25c3ff 1-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38f1ba1d19e0f8df722189e625ef9aa62b0f3083",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
