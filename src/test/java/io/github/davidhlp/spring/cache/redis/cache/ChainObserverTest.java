@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.core.annotation.Order;
 import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +54,11 @@ class ChainObserverTest {
         handler = new CacheHandler() {
             @Override public HandlerResult handle(CacheContext c) { return HandlerResult.continueChain(); }
         };
+    }
+
+    /** metrics 未启用时的 no-op seam —— 走生产同一条解析路径。 */
+    private static MeterRegistry noOpSeam() {
+        return ResolvedMetrics.resolve(null, new MockEnvironment()).meterRegistry();
     }
 
     @Nested
@@ -116,7 +122,7 @@ class ChainObserverTest {
         @Test
         @DisplayName("no-op seam 时节点计时不落任何出口,不抛异常")
         void noopSeam_noOp() {
-            ChainObserver observer = new ChainTimerChainObserver(ResolvedMetrics.NOOP_REGISTRY);
+            ChainObserver observer = new ChainTimerChainObserver(noOpSeam());
 
             Object scopeToken = observer.onNodeStart(handler, ctx);
 
@@ -236,7 +242,7 @@ class ChainObserverTest {
         @Test
         @DisplayName("no-op seam → afterNode 自增不落任何出口,不抛异常")
         void nullRegistry_noOp() {
-            ChainObserver observer = new FiredCounterChainObserver(ResolvedMetrics.NOOP_REGISTRY);
+            ChainObserver observer = new FiredCounterChainObserver(noOpSeam());
             observer.afterNode(handler, ctx, HandlerResult.continueChain());
             // 无异常即可
         }
@@ -264,19 +270,21 @@ class ChainObserverTest {
     class ObserverOrderTests {
 
         /**
-         * 工厂按 observer 类级 {@code @Order} 注册,Engine 依注册序派发每个 hook。故意以
-         * 逆序注入,证明生效顺序来自 @Order 而非注入顺序:若排序退化为 no-op(注解不在类上),
-         * beforeNode 将以 [third, first, second] 触发,断言失败。
+         * 注册序即派发序。注入列表已由 Spring 按其支持的顺序来源排好({@code @Order}、
+         * {@code Ordered}、{@code @Bean} 方法注解、元注解/代理);工厂保持注入序,
+         * 不再按实例可见的类级注解二次排序。
          */
         @Test
-        @DisplayName("observers dispatch in class-level @Order order across a chain run")
-        void createChain_dispatchesByOrderNotInjectionOrder() {
+        @DisplayName("factory keeps the Spring-resolved injected order across a chain run")
+        void createChain_preservesInjectedOrder() {
             RedisProCacheProperties properties = mock(RedisProCacheProperties.class);
             List<String> sequence = new ArrayList<>();
-            List<ChainObserver> injected = List.of(
+            List<ChainObserver> injected = new ArrayList<>(List.of(
                     new ThirdOrderObserver(sequence),
                     new FirstOrderObserver(sequence),
-                    new SecondOrderObserver(sequence));
+                    new SecondOrderObserver(sequence)));
+            // Spring 注入前的排序动作:类级 @Order 由同一比较器解析
+            AnnotationAwareOrderComparator.sort(injected);
 
             CacheHandlerChain chain = new CacheHandlerChainFactory(
                     List.of(new SingleNodeHandler()), properties,
@@ -285,6 +293,54 @@ class ChainObserverTest {
             chain.execute(ctx);
 
             assertThat(sequence).containsExactly("first", "second", "third");
+        }
+
+        /**
+         * 回归守卫:顺序来自 Spring 能识别、而实例级比较器看不到的来源({@code @Bean} 方法上的
+         * {@code @Order}、{@code Ordered}、代理/元注解)时,observer 必须保留 Spring 给它的位置,
+         * 不能被工厂挤到带类级 {@code @Order} 的 observer 之后。
+         */
+        @Test
+        @DisplayName("an observer without class-level @Order keeps its injected position")
+        void createChain_preservesInjectedPositionOfUnorderedObserver() {
+            RedisProCacheProperties properties = mock(RedisProCacheProperties.class);
+            List<String> sequence = new ArrayList<>();
+            List<ChainObserver> injected = List.of(
+                    new UnorderedObserver(sequence),
+                    new FirstOrderObserver(sequence));
+
+            CacheHandlerChain chain = new CacheHandlerChainFactory(
+                    List.of(new SingleNodeHandler()), properties,
+                    ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), injected)
+                    .createChain();
+            chain.execute(ctx);
+
+            assertThat(sequence).containsExactly("unordered", "first");
+        }
+
+        /**
+         * 标准 observer 的相对顺序由类级 {@code @Order} 单一声明;Spring 注入列表时按同一
+         * 比较器排序,因此工厂不再二次排序后 MDC→DebugLog→Timer→FiredCounter 依旧成立。
+         */
+        @Test
+        @DisplayName("standard observers declare an ascending class-level @Order")
+        void standardObservers_declareAscendingOrder() {
+            MeterRegistry seam = noOpSeam();
+            List<ChainObserver> standard = new ArrayList<>(List.of(
+                    new FiredCounterChainObserver(seam),
+                    new ChainTimerChainObserver(seam),
+                    new MDCStampChainObserver(),
+                    new ChainDebugLogChainObserver()));
+
+            AnnotationAwareOrderComparator.sort(standard);
+
+            assertThat(standard)
+                    .extracting(observer -> observer.getClass().getSimpleName())
+                    .containsExactly(
+                            "MDCStampChainObserver",
+                            "ChainDebugLogChainObserver",
+                            "ChainTimerChainObserver",
+                            "FiredCounterChainObserver");
         }
 
         private static final class SingleNodeHandler implements CacheHandler {
@@ -321,6 +377,16 @@ class ChainObserverTest {
             @Override
             public void beforeNode(CacheHandler handler, CacheContext context) {
                 sequence.add("third");
+            }
+        }
+
+        /** 无类级 @Order:顺序由 Spring 的其他来源决定,工厂必须保持注入位置。 */
+        private static final class UnorderedObserver implements ChainObserver {
+            private final List<String> sequence;
+            UnorderedObserver(List<String> sequence) { this.sequence = sequence; }
+            @Override
+            public void beforeNode(CacheHandler handler, CacheContext context) {
+                sequence.add("unordered");
             }
         }
     }

@@ -36,8 +36,8 @@ import org.springframework.core.annotation.Order;
  */
 @Slf4j
 // 标准 observer 执行顺序由类级 @Order 单一拥有(MDC→DebugLog→Timer→FiredCounter):
-// 工厂 CacheHandlerChainFactory#observerOrder 读此注解排序,故本 observer 先 stamp requestId,
-// ChainDebugLogChainObserver 才能在 afterNode 读到 MDC 中的 id。
+// Spring 注入 observer 列表时按同一注解排序,工厂保持注入序 —— 故本 observer 先 stamp
+// requestId,ChainDebugLogChainObserver 才能在 afterNode 读到 MDC 中的 id。
 @Order(1)
 final class MDCStampChainObserver implements ChainObserver {
 

@@ -155,8 +155,10 @@ class CacheHandlerChainFactory {
                 return cachedChain;
             }
 
-            // 1) 装配 observer(单一装配点):由本工厂按 observer 类级 @Order 排序后注册,
-            //    不依赖 Spring 注入列表的顺序(注入顺序非本类的顺序契约)。
+            // 1) 装配 observer(单一装配点):注册序即派发序,注入列表由 Spring 按其支持的
+            //    顺序来源排好(@Order、Ordered、@Bean 方法注解、元注解/代理),本工厂不再
+            //    二次排序 —— 实例级比较器只看得到类级注解,会把 Spring 认得而它看不到的
+            //    顺序(如 @Bean 方法上的 @Order(0))丢掉。
             //    idempotent 由本方法的单例缓存 miss pattern 保证,首次 miss 后不会再进本块。
             registerObserversOnce();
 
@@ -205,38 +207,26 @@ class CacheHandlerChainFactory {
     /**
      * 注册注入的 observer 到 Engine — 单一装配点。
      *
-     * <p>顺序由 observer 类级 {@code @Order} 单一拥有,本方法按 {@link #observerOrder}
-     * 升序排序(标准 MDC→DebugLog→Timer→FiredCounter 各带 {@code @Order(1..4)};
-     * 未标注的自定义 observer 取 {@link Integer#MAX_VALUE} 排在最后),再按类型去重
-     * (同名同 tag counter 重复注册幂等,但 observer 实例重复注册会双计 — 去重保证
-     * 每个 observer 类恰好注册一次),随后按序 addObserver。注册顺序即
-     * {@code STABILITY.md §4} 承诺的 observer 执行顺序。
+     * <p>注册顺序即 {@code STABILITY.md §4} 承诺的 observer 执行顺序,也就是 Spring 解析
+     * 注入列表时给出的顺序(observation order = registration order)。标准
+     * MDC→DebugLog→Timer→FiredCounter 由各 observer 类级 {@code @Order(1..4)} 声明,Spring
+     * 与用户 observer 的其他顺序来源({@code Ordered}、{@code @Bean} 方法上的 {@code @Order}、
+     * 元注解/代理)同样由 Spring 解析 —— 工厂因此保持注入序,不再按类级注解二次排序。按类型
+     * 去重(同名同 tag counter 重复注册幂等,但 observer 实例重复注册会双计 — 去重保证
+     * 每个 observer 类恰好注册一次),随后按序 addObserver。
      *
      * <p>registry 缺失时:MDC/DebugLog 无 registry 依赖;Timer/FiredCounter
      * observer 内部 lazy 检测,registry 缺失时全 no-op。
      */
     private void registerObserversOnce() {
         Set<Class<?>> seen = new HashSet<>();
-        List<ChainObserver> sorted = observers.stream()
-                .sorted(Comparator.comparingInt(this::observerOrder))
-                .toList();
-        for (ChainObserver observer : sorted) {
+        for (ChainObserver observer : observers) {
             if (observer == null || !seen.add(observer.getClass())) {
                 continue;
             }
             engine.addObserver(observer);
             log.debug("Registered ChainObserver: {}", observer.getClass().getSimpleName());
         }
-    }
-
-    /**
-     * observer 顺序的唯一真值读取点:读 observer 类上的 {@code @Order}(而非 {@code @Bean}
-     * 方法上的),因此 {@link #registerObserversOnce} 的排序对标准与自定义 observer 均生效。
-     */
-    private int observerOrder(ChainObserver observer) {
-        org.springframework.core.annotation.Order order =
-                observer.getClass().getAnnotation(org.springframework.core.annotation.Order.class);
-        return order != null ? order.value() : Integer.MAX_VALUE;
     }
 
     /**

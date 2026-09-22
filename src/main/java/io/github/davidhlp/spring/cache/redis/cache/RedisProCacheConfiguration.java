@@ -41,8 +41,9 @@ class RedisProCacheConfiguration {
      * 由 {@link CacheHandlerChainFactory} 单一装配点注入 Engine。
      *
      * <p>执行顺序(MDC → DebugLog → Timer → FiredCounter)由 observer 类自身的
-     * {@code @Order} 单一声明(见各 observer 类);工厂 {@code observerOrder} 读取该
-     * 类级注解排序,故 bean 方法不再重复声明。MDC 先 stamp,DEBUG log 再读 requestId,
+     * {@code @Order} 单一声明(见各 observer 类),Spring 注入列表时据此排序,工厂保持
+     * 注入序,故 bean 方法不再重复声明。用户 observer 用 {@code Ordered} 或 {@code @Bean}
+     * 方法上的 {@code @Order} 表达的顺序同样生效。MDC 先 stamp,DEBUG log 再读 requestId,
      * Timer/FiredCounter 最后打点。registry 由 {@link ResolvedMetrics} 单一决议;
      * metrics 未启用时它是 no-op seam,Timer/FiredCounter observer 照常装配。
      */
