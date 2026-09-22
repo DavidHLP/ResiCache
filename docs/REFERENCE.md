@@ -69,22 +69,28 @@ README snippet when the properties class or generated metadata differs.
 ### TTL resolution precedence
 
 Effective TTL resolves once, in package-private `TtlPolicy` (`cache/`; see
-[`ARCHITECTURE.md`](ARCHITECTURE.md)), from three inputs — the first match wins:
+[`ARCHITECTURE.md`](ARCHITECTURE.md)), from two inputs — the first match wins:
 
 1. **Annotation**: method-level `@RedisCacheable`/`@RedisCachePut` `ttl` when
-   greater than zero (attribute default `60`), optionally jittered by
-   `randomTtl`/`variance`.
+   greater than zero, optionally jittered by `randomTtl`/`variance`. An unset
+   attribute is `0` and declares no method-level TTL; `@RedisCacheEvict.ttl()`
+   uses the same unset encoding. The annotation is the only declaration that
+   can override the configured default.
 2. **Duration parameter**: the write-path TTL Spring Data Redis passes from the
    cache-level `resi-cache.default-ttl` (default `30m`, overridable per cache
-   under `caches.*.ttl`). It applies only when no method-level TTL is set —
-   `ttl=0`, or a plain Spring `@Cacheable` in `SELECTIVE` mode. A zero or
-   negative parameter yields a permanent entry (no expiry).
-3. **No TTL context**: a `null` parameter (for example a caller-supplied
-   `RedisCacheConfiguration`) falls back to `TtlPolicy`'s `60`-second default.
+   under `caches.*.ttl`). This is the only implicit default, and it applies
+   whenever no method-level TTL is declared — an annotation without `ttl`, a
+   plain Spring `@Cacheable` in `SELECTIVE` mode, or `ttl=0`.
+3. **Permanent entry**: a zero, negative, or `null` parameter applies no TTL
+   and the entry has no expiry. Spring Data Redis 4.0 has no separate `null`
+   case on a write path: `RedisCacheConfiguration`'s default `TtlFunction` is
+   `persistent()`, i.e. `Duration.ZERO`, and `entryTtl` rejects `null` — a
+   cache configured without expiry therefore produces a zero parameter.
 
-The consequence that branch 1's `60`-second annotation default overrides
-`resi-cache.default-ttl` is recorded as a supported-behaviour limitation in
-[`COMPATIBILITY.md`](../COMPATIBILITY.md).
+The `ttl` attribute no longer carries an implicit `60`-second default. An
+annotated method that does not set `ttl` now expires its entries after the
+configured default rather than after `60s`; the change and the migration
+options are recorded in [`COMPATIBILITY.md`](../COMPATIBILITY.md).
 
 ## Cache operation outcomes
 
