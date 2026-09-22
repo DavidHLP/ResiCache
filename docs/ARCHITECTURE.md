@@ -86,8 +86,12 @@ The annotation path is intentionally split into two views:
    declaration; read-through write-back remains governed by the read side.
 
 The split is required by the Spring operation source and the chain-side policy
-resolver. It is not permission to reintroduce per-invocation parsing or to
-collapse the two operation representations without a new contract decision.
+resolver. Both views are projected from one `RedisCacheAttributes` instance per
+annotation, and the snapshot carries a `kind + cacheName` index built at
+registration time, so the two views cannot disagree and policy lookup does not
+depend on declaration order. The split is not permission to reintroduce
+per-invocation parsing or to collapse the two operation representations without
+a new contract decision.
 Class-level operation discovery and method-level policy application retain the
 current documented behavior in `COMPATIBILITY.md`.
 

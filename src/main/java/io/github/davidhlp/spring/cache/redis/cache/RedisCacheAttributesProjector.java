@@ -8,7 +8,6 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
-import org.springframework.stereotype.Component;
 
 /**
  * 把 {@code @RedisCacheable / @RedisCachePut / @RedisCacheEvict} 三个公开注解的属性
@@ -27,19 +26,36 @@ import org.springframework.stereotype.Component;
  * <p>Spring 原生 {@code @Cacheable} 由 {@link SpringCacheableAdapter} 内部直接构造，
  * 无需投影层。
  *
- * <p><b>seam 收敛</b>：三个 {@code from(annotation)} 公共面之下，22 个共享字段
- * 的 builder 链下沉到单一 {@code project(FieldSource, boolean, boolean)} 方法
- * + 三个轻量 {@code extractFrom(annotation)} 提取器。Cacheable / Put 的 Evict-only
- * 字段显式传 {@code false}，Evict 则传入注解值。新增
- * 共享字段：1 处改 {@link FieldSource} + 1 处改 {@code project()} body + 3 处改
- * {@code extractFrom()}（或部分子集），共享一份 builder 链。
+ * <p><b>seam 收敛</b>：{@link AnnotationParser} 对每个注解只调用本类一次，得到的
+ * {@link RedisCacheAttributes} 同时喂给 AOP 面与 policy 面 —— 本类是
+ * "注解 → operation 字段" 的唯一映射，两侧不再各自读注解、各自解释同一字段。
+ * 三个 {@code from(annotation)} 公共面之下，共享字段的 builder 链下沉到单一
+ * {@code project(FieldSource, boolean, boolean)} 方法 + 三个轻量
+ * {@code extractFrom(annotation)} 提取器，共享一份 builder 链。
+ * Cacheable / Put 的 Evict-only 字段显式传 {@code false}，Evict 则传入注解值。
+ *
+ * <p><b>新增一个共享字段的真实触点</b>（以 {@code useBloomFilter} 的 grep 口径实测,
+ * 2026-09 复核:{@code grep -rn 'useBloomFilter\|UseBloomFilter' src/main/java} = 35 行 /
+ * 14 文件,其中 2 行是读取方、6 行在本类）:3 个注解声明 + 本类
+ * {@link FieldSource} 组件 + {@code project()} 一行 + 3 个 {@code extractFrom()} 参数 +
+ * {@link RedisCacheAttributes} 字段 + {@link RedisCacheAttributeSink} 方法 +
+ * {@code COMMON_SINKS} 一行 + 3 个 policy Builder 的字段/setter + 3 个 Operation 构造赋值 +
+ * {@code CachePolicyView} 链路。本类只收敛其中 6 行;其余是编译期强制的适配器
+ * （漏改即编译失败）,不是可漂移的重复映射。AOP 面共享字段（{@code cacheNames / key /
+ * keyGenerator / cacheManager / cacheResolver / condition}）的映射各自只有
+ * {@link RedisCacheAttributes#applyTo(org.springframework.cache.interceptor.CacheableOperation.Builder)}
+ * 一个声明点,与三个注解族无关。
  *
  * <p><b>{@code expectedInsertions} 类型契约已统一</b>：三个公开注解均使用 {@code long}
  * 并以 {@code 100000L} 为默认值，与 {@link RedisCacheAttributes#expectedInsertions}
  * 一致。本投影器只做无差别映射，不执行隐式拓宽或窄化。
  *
+ * <p><b>非 bean</b>：本类与 {@link SpringCacheableAdapter} 由 {@link AnnotationParser}
+ * 直接 {@code new} 构造 —— 它们是解析器的内部协作器,不是可替换的扩展点。此前二者标注
+ * {@code @Component} 但没有任何注入方（唯一的外部构造点已随两参构造器一并删除）,
+ * 2026-09 复核后去掉注解。
+ *
  */
-@Component
 class RedisCacheAttributesProjector {
 
     /**

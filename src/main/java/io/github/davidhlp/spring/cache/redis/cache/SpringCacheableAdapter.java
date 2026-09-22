@@ -7,7 +7,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import java.lang.reflect.Method;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.stereotype.Component;
 
 /**
  * Spring 原生 {@link Cacheable @Cacheable} 注解 → {@link RedisCacheableOperation} 的适配工厂。
@@ -21,8 +20,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>{@code toAttributes} 与 {@code materialize} 因承载 Spring→ResiCache 字段映射的非平凡逻辑,
  * 保留为命名 seam。
+ *
+ * <p>由 {@link AnnotationParser} 直接 {@code new} —— 无注入方,故不是 bean。
  */
-@Component
 class SpringCacheableAdapter {
 
 

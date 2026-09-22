@@ -15,7 +15,8 @@ import org.springframework.util.StringUtils;
  * 注解 → Builder 字段填充的 deep seam.
  *
  * <p><b>problem (背景)</b>:两条注解 → Spring {@code CacheOperation} 解析路径
- * ({@link AnnotationParser} 解析 {@code @RedisCacheable/@RedisCacheEvict/@RedisCachePut},
+ * ({@link RedisCacheAttributes#applyTo(org.springframework.cache.interceptor.CacheableOperation.Builder)}
+ * 把 ResiCache 注解投影出的 AOP 面填入 Spring builder,
  *  {@link SpringAnnotationAdapter} 解析 Spring {@code @Cacheable/@CachePut/@CacheEvict})
  * 各持有 3 个近镜像的 builder 方法,共 6 处.每个方法都遵循同一形状:
  * <ol>
@@ -23,20 +24,21 @@ import org.springframework.util.StringUtils;
  *   <li>{@code setName(name)}</li>
  *   <li>{@code setCacheNames(value-or-cacheNames)}</li>
  *   <li>6 个文本字段({@code key / condition / unless / keyGenerator / cacheManager /
- *       cacheResolver})逐个做{@code if (hasText) setX} 守卫式赋值 — 18 处 in
- *       {@code AnnotationParser} + 17 处 in {@code SpringAnnotationAdapter}</li>
+ *       cacheResolver})逐个做{@code if (hasText) setX} 守卫式赋值 — 6 处 in
+ *       {@code RedisCacheAttributes#applyToSpringCommonFields} + 17 处 in
+ *       {@code SpringAnnotationAdapter}</li>
  *   <li>1-2 个 special 字段({@code sync} / {@code cacheWide} / {@code beforeInvocation})直接赋值</li>
  *   <li>{@code build()}</li>
  * </ol>
  *
- * <p>两类的实现各自把同一形状重写一次 — 添加 1 个新 ResiCache 注解字段需同时改两个类的
- * 3 个方法共 6 个触点,且 {@code AnnotationParser} 不会复用 {@code SpringAnnotationAdapter}
+ * <p>两处的实现各自把同一形状重写一次 — 添加 1 个 AOP 面注解字段需同时改两处,
+ * 且 AOP 面不会复用 {@code SpringAnnotationAdapter}
  * 已有的私有 {@code applyText} helper.同一形状在两文件中独立漂移.
  *
  * <p><b>solution</b>:把"形状 → 字段填充"收口到本类两个 seam:
  * <ul>
  *   <li>{@link #applyText(Object, String, BiConsumer)} — 单字段 null-safe 写入,
- *       替换 {@code if (hasText) b.setX(value)} 样板.两类的 35 处 if-守卫收敛为一处.</li>
+ *       替换 {@code if (hasText) b.setX(value)} 样板.两处的 23 处 if-守卫收敛为一处.</li>
  *   <li>{@link #populate(Object, Object, List, List)} — 整个 builder 的字段填充
  *       编排:迭代 textFields(应用 {@code applyText}) + 迭代 specialFields(直接应用).
  *       每个 parse/build 方法仅含 1 个 populate(...) 调用 + 1 个 build().</li>
@@ -50,14 +52,15 @@ import org.springframework.util.StringUtils;
  *
  * <p><b>deletion test</b>:删本类 + 内联回两个 caller →
  * <ul>
- *   <li>{@link AnnotationParser} 6 个 parse 方法 × 18 if-守卫 = 35+ 行样板回归</li>
+ *   <li>{@code RedisCacheAttributes#applyToSpringCommonFields} 的 6 个 if-守卫 +
+ *       AOP 面 3 个重载的 special 字段填充回归为手写样板</li>
  *   <li>{@link SpringAnnotationAdapter} 私有 {@code applyText} 重新出现 + 3 个 build 方法
  *       17 个 applyText 调用恢复</li>
- *   <li>两文件继续持有"同一形状"2 份独立实现,字段新增触点 = 6 个 caller 方法</li>
+ *   <li>两处继续持有"同一形状"2 份独立实现</li>
  * </ul>
  * seam 挣得起存在代价(单类 ~60 SLOC 含 Javadoc).
  *
- * <p><b>包归属</b>:放在 {@code annotation} 包 — {@link AnnotationParser} /
+ * <p><b>包归属</b>:放在 {@code annotation} 包 — {@link RedisCacheAttributes} /
  * {@link SpringAnnotationAdapter} 是本 utility 的两个生产 consumer,utility 自身无 domain
  * 依赖(纯 {@code StringUtils} + 标准 JDK functional API).
  *
@@ -67,7 +70,7 @@ import org.springframework.util.StringUtils;
  *   <li>helper 全为 {@code public static},无状态,线程安全</li>
  * </ul>
  *
- * @see AnnotationParser
+ * @see RedisCacheAttributes
  * @see SpringAnnotationAdapter
  */
 @UtilityClass
@@ -162,8 +165,8 @@ final class BuilderPopulator {
      * <p>本方法用 {@link BiConsumer} 把 builder 也传入,允许 setter 在 lambda 体内捕获 builder
      * 实例(适配 Lombok 链式 builder 写法).
      *
-     * <p>{@link AnnotationParser} 18 处
-     * {@code if (StringUtils.hasText(ann.x())) builder.setX(ann.x());} 样板
+     * <p>{@link RedisCacheAttributes} 与 {@link SpringAnnotationAdapter} 的
+     * {@code if (StringUtils.hasText(...)) builder.setX(...);} 样板
      * 经本方法统一处理,消除重复的 if-守卫.
      *
      * @param builder 目标 builder
