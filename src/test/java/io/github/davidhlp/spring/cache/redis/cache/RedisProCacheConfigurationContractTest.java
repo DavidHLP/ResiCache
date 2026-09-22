@@ -11,7 +11,6 @@ import io.github.davidhlp.spring.cache.redis.config.RedisCacheAutoConfiguration;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.Method;
 import java.util.function.Consumer;
@@ -25,6 +24,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RedisProCacheConfigurationContractTest {
@@ -89,9 +89,13 @@ class RedisProCacheConfigurationContractTest {
                         assertThat(context).hasNotFailed();
                         assertThat(context).doesNotHaveBean(MeterRegistry.class);
                         assertThat(context).hasSingleBean(ResolvedMetrics.class);
-                        MeterRegistry seam = context.getBean(ResolvedMetrics.class).meterRegistry();
-                        assertThat(seam).isInstanceOf(CompositeMeterRegistry.class);
-                        assertThat(((CompositeMeterRegistry) seam).getRegistries()).isEmpty();
+                        assertThat(context.getBean(ResolvedMetrics.class).meterRegistry())
+                                .isInstanceOf(DisabledMetricsRegistry.class)
+                                .isSameAs(ResolvedMetrics.resolve(null, new MockEnvironment())
+                                        .meterRegistry());
+                        assertThat(context.getBean(ResolvedMetrics.class).meterRegistry().getMeters())
+                                .as("无状态 sink:没有 bean 也不得留下 meter 痕迹")
+                                .isEmpty();
                     });
         }
     }

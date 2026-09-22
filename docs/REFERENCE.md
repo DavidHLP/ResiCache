@@ -42,8 +42,11 @@ The main configuration groups are:
   metrics opt-in. It has no `RedisProCacheProperties` field: package-private
   `ResolvedMetrics` (`cache/`) reads it in exactly one place and hands every
   caller a non-null metrics seam — the application `MeterRegistry` when the
-  property is `true` and such a bean exists, otherwise a shared no-op adapter.
-  Its metadata comes from
+  property is `true` and such a bean exists, otherwise the single shared
+  `DisabledMetricsRegistry`: one stateless sink for the whole JVM that registers
+  and retains nothing, so turning metrics off cannot accumulate meter ids or tag
+  strings for dynamically named caches, and the same instance serves every
+  context that resolves it. Its metadata comes from
   `additional-spring-configuration-metadata.json`.
 
 Configuration is validated at binding time. Do not infer a default from an old
