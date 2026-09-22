@@ -1,0 +1,31 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/DisabledMetricsRegistryTest.java
+  s_2b4c67baf1afa2::t_70cdaadfade9ec 1-44
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfigurationContractTest.java
+  s_2b4c67baf1afa2::t_ab2cb942f7eacd 93-98
+  s_2b4c67baf1afa2::t_6d7790d3868e8c 92
+  s_2b4c67baf1afa2::t_bcee9180148cd4 27
+docs/REFERENCE.md
+  s_2b4c67baf1afa2::t_980b3e22814428 45-49
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DisabledMetricsRegistry.java
+  s_2b4c67baf1afa2::t_1d862ace0c85de 15
+  s_2b4c67baf1afa2::t_0fffdc7528b035 71
+  s_2b4c67baf1afa2::t_8cc4bff8e8e7c9 1-14,16-70,72-106
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResolvedMetrics.java
+  s_2b4c67baf1afa2::t_7720f41a487021 13-16,40-41,43-47,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "163318d835d205090a26008e95d602b3fad1fee5",
+  "prompts": {},
+  "sessions": {
+    "s_2b4c67baf1afa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4201cbd5-6296-436d-9d9e-8dccfcfaa3f3",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
