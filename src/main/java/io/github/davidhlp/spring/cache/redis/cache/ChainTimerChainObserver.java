@@ -30,7 +30,8 @@ import org.springframework.core.annotation.Order;
  *
  * <p>线程安全：Timer map 支持并发注册；{@link TimerScope} 是单次节点调用的不可变
  * token，不在 observer 内保存共享的 per-call 状态。registry 由 {@link ResolvedMetrics}
- * 单一决议、永不为 null；metrics 未启用时它是 no-op seam，计时样本不落任何出口。
+ * 单一决议、永不为 null；metrics 未启用时它是 no-op seam，关闭路径不注册、不分配、
+ * 不保留任何 timer —— map 保持为空。
  */
 @Order(3) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class ChainTimerChainObserver implements ChainObserver {
@@ -38,10 +39,13 @@ final class ChainTimerChainObserver implements ChainObserver {
     static final String METRIC_NAME = "resicache.chain.execute";
 
     private final MeterRegistry registry;
+    /** 关闭路径唯一判据 —— 构造期从 seam 推导一次,热路径只分支 final 字段。 */
+    private final boolean disabled;
     private final ConcurrentMap<TimerKey, Timer> timers = new ConcurrentHashMap<>();
 
     public ChainTimerChainObserver(MeterRegistry registry) {
         this.registry = registry;
+        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
     }
 
     @Override
@@ -52,9 +56,10 @@ final class ChainTimerChainObserver implements ChainObserver {
     @Override
     public void onNodeEnd(CacheHandler handler, CacheContext context,
                           Object scopeToken, HandlerResult result) {
-        if (result == null || scopeToken == null) {
+        if (disabled || result == null || scopeToken == null) {
             // 故障节点没有 HandlerResult,不伪造 decision;token 为 null 仅当本人
             // onNodeStart 抛异常(Engine 不产生 token),同样无样本可记录。
+            // disabled:关闭路径不构造 TimerKey、不写 map、不分配 NoopTimer。
             return;
         }
         // Engine 按 observer index 严格配对回传,故 token 必然是本人 onNodeStart 返回的
@@ -76,6 +81,11 @@ final class ChainTimerChainObserver implements ChainObserver {
                 .tag("decision", key.decision())
                 .tag("cacheName", key.cacheName())
                 .register(registry);
+    }
+
+    /** 测试用：暴露当前已注册的 timer 数。 */
+    int registeredTimerCount() {
+        return timers.size();
     }
 
     private record TimerScope(long startNanos) {

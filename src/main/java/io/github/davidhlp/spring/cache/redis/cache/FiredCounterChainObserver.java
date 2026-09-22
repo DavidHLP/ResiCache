@@ -38,11 +38,14 @@ import org.springframework.core.annotation.Order;
 final class FiredCounterChainObserver implements ChainObserver {
 
     private final MeterRegistry registry;
+    /** 关闭路径唯一判据 —— 构造期从 seam 推导一次。 */
+    private final boolean disabled;
     /** handler 类 → fired counter；同名同 tag 重复 register 幂等，故 map 仅按 type 持有。 */
     private final ConcurrentMap<Class<? extends CacheHandler>, Counter> firedCounters = new ConcurrentHashMap<>();
 
     public FiredCounterChainObserver(MeterRegistry registry) {
         this.registry = registry;
+        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
     }
 
     @Override
@@ -57,6 +60,10 @@ final class FiredCounterChainObserver implements ChainObserver {
     @Override
     public void afterNode(CacheHandler handler, CacheContext context,
                           io.github.davidhlp.spring.cache.redis.chain.HandlerResult result) {
+        if (disabled) {
+            // 关闭路径:跳过 handlerTag / ClassValue 查找、Counter.builder、map 写入与 NoopCounter。
+            return;
+        }
         String handlerTag = CacheHandlerChain.handlerTag(handler);
         Counter counter = firedCounters.computeIfAbsent(handler.getClass(), klass ->
                 Counter.builder("resicache.handler.fired")

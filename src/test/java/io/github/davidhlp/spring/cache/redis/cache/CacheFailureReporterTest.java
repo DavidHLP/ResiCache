@@ -83,11 +83,14 @@ class CacheFailureReporterTest {
     }
 
     @Test
-    @DisplayName("no-op seam → 不抛异常,且不向应用 registry 注册任何 meter")
+    @DisplayName("no-op seam → 不抛异常,不保留 counter,且不向应用 registry 注册任何 meter")
     void noopRegistry_noOp() {
         CacheFailureReporter noRegistry = new CacheFailureReporter(
                 ResolvedMetrics.resolve(null, new MockEnvironment()).meterRegistry());
         noRegistry.report(CacheOperation.PUT, FailureKind.REDIS, ErrorStrategy.FAIL_FAST);
+        noRegistry.report(CacheOperation.GET, FailureKind.REDIS, ErrorStrategy.GRACEFUL_DEGRADATION);
+
+        assertThat(noRegistry.registeredCounterCount()).isZero();
         assertThat(registry.getMeters()).isEmpty();
     }
 

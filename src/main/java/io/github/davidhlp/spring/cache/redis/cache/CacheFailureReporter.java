@@ -41,10 +41,13 @@ final class CacheFailureReporter {
     public static final String METRIC_NAME = "resicache.cache.failure";
 
     private final MeterRegistry registry;
+    /** 关闭路径唯一判据 —— 构造期从 seam 推导一次。 */
+    private final boolean disabled;
     private final ConcurrentMap<FailureKey, Counter> counters = new ConcurrentHashMap<>();
 
     public CacheFailureReporter(MeterRegistry registry) {
         this.registry = registry;
+        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
     }
 
     /**
@@ -57,6 +60,10 @@ final class CacheFailureReporter {
     public void report(@org.springframework.lang.Nullable CacheOperation operation,
                        @org.springframework.lang.Nullable FailureKind kind,
                        @org.springframework.lang.Nullable ErrorStrategy strategy) {
+        if (disabled) {
+            // 关闭路径:跳过 FailureKey 构造、map 查找与 NoopCounter。
+            return;
+        }
         FailureKey key = new FailureKey(
                 operation == null ? "UNKNOWN" : operation.name(),
                 kind == null ? "UNKNOWN" : kind.name(),
@@ -73,6 +80,11 @@ final class CacheFailureReporter {
                         "kind", key.kind(),
                         "strategy", key.strategy())
                 .register(registry);
+    }
+
+    /** 测试用：暴露当前已注册的 counter 数。 */
+    int registeredCounterCount() {
+        return counters.size();
     }
 
     private record FailureKey(String operation, String kind, String strategy) {

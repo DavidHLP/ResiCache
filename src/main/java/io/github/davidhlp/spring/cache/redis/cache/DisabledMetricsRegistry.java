@@ -51,6 +51,11 @@ final class DisabledMetricsRegistry extends MeterRegistry {
     /** 全 JVM 共享的无状态 sink;{@link ResolvedMetrics} 关闭路径唯一取值。 */
     static final MeterRegistry INSTANCE = new DisabledMetricsRegistry();
 
+    /** 该 registry 是否为关闭路径的 no-op seam —— 关闭路径唯一判据。 */
+    static boolean isDisabledSeam(MeterRegistry registry) {
+        return registry == INSTANCE;
+    }
+
     private DisabledMetricsRegistry() {
         super(Clock.SYSTEM);
         config().meterFilter(MeterFilter.deny());

@@ -129,6 +129,26 @@ class ChainObserverTest {
             observer.onNodeEnd(handler, ctx, scopeToken, HandlerResult.continueChain());
         }
 
+        /**
+         * 回归守卫：关闭路径必须"不保留",而不只是"不发布"。100 个不同 cacheName 若进入
+         * timer map,就重现了 metrics 关闭时本不该发生的按 cache 名无界增长。
+         */
+        @Test
+        @DisplayName("disabled seam 下 100 个不同 cacheName 不保留任何 Timer")
+        void noopSeam_retainsNoTimers() {
+            ChainTimerChainObserver observer = new ChainTimerChainObserver(noOpSeam());
+            CacheHandler namedHandler = new ContinueHandler();
+
+            for (int i = 0; i < 100; i++) {
+                CacheContext dynamicContext = context("dynamic-cache-" + i, "same-key");
+                Object scopeToken = observer.onNodeStart(namedHandler, dynamicContext);
+                observer.onNodeEnd(namedHandler, dynamicContext, scopeToken,
+                        HandlerResult.continueChain());
+            }
+
+            assertThat(observer.registeredTimerCount()).isZero();
+        }
+
         @Test
         @DisplayName("成功节点按 handler、decision、cacheName 记录一次 Timer")
         void successfulNode_recordsBoundedTags() {
@@ -240,11 +260,14 @@ class ChainObserverTest {
     class FiredCounterTests {
 
         @Test
-        @DisplayName("no-op seam → afterNode 自增不落任何出口,不抛异常")
+        @DisplayName("no-op seam → afterNode 自增不落任何出口,不保留 counter,不抛异常")
         void nullRegistry_noOp() {
-            ChainObserver observer = new FiredCounterChainObserver(noOpSeam());
-            observer.afterNode(handler, ctx, HandlerResult.continueChain());
-            // 无异常即可
+            FiredCounterChainObserver observer = new FiredCounterChainObserver(noOpSeam());
+            for (int i = 0; i < 5; i++) {
+                observer.afterNode(handler, ctx, HandlerResult.continueChain());
+            }
+
+            assertThat(observer.registeredCounterCount()).isZero();
         }
 
         @Test
