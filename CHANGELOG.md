@@ -272,12 +272,17 @@ Current milestones:
   change had moved that work instead of removing it — the retention into the
   timer observer's own per-cache-name map, and the per-key allocation into the
   migration engine. Metric names, tag keys and tag values are unchanged.
-- **The degraded-protection warning fires once per context (c2)** —
-  `RedisCacheHealthIndicator` emits `protection.degraded=local-only` on its first
-  degraded observation instead of on every `/actuator/health` probe, which matters
-  where a load balancer or orchestrator probes frequently and no distributed lock
-  backend is installed. Level and wording are unchanged, and the degradation is
-  still reported in every health response's details.
+- **The degraded-protection warning fires once per context and reports the real
+  mode (c2)** — `RedisCacheHealthIndicator` reports the actual sync-protection
+  state, derived in one place by `SyncSupport`: `protection.degraded=local-only`
+  only when no distributed lock backend is present and
+  `resi-cache.sync-lock.local-only=true` was explicitly enabled,
+  `protection.degraded=fail-fast` when no backend is present without that opt-in
+  (so `sync=true` rejects instead of degrading), and no protection detail when a
+  backend exists. The associated WARN fires at most once per context instead of
+  on every `/actuator/health` probe, which matters where a load balancer or
+  orchestrator probes frequently; the state itself is reported in every health
+  response's details.
 - **Observer order owned by the observer class (c3)** — the four standard
   observers declare `@Order(1..4)` on the class instead of on their `@Bean`
   methods, and the factory registers observers in the Spring-resolved injection

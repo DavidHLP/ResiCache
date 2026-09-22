@@ -44,7 +44,12 @@ and the application's `MeterRegistry`, a decision resolved once during
 assembly. When either is missing the metrics seam is a no-op adapter and
 nothing is published. The Redis health indicator is not gated by that switch;
 it needs the optional Actuator dependency and reports Redis connectivity plus
-protection degradation.
+the sync-protection state: `protection.degraded=local-only` when no distributed
+lock backend is present and `resi-cache.sync-lock.local-only=true` was
+explicitly enabled, `protection.degraded=fail-fast` when no backend is present
+without that opt-in, and no protection detail when a backend exists. The
+indicator's overall status tracks Redis connectivity only: it stays UP while a
+protection detail is attached.
 
 Because that indicator is assembled whenever Actuator, Redis and ResiCache are
 all present, **every `/actuator/health` probe costs one synchronous

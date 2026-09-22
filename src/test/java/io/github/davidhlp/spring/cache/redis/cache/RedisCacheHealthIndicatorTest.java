@@ -28,7 +28,7 @@ class RedisCacheHealthIndicatorTest {
         RedisTemplate<String, Object> template = mock(RedisTemplate.class);
         SyncSupport syncSupport = mock(SyncSupport.class);
         when(template.execute(any(RedisCallback.class))).thenReturn("PONG");
-        when(syncSupport.isDegraded()).thenReturn(true);
+        when(syncSupport.protectionMode()).thenReturn(SyncSupport.ProtectionMode.LOCAL_ONLY);
 
         RedisCacheHealthIndicator indicator = new RedisCacheHealthIndicator(
                 template, provider(syncSupport));
@@ -43,12 +43,50 @@ class RedisCacheHealthIndicatorTest {
     }
 
     @Test
+    @DisplayName("fail-fast state reports fail-fast, not local-only")
+    void failFastState_reportsFailFastDetail() {
+        RedisTemplate<String, Object> template = mock(RedisTemplate.class);
+        SyncSupport syncSupport = mock(SyncSupport.class);
+        when(template.execute(any(RedisCallback.class))).thenReturn("PONG");
+        when(syncSupport.protectionMode()).thenReturn(SyncSupport.ProtectionMode.FAIL_FAST);
+
+        Health health = new RedisCacheHealthIndicator(
+                template, provider(syncSupport)).health();
+
+        assertThat(health.getStatus()).isEqualTo(Status.UP);
+        assertThat(health.getDetails())
+                .containsEntry("protection.degraded", "fail-fast")
+                .containsEntry("protection.degraded.reason",
+                        "no distributed LockManager bean and "
+                                + "resi-cache.sync-lock.local-only=false: sync=true "
+                                + "operations fail fast on the first cache miss");
+    }
+
+    @Test
+    @DisplayName("distributed backend reports connectivity without protection detail")
+    void distributedBackend_omitsProtectionDetail() {
+        RedisTemplate<String, Object> template = mock(RedisTemplate.class);
+        SyncSupport syncSupport = mock(SyncSupport.class);
+        when(template.execute(any(RedisCallback.class))).thenReturn("PONG");
+        when(syncSupport.protectionMode()).thenReturn(SyncSupport.ProtectionMode.DISTRIBUTED);
+
+        Health health = new RedisCacheHealthIndicator(
+                template, provider(syncSupport)).health();
+
+        assertThat(health.getStatus()).isEqualTo(Status.UP);
+        assertThat(health.getDetails())
+                .containsEntry("status", "connected")
+                .doesNotContainKey("protection.degraded")
+                .doesNotContainKey("protection.degraded.reason");
+    }
+
+    @Test
     @DisplayName("degraded state is reported on every probe but warns only once per context")
     void degradedState_warnsOncePerContext() {
         RedisTemplate<String, Object> template = mock(RedisTemplate.class);
         SyncSupport syncSupport = mock(SyncSupport.class);
         when(template.execute(any(RedisCallback.class))).thenReturn("PONG");
-        when(syncSupport.isDegraded()).thenReturn(true);
+        when(syncSupport.protectionMode()).thenReturn(SyncSupport.ProtectionMode.LOCAL_ONLY);
 
         RedisCacheHealthIndicator indicator = new RedisCacheHealthIndicator(
                 template, provider(syncSupport));
@@ -65,13 +103,44 @@ class RedisCacheHealthIndicatorTest {
                     .filteredOn(event -> event.getLevel() == Level.WARN)
                     .singleElement()
                     .satisfies(event -> assertThat(event.getFormattedMessage())
-                            .isEqualTo("protection.degraded=local-only: sync=true 但无分布式锁后端,降级为单 JVM synchronized"));
+                            .isEqualTo("protection.degraded=local-only: 无分布式锁后端,"
+                                    + "已按 local-only=true 显式降级为单 JVM synchronized"));
             assertThat(List.of(first, second)).allSatisfy(health -> {
                 assertThat(health.getStatus()).isEqualTo(Status.UP);
                 assertThat(health.getDetails())
                         .containsEntry("protection.degraded", "local-only")
                         .containsKey("protection.degraded.reason");
             });
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
+    @DisplayName("fail-fast state warns once per context")
+    void failFastState_warnsOncePerContext() {
+        RedisTemplate<String, Object> template = mock(RedisTemplate.class);
+        SyncSupport syncSupport = mock(SyncSupport.class);
+        when(template.execute(any(RedisCallback.class))).thenReturn("PONG");
+        when(syncSupport.protectionMode()).thenReturn(SyncSupport.ProtectionMode.FAIL_FAST);
+
+        RedisCacheHealthIndicator indicator = new RedisCacheHealthIndicator(
+                template, provider(syncSupport));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(RedisCacheHealthIndicator.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            indicator.health();
+            indicator.health();
+
+            assertThat(appender.list)
+                    .filteredOn(event -> event.getLevel() == Level.WARN)
+                    .singleElement()
+                    .satisfies(event -> assertThat(event.getFormattedMessage())
+                            .isEqualTo("protection.degraded=fail-fast: 无分布式锁后端且未启用 "
+                                    + "local-only,sync=true 操作将在首次未命中直接失败"));
         } finally {
             logger.detachAppender(appender);
         }

@@ -45,6 +45,9 @@ import org.springframework.stereotype.Component;
  * <p>注意:{@code sync=true} 是 per-method 注解属性,启动期不可穷举,故 fail-fast 的精确触发点
  * 在运行期 {@link #executeSync}(即用户确实声明了 sync 且缓存未命中);启动期仅在检测到空后端时
  * 发出告警(见 {@link #warnIfNoDistributedBackend()}),仍允许启动(用户可能根本不用 sync)。
+ *
+ * <p>本类的 {@link #protectionMode()} 同时是健康侧( {@code RedisCacheHealthIndicator} )
+ * 报告 sync 保护状态的唯一推导点。
  */
 @Slf4j
 @Component
@@ -93,17 +96,29 @@ class SyncSupport {
         }
     }
 
+    /** sync 保护的后端实测模式(构造期即固定:后端列表 + local-only 属性)。 */
+    enum ProtectionMode {
+        /** 分布式锁后端存在,sync=true 按设计工作。 */
+        DISTRIBUTED,
+        /** 无后端且显式 {@code local-only=true}:sync=true 降级为单 JVM 同步。 */
+        LOCAL_ONLY,
+        /** 无后端且未启用 local-only:sync=true 首次未命中即 fail-fast。 */
+        FAIL_FAST
+    }
+
     /**
-     * 健康查询:同步锁后端是否缺失。{@code true} = 未显式
-     * {@code localOnly=true} 且无分布式锁后端(Redisson 缺失);此时 sync=true
-     * 首次未命中会 fail-fast。暴露此信号供
-     * {@code RedisCacheHealthIndicator} 级联到 /actuator/health。
+     * 健康查询:sync 保护的实测模式。后端存在性与 {@code local-only} 属性都归本类
+     * 所有,消费方(如 {@code RedisCacheHealthIndicator})不重复推导。
      *
-     * @return 是否处于缺失分布式后端且未显式允许 local-only 的状态
+     * @return 当前保护模式
      */
-    public boolean isDegraded() {
-        return !properties.getSyncLock().isLocalOnly()
-                && distributedManagers.isEmpty();
+    public ProtectionMode protectionMode() {
+        if (!distributedManagers.isEmpty()) {
+            return ProtectionMode.DISTRIBUTED;
+        }
+        return properties.getSyncLock().isLocalOnly()
+                ? ProtectionMode.LOCAL_ONLY
+                : ProtectionMode.FAIL_FAST;
     }
 
     /**
