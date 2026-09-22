@@ -1,0 +1,24 @@
+CHANGELOG.md
+  h_77173abe25c3ff 275-285
+docs/OPERATIONS.md
+  h_77173abe25c3ff 47-52
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheHealthIndicator.java
+  h_77173abe25c3ff 7,22-26,29,39-40,62-87
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupport.java
+  h_77173abe25c3ff 48-50,99-108,110-111,113,115-121
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheHealthIndicatorTest.java
+  h_77173abe25c3ff 31,45-82,89,106-107,119-148
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupportTest.java
+  h_77173abe25c3ff 79-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5bf6adfb20990e486cfc21af81ced5cea4cff985",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
