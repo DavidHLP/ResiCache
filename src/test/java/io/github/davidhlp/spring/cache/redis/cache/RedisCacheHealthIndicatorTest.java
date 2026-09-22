@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -26,7 +25,7 @@ class RedisCacheHealthIndicatorTest {
         when(syncSupport.isDegraded()).thenReturn(true);
 
         RedisCacheHealthIndicator indicator = new RedisCacheHealthIndicator(
-                template, provider(syncSupport), provider(null));
+                template, provider(syncSupport));
 
         Health health = indicator.health();
 
@@ -44,7 +43,7 @@ class RedisCacheHealthIndicatorTest {
         when(template.execute(any(RedisCallback.class))).thenReturn("NOPE");
 
         Health health = new RedisCacheHealthIndicator(
-                template, provider(null), provider(null)).health();
+                template, provider(null)).health();
 
         assertThat(health.getStatus()).isEqualTo(Status.DOWN);
         assertThat(health.getDetails().get("status")).isEqualTo("unexpected response: NOPE");
@@ -57,7 +56,7 @@ class RedisCacheHealthIndicatorTest {
         when(template.execute(any(RedisCallback.class))).thenThrow(new IllegalStateException("Redis unavailable"));
 
         Health health = new RedisCacheHealthIndicator(
-                template, provider(null), provider(null)).health();
+                template, provider(null)).health();
 
         assertThat(health.getStatus()).isEqualTo(Status.DOWN);
         assertThat(health.getDetails()).containsEntry("error", "Redis unavailable");

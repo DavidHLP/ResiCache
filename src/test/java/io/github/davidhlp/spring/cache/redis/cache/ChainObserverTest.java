@@ -108,13 +108,12 @@ class ChainObserverTest {
     class TimerTests {
 
         @Test
-        @DisplayName("registry 缺失时节点计时 no-op")
-        void nullRegistry_noOp() {
-            ChainObserver observer = new ChainTimerChainObserver(null);
+        @DisplayName("no-op seam 时节点计时不落任何出口,不抛异常")
+        void noopSeam_noOp() {
+            ChainObserver observer = new ChainTimerChainObserver(ResolvedMetrics.NOOP_REGISTRY);
 
             Object scopeToken = observer.onNodeStart(handler, ctx);
 
-            assertThat(scopeToken).isNull();
             observer.onNodeEnd(handler, ctx, scopeToken, HandlerResult.continueChain());
         }
 
@@ -229,9 +228,9 @@ class ChainObserverTest {
     class FiredCounterTests {
 
         @Test
-        @DisplayName("registry 缺失 → afterNode 自增调用为 no-op,不抛异常")
+        @DisplayName("no-op seam → afterNode 自增不落任何出口,不抛异常")
         void nullRegistry_noOp() {
-            ChainObserver observer = new FiredCounterChainObserver(null);
+            ChainObserver observer = new FiredCounterChainObserver(ResolvedMetrics.NOOP_REGISTRY);
             observer.afterNode(handler, ctx, HandlerResult.continueChain());
             // 无异常即可
         }
