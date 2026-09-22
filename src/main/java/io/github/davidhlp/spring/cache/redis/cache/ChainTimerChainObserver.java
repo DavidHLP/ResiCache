@@ -30,8 +30,8 @@ import org.springframework.core.annotation.Order;
  *
  * <p>线程安全：Timer map 支持并发注册；{@link TimerScope} 是单次节点调用的不可变
  * token，不在 observer 内保存共享的 per-call 状态。registry 由 {@link ResolvedMetrics}
- * 单一决议、永不为 null；metrics 未启用时它是 no-op seam，关闭路径不注册、不分配、
- * 不保留任何 timer —— map 保持为空。
+ * 单一决议、永不为 null；metrics 未启用时它是 no-op seam，关闭路径不读时钟、不分配
+ * scope token、不注册、不分配、不保留任何 timer —— map 保持为空，节点起点返回 null。
  */
 @Order(3) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class ChainTimerChainObserver implements ChainObserver {
@@ -50,15 +50,18 @@ final class ChainTimerChainObserver implements ChainObserver {
 
     @Override
     public Object onNodeStart(CacheHandler handler, CacheContext context) {
-        return new TimerScope(System.nanoTime());
+        // 关闭路径不分配 token:Engine 按 index 配对回传 null,onNodeEnd 直接返回,
+        // 与 metrics 未启用时的历史行为一致(既不计时,也不读时钟)。
+        return disabled ? null : new TimerScope(System.nanoTime());
     }
 
     @Override
     public void onNodeEnd(CacheHandler handler, CacheContext context,
                           Object scopeToken, HandlerResult result) {
         if (disabled || result == null || scopeToken == null) {
-            // 故障节点没有 HandlerResult,不伪造 decision;token 为 null 仅当本人
-            // onNodeStart 抛异常(Engine 不产生 token),同样无样本可记录。
+            // 故障节点没有 HandlerResult,不伪造 decision;token 为 null 有两处来源:
+            // 本 observer 在关闭 seam 时不分配 token,或本人 onNodeStart 抛异常
+            // (Engine 不产生 token)。两种情形都无样本可记录。
             // disabled:关闭路径不构造 TimerKey、不写 map、不分配 NoopTimer。
             return;
         }

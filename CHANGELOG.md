@@ -259,13 +259,19 @@ Current milestones:
   `RedisCacheHealthIndicator` now reports Redis connectivity and protection
   degradation regardless of `resi-cache.metrics.enabled`; previously the
   unrelated metrics switch could suppress the indicator.
-- **The disabled metrics seam retains nothing (c2)** — with
+- **The disabled metrics seam does no work (c2)** — with
   `resi-cache.metrics.enabled` off (the default) the resolved seam is a shared
-  stateless registry, and the chain's timer observer, the fired-counter observer
-  and the failure reporter short-circuit on it. A disabled application therefore
-  allocates and keeps no meter, no timer and no per-cache entry: an earlier
-  revision of this change had moved that retention into the timer observer's own
-  per-cache-name map. Metric names, tag keys and tag values are unchanged.
+  stateless registry, and every consumer short-circuits on it rather than
+  registering through it: the chain's timer observer, the fired-counter observer
+  and the failure reporter return before building a key; the per-cache registry,
+  the handler attach hook, the refresh-task metrics and the Bloom filter take
+  their existing null path; and the migration engine skips its per-key metric
+  record. A disabled application therefore allocates and keeps no meter, no
+  timer and no per-cache entry, and the chain timer observer neither reads the
+  clock nor allocates a scope token on that path. Two earlier revisions of this
+  change had moved that work instead of removing it — the retention into the
+  timer observer's own per-cache-name map, and the per-key allocation into the
+  migration engine. Metric names, tag keys and tag values are unchanged.
 - **The degraded-protection warning fires once per context (c2)** —
   `RedisCacheHealthIndicator` emits `protection.degraded=local-only` on its first
   degraded observation instead of on every `/actuator/health` probe, which matters

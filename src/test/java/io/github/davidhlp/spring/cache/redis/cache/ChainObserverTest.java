@@ -149,6 +149,18 @@ class ChainObserverTest {
             assertThat(observer.registeredTimerCount()).isZero();
         }
 
+        /**
+         * map 为空还不够:关闭 seam 时 onNodeStart 若仍构造 scope token,每个 handler 节点
+         * 都会白读一次时钟并分配一个立刻被丢弃的 token —— 关闭路径应当连工作都不做。
+         */
+        @Test
+        @DisplayName("disabled seam 下节点起点不分配 scope token")
+        void noopSeam_doesNotAllocateScopeToken() {
+            ChainTimerChainObserver observer = new ChainTimerChainObserver(noOpSeam());
+
+            assertThat(observer.onNodeStart(new ContinueHandler(), ctx)).isNull();
+        }
+
         @Test
         @DisplayName("成功节点按 handler、decision、cacheName 记录一次 Timer")
         void successfulNode_recordsBoundedTags() {
