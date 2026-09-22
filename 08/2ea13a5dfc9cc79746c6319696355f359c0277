@@ -1,0 +1,19 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandlerIntegrationTest.java
+  s_40765406dcdea6::t_e6da69f8946737 8,15,19,286-290,297-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "082ea13a5dfc9cc79746c6319696355f359c0277",
+  "prompts": {},
+  "sessions": {
+    "s_40765406dcdea6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db3544fb-0f65-4b67-8f14-eb941fd77316",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
