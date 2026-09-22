@@ -1,0 +1,22 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheFailureReporterTest.java
+  h_77173abe25c3ff 27,85-87,89
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactoryTest.java
+  h_77173abe25c3ff 22,41,63,78,93,107,121,141,157,173,189,212,228,340,354,369,394-397
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainObserverTest.java
+  h_77173abe25c3ff 111-113,231,233
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheHealthIndicatorTest.java
+  h_77173abe25c3ff 28,46,59
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfigurationContractTest.java
+  h_77173abe25c3ff 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "66b807cbc867bda12b8f1ed98460bb3f35c70135",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}

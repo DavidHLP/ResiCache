@@ -1,0 +1,30 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheFailureReporter.java
+  h_77173abe25c3ff 33-34
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactory.java
+  h_77173abe25c3ff 189
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainTimerChainObserver.java
+  h_77173abe25c3ff 31-32,47,53
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/FiredCounterChainObserver.java
+  h_77173abe25c3ff 26-27
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheHealthIndicator.java
+  h_77173abe25c3ff 25-27,38
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfiguration.java
+  h_77173abe25c3ff 45-46,85-86,88-89,185
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResolvedMetrics.java
+  h_77173abe25c3ff 4,10-11,13-19,21-24,30-34
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationEngine.java
+  h_77173abe25c3ff 291-292
+src/main/resources/META-INF/additional-spring-configuration-metadata.json
+  h_77173abe25c3ff 26-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9e4c2fdc254e8927c4555a1b16053207a1c380d8",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
