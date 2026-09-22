@@ -168,7 +168,7 @@ class AnnotationAopBehaviorMatrixTest {
     }
 
     @Test
-    @DisplayName("value/cacheNames alias resolution is shared by both faces")
+    @DisplayName("both-set value/cacheNames resolution is shared by both faces, value winning")
     void aliasResolutionIsSharedByBothFaces() throws Exception {
         Method method = method("aliased");
 
@@ -176,10 +176,13 @@ class AnnotationAopBehaviorMatrixTest {
         CacheableOperation aop = (CacheableOperation)
                 operationSource.getCacheOperations(method, Matrix.class).iterator().next();
 
-        assertThat(aop.getCacheNames()).containsExactly("alias-cache");
-        assertThat(policy.getCacheNames()).containsExactly("alias-cache");
-        assertThat(resolve("alias-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+        assertThat(aop.getCacheNames()).containsExactly("alias-value");
+        assertThat(policy.getCacheNames()).containsExactly("alias-value");
+        assertThat(resolve("alias-value", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
                 .isSameAs(policy);
+        assertThat(resolve("alias-cache", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
+                .as("别名不承载 policy:两面对同一 cache,不得留下第二份快照")
+                .isNull();
     }
 
     @Test

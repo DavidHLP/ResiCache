@@ -64,6 +64,35 @@ class AnnotationPolicySnapshotTest {
                 .isSameAs(snapshot.policyOperations().get(0));
     }
 
+    /**
+     * {@code value} 与 {@code cacheNames} 同时声明时,两个面必须落到同一个 cache —— 且是
+     * {@code main} 上 operation 面已经在用的那个({@code value})。否则 policy 会被注册到
+     * 一个实际未被使用的 cache 上,静默失效。
+     */
+    @Test
+    @DisplayName("both attributes set: value wins on the operation face and the policy face")
+    void bothCacheNameAttributesSet_valueWinsOnBothFaces() throws Exception {
+        RedisCacheRegister register = new RedisCacheRegister();
+        RedisCacheOperationSource source = new RedisCacheOperationSource(
+                RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, register);
+        Method method = BothSetService.class.getMethod("read", String.class);
+
+        java.util.Collection<CacheOperation> operations =
+                source.getCacheOperations(method, BothSetService.class);
+        AnnotationParser.ParsedAnnotations snapshot =
+                register.getSnapshot(method, BothSetService.class);
+
+        assertThat(operations).singleElement().satisfies(operation ->
+                assertThat(operation.getCacheNames()).containsExactly("value-cache"));
+        assertThat(snapshot.operations().get(0).getCacheNames()).containsExactly("value-cache");
+        assertThat(snapshot.policy(OperationKind.CACHEABLE, "value-cache"))
+                .as("policy 注册在实际使用的 cache 上")
+                .isSameAs(snapshot.policyOperations().get(0));
+        assertThat(snapshot.policy(OperationKind.CACHEABLE, "names-cache"))
+                .as("别名不得再单独承载 policy")
+                .isNull();
+    }
+
     private static final class CountingAnnotationParser extends AnnotationParser {
         private final AtomicInteger invocations = new AtomicInteger();
 
@@ -81,6 +110,14 @@ class AnnotationPolicySnapshotTest {
     static class SnapshotService {
         @RedisCacheable(cacheNames = "snapshot-cache", key = "#id", ttl = 77,
                 useBloomFilter = true, sync = true, cacheNullValues = true)
+        public String read(String id) {
+            return id;
+        }
+    }
+
+    /** 注解未做 {@code @AliasFor} 关联,故两个属性可以同时声明且取值不同。 */
+    static class BothSetService {
+        @RedisCacheable(value = "value-cache", cacheNames = "names-cache", key = "#id", ttl = 77)
         public String read(String id) {
             return id;
         }

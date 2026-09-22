@@ -109,6 +109,17 @@ not require a cache flush.
   `clear` deletion counts and PUT_IF_ABSENT insertion. `withStatisticsCollector`
   fully rebinds statistics; lock-wait duration remains unreported (zero).
 - **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; this behavior is unchanged from `main`.
+- **`value` and `cacheNames` resolution**: the three annotations are not
+  `@AliasFor`-linked, so one declaration may set both attributes. There is one
+  resolution for both faces (`RedisCacheAttributesProjector.resolveCacheNames`)
+  and **`value` wins**; `cacheNames` is the fallback and only applies when
+  `value` is empty. A declaration that sets both targets the `value` cache.
+  This is the operation face's `main` behaviour, so the cache in use is
+  unchanged. The policy face changes for that same both-set declaration: on
+  `main` the operation targeted `value` while the policy snapshot was
+  registered under `cacheNames`, so the declared policy silently did not apply
+  to the cache that was used. Both faces now resolve to `value`, and the policy
+  applies to the cache in use.
 - **TTL default precedence**: one module owns the resolution (`TtlPolicy`; the
   ordered rule is specified in [`docs/REFERENCE.md`](docs/REFERENCE.md)). A
   method-level `ttl` greater than zero is the only declaration that overrides

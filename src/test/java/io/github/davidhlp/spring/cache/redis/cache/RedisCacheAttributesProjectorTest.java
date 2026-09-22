@@ -82,27 +82,27 @@ class RedisCacheAttributesProjectorTest {
     }
 
     @Nested
-    @DisplayName("cacheNames vs value 合并")
+    @DisplayName("value / cacheNames 合并")
     class CacheNamesResolution {
 
         @Test
-        @DisplayName("cacheNames 非空优先使用")
-        void cacheNames_wins_over_value() {
+        @DisplayName("同时声明时 value 优先(与 main 的 operation 面一致)")
+        void value_wins_over_cacheNames() {
             RedisCacheable ann = stubCacheable(s -> {
                 s.cacheNames = new String[]{"primary"};
                 s.values = new String[]{"fallback"};
             });
-            assertThat(projector.from(ann).getCacheNames()).containsExactly("primary");
+            assertThat(projector.from(ann).getCacheNames()).containsExactly("fallback");
         }
 
         @Test
-        @DisplayName("cacheNames 为空时回退到 value")
-        void value_used_when_cacheNames_empty() {
+        @DisplayName("value 为空时回退到 cacheNames")
+        void cacheNames_used_when_value_empty() {
             RedisCacheable ann = stubCacheable(s -> {
-                s.cacheNames = new String[0];
-                s.values = new String[]{"fromValue"};
+                s.cacheNames = new String[]{"fromCacheNames"};
+                s.values = new String[0];
             });
-            assertThat(projector.from(ann).getCacheNames()).containsExactly("fromValue");
+            assertThat(projector.from(ann).getCacheNames()).containsExactly("fromCacheNames");
         }
     }
 
@@ -148,7 +148,7 @@ class RedisCacheAttributesProjectorTest {
     class StaticUtils {
 
         @Test
-        @DisplayName("resolveCacheNames: 全部 null-safe")
+        @DisplayName("resolveCacheNames: 全部 null-safe,且同时声明时 value 优先")
         void resolveCacheNames_nullSafe() {
             assertThat(RedisCacheAttributesProjector.resolveCacheNames(null, null))
                     .isEmpty();
@@ -156,6 +156,10 @@ class RedisCacheAttributesProjectorTest {
                     .containsExactly("v");
             assertThat(RedisCacheAttributesProjector.resolveCacheNames(new String[]{"c"}, null))
                     .containsExactly("c");
+            assertThat(RedisCacheAttributesProjector.resolveCacheNames(
+                    new String[]{"names-cache"}, new String[]{"value-cache"}))
+                    .as("main 的 operation 面用 value;c6 统一后两面都必须是 value")
+                    .containsExactly("value-cache");
         }
     }
 
