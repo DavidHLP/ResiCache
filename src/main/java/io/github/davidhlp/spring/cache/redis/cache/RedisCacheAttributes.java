@@ -311,7 +311,7 @@ class RedisCacheAttributes {
     /**
      * 本值对象的 AOP 面 → {@link CacheEvictOperation.Builder}。
      *
-     * <p>Cachable/Put 面的子集 + Evict-only:{@code unless} 无槽位,{@code allEntries} /
+     * <p>Cacheable/Put 面的子集 + Evict-only:{@code unless} 无槽位,{@code allEntries} /
      * {@code beforeInvocation} 落进 Spring 的 {@code cacheWide} / {@code beforeInvocation}。
      */
     public CacheEvictOperation.Builder applyTo(CacheEvictOperation.Builder b) {
