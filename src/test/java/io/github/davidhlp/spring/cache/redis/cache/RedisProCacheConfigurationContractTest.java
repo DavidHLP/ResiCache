@@ -321,7 +321,7 @@ class RedisProCacheConfigurationContractTest {
     }
 
     @Test
-    void standardObserverBeans_areDeclaredWithOrder() {
+    void standardObservers_declareOrderOnTheirClass() {
         var observerMethods = java.util.Arrays.stream(
                         RedisProCacheConfiguration.class.getDeclaredMethods())
                 .filter(method -> io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver.class
@@ -329,16 +329,23 @@ class RedisProCacheConfigurationContractTest {
                 .toList();
 
         assertThat(observerMethods).hasSize(4);
-        assertThat(observerMethods).allSatisfy(method -> {
-            assertThat(method.getAnnotation(Bean.class))
-                    .as("observer factory must be a bean method")
-                    .isNotNull();
-            assertThat(method.getAnnotation(org.springframework.core.annotation.Order.class))
-                    .as("observer bean must be ordered")
-                    .isNotNull();
-        });
-        assertThat(observerMethods)
-                .extracting(method -> method.getAnnotation(
+        assertThat(observerMethods).allSatisfy(method ->
+                assertThat(method.getAnnotation(Bean.class))
+                        .as("observer factory must be a bean method")
+                        .isNotNull());
+
+        // 顺序契约必须落在工厂 CacheHandlerChainFactory#observerOrder 真正读取的那一处 ——
+        // observer 类级 @Order,而非 @Bean 方法上的注解(工厂不看方法注解)。
+        var observerClasses = observerMethods.stream()
+                .map(java.lang.reflect.Method::getReturnType)
+                .toList();
+        assertThat(observerClasses).allSatisfy(observerClass ->
+                assertThat(observerClass.getAnnotation(
+                        org.springframework.core.annotation.Order.class))
+                        .as("%s must carry class-level @Order", observerClass.getSimpleName())
+                        .isNotNull());
+        assertThat(observerClasses)
+                .extracting(c -> c.getAnnotation(
                         org.springframework.core.annotation.Order.class).value())
                 .containsExactlyInAnyOrder(1, 2, 3, 4);
     }
@@ -357,7 +364,7 @@ class RedisProCacheConfigurationContractTest {
 
         assertThat(beanMethods).isNotEmpty();
         // 标准 observer 是叠加钩子(用户 observer 与它们共存),不是可替换默认 bean;
-        // 该集合由 standardObserverBeans_areDeclaredWithOrder 固定为 4 个。
+        // 该集合由 standardObservers_declareOrderOnTheirClass 固定为 4 个。
         // 其余每个 @Bean 方法都必须按类型 back off —— 新增服务 bean 缺少注解除即失败。
         assertThat(beanMethods)
                 .filteredOn(method -> !io.github.davidhlp.spring.cache.redis.chain.observer
