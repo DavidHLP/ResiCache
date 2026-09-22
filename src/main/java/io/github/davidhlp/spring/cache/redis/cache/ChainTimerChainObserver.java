@@ -52,9 +52,15 @@ final class ChainTimerChainObserver implements ChainObserver {
     @Override
     public void onNodeEnd(CacheHandler handler, CacheContext context,
                           Object scopeToken, HandlerResult result) {
-        if (result == null || !(scopeToken instanceof TimerScope scope)) {
+        if (result == null || scopeToken == null) {
+            // 故障节点没有 HandlerResult,不伪造 decision;token 为 null 仅当本人
+            // onNodeStart 抛异常(Engine 不产生 token),同样无样本可记录。
             return;
         }
+        // Engine 按 observer index 严格配对回传,故 token 必然是本人 onNodeStart 返回的
+        // TimerScope(见 ChainObserver 的 scope token 机制说明)—— 协议保证的类型,
+        // 不做防御性 instanceof 重检。
+        TimerScope scope = (TimerScope) scopeToken;
         TimerKey key = new TimerKey(
                 CacheHandlerChain.handlerTag(handler),
                 result.decision().name(),

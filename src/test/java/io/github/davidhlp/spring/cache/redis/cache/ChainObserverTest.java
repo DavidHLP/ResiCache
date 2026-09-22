@@ -355,8 +355,9 @@ class ChainObserverTest {
             private final List<String> sequence;
             FirstOrderObserver(List<String> sequence) { this.sequence = sequence; }
             @Override
-            public void beforeNode(CacheHandler handler, CacheContext context) {
+            public Object onNodeStart(CacheHandler handler, CacheContext context) {
                 sequence.add("first");
+                return null;
             }
         }
 
@@ -365,8 +366,9 @@ class ChainObserverTest {
             private final List<String> sequence;
             SecondOrderObserver(List<String> sequence) { this.sequence = sequence; }
             @Override
-            public void beforeNode(CacheHandler handler, CacheContext context) {
+            public Object onNodeStart(CacheHandler handler, CacheContext context) {
                 sequence.add("second");
+                return null;
             }
         }
 
@@ -375,8 +377,9 @@ class ChainObserverTest {
             private final List<String> sequence;
             ThirdOrderObserver(List<String> sequence) { this.sequence = sequence; }
             @Override
-            public void beforeNode(CacheHandler handler, CacheContext context) {
+            public Object onNodeStart(CacheHandler handler, CacheContext context) {
                 sequence.add("third");
+                return null;
             }
         }
 
@@ -385,8 +388,9 @@ class ChainObserverTest {
             private final List<String> sequence;
             UnorderedObserver(List<String> sequence) { this.sequence = sequence; }
             @Override
-            public void beforeNode(CacheHandler handler, CacheContext context) {
+            public Object onNodeStart(CacheHandler handler, CacheContext context) {
                 sequence.add("unordered");
+                return null;
             }
         }
     }

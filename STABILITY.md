@@ -130,16 +130,33 @@ custom implementation must satisfy.
 ### Observers
 
 1. **Hook order** per chain execution: `onChainStart` → per node
-   [`onNodeStart` → `beforeNode` → `handler.handle(context, next)` →
+   [`onNodeStart` → `handler.handle(context, next)` →
    `afterNode` → `onNodeEnd`] → `onChainEnd`. Multiple observers run in registration
    (`@Order`) order for every hook.
 2. **Scope tokens**: each `on*Start` returns a per-call token the engine
    pairs back to the same observer's `on*End` in a `finally` block (on
    handler exception `onNodeEnd` receives a `null` result — recover the
    token, do not fabricate decisions). Tokens carry per-call state; observers
-   must be thread-safe and stateless between calls.
+   must be thread-safe and stateless between calls. The engine pairs by
+   observer registration index, so the token an `on*End` hook receives is
+   always the reference returned by *that* observer's matching `on*Start`: an
+   observer may cast its own token to its private token type without a
+   runtime type check.
 3. **Exception isolation**: observer hook failures are caught and logged by
    the engine; they never change chain control flow.
+
+⚠️ **BREAKING — `beforeNode` removed (0.x)**: the SPI hook
+`ChainObserver.beforeNode(CacheHandler, CacheContext)` no longer exists; it had
+zero production implementers and no other hook was renamed, retyped or
+reordered. Migration from an implementation that overrode it:
+
+- node pre-execution work (DEBUG log / counter increments / start markers) →
+  move the body to `onNodeStart`, returning `null` when the observer keeps no
+  per-call state;
+- work that needs the evaluated result → move the body to `afterNode`;
+- per-call state that a matching hook must recover → return it from
+  `onNodeStart` and read it back in `onNodeEnd` (the documented token pairing
+  above); the engine still calls `onNodeEnd` from a `finally` block.
 
 ### Context
 

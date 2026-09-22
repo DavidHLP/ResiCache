@@ -53,12 +53,14 @@ final class MDCStampChainObserver implements ChainObserver {
 
     @Override
     public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
-        // scopeToken 即 onChainStart 返回的 MdcScope 实例,无 cast 之 cast
-        // —— instanceof 模式匹配恢复 previousRequestId 字段
-        if (!(scopeToken instanceof MdcScope scope)) {
-            // 防御性:Engine 协议保证 token 类型匹配,理论不可达;失败则不恢复(不污染调用方 MDC)
+        // Engine 按 observer index 严格配对回传,故 token 必然是本人 onChainStart 返回的
+        // MdcScope(见 ChainObserver 的 scope token 机制说明)—— 协议保证的类型,
+        // 不做防御性 instanceof 重检。token 为 null 仅当本人 onChainStart 抛异常
+        // (Engine 不产生 token),此时无原值可恢复。
+        if (scopeToken == null) {
             return;
         }
+        MdcScope scope = (MdcScope) scopeToken;
         if (scope.previousRequestId() == null) {
             MDC.remove(CacheHandlerChain.MDC_REQUEST_ID_KEY);
         } else {

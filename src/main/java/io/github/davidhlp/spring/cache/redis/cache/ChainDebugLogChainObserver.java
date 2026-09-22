@@ -28,7 +28,7 @@ import org.springframework.core.annotation.Order;
  * 则 requestId 为 null，日志降级为不含 id 形式（仅影响 DEBUG 可读性，不影响功能）。
  *
  * <p>线程安全：MDC 是 ThreadLocal，本类在调用方线程上读取（Engine 串行调用
- * beforeNode → handler → afterNode），无共享状态。
+ * onNodeStart → handler → afterNode），无共享状态。
  */
 @Slf4j
 @Order(2) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
