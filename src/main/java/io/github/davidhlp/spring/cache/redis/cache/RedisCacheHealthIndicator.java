@@ -4,6 +4,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.health.contributor.Health;
@@ -33,6 +34,8 @@ class RedisCacheHealthIndicator implements HealthIndicator {
 
     private final RedisTemplate<String, Object> redisCacheTemplate;
     private final SyncSupport syncSupport;
+    /** 降级 WARN 每 context 至多一条 —— 状态本身仍每次响应都报告在 detail 中。 */
+    private final AtomicBoolean degradationWarned = new AtomicBoolean();
 
     public RedisCacheHealthIndicator(RedisTemplate<String, Object> redisCacheTemplate,
                                      ObjectProvider<SyncSupport> syncSupportProvider) {
@@ -57,7 +60,11 @@ class RedisCacheHealthIndicator implements HealthIndicator {
         if (syncSupport != null && syncSupport.isDegraded()) {
             // sync=true 但无分布式锁后端 — 降级为 local-only(单 JVM 锁,跨实例不协调)
             // 状态仍是 UP(Redis 可用),但 detail 记录 protection.degraded
-            log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端,降级为单 JVM synchronized");
+            // 降级状态在构造期即固定(LockManager 列表 + local-only 属性),而 health 端点按探针
+            // 节奏被反复调用 —— 每探针一条恒同 WARN 只是噪声;状态本身仍在每次响应 detail 中报告。
+            if (degradationWarned.compareAndSet(false, true)) {
+                log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端,降级为单 JVM synchronized");
+            }
             builder = builder
                     .withDetail("protection.degraded", "local-only")
                     .withDetail("protection.degraded.reason",
