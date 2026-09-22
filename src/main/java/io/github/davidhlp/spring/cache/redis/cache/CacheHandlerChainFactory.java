@@ -8,7 +8,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
-import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -172,17 +171,17 @@ class CacheHandlerChainFactory {
             Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
             resolveProtectionDisabled(properties, disabled);
 
-            // 按 @HandlerPriority 注解排序
+            // 按 @HandlerPriority 注解排序(身份三项的解析见 HandlerIdentity)
             List<CacheHandler> sortedHandlers = handlers.stream()
-                .sorted(Comparator.comparingInt(this::getOrder))
+                .sorted(Comparator.comparingInt(handler -> HandlerIdentity.of(handler).order()))
                 .toList();
 
             // 添加到链，过滤禁用的 Handler
             for (CacheHandler handler : sortedHandlers) {
-                String handlerName = getHandlerDisableName(handler);
+                HandlerIdentity identity = HandlerIdentity.of(handler);
 
-                if (disabled.contains(handlerName)) {
-                    log.info("Handler disabled by configuration: {}", CacheHandlerChain.handlerTag(handler));
+                if (disabled.contains(identity.disableName())) {
+                    log.info("Handler disabled by configuration: {}", identity.tag());
                     continue;
                 }
 
@@ -191,8 +190,8 @@ class CacheHandlerChainFactory {
                     ach.attachMeterRegistry(registry);
                 }
                 log.debug("Added handler to chain: {} (order={})",
-                          CacheHandlerChain.handlerTag(handler),
-                          getOrder(handler));
+                          identity.tag(),
+                          identity.order());
             }
 
             log.info("Handler chain created with {} handlers: {}",
@@ -275,34 +274,5 @@ class CacheHandlerChainFactory {
                 }
             }
         }
-    }
-
-    /**
-     * 获取 Handler 的禁用配置名称.
-     *
-     * <p>优先从 {@code @HandlerPriority} 注解关联的 {@link HandlerOrder} 反查
-     * {@link HandlerOrder#getDisableName()}(单一事实源),使 handler 类重命名不影响
-     * 配置禁用语义。未标注注解的 handler 回退到类名派生(kebab-case)以保持兼容。
-     */
-    private String getHandlerDisableName(CacheHandler handler) {
-        HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
-        if (annotation != null) {
-            return annotation.value().getDisableName();
-        }
-        String className = CacheHandlerChain.handlerTag(handler);
-        return className.replace("Handler", "")
-                        .replaceAll("([a-z])([A-Z])", "$1-$2")  // camelCase to kebab-case
-                        .toLowerCase();
-    }
-
-    /**
-     * 获取 Handler 的执行顺序
-     *
-     * @param handler Handler 实例
-     * @return 顺序值，未标注则返回 Integer.MAX_VALUE
-     */
-    private int getOrder(CacheHandler handler) {
-        HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
-        return annotation != null ? annotation.value().getOrder() : Integer.MAX_VALUE;
     }
 }

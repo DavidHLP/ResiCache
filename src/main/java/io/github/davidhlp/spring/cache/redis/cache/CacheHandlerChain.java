@@ -70,7 +70,7 @@ class CacheHandlerChain {
 
     /** Shared runtime label for handler logs and bounded observer tags. */
     static String handlerTag(CacheHandler handler) {
-        return handler.getClass().getSimpleName();
+        return HandlerIdentity.of(handler).tag();
     }
 
     /**
