@@ -64,7 +64,7 @@ classes can move or disappear without becoming a compatibility promise.
 | 100 | `BloomFilterHandler` | membership gate / penetration protection |
 | 200 | `SyncLockHandler` | distributed or explicit local-only synchronization |
 | 250 | `EarlyExpirationHandler` | hot-key refresh decision and scheduling |
-| 300 | `TtlHandler` | base TTL and jitter calculation |
+| 300 | `TtlHandler` | TTL decision application (precedence and jitter resolve in `TtlPolicy`) |
 | 400 | `NullValueHandler` | negative-result encoding |
 | 500 | `ActualCacheHandler` | actual cache operation |
 

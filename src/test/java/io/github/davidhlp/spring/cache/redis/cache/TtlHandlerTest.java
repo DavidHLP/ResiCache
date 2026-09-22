@@ -15,7 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * TtlHandler 单元测试。
  *
- * <p>TTL 默认值、配置优先级、永久缓存哨兵和抖动均由处理器直接拥有。
+ * <p>TTL 优先级、默认值与抖动由 {@link TtlPolicy} 拥有(见 TtlPolicyTest);
+ * 本测试覆盖处理器对决策的应用与 jitter 计数。
  */
 @DisplayName("TtlHandler Tests")
 class TtlHandlerTest {
@@ -42,7 +43,7 @@ class TtlHandlerTest {
         return new CacheContext(input);
     }
 
-    private RedisCacheableOperation configuredOperation(long ttl, boolean randomTtl, float variance) {
+    private RedisCacheableOperation annotatedOperation(long ttl, boolean randomTtl, float variance) {
         return RedisCacheableOperation.builder()
                 .name("test-cache")
                 .cacheNames("test-cache")
@@ -64,7 +65,7 @@ class TtlHandlerTest {
             h.attachMeterRegistry(registry);
 
             h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60),
-                    configuredOperation(60, true, 0.2f)));
+                    annotatedOperation(60, true, 0.2f)));
 
             assertThat(registry.get("resicache.handler.ttl.jittered").counter().count())
                     .isEqualTo(1.0);
@@ -78,7 +79,21 @@ class TtlHandlerTest {
             h.attachMeterRegistry(registry);
 
             h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60),
-                    configuredOperation(60, false, 0.2f)));
+                    annotatedOperation(60, false, 0.2f)));
+
+            assertThat(registry.get("resicache.handler.ttl.jittered").counter().count())
+                    .isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("randomTtl=true on the parameter path does not increment the jitter counter")
+        void randomTtlTrue_parameterPath_doesNotIncrement() {
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            TtlHandler h = new TtlHandler();
+            h.attachMeterRegistry(registry);
+
+            h.handle(createContext(CacheOperation.PUT, Duration.ofSeconds(60),
+                    annotatedOperation(0, true, 0.2f)));
 
             assertThat(registry.get("resicache.handler.ttl.jittered").counter().count())
                     .isEqualTo(0.0);
@@ -117,13 +132,13 @@ class TtlHandlerTest {
     }
 
     @Nested
-    @DisplayName("handler-owned TTL decisions")
+    @DisplayName("handler-applied TTL decisions")
     class TtlDecisionTests {
 
         @Test
-        void configuredTtl_takesPrecedenceOverParameterTtl() {
+        void annotationTtl_takesPrecedenceOverParameterTtl() {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30),
-                    configuredOperation(120, false, 0.2f));
+                    annotatedOperation(120, false, 0.2f));
 
             handler.doHandle(context, CacheResult::success);
 
@@ -132,9 +147,9 @@ class TtlHandlerTest {
         }
 
         @Test
-        void parameterTtl_isUsedWhenConfiguredTtlIsAbsent() {
+        void parameterTtl_isUsedWhenAnnotationTtlIsZero() {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(30),
-                    configuredOperation(0, false, 0.2f));
+                    annotatedOperation(0, false, 0.2f));
 
             handler.doHandle(context, CacheResult::success);
 
@@ -145,7 +160,7 @@ class TtlHandlerTest {
         @Test
         void zeroParameterTtl_skipsTtl() {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ZERO,
-                    configuredOperation(0, false, 0.2f));
+                    annotatedOperation(0, false, 0.2f));
 
             handler.doHandle(context, CacheResult::success);
 
@@ -156,7 +171,7 @@ class TtlHandlerTest {
         @Test
         void negativeParameterTtl_mapsToPermanentCacheSentinel() {
             CacheContext context = createContext(CacheOperation.PUT, Duration.ofSeconds(-1),
-                    configuredOperation(0, false, 0.2f));
+                    annotatedOperation(0, false, 0.2f));
 
             handler.doHandle(context, CacheResult::success);
 
@@ -167,48 +182,19 @@ class TtlHandlerTest {
         @Test
         void missingTtl_usesDefaultTtl() {
             CacheContext context = createContext(CacheOperation.PUT, null,
-                    configuredOperation(0, false, 0.2f));
+                    annotatedOperation(0, false, 0.2f));
 
             handler.doHandle(context, CacheResult::success);
 
             assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
             assertThat(context.getTtlDecision().finalTtl()).isEqualTo(60L);
         }
-
-        @Test
-        void nullZeroAndNegativeBaseTtl_mapToPermanentSentinel() {
-            assertThat(handler.calculateFinalTtl(null, false, 0.2f)).isEqualTo(-1L);
-            assertThat(handler.calculateFinalTtl(0L, false, 0.2f)).isEqualTo(-1L);
-            assertThat(handler.calculateFinalTtl(-1L, false, 0.2f)).isEqualTo(-1L);
-        }
-
-        @Test
-        void nonPositiveVariance_doesNotJitterBaseTtl() {
-            assertThat(handler.calculateFinalTtl(120L, true, 0.0f)).isEqualTo(120L);
-            assertThat(handler.calculateFinalTtl(120L, true, -0.1f)).isEqualTo(120L);
-        }
-
-        @Test
-        void varianceAboveOne_isClampedToSafeOutputBounds() {
-            for (int i = 0; i < 128; i++) {
-                assertThat(handler.calculateFinalTtl(120L, true, 2.0f))
-                        .isBetween(1L, 240L);
-            }
-        }
-
-        @Test
-        void jitteredConfiguredTtl_staysWithinBoundedVariance() {
-            for (int i = 0; i < 128; i++) {
-                assertThat(handler.calculateFinalTtl(120L, true, 0.1f))
-                        .isBetween(108L, 132L);
-            }
-        }
     }
 
     @Test
     void doHandle_alwaysContinuesChain() {
         CacheContext context = createContext(CacheOperation.PUT, null,
-                configuredOperation(120, false, 0.2f));
+                annotatedOperation(120, false, 0.2f));
 
         HandlerResult result = handler.doHandle(context, CacheResult::success);
 

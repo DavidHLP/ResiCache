@@ -108,6 +108,7 @@ not require a cache flush.
   `clear` deletion counts and PUT_IF_ABSENT insertion. `withStatisticsCollector`
   fully rebinds statistics; lock-wait duration remains unreported (zero).
 - **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; this behavior is unchanged from `main`.
+- **TTL default precedence**: because the method-level `@RedisCacheable`/`@RedisCachePut` `ttl` attribute defaults to `60` seconds, annotating a method without an explicit `ttl` expires its entries after `60s` even when `resi-cache.default-ttl` (default `30m`) is configured; the configured default applies only where no method-level TTL is declared (`ttl=0`, or a plain Spring `@Cacheable` in `SELECTIVE` mode). Ordered resolution and its single owner (`TtlPolicy`) are specified in [`docs/REFERENCE.md`](docs/REFERENCE.md). Which default should win for an annotation without an explicit `ttl` is an unresolved product decision; both values are preserved as current supported behaviour and neither changes on this build line.
 - **Refresh metadata**: the version-2 envelope persists the fields required by
   early-expiration policy and version CAS (`ttl`, `createdTime`, access/visit
   counters, `expired`, and `version`). `startNanoTime` is process-local and is
