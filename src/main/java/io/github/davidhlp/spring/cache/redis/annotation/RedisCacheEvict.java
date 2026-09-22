@@ -21,11 +21,16 @@ public @interface RedisCacheEvict {
 
     /**
      * 缓存名称，与 Spring Cache 的 value 相同.
+     *
+     * <p>同时声明 {@code value} 与 {@link #cacheNames()} 时 <b>{@code value} 优先</b>；
+     * 只声明其中一个时按声明的那个解析（见 {@code COMPATIBILITY.md} 的注解属性解析规则）。
      */
     String[] value() default {};
 
     /**
      * 缓存名称别名，与 value 相同.
+     *
+     * <p>同时声明 {@link #value()} 时由 {@code value} 决定——本属性只在其为空时生效。
      */
     String[] cacheNames() default {};
 

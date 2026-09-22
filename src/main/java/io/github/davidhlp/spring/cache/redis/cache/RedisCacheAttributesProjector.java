@@ -60,7 +60,8 @@ class RedisCacheAttributesProjector {
 
     /**
      * 从 {@link RedisCacheable} 投影。
-     * <p>注：{@code cacheNames} 与 {@code value} 合并——{@code cacheNames} 优先、为空则用 {@code value}。
+     * <p>注：{@code value} 与 {@code cacheNames} 合并——同时声明两者时 {@code value} 优先
+     * （见 {@link #resolveCacheNames}）。
      */
     public RedisCacheAttributes from(RedisCacheable annotation) {
         return annotation == null ? null : project(extractFrom(annotation), false, false);
@@ -271,14 +272,19 @@ class RedisCacheAttributesProjector {
     // ---------------------------------------------------------------------
 
     /**
-     * 解析缓存名称：{@code cacheNames} 优先，为空则用 {@code value}。
-     * 这是原三个注解共有的语义——{@code value} 与 {@code cacheNames} 同义，
-     * Spring 的 {@code @Cacheable} 也遵循同一约定。
+     * 解析缓存名称：{@code value} 优先，为空则用 {@code cacheNames}。
+     *
+     * <p>这是 {@code main} 上 AOP 面的既有语义（三个 {@code parseRedisCache*} 均写
+     * {@code ann.value().length > 0 ? ann.value() : ann.cacheNames()}），c6 统一两面后本方法
+     * 是唯一的解析点，因此 {@code value} 必须在两面上都赢——否则同时声明两者的注解会让
+     * policy 面指向一个实际未被使用的 cache。
+     *
+     * <p>只声明其中一个时行为不变：另者为空数组，直接由非空的那一个决定。
      */
-    public static String[] resolveCacheNames(String[] cacheNames, String[] values) {
-        if (cacheNames != null && cacheNames.length > 0) {
-            return cacheNames;
+    public static String[] resolveCacheNames(String[] cacheNames, String[] value) {
+        if (value != null && value.length > 0) {
+            return value;
         }
-        return values != null ? values : new String[0];
+        return cacheNames != null ? cacheNames : new String[0];
     }
 }

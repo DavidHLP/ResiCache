@@ -44,7 +44,20 @@ and the application's `MeterRegistry`, a decision resolved once during
 assembly. When either is missing the metrics seam is a no-op adapter and
 nothing is published. The Redis health indicator is not gated by that switch;
 it needs the optional Actuator dependency and reports Redis connectivity plus
-protection degradation. Writer statistics and failure reporting are bounded by
+protection degradation.
+
+Because that indicator is assembled whenever Actuator, Redis and ResiCache are
+all present, **every `/actuator/health` probe costs one synchronous
+`connection.ping()` Redis round trip**. An orchestrator or load balancer that
+polls health frequently (a Kubernetes liveness/readiness probe on a short
+period, for example) therefore adds that traffic to Redis for each probe, per
+application instance. Previously the indicator was gated on
+`resi-cache.metrics.enabled`, so applications that left metrics off had no
+probe traffic at all. Size the health-check interval and any Redis connection
+pool accordingly, and prefer a dedicated low-frequency probe over reusing the
+health endpoint as a load-balancer check.
+
+Writer statistics and failure reporting are bounded by
 the contracts in `STABILITY.md` and `COMPATIBILITY.md`; pre-1.0 metric names
 and log wording are not a general compatibility promise.
 
