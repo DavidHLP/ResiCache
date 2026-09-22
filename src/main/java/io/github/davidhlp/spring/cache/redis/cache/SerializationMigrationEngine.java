@@ -44,6 +44,8 @@ class SerializationMigrationEngine
     private final LegacyValueDecoder legacyDecoder;
     private final SerializationMigrationProperties migration;
     private final MeterRegistry meterRegistry;
+    /** 关闭路径唯一判据 —— 构造期从 seam 推导一次,热路径只分支 final 字段。 */
+    private final boolean disabled;
 
     public SerializationMigrationEngine(
             RedisConnectionFactory connectionFactory,
@@ -58,6 +60,7 @@ class SerializationMigrationEngine
                 objectMapper, serializer.getAllowedPackagePrefixes(), serializer.getTypeProperty());
         this.migration = serializer.getMigration();
         this.meterRegistry = resolvedMetrics.meterRegistry();
+        this.disabled = DisabledMetricsRegistry.isDisabledSeam(this.meterRegistry);
     }
 
     /**
@@ -288,6 +291,10 @@ class SerializationMigrationEngine
     }
 
     private void record(String outcome) {
+        if (disabled) {
+            // 关闭路径:跳过 tag 数组、Meter.Id 构造与 deny-all filter 遍历(单 key 可达 4 次)。
+            return;
+        }
         meterRegistry.counter(METRIC_NAME,
                 "phase", migration.getPhase().name(), "outcome", outcome).increment();
     }
