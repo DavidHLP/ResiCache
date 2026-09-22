@@ -1,0 +1,50 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandler.java
+  h_77173abe25c3ff 155-156,174
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandler.java
+  h_77173abe25c3ff 51,57,62,149,224
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheOperationResolver.java
+  h_77173abe25c3ff 23,26,51-53,56-57,125
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheValueCodec.java
+  h_77173abe25c3ff 57-60,66
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/LoaderOrchestrator.java
+  h_77173abe25c3ff 30,133-135,138-140,147-149,174-175,194,310,316
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCache.java
+  h_77173abe25c3ff 13,47,67-69,82,92-93,136-137,155
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriter.java
+  h_77173abe25c3ff 37-38,144,147,224-225,227,262-263,344
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResiCacheFeatures.java
+  h_77173abe25c3ff 20-21,31,34,37,40
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandlerIntegrationTest.java
+  h_77173abe25c3ff 57,74,108
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactoryTest.java
+  h_77173abe25c3ff 40,62,77,92,106,120,140,156,172,188,211,227,339,353,368,390-391,393
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheValueCodecTest.java
+  h_77173abe25c3ff 66-74
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandlerIntegrationTest.java
+  h_77173abe25c3ff 60,292
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/LoaderOrchestratorTest.java
+  h_77173abe25c3ff 533-537
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheIntegrationTest.java
+  h_77173abe25c3ff 87-102,253-254
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheLoadPathTest.java
+  h_77173abe25c3ff 34,148-167,205
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheLoaderFailurePrivacyTest.java
+  h_77173abe25c3ff 70-84
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheManagerTest.java
+  h_77173abe25c3ff 24,55-60
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterFailureTest.java
+  h_77173abe25c3ff 25-27,48
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheWriterStatisticsTest.java
+  h_77173abe25c3ff 25-28,48,55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb724afa26a43475b3bcdf072cf1749609385dfc",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
