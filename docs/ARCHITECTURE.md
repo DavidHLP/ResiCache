@@ -73,6 +73,9 @@ classes can move or disappear without becoming a compatibility promise.
 assembles observers. `ChainEngine` owns advancement, flow decisions, observer
 hook ordering, and post-processing isolation. A custom handler must be supplied
 by the host application's component scan or as an application bean.
+`HandlerOrder` additionally carries each slot's protection disable name and its
+`handler` metric/log tag, which internal `cache/HandlerIdentity.java` resolves as
+one declaration so that renaming a handler class changes neither.
 
 ## Annotation and policy flow
 
