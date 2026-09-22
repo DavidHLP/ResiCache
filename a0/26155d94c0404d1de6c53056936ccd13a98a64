@@ -1,0 +1,18 @@
+COMPATIBILITY.md
+  h_77173abe25c3ff 59-62
+docs/OPERATIONS.md
+  h_77173abe25c3ff 42-49
+docs/REFERENCE.md
+  h_77173abe25c3ff 39-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a026155d94c0404d1de6c53056936ccd13a98a64",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
