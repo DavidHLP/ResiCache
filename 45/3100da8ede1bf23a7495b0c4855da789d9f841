@@ -1,0 +1,20 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactory.java
+  h_77173abe25c3ff 158-161,210-216,223
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/MDCStampChainObserver.java
+  h_77173abe25c3ff 39-40
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfiguration.java
+  h_77173abe25c3ff 44-46
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainObserverTest.java
+  h_77173abe25c3ff 26,59-63,125,245,273-275,278-279,282,285-287,298-345,382-391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "453100da8ede1bf23a7495b0c4855da789d9f841",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
