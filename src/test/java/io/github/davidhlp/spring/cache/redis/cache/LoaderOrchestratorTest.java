@@ -368,13 +368,7 @@ class LoaderOrchestratorTest {
         @Test
         @DisplayName("bound callback constructor exposes a small production call surface")
         void boundCallbacks_productionEntryUsesOnlyLoaderAndKey() {
-            LoaderOrchestrator boundOrchestrator = new LoaderOrchestrator(
-                    null,
-                    null,
-                    null,
-                    key -> testRedisKey,
-                    key -> null,
-                    (key, value) -> { });
+            LoaderOrchestrator boundOrchestrator = bound(key -> null, (key, value) -> { });
 
             LoadOutcome<String> outcome = boundOrchestrator.orchestrate(
                     "testCache", () -> "loaded-value", "key1", operation(false, false));
