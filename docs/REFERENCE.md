@@ -59,6 +59,26 @@ README snippet when the properties class or generated metadata differs.
   TTL and disables Bloom, sync-lock, early-expiration, and null-value handlers;
   a per-mechanism true cannot re-enable one after global-off.
 
+### TTL resolution precedence
+
+Effective TTL resolves once, in package-private `TtlPolicy` (`cache/`; see
+[`ARCHITECTURE.md`](ARCHITECTURE.md)), from three inputs — the first match wins:
+
+1. **Annotation**: method-level `@RedisCacheable`/`@RedisCachePut` `ttl` when
+   greater than zero (attribute default `60`), optionally jittered by
+   `randomTtl`/`variance`.
+2. **Duration parameter**: the write-path TTL Spring Data Redis passes from the
+   cache-level `resi-cache.default-ttl` (default `30m`, overridable per cache
+   under `caches.*.ttl`). It applies only when no method-level TTL is set —
+   `ttl=0`, or a plain Spring `@Cacheable` in `SELECTIVE` mode. A zero or
+   negative parameter yields a permanent entry (no expiry).
+3. **No TTL context**: a `null` parameter (for example a caller-supplied
+   `RedisCacheConfiguration`) falls back to `TtlPolicy`'s `60`-second default.
+
+The consequence that branch 1's `60`-second annotation default overrides
+`resi-cache.default-ttl` is recorded as a supported-behaviour limitation in
+[`COMPATIBILITY.md`](../COMPATIBILITY.md).
+
 ## Cache operation outcomes
 
 | Operation | Current behavior |
