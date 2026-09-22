@@ -1,0 +1,14 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainObserverTest.java
+  h_77173abe25c3ff 27,283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9508ddbb8b60b905ac6bad4f85c178fd7561bf06",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
