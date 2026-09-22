@@ -10,6 +10,7 @@ import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcom
 import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
@@ -43,7 +44,7 @@ public class RedisProCache extends RedisCache {
      */
     private final RedisProCacheMetricsRegistry metricsRegistry;
 
-    /** 方法级策略解析器 — 仅 lookupPolicy 使用;null 时关闭元数据查找。 */
+    /** 方法级策略解析器 — 仅 loader 路径使用;生产恒由 {@code RedisProCacheConfiguration} 装配。 */
     private final CacheOperationResolver operationResolver;
 
     /**
@@ -63,9 +64,9 @@ public class RedisProCache extends RedisCache {
      * 构造 ResiCache 实例 — 唯一构造入口。
      *
      * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点。
-     * 全部可选特性收口到单一 {@link ResiCacheFeatures} 值对象,「null = 该特性禁用」的契约
-     * 只存在于 {@link ResiCacheFeatures} 一处。测试用 {@link ResiCacheFeatures#none()} 或
-     * builder 显式声明启用的特性。
+     * 可选特性收口到单一 {@link ResiCacheFeatures} 值对象。只有指标是可降解特性
+     * ({@code meterRegistry} null ⇒ no-op);元数据解析与 protection 协作对象在生产始终
+     * 装配,构造期校验非 null(缺失即装配错误,不静默降级)。
      *
      * <p>构造期委派 3 个 deep seam:
      * <ol>
@@ -78,7 +79,7 @@ public class RedisProCache extends RedisCache {
      * <ul>
      *   <li>{@code name / cacheWriter / cacheConfiguration} —— 必传,转发给
      *       {@code super(String, RedisCacheWriter, RedisCacheConfiguration)}</li>
-     *   <li>{@code features} —— 可选特性集合(见 {@link ResiCacheFeatures};各字段 null 表示禁用)</li>
+     *   <li>{@code features} —— 特性集合(见 {@link ResiCacheFeatures});非指标字段必传</li>
      * </ul>
      */
     RedisProCache(
@@ -88,7 +89,8 @@ public class RedisProCache extends RedisCache {
             ResiCacheFeatures features) {
         super(name, cacheWriter, cacheConfiguration);
         this.metricsRegistry = new RedisProCacheMetricsRegistry(features.getMeterRegistry(), name);
-        this.operationResolver = features.getOperationResolver();
+        this.operationResolver = Objects.requireNonNull(
+                features.getOperationResolver(), "operationResolver");
         // loader 路径编排器 build — protection 依赖 + cache-specific callbacks 一次性绑定;
         // 生产 get(key, loader) 只需传入 key/loader/operation,不再重复装配 3 个 callback。
         this.loaderOrchestrator = new LoaderOrchestrator(
@@ -131,6 +133,8 @@ public class RedisProCache extends RedisCache {
      * 由 {@link LoaderOrchestrator#orchestrate} 承担,本方法:
      * <ol>
      *   <li>timed wrap(getTimer)(委派 {@link RedisProCacheMetricsRegistry#recordGet})</li>
+     *   <li>查当前方法的策略视图 — loader 路径恒为 GET 操作,故查
+     *       {@code @RedisCacheable} 命名空间(委派 {@link CacheOperationResolver#resolve})</li>
      *   <li>委派 orchestrator.orchestrate(...) 返回 {@link LoadOutcome}</li>
      *   <li>switch 翻译 4 态 → 路径返回 / miss 自增 / 异常翻译</li>
      * </ol>
@@ -148,7 +152,7 @@ public class RedisProCache extends RedisCache {
     @Override
     public <T> T get(Object key, Callable<T> loader) {
         return metricsRegistry.recordGet(() -> {
-            CachePolicyView.Source operation = lookupPolicy();
+            CachePolicyView.Source operation = operationResolver.resolve(getName(), CacheOperation.GET);
             LoadOutcome<T> outcome = loaderOrchestrator.orchestrate(getName(), loader, key, operation);
             return switch (outcome) {
                 case LoaderOrchestrator.BloomShortCircuited<T> ignored -> {
@@ -204,22 +208,6 @@ public class RedisProCache extends RedisCache {
         // checked Exception 包装:message 只含低基数 cacheName,不含 raw key;
         // 原始 cause 保留(不吞异常、不降级为 miss)。
         return new RuntimeException("Failed to load cache value (cache=" + cacheName + ")", cause);
-    }
-
-    /**
-     * 查找当前方法在本 cache 上的策略视图 —— 1 行委派。
-     *
-     * <p>委派 {@link CacheOperationResolver#resolve(String, CacheOperation)}:loader 路径
-     * 恒为 GET 操作,故查 {@code @RedisCacheable} 命名空间。{@code operationResolver} 为 null
-     * 时直接返回 null(测试场景关闭元数据查找)。
-     *
-     * <p>返回稳定 {@link CachePolicyView.Source} 而非内部 operation 类型:链侧需要的只是
-     * 策略字段(ttl / bloom / sync / …)。
-     */
-    private CachePolicyView.Source lookupPolicy() {
-        return operationResolver == null
-                ? null
-                : operationResolver.resolve(getName(), CacheOperation.GET);
     }
 
     @Override

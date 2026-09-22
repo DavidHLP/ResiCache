@@ -152,7 +152,8 @@ abstract class AbstractCacheHandler implements CacheHandler {
     }
 
     /**
-     * handle 默认实现 — 由 Engine 调用。
+     * handle 默认实现 — 单参形态没有剩余链可推进,委托二参形态并传入基类统一提供的
+     * "无剩余链"句柄;shouldHandle 分发决策只在二参形态实现一次。
      *
      * <p>Engine 已在调用本方法前完成：
      * <ul>
@@ -166,14 +167,11 @@ abstract class AbstractCacheHandler implements CacheHandler {
      *   <li>推进到下一个 handler（CONTINUE）</li>
      * </ul>
      *
-     * 本方法只把单参调用转为统一的二参处理钩子，并提供显式的"无剩余链"句柄。
      * 链推进由 {@link ChainEngine} 统一驱动。
      */
     @Override
     public HandlerResult handle(CacheContext context) {
-        return shouldHandle(context)
-                ? doHandle(context, NO_REMAINDER)
-                : HandlerResult.continueChain();
+        return handle(context, NO_REMAINDER);
     }
 
     /**

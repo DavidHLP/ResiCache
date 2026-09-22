@@ -27,7 +27,7 @@ import org.springframework.lang.Nullable;
  * <ol>
  *   <li><b>Bloom 短路检查</b> — 经 {@link BloomGate#definiteMiss} 判定「确定不存在」 →
  *       返回 {@link LoadOutcome.BloomShortCircuited};caller 据此自增 miss counter 并返回 null</li>
- *   <li><b>Sync 路径</b> — {@code sync=true} + {@link SyncSupport} 在场 →
+ *   <li><b>Sync 路径</b> — {@code sync=true} →
  *       {@link SyncSupport#executeSync} + 锁内 {@link #readThrough read-through protocol};
  *       返回 {@link LoadOutcome.Loaded};锁内 loader 抛异常 →
  *       {@link LoadOutcome.LoadFailed}(由 caller 翻译)</li>
@@ -130,22 +130,23 @@ final class LoaderOrchestrator {
     /**
      * 生产构造:一次性绑定保护依赖与 cache-specific 回调,隐藏 loader 编排的 callback 组装细节。
      *
-     * <p>3 个回调是 loader 路径的必需操作,构造期分别以 {@link Objects#requireNonNull} 校验,
-     * 缺失即抛带参数名的 {@link NullPointerException};可选保护依赖保持既有可空语义。
+     * <p>3 个回调与 3 个保护协作对象(bloom / sync / sync-timeout)在生产均由 Spring 装配,
+     * 构造期分别以 {@link Objects#requireNonNull} 校验,缺失即抛带参数名的
+     * {@link NullPointerException}(装配错误,不静默降级)。
      */
     LoaderOrchestrator(
-            @Nullable BloomGate bloomGate,
-            @Nullable SyncSupport syncSupport,
-            @Nullable SyncLockTimeout syncLockTimeout,
+            BloomGate bloomGate,
+            SyncSupport syncSupport,
+            SyncLockTimeout syncLockTimeout,
             Function<Object, String> redisKeyFn,
             Function<Object, Cache.ValueWrapper> doubleCheckFn,
             BiConsumer<Object, Object> putAfterLoad) {
-        this.bloomGate = bloomGate;
-        this.syncSupport = syncSupport;
-        this.syncLockTimeout = syncLockTimeout;
         this.boundRedisKeyFn = Objects.requireNonNull(redisKeyFn, "redisKeyFn");
         this.boundDoubleCheckFn = Objects.requireNonNull(doubleCheckFn, "doubleCheckFn");
         this.boundPutAfterLoad = Objects.requireNonNull(putAfterLoad, "putAfterLoad");
+        this.bloomGate = Objects.requireNonNull(bloomGate, "bloomGate");
+        this.syncSupport = Objects.requireNonNull(syncSupport, "syncSupport");
+        this.syncLockTimeout = Objects.requireNonNull(syncLockTimeout, "syncLockTimeout");
     }
 
     /**
@@ -170,8 +171,8 @@ final class LoaderOrchestrator {
             return new BloomShortCircuited<>();
         }
 
-        // 2) Sync 路径 — sync=true 且 SyncSupport 在场才走;否则降级 default 路径
-        if (operation != null && operation.isSync() && syncSupport != null) {
+        // 2) Sync 路径 — sync=true 才走;否则 default 路径
+        if (operation != null && operation.isSync()) {
             return executeSyncLoad(cacheName, loader, key, operation);
         }
 
@@ -190,10 +191,7 @@ final class LoaderOrchestrator {
             Callable<T> loader,
             Object key,
             CachePolicyView.Source operation) {
-        SyncLockTimeout.Resolved timeout = syncLockTimeout != null
-                ? syncLockTimeout.resolve(operation)
-                : SyncLockTimeout.Resolved.fromSeconds(
-                        SyncLockTimeout.DEFAULT_LOCK_TIMEOUT_SECONDS);
+        SyncLockTimeout.Resolved timeout = syncLockTimeout.resolve(operation);
         try {
             String lockKey = boundRedisKeyFn.apply(key);
             return syncSupport.executeSync(
@@ -306,13 +304,13 @@ final class LoaderOrchestrator {
     /**
      * Bloom 短路检查 — miss counter 自增下沉到 caller(orchestrator 不感知 metric)。
      *
-     * <p>前置条件任一缺失(operation null / 未启用 bloom / bloomGate null)→ return false(不短路)。
+     * <p>前置条件任一缺失(operation null / 未启用 bloom)→ return false(不短路)。
      * 键派生经 {@link CacheKeys#fromRedisKey} 与链层 {@code BloomFilterHandler.add} 同源,杜绝
      * actualKey/redisKey 漂移缺陷。
      */
     private boolean isBloomShortCircuited(String cacheName, String redisKey,
                                           @Nullable CachePolicyView.Source operation) {
-        if (operation == null || !operation.isUseBloomFilter() || bloomGate == null) {
+        if (operation == null || !operation.isUseBloomFilter()) {
             return false;
         }
         String bloomKey = CacheKeys.fromRedisKey(cacheName, redisKey).bloomKey();

@@ -34,9 +34,8 @@ import org.springframework.lang.Nullable;
  * NullValueHandler → ActualCacheHandler
  *
  * <p>本类持有单一 {@link CacheOperationResolver} seam —— 消除两处镜像
- * "读 ThreadLocal key → 查 register"协议(本类 {@code resolveOperation} 与
- * {@code RedisProCache} 的 lookup)漂移风险;
- * {@code resolveOperation} 为 1 行委派。
+ * "读 ThreadLocal key → 查 register"协议(本类各入口与 {@code RedisProCache} 的 loader 路径)
+ * 漂移风险;resolver 由生产装配保证非 null。
  */
 @Slf4j
 class RedisProCacheWriter implements RedisCacheWriter {
@@ -142,12 +141,10 @@ class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     private <T> CompletableFuture<T> submitAsync(Supplier<T> work) {
-        MethodSnapshot snapshot = operationResolver == null ? null : operationResolver.capture();
+        MethodSnapshot snapshot = operationResolver.capture();
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
         return CompletableFuture.supplyAsync(
-                () -> operationResolver == null
-                        ? work.get()
-                        : operationResolver.runWithSnapshot(snapshot, mdcSnapshot, work));
+                () -> operationResolver.runWithSnapshot(snapshot, mdcSnapshot, work));
     }
     @Override
     @NonNull
@@ -224,9 +221,10 @@ class RedisProCacheWriter implements RedisCacheWriter {
         // 构建上下文 —— keyPattern 前置进 buildContext,避免后置 mutate
         CacheContext context = buildContext(
                 CacheOperation.CLEAN, name, keyPattern, actualKey,
-                null, null, null, resolveOperation(name, CacheOperation.CLEAN), keyPattern);
+                null, null, null,
+                operationResolver.resolve(name, CacheOperation.CLEAN), keyPattern);
 
-        CacheResult result = executeContext(context);
+        CacheResult result = cachedChain.execute(context);
         CacheErrorHandler.finalizeFailure(CacheOperation.CLEAN, name, result);
         if (result.isSuccess()) {
             recordCleanDeletes(name, result.deletedCount());
@@ -258,25 +256,11 @@ class RedisProCacheWriter implements RedisCacheWriter {
     }
 
     /**
-     * 解析方法级策略(布隆/同步锁/TTL/空值等)—— 1 行委派。
-     *
-     * <p>委派 {@link CacheOperationResolver#resolve(String, CacheOperation)};{@code operationResolver} 为 null
-     * 时直接返回 null(测试场景关闭元数据查找)。
-     *
-     * @param cacheName 缓存名称
-     * @param operation 当前链侧操作(决定查询的注册命名空间)
-     * @return 命中的策略视图;无元数据或未命中返回 null
-     */
-    @Nullable
-    private CachePolicyView.Source resolveOperation(@NonNull String cacheName, CacheOperation operation) {
-        return operationResolver == null ? null : operationResolver.resolve(cacheName, operation);
-    }
-
-    /**
      * 统一的 CacheContext 构造 seam —— 5 个 SDR 入口(GET/PUT/PUT_IF_ABSENT/REMOVE/CLEAN)
      * 与带 operation 的 put 重载均经此构造。
      *
-     * <p>cacheOperation 由调用方解析:executeChain/clean 走 {@link #resolveOperation} 查 register,
+     * <p>cacheOperation 由调用方解析:executeChain/clean 走
+     * {@link CacheOperationResolver#resolve(String, CacheOperation)} 查 register,
      * put 5参重载直接传入已持有的 operation。keyPattern 仅 CLEAN 操作非 null —— 作为
      * CacheContext direct field 前置设置,避免 clean 后置 mutate。
      *
@@ -357,11 +341,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
                 valueBytes != null ? valueCodec.fromValueBytes(valueBytes) : null;
         CacheContext context = buildContext(
                 operation, name, redisKey, actualKey, valueBytes, deserializedValue, ttl,
-                resolveOperation(name, operation), null);
-        return executeContext(context);
-    }
-
-    private CacheResult executeContext(CacheContext context) {
+                operationResolver.resolve(name, operation), null);
         return cachedChain.execute(context);
     }
 

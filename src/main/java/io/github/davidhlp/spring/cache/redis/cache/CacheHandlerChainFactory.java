@@ -15,7 +15,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.util.*;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -104,30 +103,6 @@ class CacheHandlerChainFactory {
      */
     static List<Toggle> protectionToggles() {
         return PROTECTION_TOGGLES;
-    }
-
-    /**
-     * 便捷构造(无 observer bean)—单元测试用;Spring 装配走带 ResolvedMetrics 的
-     * {@code @Autowired} 构造。
-     */
-    public CacheHandlerChainFactory(List<CacheHandler> handlers,
-                                 RedisProCacheProperties properties,
-                                 ObjectProvider<MeterRegistry> meterRegistryProvider,
-                                 ChainEngine engine) {
-        this(handlers, properties, ResolvedMetrics.resolve(meterRegistryProvider, null), engine,
-                List.of());
-    }
-
-    /**
-     * Convenience constructor for tests without an injected Environment.
-     */
-    public CacheHandlerChainFactory(List<CacheHandler> handlers,
-                                 RedisProCacheProperties properties,
-                                 ObjectProvider<MeterRegistry> meterRegistryProvider,
-                                 ChainEngine engine,
-                                 List<ChainObserver> observers) {
-        this(handlers, properties, ResolvedMetrics.resolve(meterRegistryProvider, null), engine,
-                observers);
     }
 
     /**

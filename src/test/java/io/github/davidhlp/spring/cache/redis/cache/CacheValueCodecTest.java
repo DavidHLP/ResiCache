@@ -63,6 +63,15 @@ class CacheValueCodecTest {
             assertThat((byte) result[0]).isEqualTo((byte) 0xAC);
             assertThat((byte) result[1]).isEqualTo((byte) 0xED);
         }
+
+        @Test
+        @DisplayName("Java null 同样写出 NullValue 占位字节(不与 NullValue.INSTANCE 分叉)")
+        void toValueBytes_javaNull_writesNullValueBytes() {
+            byte[] result = codec.toValueBytes(null);
+
+            assertThat(result).isEqualTo(codec.toValueBytes(NullValue.INSTANCE));
+            assertThat(codec.fromValueBytes(result)).isSameAs(NullValue.INSTANCE);
+        }
     }
 
     @Nested

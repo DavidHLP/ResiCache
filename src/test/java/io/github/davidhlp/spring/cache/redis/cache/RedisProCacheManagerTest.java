@@ -21,6 +21,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,7 +52,12 @@ class RedisProCacheManagerTest {
                 defaultConfiguration,
                 ResiCacheFeatures.builder()
                         .meterRegistry(meterRegistry)
-                        .build(),   // bloom/operationResolver/sync disabled
+                        .operationResolver(new CacheOperationResolver(
+                                new DefaultMethodMetadataResolver(), new RedisCacheRegister()))
+                        .bloomGate(mock(BloomGate.class))
+                        .syncSupport(mock(SyncSupport.class))
+                        .syncLockTimeout(mock(SyncLockTimeout.class))
+                        .build(),   // 生产形状:协作对象在场;无元数据 → 不启用 bloom/sync
                 Collections.emptyMap(),
                 false);  // transactionAware
     }

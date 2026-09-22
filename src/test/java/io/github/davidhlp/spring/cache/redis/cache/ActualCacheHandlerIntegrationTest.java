@@ -54,7 +54,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Autowired
-    private NullValueEncoder nullValueEncoder;
+    private CacheValueCodec valueCodec;
 
     @Mock
     private RefreshCancellation earlyExpirationExecutor;
@@ -71,7 +71,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
         handler = new ActualCacheHandler(
                 redisTemplate,
                 valueOperations,
-                nullValueEncoder,
+                valueCodec,
                 earlyExpirationExecutor,
                 errorHandler);
     }
@@ -105,7 +105,7 @@ class ActualCacheHandlerIntegrationTest extends AbstractRedisIntegrationTest {
         if (onDelete != null) {
             when(throwingTpl.delete("test:key")).thenThrow(onDelete);
         }
-        return new ActualCacheHandler(throwingTpl, throwingOps, nullValueEncoder,
+        return new ActualCacheHandler(throwingTpl, throwingOps, valueCodec,
                 earlyExpirationExecutor, errorHandler);
     }
 
