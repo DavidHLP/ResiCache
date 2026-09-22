@@ -14,6 +14,7 @@ import io.micrometer.core.instrument.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import org.springframework.core.annotation.Order;
 
 /**
  * 责任链节点级 Micrometer Timer。
@@ -30,6 +31,7 @@ import java.util.concurrent.TimeUnit;
  * <p>线程安全：Timer map 支持并发注册；{@link TimerScope} 是单次节点调用的不可变
  * token，不在 observer 内保存共享的 per-call 状态。registry 缺失时全程 no-op。
  */
+@Order(3) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class ChainTimerChainObserver implements ChainObserver {
 
     static final String METRIC_NAME = "resicache.chain.execute";

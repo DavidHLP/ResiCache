@@ -41,24 +41,22 @@ class RedisProCacheConfiguration {
      * 标准 ChainObserver beans — P1-API-001-C:标准和用户 observer 均为有序 Bean,
      * 由 {@link CacheHandlerChainFactory} 单一装配点注入 Engine。
      *
-     * <p>顺序(MDC → DebugLog → Timer → FiredCounter)由 {@code @Order} 显式声明:
-     * MDC 先 stamp,DEBUG log 再读 requestId,Timer/FiredCounter 最后打点。
-     * registry 缺失时 Timer/FiredCounter observer 内部 no-op。
+     * <p>执行顺序(MDC → DebugLog → Timer → FiredCounter)由 observer 类自身的
+     * {@code @Order} 单一声明(见各 observer 类);工厂 {@code observerOrder} 读取该
+     * 类级注解排序,故 bean 方法不再重复声明。MDC 先 stamp,DEBUG log 再读 requestId,
+     * Timer/FiredCounter 最后打点。registry 缺失时 Timer/FiredCounter observer 内部 no-op。
      */
     @Bean
-    @org.springframework.core.annotation.Order(1)
     public io.github.davidhlp.spring.cache.redis.cache.MDCStampChainObserver mdcStampChainObserver() {
         return new io.github.davidhlp.spring.cache.redis.cache.MDCStampChainObserver();
     }
 
     @Bean
-    @org.springframework.core.annotation.Order(2)
     public io.github.davidhlp.spring.cache.redis.cache.ChainDebugLogChainObserver chainDebugLogChainObserver() {
         return new io.github.davidhlp.spring.cache.redis.cache.ChainDebugLogChainObserver();
     }
 
     @Bean
-    @org.springframework.core.annotation.Order(3)
     public io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver chainTimerChainObserver(
             ResolvedMetrics resolvedMetrics) {
         return new io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver(
@@ -66,7 +64,6 @@ class RedisProCacheConfiguration {
     }
 
     @Bean
-    @org.springframework.core.annotation.Order(4)
     public io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver firedCounterChainObserver(
             ResolvedMetrics resolvedMetrics) {
         return new io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver(

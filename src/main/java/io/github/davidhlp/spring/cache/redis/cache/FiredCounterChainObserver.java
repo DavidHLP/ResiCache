@@ -13,6 +13,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.annotation.Order;
 
 /**
  * ChainObserver 的 perNode 实现 — per-handler uniform {@code resicache.handler.fired}
@@ -32,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
  * handler 类型竞争同 observer）；{@link Counter#increment()} 自身线程安全。
  */
 @Slf4j
+@Order(4) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class FiredCounterChainObserver implements ChainObserver {
 
     private final MeterRegistry registry;

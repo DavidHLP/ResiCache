@@ -156,7 +156,8 @@ class CacheHandlerChainFactory {
                 return cachedChain;
             }
 
-            // 1) 装配 observer(单一装配点):注入列表已由 Spring 按 @Order 排序。
+            // 1) 装配 observer(单一装配点):由本工厂按 observer 类级 @Order 排序后注册,
+            //    不依赖 Spring 注入列表的顺序(注入顺序非本类的顺序契约)。
             //    idempotent 由本方法的单例缓存 miss pattern 保证,首次 miss 后不会再进本块。
             registerObserversOnce();
 
@@ -205,9 +206,12 @@ class CacheHandlerChainFactory {
     /**
      * 注册注入的 observer 到 Engine — 单一装配点。
      *
-     * <p>注入列表由 Spring 按 {@code @Order} 升序提供;此处按类型去重
+     * <p>顺序由 observer 类级 {@code @Order} 单一拥有,本方法按 {@link #observerOrder}
+     * 升序排序(标准 MDC→DebugLog→Timer→FiredCounter 各带 {@code @Order(1..4)};
+     * 未标注的自定义 observer 取 {@link Integer#MAX_VALUE} 排在最后),再按类型去重
      * (同名同 tag counter 重复注册幂等,但 observer 实例重复注册会双计 — 去重保证
-     * 每个 observer 类恰好注册一次),随后按序 addObserver。
+     * 每个 observer 类恰好注册一次),随后按序 addObserver。注册顺序即
+     * {@code STABILITY.md §4} 承诺的 observer 执行顺序。
      *
      * <p>registry 缺失时:MDC/DebugLog 无 registry 依赖;Timer/FiredCounter
      * observer 内部 lazy 检测,registry 缺失时全 no-op。
@@ -226,6 +230,10 @@ class CacheHandlerChainFactory {
         }
     }
 
+    /**
+     * observer 顺序的唯一真值读取点:读 observer 类上的 {@code @Order}(而非 {@code @Bean}
+     * 方法上的),因此 {@link #registerObserversOnce} 的排序对标准与自定义 observer 均生效。
+     */
     private int observerOrder(ChainObserver observer) {
         org.springframework.core.annotation.Order order =
                 observer.getClass().getAnnotation(org.springframework.core.annotation.Order.class);
