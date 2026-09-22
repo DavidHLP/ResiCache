@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -175,6 +176,33 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
             faultFilter.init();
 
             faultFilter.clear("test-cache");
+        }
+    }
+
+    @Nested
+    @DisplayName("metrics seam")
+    class MetricsSeamTests {
+
+        @Test
+        @DisplayName("关闭 seam — 两个 failure counter 都不注册(字段保持 null)")
+        void disabledSeam_registersNoFailureCounters() {
+            RedisBloomIFilter seamFilter =
+                    new RedisBloomIFilter(redisTemplate, config, DisabledMetricsRegistry.INSTANCE);
+            seamFilter.init();
+
+            assertThat(seamFilter.registeredFailureCounterCount())
+                    .as("关闭 seam 上注册不分配任何 counter")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("启用 registry — 两个 failure counter 注册")
+        void enabledRegistry_registersFailureCounters() {
+            RedisBloomIFilter meteredFilter =
+                    new RedisBloomIFilter(redisTemplate, config, new SimpleMeterRegistry());
+            meteredFilter.init();
+
+            assertThat(meteredFilter.registeredFailureCounterCount()).isEqualTo(2);
         }
     }
 

@@ -50,7 +50,7 @@ class RedisBloomIFilter implements BloomIFilter {
         this.hashPositionCache = Caffeine.newBuilder()
                 .maximumSize(config.getHashCacheSize())
                 .build();
-        if (meterRegistry != null) {
+        if (meterRegistry != null && !DisabledMetricsRegistry.isDisabledSeam(meterRegistry)) {
             this.checkFailureCounter = Counter.builder("bloomsift.check.failures")
                     .description("Number of bloom filter check failures")
                     .register(meterRegistry);
@@ -161,5 +161,20 @@ class RedisBloomIFilter implements BloomIFilter {
 
     private String bloomKey(String cacheName) {
         return config.getKeyPrefix() + cacheName;
+    }
+
+    /**
+     * 测试用：暴露 2 个已注册 failure counter 的个数。关闭 seam / null registry 下应为 0，
+     * 启用 registry 下应为 2。
+     */
+    int registeredFailureCounterCount() {
+        int registered = 0;
+        if (checkFailureCounter != null) {
+            registered++;
+        }
+        if (addFailureCounter != null) {
+            registered++;
+        }
+        return registered;
     }
 }

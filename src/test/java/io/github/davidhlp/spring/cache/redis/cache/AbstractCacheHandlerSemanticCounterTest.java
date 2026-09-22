@@ -124,6 +124,28 @@ class AbstractCacheHandlerSemanticCounterTest {
         }
 
         @Test
+        @DisplayName("关闭 seam → 语义 counter 不注册(counter 字段保持 null)")
+        void disabledSeam_registersNoCounter() {
+            WithSemanticHandler h = new WithSemanticHandler();
+            h.attachMeterRegistry(DisabledMetricsRegistry.INSTANCE);
+
+            assertThat(h.getSemanticCounter())
+                    .as("关闭 seam 上注册不绑定任何 counter")
+                    .isNull();
+            assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
+            h.incrementForTest();  // 沿类内既有 null 短路,不得抛 NPE
+        }
+
+        @Test
+        @DisplayName("启用 registry → 语义 counter 绑定到基类字段")
+        void enabledRegistry_bindsCounterField() {
+            WithSemanticHandler h = new WithSemanticHandler();
+            h.attachMeterRegistry(new SimpleMeterRegistry());
+
+            assertThat(h.getSemanticCounter()).isNotNull();
+        }
+
+        @Test
         @DisplayName("重复 attach 同一 registry → 幂等（同名 register 返同一实例）")
         void idempotent_attachSameRegistry() {
             SimpleMeterRegistry registry = new SimpleMeterRegistry();

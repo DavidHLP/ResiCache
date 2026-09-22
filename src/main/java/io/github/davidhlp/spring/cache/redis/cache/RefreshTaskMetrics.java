@@ -20,10 +20,10 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>{@code meterRegistry} 永不为 {@code null}：指标未启用（或应用无 {@code MeterRegistry}
  * bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
- * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），在其上的注册是 no-op 分配
- * ——不发布、不保留任何 meter，所有 record 方法为空操作。提取收益（locality）：原本散落在
- * 执行器构造器与各方法中的 Counter/Gauge 注册及 null 判定，现收敛为一处，执行器只需调用
- * {@code recordXxx()}。
+ * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），此时构造期直接走 null
+ * 分支——不构造 meter、不走 deny-all filter、不分配 Noop* counter/gauge，3 个 counter 字段
+ * 保持 null，所有 record 方法为空操作。提取收益（locality）：原本散落在执行器构造器与各方法中
+ * 的 Counter/Gauge 注册及 null 判定，现收敛为一处，执行器只需调用 {@code recordXxx()}。
  */
 @Slf4j
 final class RefreshTaskMetrics {
@@ -44,7 +44,7 @@ final class RefreshTaskMetrics {
             MeterRegistry meterRegistry,
             ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
             ExecutorService executorService) {
-        if (meterRegistry == null) {
+        if (meterRegistry == null || DisabledMetricsRegistry.isDisabledSeam(meterRegistry)) {
             this.submittedCounter = null;
             this.completedCounter = null;
             this.cancelledCounter = null;
@@ -93,5 +93,23 @@ final class RefreshTaskMetrics {
         if (cancelledCounter != null) {
             cancelledCounter.increment();
         }
+    }
+
+    /**
+     * 测试用：暴露 3 个已注册 counter 的个数。关闭 seam / null registry 下应为 0，
+     * 启用 registry 下应为 3。
+     */
+    int registeredCounterCount() {
+        int registered = 0;
+        if (submittedCounter != null) {
+            registered++;
+        }
+        if (completedCounter != null) {
+            registered++;
+        }
+        if (cancelledCounter != null) {
+            registered++;
+        }
+        return registered;
     }
 }
