@@ -1,17 +1,18 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
@@ -27,8 +28,10 @@ import org.slf4j.Logger;
  *   <li>{@link Exclusive} — 写路径只做互斥锁和本地串行,不发布或清理 single-flight 注册。</li>
  * </ul>
  *
- * <p>角色只接收 {@link SyncStateAccess} 的窄生命周期契约,不直接持有三个 registry。这样一个
- * per-key sync state 只有一个 owner,发布、完成和清理由同一处负责。
+ * <p>本文件同时承载角色与它们变更的 per-key 状态: {@link SyncStateAccess} 生命周期契约、
+ * 唯一实现 {@link SyncState}(key registry、重入标记、local-only 队列)、
+ * {@link SyncRegistration} 发布凭据与 {@link SyncRoleLockExecutor} 分布式锁执行。角色只通过
+ * {@link SyncStateAccess} 变更状态,不直接持有三个 registry —— 状态与其生命周期同处一个 owner。
  *
  * <p>包私有:仅 SyncSupport 和同包测试使用,不对外暴露。
  */
@@ -86,8 +89,7 @@ sealed interface SyncRole<T>
             RuntimeException failure = null;
             boolean success = false;
             try {
-                value = SyncSupport.executeRoleWork(
-                        log, key, timeout, loader, distributedManagers, properties, state);
+                value = state.executeRoleWork(log, key, timeout, loader, distributedManagers, properties);
                 success = true;
             } catch (final RuntimeException e) {
                 failure = e;
@@ -105,19 +107,33 @@ sealed interface SyncRole<T>
                     throw error;
                 }
             } finally {
-                Throwable completionFailure = success
-                        ? null
-                        : failure != null
-                                ? failure
-                                : new IllegalStateException("Single-flight leader aborted before completing");
-                state.complete(registration, value, completionFailure);
-                state.exit(key);
-                state.cleanup(registration);
+                finishPublication(value, failure, success);
             }
             if (success) {
                 return value;
             }
             throw failure;
+        }
+
+        /**
+         * Once-only publication lifecycle for a single key: {@code enter} (performed by
+         * {@link #run} before the work) → {@code complete} → {@code exit} → {@code cleanup}.
+         *
+         * <p>Called exactly once from {@link #run}'s {@code finally}, including the {@link Error}
+         * rethrow path. Ordering is load-bearing: completion of the shared future must be visible
+         * before this thread's reentrancy mark is cleared, and the leader's own registration is
+         * removed last so followers that joined can never observe a cleaned-up-but-incomplete
+         * publication.
+         */
+        private void finishPublication(T value, RuntimeException failure, boolean success) {
+            Throwable completionFailure = success
+                    ? null
+                    : failure != null
+                            ? failure
+                            : new IllegalStateException("Single-flight leader aborted before completing");
+            state.complete(registration, value, completionFailure);
+            state.exit(key);
+            state.cleanup(registration);
         }
     }
 
@@ -208,8 +224,7 @@ sealed interface SyncRole<T>
         public T run() {
             state.enter(key);
             try {
-                return SyncSupport.executeRoleWork(
-                        log, key, timeout, work, distributedManagers, properties, state);
+                return state.executeRoleWork(log, key, timeout, work, distributedManagers, properties);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(
@@ -222,7 +237,11 @@ sealed interface SyncRole<T>
     }
 }
 
-/** Narrow lifecycle contract owned by SyncSupport's per-key state holder. */
+/**
+ * Narrow lifecycle and execution contract owned by the per-key state holder ({@link SyncState}).
+ * Roles mutate the single-flight state only through this seam, so publication, completion, cleanup,
+ * local-only serialisation and the distributed-lock dispatch decision share one owner.
+ */
 interface SyncStateAccess {
 
     boolean isReentrant(String key);
@@ -238,10 +257,148 @@ interface SyncStateAccess {
     void cleanup(SyncRegistration registration);
 
     <T> T executeLocalOnly(String key, SyncLockTimeout.Resolved timeout, Supplier<T> work);
+
+    /**
+     * 选择分布式锁、本地串行或 fail-fast 路径。local-only fallback 由 state owner 负责,
+     * 锁执行器只处理真正的分布式锁。
+     *
+     * <p>这是角色实际执行工作(或降级/fail-fast)的唯一入口,由 {@link SyncRole.Leader} 与
+     * {@link SyncRole.Exclusive} 通过自己持有的 {@code state} 调用,不再回指构造它们的 SyncSupport。
+     */
+    <T> T executeRoleWork(Logger log,
+                          String key,
+                          SyncLockTimeout.Resolved timeout,
+                          Supplier<T> work,
+                          List<LockManager> distributedManagers,
+                          RedisProCacheProperties properties) throws InterruptedException;
 }
 
 /** A single-flight publication returned by the state owner. */
 record SyncRegistration(String key, CompletableFuture<Object> future, boolean leader) {
+}
+
+/**
+ * 一个 owner 统一管理 key registry 的 publication、completion、cleanup 和 local-only queue,
+ * 并负责在分布式锁缺失时选择 local-only 降级或 fail-fast。
+ */
+final class SyncState implements SyncStateAccess {
+
+    private final ConcurrentMap<String, CompletableFuture<Object>> inFlight = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, CompletableFuture<Void>> localOnlyTails = new ConcurrentHashMap<>();
+    private final ThreadLocal<Set<String>> reentrantKeys = ThreadLocal.withInitial(HashSet::new);
+
+    @Override
+    public boolean isReentrant(String key) {
+        return reentrantKeys.get().contains(key);
+    }
+
+    @Override
+    public void enter(String key) {
+        reentrantKeys.get().add(key);
+    }
+
+    @Override
+    public void exit(String key) {
+        reentrantKeys.get().remove(key);
+    }
+
+    @Override
+    public SyncRegistration publish(String key) {
+        CompletableFuture<Object> mine = new CompletableFuture<>();
+        CompletableFuture<Object> existing = inFlight.putIfAbsent(key, mine);
+        return existing == null
+                ? new SyncRegistration(key, mine, true)
+                : new SyncRegistration(key, existing, false);
+    }
+
+    @Override
+    public void complete(SyncRegistration registration, Object value, Throwable failure) {
+        if (failure == null) {
+            registration.future().complete(value);
+        } else {
+            registration.future().completeExceptionally(failure);
+        }
+    }
+
+    @Override
+    public void cleanup(SyncRegistration registration) {
+        if (registration.leader()) {
+            // 只移除自己发布的 future,避免误删后一个 leader。
+            inFlight.remove(registration.key(), registration.future());
+        }
+    }
+
+    @Override
+    public <T> T executeLocalOnly(String key,
+                                  SyncLockTimeout.Resolved timeout,
+                                  Supplier<T> work) {
+        AtomicReference<CompletableFuture<Void>> predecessorRef = new AtomicReference<>();
+        CompletableFuture<Void> current = new CompletableFuture<>();
+        CompletableFuture<Void> tail = localOnlyTails.compute(key, (ignored, predecessor) -> {
+            predecessorRef.set(predecessor);
+            return predecessor == null ? current : CompletableFuture.allOf(predecessor, current);
+        });
+        tail.whenComplete((ignored, failure) -> localOnlyTails.remove(key, tail));
+        CompletableFuture<Void> predecessor = predecessorRef.get();
+        try {
+            if (predecessor != null) {
+                awaitPredecessor(key, predecessor, timeout);
+            }
+            return work.get();
+        } finally {
+            current.complete(null);
+        }
+    }
+
+    @Override
+    public <T> T executeRoleWork(Logger log,
+                                 String key,
+                                 SyncLockTimeout.Resolved timeout,
+                                 Supplier<T> work,
+                                 List<LockManager> distributedManagers,
+                                 RedisProCacheProperties properties) throws InterruptedException {
+        if (distributedManagers.isEmpty()) {
+            if (properties.getSyncLock().isLocalOnly()) {
+                FailureReport.warn(log,
+                        "protection.degraded=local-only: sync=true 但无分布式锁后端, "
+                                + "已按 local-only=true 降级为单 JVM 同步",
+                        null, key);
+                return executeLocalOnly(key, timeout, work);
+            }
+            // Key-privacy contract: exception message omits raw key.
+            throw new IllegalStateException(
+                    "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
+                            + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
+                            + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
+                            + " [keyFingerprint=" + FailureReport.fingerprint(key) + "]");
+        }
+        return SyncRoleLockExecutor.run(log, key, timeout, work, distributedManagers);
+    }
+
+    private static void awaitPredecessor(String key,
+                                         CompletableFuture<Void> predecessor,
+                                         SyncLockTimeout.Resolved timeout) {
+        long timeoutSeconds = timeout.seconds();
+        try {
+            predecessor.get(Math.max(timeoutSeconds, 0L), TimeUnit.SECONDS);
+        } catch (final TimeoutException e) {
+            throw new IllegalStateException(
+                    "Timed out after " + timeoutSeconds
+                            + "s waiting for the local-only predecessor (keyFingerprint="
+                            + FailureReport.fingerprint(key) + ")", e);
+        } catch (final ExecutionException e) {
+            // 前驱 future 只会 complete(null);兜底避免把 checked 异常漏给调用方。
+            throw new IllegalStateException(
+                    "Local-only predecessor failed (keyFingerprint="
+                            + FailureReport.fingerprint(key) + ")",
+                    e.getCause() != null ? e.getCause() : e);
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(
+                    "Thread interrupted while waiting for the local-only predecessor (keyFingerprint="
+                            + FailureReport.fingerprint(key) + ")", e);
+        }
+    }
 }
 
 /** Shared lock execution for the explicit Leader and Exclusive role cases. */
