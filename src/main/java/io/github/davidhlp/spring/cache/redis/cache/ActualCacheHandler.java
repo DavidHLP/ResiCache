@@ -48,18 +48,18 @@ class ActualCacheHandler extends AbstractCacheHandler {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
-    private final NullValueEncoder nullValueEncoder;
+    private final CacheValueCodec valueCodec;
     private final RefreshCancellation earlyExpirationExecutor;
     private final CacheErrorHandler errorHandler;
     public ActualCacheHandler(
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             ValueOperations<String, Object> valueOperations,
-            NullValueEncoder nullValueEncoder,
+            CacheValueCodec valueCodec,
             @Qualifier("earlyExpirationExecutor") RefreshCancellation earlyExpirationExecutor,
             CacheErrorHandler errorHandler) {
         this.redisTemplate = redisTemplate;
         this.valueOperations = valueOperations;
-        this.nullValueEncoder = nullValueEncoder;
+        this.valueCodec = valueCodec;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.errorHandler = errorHandler;
     }
@@ -146,8 +146,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
         // 读路径默认不触发写操作，避免写放大。
         // 如需 TTI（读取刷新 TTL），应使用 Spring Data Redis 的 RedisCacheConfiguration.enableTimeToIdle()，
         // 由 Redis 6.2+ 的 GETEX 命令实现，无需重写 value。
-        byte[] result = nullValueEncoder.encodeForReturn(
-            cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
+        byte[] result = valueCodec.toValueBytes(cachedValue.getValue());
 
         return CacheResult.success(result);
     }
@@ -222,8 +221,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
                       context.getCacheName(), context.getRedisKey());
             CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
             if (existingValue != null) {
-                byte[] result = nullValueEncoder.encodeForReturn(
-                    existingValue.getValue(), context.getCacheName(), context.getRedisKey());
+                byte[] result = valueCodec.toValueBytes(existingValue.getValue());
                 return CacheResult.existing(result);
             }
 

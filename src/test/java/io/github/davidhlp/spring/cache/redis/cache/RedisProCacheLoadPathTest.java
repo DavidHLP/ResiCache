@@ -31,6 +31,7 @@ import org.springframework.data.redis.serializer.RedisSerializer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -144,7 +145,26 @@ class RedisProCacheLoadPathTest {
             RedisCacheWriter writer, SimpleMeterRegistry registry) {
         return new RedisProCache(CACHE_NAME, writer,
                 RedisCacheConfiguration.defaultCacheConfig(),
-                ResiCacheFeatures.builder().meterRegistry(registry).build());
+                disabledMechanisms(registry));
+    }
+
+    /**
+     * 生产形状的 feature set:元数据解析与 protection 协作对象全部在场(构造期要求非 null),
+     * 但 operation 不启用 bloom/sync,故真实行为是「无元数据 → 不短路、不走锁」。
+     */
+    private static ResiCacheFeatures disabledMechanisms(SimpleMeterRegistry registry) {
+        return ResiCacheFeatures.builder()
+                .meterRegistry(registry)
+                .operationResolver(noMetadataResolver())
+                .bloomGate(mock(BloomGate.class))
+                .syncSupport(mock(SyncSupport.class))
+                .syncLockTimeout(mock(SyncLockTimeout.class))
+                .build();
+    }
+
+    /** 真实 no-metadata resolver:无激活上下文 → resolve 恒返回 null(取代「传 null 关闭解析」)。 */
+    private static CacheOperationResolver noMetadataResolver() {
+        return new CacheOperationResolver(new DefaultMethodMetadataResolver(), new RedisCacheRegister());
     }
 
     private RedisProCacheWriter writerWithPutFailure() {
@@ -182,7 +202,7 @@ class RedisProCacheLoadPathTest {
                 statistics,
                 valueCodec,
                 chainFactory,
-                null);
+                noMetadataResolver());
     }
 
     private void assertSinglePutFailureCounter(SimpleMeterRegistry registry) {

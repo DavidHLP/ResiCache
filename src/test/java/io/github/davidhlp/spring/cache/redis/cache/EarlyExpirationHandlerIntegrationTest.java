@@ -57,7 +57,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     private ValueOperations<String, Object> valueOperations;
 
     @Autowired
-    private NullValueEncoder nullValueEncoder;
+    private CacheValueCodec valueCodec;
 
     private EarlyExpirationHandler handler;
     private EarlyRefresh earlyRefresh;
@@ -289,7 +289,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             ActualCacheHandler actual = new ActualCacheHandler(
                     redisTemplate,
                     valueOperations,
-                    nullValueEncoder,
+                    valueCodec,
                     earlyExpirationExecutor,
                     new CacheErrorHandler());
             return new CacheHandlerChain(new ChainEngine())

@@ -17,8 +17,8 @@ import org.springframework.lang.Nullable;
  * 需同时改动多个构造器 + bean 装配 + 各自 Javadoc。本值对象让该契约<b>只存在一处</b>:消费方
  * 询问本对象,而非各自记忆可空语义;新增特性只动本类一处。
  *
- * <p><b>可空语义</b>:每个字段为 {@code null} 表示对应特性未启用,消费方走 null-safe 降级路径
- * (与原逐参数可空行为字节等价)。{@link #none()} 提供「全部禁用」的测试便捷入口。
+ * <p><b>可空语义</b>:只有 {@code meterRegistry} 为 {@code null} 表示指标禁用(no-op 降级);
+ * 其余字段是生产恒装配的协作对象,消费方构造期校验非 null(装配错误即抛,不静默降级)。
  */
 @Value
 @Builder
@@ -28,24 +28,15 @@ class ResiCacheFeatures {
     @Nullable
     MeterRegistry meterRegistry;
 
-    /** 布隆读侧穿透闸门 —— null 表示关闭缓存穿透防护(GET/loader 路径跳过布隆短路). */
-    @Nullable
+    /** 布隆读侧穿透闸门 —— 生产恒装配. */
     BloomGate bloomGate;
 
-    /** 方法级 operation 元数据解析器 —— null 表示关闭元数据查找. */
-    @Nullable
+    /** 方法级 operation 元数据解析器 —— 生产恒装配. */
     CacheOperationResolver operationResolver;
 
-    /** 分布式同步锁支持 —— null 表示关闭分布式锁(loader 走 Spring 默认本地锁). */
-    @Nullable
+    /** 分布式同步锁支持 —— 生产恒装配. */
     SyncSupport syncSupport;
 
-    /** 分布式锁超时解析规则 —— null 时回退内置默认(仅测试;生产始终装配). */
-    @Nullable
+    /** 分布式锁超时解析规则 —— 生产恒装配. */
     SyncLockTimeout syncLockTimeout;
-
-    /** 全部特性禁用 —— 测试便捷入口. */
-    public static ResiCacheFeatures none() {
-        return ResiCacheFeatures.builder().build();
-    }
 }

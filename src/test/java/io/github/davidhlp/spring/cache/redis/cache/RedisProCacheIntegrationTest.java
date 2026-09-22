@@ -84,9 +84,22 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
                 NAME,
                 realWriter,
                 cacheConfiguration,
-                ResiCacheFeatures.builder()
-                        .meterRegistry(meterRegistry)
-                        .build());   // bloom/sync disabled; operationResolver null
+                noMechanisms(meterRegistry));   // 协作对象在场;operation 无元数据 → 不启用 bloom/sync
+    }
+
+    /**
+     * 生产形状的 feature set:元数据解析与 protection 协作对象全部在场(构造期要求非 null),
+     * 但无元数据 → 真实行为是「不短路、不走锁」。
+     */
+    private static ResiCacheFeatures noMechanisms(MeterRegistry registry) {
+        return ResiCacheFeatures.builder()
+                .meterRegistry(registry)
+                .operationResolver(new CacheOperationResolver(
+                        new DefaultMethodMetadataResolver(), new RedisCacheRegister()))
+                .bloomGate(org.mockito.Mockito.mock(BloomGate.class))
+                .syncSupport(org.mockito.Mockito.mock(SyncSupport.class))
+                .syncLockTimeout(org.mockito.Mockito.mock(SyncLockTimeout.class))
+                .build();
     }
 
     @Nested
@@ -237,6 +250,8 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
                             .meterRegistry(meterRegistry)
                             .operationResolver(operationResolver)
                             .bloomGate(new BloomGate(bloomSupport))
+                            .syncSupport(org.mockito.Mockito.mock(SyncSupport.class))
+                            .syncLockTimeout(org.mockito.Mockito.mock(SyncLockTimeout.class))
                             .build());
         }
 

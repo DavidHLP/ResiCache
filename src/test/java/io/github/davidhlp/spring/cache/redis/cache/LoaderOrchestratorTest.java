@@ -530,10 +530,11 @@ class LoaderOrchestratorTest {
         }
 
         @Test
-        @DisplayName("可选保护依赖为 null → 合法装配,构造不抛")
-        void nullProtectionDeps_stillAccepted() {
-            assertThat(new LoaderOrchestrator(null, null, null, keyFn, checkFn, putFn))
-                    .isNotNull();
+        @DisplayName("保护协作依赖为 null → 装配错误,构造期抛 NPE(bloomGate)")
+        void nullProtectionDeps_rejectedAtConstruction() {
+            assertThatThrownBy(() -> new LoaderOrchestrator(null, null, null, keyFn, checkFn, putFn))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("bloomGate");
         }
 
         @Test

@@ -22,6 +22,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class RedisProCacheWriterFailureTest {
 
+    /** 真实 no-metadata resolver(无激活上下文 → resolve 恒 null),取代旧的「传 null 关闭解析」。 */
+    private static final CacheOperationResolver NO_METADATA_RESOLVER =
+            new CacheOperationResolver(new DefaultMethodMetadataResolver(), new RedisCacheRegister());
 
     @Mock
     private CacheStatisticsCollector statistics;
@@ -42,7 +45,7 @@ class RedisProCacheWriterFailureTest {
     void setUp() {
         when(chainFactory.createChain()).thenReturn(chain);
         writer = new RedisProCacheWriter(
-                statistics, valueCodec, chainFactory, null);
+                statistics, valueCodec, chainFactory, NO_METADATA_RESOLVER);
     }
 
     @Test
