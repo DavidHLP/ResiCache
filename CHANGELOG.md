@@ -126,8 +126,8 @@ Current milestones:
   `cacheNullValues` and early-expiration attributes (a writer that never filled
   the Bloom filter could leave a Bloom-enabled reader judging the key
   "definitely missing"). Write-only methods now honour their own declaration —
-  including `ttl()`, whose annotation default is 60 seconds, so such a method's
-  entries now expire after 60s where the cache-level TTL used to apply. A
+  including an explicitly set `ttl()`, which now overrides the cache-level TTL
+  on that path where it previously could not. A
   method that also declares `@RedisCacheable` keeps using the read-side
   declaration, because the read-through write-back is part of the read
   operation.
@@ -264,8 +264,23 @@ Current milestones:
   methods, and the factory registers observers in the Spring-resolved injection
   order instead of re-sorting by an annotation only it could see; observers
   ordered through `Ordered`, a `@Bean`-method `@Order`, a meta-annotation or a
-  proxy keep the position Spring gave them. The documented hook protocol,
-  `beforeNode` and the scope-token types are unchanged.
+  proxy keep the position Spring gave them. The dispatch itself is typed at both
+  levels — the chain-level and node-level results reach the end hooks as
+  `CacheResult` / `HandlerResult` without a cast — and the chain observer
+  protocol no longer checks its own scope token's runtime type.
+- ⚠️ **`ChainObserver.beforeNode` removed (c3)** — the hook had no production
+  implementer. An extension that overrode it must move that work to
+  `onNodeStart` / `afterNode`; every other hook keeps its name and semantics.
+  See `STABILITY.md` §4 for the migration note.
+- ⚠️ **An annotated method without an explicit `ttl` now takes the configured TTL (c8)** —
+  `@RedisCacheable#ttl` and `@RedisCachePut#ttl` default to `0`, which `TtlPolicy` reads as
+  "no method-level declaration", so a method that does not set `ttl` falls through to
+  `resi-cache.default-ttl` (default 30 minutes) instead of the previous implicit 60 seconds.
+  An explicitly set positive `ttl` still wins and still applies its jitter.
+  `TtlPolicy.DEFAULT_TTL_SECONDS` and its `null`-`Duration` branch are gone, and a zero,
+  negative or `null` TTL all mean "no expiry", matching Spring Data Redis's own
+  `DefaultRedisCacheWriter.shouldExpireWithin`; a direct writer/SPI `put(…, null)` therefore
+  writes a persistent entry where it previously wrote a 60-second one.
 - **Handler identity declared once (c4)** — order slot, protection disable name,
   metric/log tag and the ordering requirement of each slot are declared
   alongside `HandlerOrder` and resolved by `cache/HandlerIdentity`; emitted tag
