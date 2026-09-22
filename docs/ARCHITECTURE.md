@@ -106,8 +106,9 @@ current documented behavior in `COMPATIBILITY.md`.
 - `LoaderOrchestrator` owns the shared read → load → write-back protocol. A
   successful loaded value is returned even when write-back fails.
 - `FailureReport` owns the one failure-reporting shape: a WARN/ERROR carrying
-  only cacheName or the key fingerprint plus the exception type chain, paired
-  with a DEBUG line holding the full stack; `CacheErrorHandler` owns count-once
+  only cacheName or the key fingerprint, and — when the report carries a
+  throwable — its exception type chain plus a paired DEBUG line holding the full
+  stack. A report without a throwable emits the WARN only; `CacheErrorHandler` owns count-once
   reporting for chain failures on top of it, and the failure metric uses finite
   operation/kind/strategy dimensions.
 - `SecureJacksonRedisSerializer` owns whitelist-backed serialization and the
