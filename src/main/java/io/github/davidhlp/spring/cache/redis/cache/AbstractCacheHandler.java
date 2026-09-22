@@ -75,7 +75,8 @@ abstract class AbstractCacheHandler implements CacheHandler {
 
     /**
      * 语义 counter 字段 — 由 {@link #attachMeterRegistry} 在子类声明
-     * {@link #semanticCounter()} 非 null 时从元数据注册；registry 缺失时为 null。
+     * {@link #semanticCounter()} 非 null 时从元数据注册；传入 null registry
+     * （仅测试/防御路径）时为 null。
      */
     private Counter semanticCounter;
 

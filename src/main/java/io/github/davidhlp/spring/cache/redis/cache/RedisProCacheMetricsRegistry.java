@@ -89,8 +89,11 @@ final class RedisProCacheMetricsRegistry {
     /**
      * 构造期一次性注册 7 个 metric — 在 cache 构造期调用一次，运行期 record 路径直接复用。
      *
-     * <p>内部注册 helper 保证 {@code meterRegistry == null} 时所有字段保持 null。
-     * @param meterRegistry Micrometer 注册表（可为 null → 全部 7 字段为 null）
+     * <p>生产路径注入的 registry 永不为 null —— 指标未启用（或应用无 {@code MeterRegistry}
+     * bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}，在其上注册的 7 个
+     * metric 是 no-op 分配：不发布、不保留任何 meter。{@code meterRegistry == null} 仅测试/
+     * 防御路径可达，此时内部注册 helper 让全部字段保持 null。
+     * @param meterRegistry Micrometer 注册表（生产路径永不为 null；为 null 时全部 7 字段为 null）
      * @param cacheName     cache 标识，作为 {@code tags("cache", cacheName)} 写入每个 metric
      */
     public RedisProCacheMetricsRegistry(@Nullable MeterRegistry meterRegistry, String cacheName) {
@@ -188,7 +191,7 @@ final class RedisProCacheMetricsRegistry {
     /**
      * 当前 cache 实例的指标快照。
      *
-     * <p>Counter 字段为 null 时（registry 缺失）对应字段为 0L。
+     * <p>Counter 字段为 null 时（仅测试/防御路径传入 null registry）对应字段为 0L。
      *
      * @return 不可变指标快照
      */

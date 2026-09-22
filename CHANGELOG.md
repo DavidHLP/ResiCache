@@ -259,6 +259,19 @@ Current milestones:
   `RedisCacheHealthIndicator` now reports Redis connectivity and protection
   degradation regardless of `resi-cache.metrics.enabled`; previously the
   unrelated metrics switch could suppress the indicator.
+- **The disabled metrics seam retains nothing (c2)** — with
+  `resi-cache.metrics.enabled` off (the default) the resolved seam is a shared
+  stateless registry, and the chain's timer observer, the fired-counter observer
+  and the failure reporter short-circuit on it. A disabled application therefore
+  allocates and keeps no meter, no timer and no per-cache entry: an earlier
+  revision of this change had moved that retention into the timer observer's own
+  per-cache-name map. Metric names, tag keys and tag values are unchanged.
+- **The degraded-protection warning fires once per context (c2)** —
+  `RedisCacheHealthIndicator` emits `protection.degraded=local-only` on its first
+  degraded observation instead of on every `/actuator/health` probe, which matters
+  where a load balancer or orchestrator probes frequently and no distributed lock
+  backend is installed. Level and wording are unchanged, and the degradation is
+  still reported in every health response's details.
 - **Observer order owned by the observer class (c3)** — the four standard
   observers declare `@Order(1..4)` on the class instead of on their `@Bean`
   methods, and the factory registers observers in the Spring-resolved injection
