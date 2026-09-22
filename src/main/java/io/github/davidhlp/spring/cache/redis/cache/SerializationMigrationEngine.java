@@ -130,11 +130,7 @@ class SerializationMigrationEngine
         } catch (Exception ex) {
             report.failed++;
             record("failed");
-            // Key-privacy contract: WARN omits raw key and exception message (it may contain the key);
-            // only the type chain and fingerprint remain; the full stack stays at DEBUG.
-            log.warn("[ResiCache] Serialization migration rejected key fingerprint={}, cause={}",
-                    keyFingerprint(key), FailureDiagnostics.sanitizedFailure(ex));
-            log.debug("[ResiCache] Serialization migration rejection detail", ex);
+            FailureReport.warn(log, "[ResiCache] Serialization migration rejected key", null, key, ex);
         }
     }
 
@@ -180,9 +176,7 @@ class SerializationMigrationEngine
         } catch (Exception ex) {
             report.failed++;
             record("failed");
-            log.warn("[ResiCache] Serialization rollback rejected key fingerprint={}, cause={}",
-                    keyFingerprint(backupKey), FailureDiagnostics.sanitizedFailure(ex));
-            log.debug("[ResiCache] Serialization rollback rejection detail", ex);
+            FailureReport.warn(log, "[ResiCache] Serialization rollback rejected key", null, backupKey, ex);
         }
     }
 
@@ -324,14 +318,6 @@ class SerializationMigrationEngine
             }
         }
         return true;
-    }
-
-    /**
-     * key 内容指纹 — 委托 {@link FailureDiagnostics} 的单一实现(key-privacy contract),
-     * 使 migration 路径与锁/刷新路径的指纹形式不再各自漂移。
-     */
-    private static String keyFingerprint(byte[] key) {
-        return FailureDiagnostics.keyFingerprint(key);
     }
 
     @FunctionalInterface

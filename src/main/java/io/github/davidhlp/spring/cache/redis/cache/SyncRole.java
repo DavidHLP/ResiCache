@@ -93,15 +93,14 @@ sealed interface SyncRole<T>
                 failure = e;
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
-                // Key-privacy contract: exception message omits raw key and keeps keyFingerprint
                 failure = new IllegalStateException(
                         "Thread interrupted while acquiring distributed lock: keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key), e);
+                                + FailureReport.fingerprint(key), e);
             } catch (final Throwable t) {
                 // Error 仍按原语义重新抛出,但先完成 future 并清理 owner state。
                 failure = new IllegalStateException(
                         "Distributed-lock work failed: keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key), t);
+                                + FailureReport.fingerprint(key), t);
                 if (t instanceof Error error) {
                     throw error;
                 }
@@ -143,12 +142,11 @@ sealed interface SyncRole<T>
             long timeoutSeconds = timeout.seconds();
             try {
                 if (timeoutSeconds <= 0 && !leader.isDone()) {
-                    // Key-privacy contract: exception message omits raw key and keeps keyFingerprint
                     throw new IllegalStateException(
                             "In-flight single-flight loader still running; waitTimeoutSeconds="
                                     + timeoutSeconds
                                     + " <= 0 — follower refuses to wait (keyFingerprint="
-                                    + FailureDiagnostics.keyFingerprint(key) + ")");
+                                    + FailureReport.fingerprint(key) + ")");
                 }
                 final Object value = (timeoutSeconds > 0)
                         ? leader.get(timeoutSeconds, TimeUnit.SECONDS)
@@ -158,7 +156,7 @@ sealed interface SyncRole<T>
                 throw new IllegalStateException(
                         "Timed out after " + timeoutSeconds
                                 + "s waiting for in-flight single-flight loader (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
+                                + FailureReport.fingerprint(key) + ")", e);
             } catch (final ExecutionException e) {
                 // leader 的原始异常:RuntimeException 原样抛,保留调用方既有 catch 语义
                 final Throwable cause = (e.getCause() != null) ? e.getCause() : e;
@@ -169,12 +167,12 @@ sealed interface SyncRole<T>
                     throw err;
                 }
                 throw new RuntimeException("In-flight single-flight loader failed (keyFingerprint="
-                        + FailureDiagnostics.keyFingerprint(key) + ")", cause);
+                        + FailureReport.fingerprint(key) + ")", cause);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(
                         "Thread interrupted while waiting for in-flight loader (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
+                                + FailureReport.fingerprint(key) + ")", e);
             }
         }
     }
@@ -216,7 +214,7 @@ sealed interface SyncRole<T>
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(
                         "Thread interrupted while acquiring distributed lock: keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key), e);
+                                + FailureReport.fingerprint(key), e);
             } finally {
                 state.exit(key);
             }
@@ -261,10 +259,10 @@ final class SyncRoleLockExecutor {
         try (LockStack lockStack = new LockStack(log)) {
             for (LockManager manager : distributedManagers) {
                 manager.tryAcquire(key, timeout.seconds()).ifPresentOrElse(lockStack::push, () -> {
-                    // Key-privacy contract: WARN includes only keyFingerprint
-                    log.warn("Lock manager {} failed to acquire distributed lock: keyFingerprint={}",
-                            manager.getClass().getSimpleName(),
-                            FailureDiagnostics.keyFingerprint(key));
+                    FailureReport.warn(log,
+                            "Lock manager " + manager.getClass().getSimpleName()
+                                    + " failed to acquire distributed lock",
+                            null, key);
                     throw new RuntimeException("Failed to acquire distributed lock");
                 });
             }
@@ -299,9 +297,7 @@ final class SyncRoleLockExecutor {
                 try {
                     handle.close();
                 } catch (Exception e) {
-                    log.error("Failed to release distributed lock: failure={}",
-                            FailureDiagnostics.sanitizedFailure(e));
-                    log.debug("Distributed lock release failure detail", e);
+                    FailureReport.error(log, "Failed to release distributed lock", e);
                 }
             }
         }

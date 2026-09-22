@@ -89,9 +89,11 @@ current documented behavior in `COMPATIBILITY.md`.
   `CacheResult` carries typed operation outcomes internally.
 - `LoaderOrchestrator` owns the shared read → load → write-back protocol. A
   successful loaded value is returned even when write-back fails.
-- `CacheErrorHandler` owns count-once failure reporting for chain failures; the
-  failure metric uses finite operation/kind/strategy dimensions and diagnostics
-  omit raw keys at WARN/ERROR.
+- `FailureReport` owns the one failure-reporting shape: a WARN/ERROR carrying
+  only cacheName or the key fingerprint plus the exception type chain, paired
+  with a DEBUG line holding the full stack; `CacheErrorHandler` owns count-once
+  reporting for chain failures on top of it, and the failure metric uses finite
+  operation/kind/strategy dimensions.
 - `SecureJacksonRedisSerializer` owns whitelist-backed serialization and the
   `{version, payload}` envelope. Refresh metadata required by policy/CAS is
   persisted; process-local monotonic time is not.

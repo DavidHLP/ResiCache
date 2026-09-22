@@ -152,9 +152,10 @@ class SyncSupport {
                                   SyncStateAccess state) throws InterruptedException {
         if (distributedManagers.isEmpty()) {
             if (properties.getSyncLock().isLocalOnly()) {
-                log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
-                        + "已按 local-only=true 降级为单 JVM 同步 (keyFingerprint={})",
-                        FailureDiagnostics.keyFingerprint(key));
+                FailureReport.warn(log,
+                        "protection.degraded=local-only: sync=true 但无分布式锁后端, "
+                                + "已按 local-only=true 降级为单 JVM 同步",
+                        null, key);
                 return state.executeLocalOnly(key, timeout, work);
             }
             // Key-privacy contract: exception message omits raw key.
@@ -162,7 +163,7 @@ class SyncSupport {
                     "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
                             + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
                             + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
-                            + " [keyFingerprint=" + FailureDiagnostics.keyFingerprint(key) + "]");
+                            + " [keyFingerprint=" + FailureReport.fingerprint(key) + "]");
         }
         return SyncRoleLockExecutor.run(log, key, timeout, work, distributedManagers);
     }
@@ -292,18 +293,18 @@ class SyncSupport {
                 throw new IllegalStateException(
                         "Timed out after " + timeoutSeconds
                                 + "s waiting for the local-only predecessor (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
+                                + FailureReport.fingerprint(key) + ")", e);
             } catch (final ExecutionException e) {
                 // 前驱 future 只会 complete(null);兜底避免把 checked 异常漏给调用方。
                 throw new IllegalStateException(
                         "Local-only predecessor failed (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")",
+                                + FailureReport.fingerprint(key) + ")",
                         e.getCause() != null ? e.getCause() : e);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(
                         "Thread interrupted while waiting for the local-only predecessor (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
+                                + FailureReport.fingerprint(key) + ")", e);
             }
         }
     }
