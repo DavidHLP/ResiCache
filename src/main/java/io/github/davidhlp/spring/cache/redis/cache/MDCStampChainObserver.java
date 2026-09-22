@@ -11,6 +11,7 @@ import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.core.annotation.Order;
 
 /**
  * ChainObserver 的 aroundChain 实现 — 在链入口为本次执行 stamp 唯一 requestId
@@ -34,6 +35,10 @@ import org.slf4j.MDC;
  * snapshot/restore 配对，无共享状态。
  */
 @Slf4j
+// 标准 observer 执行顺序由类级 @Order 单一拥有(MDC→DebugLog→Timer→FiredCounter):
+// 工厂 CacheHandlerChainFactory#observerOrder 读此注解排序,故本 observer 先 stamp requestId,
+// ChainDebugLogChainObserver 才能在 afterNode 读到 MDC 中的 id。
+@Order(1)
 final class MDCStampChainObserver implements ChainObserver {
 
     @Override

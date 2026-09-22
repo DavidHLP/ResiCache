@@ -10,17 +10,22 @@ import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.core.annotation.Order;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * ChainObserver 实现测试 — 4 个标准 observer 的契约。
@@ -251,6 +256,72 @@ class ChainObserverTest {
                     .counter();
             assertThat(counter).isNotNull();
             assertThat((double) counter.count()).isEqualTo(3.0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Observer order")
+    class ObserverOrderTests {
+
+        /**
+         * 工厂按 observer 类级 {@code @Order} 注册,Engine 依注册序派发每个 hook。故意以
+         * 逆序注入,证明生效顺序来自 @Order 而非注入顺序:若排序退化为 no-op(注解不在类上),
+         * beforeNode 将以 [third, first, second] 触发,断言失败。
+         */
+        @Test
+        @DisplayName("observers dispatch in class-level @Order order across a chain run")
+        void createChain_dispatchesByOrderNotInjectionOrder() {
+            RedisProCacheProperties properties = mock(RedisProCacheProperties.class);
+            List<String> sequence = new ArrayList<>();
+            List<ChainObserver> injected = List.of(
+                    new ThirdOrderObserver(sequence),
+                    new FirstOrderObserver(sequence),
+                    new SecondOrderObserver(sequence));
+
+            CacheHandlerChain chain = new CacheHandlerChainFactory(
+                    List.of(new SingleNodeHandler()), properties,
+                    ResolvedMetrics.resolve(null, null), new ChainEngine(), injected)
+                    .createChain();
+            chain.execute(ctx);
+
+            assertThat(sequence).containsExactly("first", "second", "third");
+        }
+
+        private static final class SingleNodeHandler implements CacheHandler {
+            @Override
+            public HandlerResult handle(CacheContext context) {
+                return HandlerResult.continueChain();
+            }
+        }
+
+        @Order(1)
+        private static final class FirstOrderObserver implements ChainObserver {
+            private final List<String> sequence;
+            FirstOrderObserver(List<String> sequence) { this.sequence = sequence; }
+            @Override
+            public void beforeNode(CacheHandler handler, CacheContext context) {
+                sequence.add("first");
+            }
+        }
+
+        @Order(2)
+        private static final class SecondOrderObserver implements ChainObserver {
+            private final List<String> sequence;
+            SecondOrderObserver(List<String> sequence) { this.sequence = sequence; }
+            @Override
+            public void beforeNode(CacheHandler handler, CacheContext context) {
+                sequence.add("second");
+            }
+        }
+
+        @Order(3)
+        private static final class ThirdOrderObserver implements ChainObserver {
+            private final List<String> sequence;
+            ThirdOrderObserver(List<String> sequence) { this.sequence = sequence; }
+            @Override
+            public void beforeNode(CacheHandler handler, CacheContext context) {
+                sequence.add("third");
+            }
         }
     }
 }
