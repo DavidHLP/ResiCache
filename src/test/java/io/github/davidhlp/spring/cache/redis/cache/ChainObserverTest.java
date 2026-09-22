@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
@@ -279,7 +280,7 @@ class ChainObserverTest {
 
             CacheHandlerChain chain = new CacheHandlerChainFactory(
                     List.of(new SingleNodeHandler()), properties,
-                    ResolvedMetrics.resolve(null, null), new ChainEngine(), injected)
+                    ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), injected)
                     .createChain();
             chain.execute(ctx);
 
