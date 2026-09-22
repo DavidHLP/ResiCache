@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
+import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
@@ -12,9 +13,10 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * TtlPolicy 单元测试 —— TTL 优先级(注解 / Duration 参数 / 兜底默认)与抖动,均不经 handler 链。
+ * TtlPolicy 单元测试 —— TTL 优先级(注解 / Duration 参数 / 永久)与抖动,均不经 handler 链。
  *
- * <p>行为基线:每条用例断言的是 TtlPolicy 引入前后逐字保留的既有结果。
+ * <p>行为基线:TtlHandler 之前的 5 份 TTL 编码收敛为 TtlPolicy 之后,每条用例断言
+ * 解析出的 TTL;注解属性未设置的落回配置默认值是本次裁决的行为变更(deltas.md D2)。
  */
 @DisplayName("TtlPolicy Tests")
 class TtlPolicyTest {
@@ -48,21 +50,23 @@ class TtlPolicyTest {
         }
 
         @Test
-        @DisplayName("attribute unset (annotation default 60s) wins over the 30m parameter")
-        void annotationUnsetDefault_winsOverParameter() {
-            TtlPolicy.Resolution resolution = TtlPolicy.resolve(CONFIGURED_DEFAULT, annotationPolicy(60));
+        @DisplayName("attribute unset (0) falls through to the 30m configured default")
+        void annotationUnset_fallsThroughToConfiguredDefault() {
+            TtlPolicy.Resolution resolution = TtlPolicy.resolve(CONFIGURED_DEFAULT, annotationPolicy(0));
 
-            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.ANNOTATION);
-            assertThat(resolution.decision().finalTtl()).isEqualTo(60L);
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.PARAMETER);
+            assertThat(resolution.decision().shouldApplyTtl()).isTrue();
+            assertThat(resolution.decision().finalTtl()).isEqualTo(1800L);
         }
 
         @Test
-        @DisplayName("attribute unset without any parameter still resolves to 60s")
-        void annotationUnsetDefault_withoutParameter_resolvesTo60s() {
-            TtlPolicy.Resolution resolution = TtlPolicy.resolve(null, annotationPolicy(60));
+        @DisplayName("attribute unset without any parameter is permanent")
+        void annotationUnset_withoutParameter_isPermanent() {
+            TtlPolicy.Resolution resolution = TtlPolicy.resolve(null, annotationPolicy(0));
 
-            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.ANNOTATION);
-            assertThat(resolution.decision().finalTtl()).isEqualTo(60L);
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.NONE);
+            assertThat(resolution.decision().shouldApplyTtl()).isFalse();
+            assertThat(resolution.decision().finalTtl()).isEqualTo(-1L);
         }
 
         @Test
@@ -75,12 +79,12 @@ class TtlPolicyTest {
         }
 
         @Test
-        @DisplayName("attribute explicitly 0 without a parameter falls back to 60s")
-        void annotationZero_withoutParameter_fallsBackTo60s() {
-            TtlPolicy.Resolution resolution = TtlPolicy.resolve(null, annotationPolicy(0));
+        @DisplayName("attribute unset with a zero parameter means permanent")
+        void annotationUnset_zeroParameter_isPermanent() {
+            TtlPolicy.Resolution resolution = TtlPolicy.resolve(Duration.ZERO, annotationPolicy(0));
 
-            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.PARAMETER);
-            assertThat(resolution.decision().finalTtl()).isEqualTo(60L);
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.NONE);
+            assertThat(resolution.decision().finalTtl()).isEqualTo(-1L);
         }
 
         @Test
@@ -113,11 +117,21 @@ class TtlPolicyTest {
         }
 
         @Test
-        @DisplayName("no method-level policy and no parameter falls back to 60s")
-        void noAnnotation_withoutParameter_fallsBackTo60s() {
+        @DisplayName("no method-level policy and no parameter means permanent")
+        void noAnnotation_withoutParameter_isPermanent() {
             TtlPolicy.Resolution resolution = TtlPolicy.resolve(null, CachePolicyView.NONE);
 
-            assertThat(resolution.decision().finalTtl()).isEqualTo(60L);
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.NONE);
+            assertThat(resolution.decision().finalTtl()).isEqualTo(-1L);
+        }
+
+        @Test
+        @DisplayName("no method-level policy with a zero parameter means permanent")
+        void noAnnotation_zeroParameter_isPermanent() {
+            TtlPolicy.Resolution resolution = TtlPolicy.resolve(Duration.ZERO, CachePolicyView.NONE);
+
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.NONE);
+            assertThat(resolution.decision().finalTtl()).isEqualTo(-1L);
         }
 
         @Test
@@ -145,24 +159,69 @@ class TtlPolicyTest {
             return id;
         }
 
+        @RedisCachePut(cacheNames = "ttl-policy-sample")
+        private String putWithDefaults(String id) {
+            return id;
+        }
+
+        @RedisCacheable(cacheNames = "ttl-policy-sample", ttl = 45)
+        private String annotatedWithExplicitTtl(String id) {
+            return id;
+        }
+
         @Test
-        @DisplayName("unset ttl attribute projects to 60s and wins over the 30m configured default")
-        void unsetTtlAttribute_resolvesTo60s() throws Exception {
+        @DisplayName("unset ttl attribute projects to 0 and resolves to the 30m configured default")
+        void unsetTtlAttribute_fallsThroughToTheConfiguredDefault() throws Exception {
+            CachePolicyView policy = projectedPolicy("annotatedWithDefaults");
+
+            assertThat(policy.ttl()).isZero();
+            TtlPolicy.Resolution resolution = TtlPolicy.resolve(CONFIGURED_DEFAULT, policy);
+
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.PARAMETER);
+            assertThat(resolution.decision().finalTtl()).isEqualTo(1800L);
+        }
+
+        @Test
+        @DisplayName("unset ttl on @RedisCachePut also resolves to the configured default")
+        void unsetPutTtlAttribute_fallsThroughToTheConfiguredDefault() throws Exception {
             Method method = AnnotationDefaultLinkTests.class
-                    .getDeclaredMethod("annotatedWithDefaults", String.class);
+                    .getDeclaredMethod("putWithDefaults", String.class);
+            RedisCachePut annotation = method.getAnnotation(RedisCachePut.class);
+            RedisCacheAttributes attributes = new RedisCacheAttributesProjector().from(annotation);
+            RedisCachePutOperation operation =
+                    RedisCachePutOperation.fromAttributes(method, annotation.key(), attributes);
+
+            CachePolicyView policy = new CacheInput(
+                    CacheOperation.PUT_IF_ABSENT, "ttl-policy-sample", "k", "k", null, null, null,
+                    operation).policy();
+            TtlPolicy.Resolution resolution = TtlPolicy.resolve(CONFIGURED_DEFAULT, policy);
+
+            assertThat(policy.ttl()).isZero();
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.PARAMETER);
+            assertThat(resolution.decision().finalTtl()).isEqualTo(1800L);
+        }
+
+        @Test
+        @DisplayName("an explicit ttl attribute still beats the configured default")
+        void explicitTtlAttribute_beatsTheConfiguredDefault() throws Exception {
+            CachePolicyView policy = projectedPolicy("annotatedWithExplicitTtl");
+            TtlPolicy.Resolution resolution = TtlPolicy.resolve(CONFIGURED_DEFAULT, policy);
+
+            assertThat(policy.ttl()).isEqualTo(45L);
+            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.ANNOTATION);
+            assertThat(resolution.decision().finalTtl()).isEqualTo(45L);
+        }
+
+        private static CachePolicyView projectedPolicy(String methodName) throws Exception {
+            Method method =
+                    AnnotationDefaultLinkTests.class.getDeclaredMethod(methodName, String.class);
             RedisCacheable annotation = method.getAnnotation(RedisCacheable.class);
             RedisCacheAttributes attributes = new RedisCacheAttributesProjector().from(annotation);
             RedisCacheableOperation operation =
                     RedisCacheableOperation.fromAttributes(method, annotation.key(), attributes);
-
-            CachePolicyView policy = new CacheInput(
+            return new CacheInput(
                     CacheOperation.PUT, "ttl-policy-sample", "k", "k", null, null, null, operation)
                     .policy();
-            TtlPolicy.Resolution resolution = TtlPolicy.resolve(CONFIGURED_DEFAULT, policy);
-
-            assertThat(policy.ttl()).isEqualTo(60L);
-            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.ANNOTATION);
-            assertThat(resolution.decision().finalTtl()).isEqualTo(60L);
         }
     }
 
