@@ -1,0 +1,44 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/observer/ChainObserver.java
+  s_2b4c67baf1afa2::t_505e8ce4754869 62
+  s_2b4c67baf1afa2::t_218be2c5f18081 43-47,51
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/MDCStampChainObserver.java
+  s_2b4c67baf1afa2::t_f362bbacdbdf34 60,63
+  s_2b4c67baf1afa2::t_8a38f89cbfcf6a 56-59
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainDebugLogChainObserver.java
+  s_2b4c67baf1afa2::t_9655c0f7d6b457 31
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngineTest.java
+  s_2b4c67baf1afa2::t_9952718c5a9f9f 253-254
+  s_2b4c67baf1afa2::t_509c6cf768a63b 252
+  s_2b4c67baf1afa2::t_adba975202f760 167
+  s_2b4c67baf1afa2::t_989227a2a56d89 638
+STABILITY.md
+  s_2b4c67baf1afa2::t_9a8e14f55566e8 133,140-144,148-159
+  s_2b4c67baf1afa2::t_b4d55e6983f679 160
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  s_2b4c67baf1afa2::t_b97495ea75a18d 38-39
+  s_2b4c67baf1afa2::t_d844bbc0e785ce 377-382,384,411-412,439-440
+  s_2b4c67baf1afa2::t_493bd4fb8ef994 109-110
+  s_2b4c67baf1afa2::t_c5936f99d7d727 31-32
+  s_2b4c67baf1afa2::t_0cdaba35682113 323,330,346-347
+  s_2b4c67baf1afa2::t_4b2e2805438127 299,317
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainTimerChainObserver.java
+  s_2b4c67baf1afa2::t_2f17801281eed7 55-57,60-63
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainObserverTest.java
+  s_2b4c67baf1afa2::t_1a5a887bb06a3d 358,360,369,371,380,382,391,393
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9024e0927300709af26d08a3f210d95f7ef2cbab",
+  "prompts": {},
+  "sessions": {
+    "s_2b4c67baf1afa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4201cbd5-6296-436d-9d9e-8dccfcfaa3f3",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
