@@ -1,0 +1,25 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandler.java
+  s_2b4c67baf1afa2::t_d36f5a5bca7f30 84-89,92-93
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistry.java
+  s_2b4c67baf1afa2::t_6996d28ce92c64 38-41
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RefreshTaskMetrics.java
+  s_2b4c67baf1afa2::t_b5efc84809ad25 21-26,38-39
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResiCacheFeatures.java
+  s_2b4c67baf1afa2::t_4b03d5d7476942 20-25,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "216470e697df0f33531444fa59cca8144e86bf55",
+  "prompts": {},
+  "sessions": {
+    "s_2b4c67baf1afa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4201cbd5-6296-436d-9d9e-8dccfcfaa3f3",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
