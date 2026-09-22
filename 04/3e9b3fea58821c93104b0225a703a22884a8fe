@@ -1,0 +1,50 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributesProjector.java
+  s_2b4c67baf1afa2::t_54bd0e98115ae9 63-64
+  s_2b4c67baf1afa2::t_6a36578476a672 275-282,284-286,288
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationAopBehaviorMatrixTest.java
+  s_2b4c67baf1afa2::t_def9825b88eab0 171,179-181,183-185
+COMPATIBILITY.md
+  s_2b4c67baf1afa2::t_0c07444dcd5042 112-122
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationPolicySnapshotTest.java
+  s_2b4c67baf1afa2::t_5e46b33390b640 67-95
+  s_2b4c67baf1afa2::t_1c80323705ff8e 117-124
+src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheable.java
+  s_2b4c67baf1afa2::t_1ce3b03231be6a 32
+  s_2b4c67baf1afa2::t_60071884711ee9 31
+  s_59181e45719afc::t_7da628e6199bd2 23-25
+src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCachePut.java
+  s_2b4c67baf1afa2::t_eea3fd015ba80a 39
+  s_2b4c67baf1afa2::t_f02ce3c668394b 38
+  s_59181e45719afc::t_ed54f33811733d 30-32
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheAttributesProjectorTest.java
+  s_2b4c67baf1afa2::t_ba9991a657884b 85,89-90,95,99-100,102-103,105
+  s_2b4c67baf1afa2::t_28f53b84bbb569 151,159-162
+src/main/java/io/github/davidhlp/spring/cache/redis/annotation/RedisCacheEvict.java
+  s_2b4c67baf1afa2::t_13563904e66981 33
+  s_2b4c67baf1afa2::t_e3362bf2ed5a45 32
+  s_59181e45719afc::t_4fb5e9a8027e93 24-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "043e9b3fea58821c93104b0225a703a22884a8fe",
+  "prompts": {},
+  "sessions": {
+    "s_2b4c67baf1afa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4201cbd5-6296-436d-9d9e-8dccfcfaa3f3",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    },
+    "s_59181e45719afc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aa0da101a8752db53",
+        "model": "unknown"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
