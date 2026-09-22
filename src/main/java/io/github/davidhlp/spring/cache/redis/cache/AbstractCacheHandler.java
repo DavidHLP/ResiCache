@@ -158,7 +158,6 @@ abstract class AbstractCacheHandler implements CacheHandler {
      * <p>Engine 已在调用本方法前完成：
      * <ul>
      *   <li>{@code skipRemaining} 短路检测（isSkipRemaining 返 true 时根本不调本方法）</li>
-     *   <li>observer.beforeNode（DEBUG / fired counter）</li>
      * </ul>
      * Engine 在本方法返回后做：
      * <ul>

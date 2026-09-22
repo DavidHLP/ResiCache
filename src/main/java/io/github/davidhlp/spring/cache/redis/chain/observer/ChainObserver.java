@@ -22,7 +22,6 @@ import org.springframework.lang.Nullable;
  *   <li>每节点循环：
  *     <ul>
  *       <li>{@link #onNodeStart(CacheHandler, CacheContext)} — 节点 around-hook 起点</li>
- *       <li>{@link #beforeNode(CacheHandler, CacheContext)} — per-node 前置</li>
  *       <li>handler.handle(ctx)</li>
  *       <li>{@link #afterNode(CacheHandler, CacheContext, HandlerResult)} — 成功返回后的 per-node 后置</li>
  *       <li>{@link #onNodeEnd(CacheHandler, CacheContext, Object, HandlerResult)} —
@@ -41,10 +40,15 @@ import org.springframework.lang.Nullable;
  * ChainTimer → per-node startNanos),Engine 在对应 end hook 配对回传。observer
  * 状态机完全自承,新 observer 零字符串键漂移风险,Engine 不感知 observer 内部协议。
  *
+ * <p>Engine 按 observer 注册 index 严格配对 start/end token —— 同一个 end hook
+ * 收到的 token 必然是该 observer 自己的 start hook 在同一调用中返回的引用
+ * (跨 observer 不混淆),因此 observer 可以把自己的 token cast 回它私有的
+ * token 类型而无需运行时类型重检。
+ *
  * <p>所有钩子默认 no-op;observability 实现(Mdc / Timer / Counter / DebugLog)
  * 各自只 override 关心的钩子,正交组合。{@code aroundChain} 关注点(MDC / Timer)
  * 必须在 {@code onChainStart} 配对,{@code perNode} 关注点(counter / log)只在
- * before/afterNode 触发。新增 Observation Span 时只需新增
+ * {@code afterNode} 触发。新增 Observation Span 时只需新增
  * {@code SpanObserver implements ChainObserver},Engine 与所有 handler 零修改
  * — 这是本 seam 的核心 leverage 兑现。
  *
@@ -55,7 +59,7 @@ public interface ChainObserver {
 
     /**
      * 链入口 hook。Engine 在 stamp MDC / 启动 Timer 之后、第一次
-     * {@code beforeNode} 之前调用。典型实现:MDCStamp / Timer 启动。
+     * {@code onNodeStart} 之前调用。典型实现:MDCStamp / Timer 启动。
      *
      * <p><b>返回值</b>:本 observer 的 per-call 状态,Engine 在
      * {@link #onChainEnd} 配对回传。无状态 observer 返回 {@code null}。
@@ -112,18 +116,6 @@ public interface ChainObserver {
     default void onNodeEnd(CacheHandler handler, CacheContext context,
                            Object scopeToken, HandlerResult result) {
         // 默认 no-op
-    }
-
-    /**
-     * 节点前置 hook。Engine 在调用 {@code handler.handle(ctx)} 之前调用，
-     * 即：{@code beforeNode} → {@code handler.handle(ctx)} → {@code afterNode}。
-     * 典型实现：DEBUG log / fired counter 自增。
-     *
-     * @param handler 即将被求值的 handler
-     * @param context 链上下文
-     */
-    default void beforeNode(CacheHandler handler, CacheContext context) {
-        // no-op
     }
 
     /**
