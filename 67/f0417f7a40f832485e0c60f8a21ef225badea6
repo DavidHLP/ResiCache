@@ -1,0 +1,22 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/FailureLogKeyPrivacyTest.java
+  s_2b4c67baf1afa2::t_0ce714cf2c5b5c 398-400,405-407,409-412
+  s_2b4c67baf1afa2::t_a8d0326d5c3927 401-404
+  s_2b4c67baf1afa2::t_18ef8ac248b69b 1-397,408,413-435,437-473
+  s_2b4c67baf1afa2::t_71386647a91fec 436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "67f0417f7a40f832485e0c60f8a21ef225badea6",
+  "prompts": {},
+  "sessions": {
+    "s_2b4c67baf1afa2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4201cbd5-6296-436d-9d9e-8dccfcfaa3f3",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
