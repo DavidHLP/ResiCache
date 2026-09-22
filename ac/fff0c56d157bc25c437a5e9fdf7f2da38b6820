@@ -1,0 +1,16 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainObserverTest.java
+  h_77173abe25c3ff 13,18-19,26,28,261-326
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheConfigurationContractTest.java
+  h_77173abe25c3ff 324,332-348,367
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "acfff0c56d157bc25c437a5e9fdf7f2da38b6820",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
