@@ -180,14 +180,14 @@ class TtlHandlerTest {
         }
 
         @Test
-        void missingTtl_usesDefaultTtl() {
+        void missingTtl_isPermanent() {
             CacheContext context = createContext(CacheOperation.PUT, null,
                     annotatedOperation(0, false, 0.2f));
 
             handler.doHandle(context, CacheResult::success);
 
-            assertThat(context.getTtlDecision().shouldApplyTtl()).isTrue();
-            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(60L);
+            assertThat(context.getTtlDecision().shouldApplyTtl()).isFalse();
+            assertThat(context.getTtlDecision().finalTtl()).isEqualTo(-1L);
         }
     }
 

@@ -70,8 +70,13 @@ public @interface RedisCacheable {
 
     /**
      * 缓存过期时间（秒）.
+     *
+     * <p>{@code 0}（即未设置）表示不作方法级 TTL 声明：该方法的条目改用 cache 级
+     * {@code resi-cache.default-ttl}（默认 30 分钟，{@code caches.*.ttl} 可覆盖）。
+     * 只有大于 0 的值才覆盖该配置默认值。与 {@link RedisCacheEvict#ttl()} 的未设置
+     * 编码一致。
      */
-    long ttl() default 60;
+    long ttl() default 0;
 
     /**
      * 缓存值的声明类型（兼容性元数据）.

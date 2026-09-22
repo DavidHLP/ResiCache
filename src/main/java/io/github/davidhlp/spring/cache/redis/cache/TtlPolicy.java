@@ -8,39 +8,32 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * TTL 优先级的唯一实现 —— 把两个真实输入解析为 {@link TtlDecision}。
  *
- * <p>输入与优先级(自上而下,第一条命中即胜出;与历史行为逐条一致):
+ * <p>输入与优先级(自上而下,第一条命中即胜出):
  * <ol>
  *   <li>注解:方法级 {@link CachePolicyView#ttl()} 秒数 &gt; 0 时使用注解秒数,
- *       并按 {@code randomTtl}/{@code variance} 抖动;</li>
+ *       并按 {@code randomTtl}/{@code variance} 抖动。注解属性未设置时其值为 {@code 0},
+ *       不构成声明 —— 注解是唯一能压过配置默认值的声明面;</li>
  *   <li>参数:{@link Duration} 非空、非零、非负时使用其秒数。写路径的这个 Duration
  *       由 Spring Data Redis 依 cache 级配置算出并传入({@code resi-cache.default-ttl},
- *       默认 30 分钟;{@code caches.*.ttl} 可覆盖),因此"配置的默认 TTL"只在方法级
- *       TTL 为 0 或不存在时才生效;</li>
- *   <li>参数为 {@code null}(无 TTL 上下文)时使用 {@link #DEFAULT_TTL_SECONDS};</li>
- *   <li>参数为零或负 → 永久缓存({@link TtlDecision#skipped()})。</li>
+ *       默认 30 分钟;{@code caches.*.ttl} 可覆盖),因此"配置的默认 TTL"是唯一的
+ *       隐式默认值,只在方法级 TTL 未声明时才生效;</li>
+ *   <li>其余情况(参数为零、为负、或为 {@code null})→ 永久缓存
+ *       ({@link TtlDecision#skipped()})。与 Spring Data Redis 同义:
+ *       {@code DefaultRedisCacheWriter.shouldExpireWithin} 把 null、零、负一样视为
+ *       "无过期",故三者不再各自表述。</li>
  * </ol>
  *
- * <p><b>已知分歧(产品决策待定,只在此处陈述,勿在第二处重复):</b>注解声明侧的 60 秒
- * ({@code @RedisCacheable}/{@code @RedisCachePut} 的 {@code ttl} 属性默认值,以及 Spring
- * {@code @CachePut} 适配路径的 {@link RedisCachePutOperation} builder 默认值)会覆盖 cache 级
- * {@code resi-cache.default-ttl}(默认 30 分钟)。评审判定"60 秒还是 30 分钟应胜出"属于产品
- * 问题且尚无裁决,故两条默认值均按现状保留。
+ * <p><b>已裁决的规则(此处为唯一陈述处):</b>注解 {@code ttl} 属性未设置时不再有
+ * 隐式 60 秒默认值,该方法的条目落回 cache 级 {@code resi-cache.default-ttl}
+ * (默认 30 分钟)。配置默认值是唯一的隐式默认值;注解是唯一能覆盖它的声明。
  */
 final class TtlPolicy {
-
-    /**
-     * 注解与参数都不提供 TTL 时的兜底秒数。
-     *
-     * <p>与 {@code @RedisCacheable}/{@code @RedisCachePut} 的 {@code ttl} 属性默认值相等 ——
-     * 该相等关系使"属性未设置"与"无参数"两条路径得出同一结果,单方面改动任一侧即改变行为。
-     */
-    static final long DEFAULT_TTL_SECONDS = 60;
 
     /** TTL 来源 —— 与写链的三条 debug 日志一一对应。 */
     enum Source {
         /** 方法级注解策略({@link CachePolicyView#ttl()} &gt; 0)。 */
         ANNOTATION,
-        /** {@link Duration} 参数(含参数为 {@code null} 时的兜底秒数)。 */
+        /** {@link Duration} 参数(cache 级 {@code resi-cache.default-ttl} 的 Spring 计算值)。 */
         PARAMETER,
         /** 不应用 TTL(永久缓存)。 */
         NONE
@@ -64,7 +57,7 @@ final class TtlPolicy {
     /**
      * 解析 TTL。
      *
-     * @param parameterTtl 调用方 TTL(Duration);可为 {@code null}(无 TTL 上下文)、零或负(永久语义)
+     * @param parameterTtl 调用方 TTL(Duration);{@code null} 与零、负同为"无过期"语义
      * @param policy       方法级注解策略视图;{@link CachePolicyView#NONE} 表示无方法级声明
      * @return 决策与来源
      */
@@ -79,10 +72,6 @@ final class TtlPolicy {
         if (applicable(parameterTtl)) {
             return new Resolution(
                     TtlDecision.applied(parameterTtl.getSeconds()), Source.PARAMETER, false);
-        }
-        if (parameterTtl == null) {
-            return new Resolution(
-                    TtlDecision.applied(DEFAULT_TTL_SECONDS), Source.PARAMETER, false);
         }
         return new Resolution(TtlDecision.skipped(), Source.NONE, false);
     }
