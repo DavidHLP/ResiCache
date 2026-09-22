@@ -197,8 +197,10 @@ class RedisCacheAttributes {
         // sink 列表仅此一份,三个 applyTo 重载共享,漂移由 RedisCacheAttributeSink 拦截。
         populate(b, this, COMMON_SINKS);
         // Cacheable-only 5 字段:builder-only,不出现在其他两个 applyTo 重载
+        // unless 与 AOP 面同样走 hasText 守卫:空串两面统一为 null,同一投影不再派生出
+        // 不同表示(policy 曾存 "" 而 AOP 存 null)。
+        BuilderPopulator.applyText(b, unless, RedisCacheableOperation.Builder::unless);
         return b
-                .unless(unless)
                 .type(type)
                 .cacheNullValues(cacheNullValues)
                 .randomTtl(randomTtl)
@@ -223,8 +225,9 @@ class RedisCacheAttributes {
         // 14 共享字段填充走本类 COMMON_SINKS 单一真相
         populate(b, this, COMMON_SINKS);
         // Put-only 5 字段(与 Cacheable 同集):
+        // unless 与 AOP 面同样走 hasText 守卫,空串两面统一为 null(见 Cacheable 重载注释)。
+        BuilderPopulator.applyText(b, unless, RedisCachePutOperation.Builder::unless);
         return b
-                .unless(unless)
                 .type(type)
                 .cacheNullValues(cacheNullValues)
                 .randomTtl(randomTtl)
