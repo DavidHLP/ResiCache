@@ -59,9 +59,8 @@ import org.springframework.lang.Nullable;
  * </ul>
  *
  * <p><b>一条协议,两个入口</b>:cache 与 writer 入口都走 {@link #readThrough} —
- * 同一套 double-check 语义、同一套写回容错和单点脱敏 WARN。若写回经由 writer 的 PUT
- * chain 失败,失败指标已在 {@link CacheErrorHandler} 出口上报一次;本编排器只观察并返回
- * tolerated outcome,不再次上报。
+ * 同一套 double-check 语义、同一套写回容错和单点脱敏 WARN。失败指标的唯一报告点见
+ * {@link CacheErrorHandler};本编排器只观察并返回 tolerated outcome。
  * 两者只在读值表示与 loader 异常翻译上不同;sync 路径另外把 cache 协议跑在
  * {@link SyncSupport} 的分布式锁内。
  *
