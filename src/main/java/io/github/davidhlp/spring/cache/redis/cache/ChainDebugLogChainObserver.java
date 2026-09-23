@@ -37,9 +37,9 @@ final class ChainDebugLogChainObserver implements ChainObserver {
     @Override
     public void afterNode(CacheHandler handler, CacheContext context, HandlerResult result) {
         log.debug("[chain] handler={} decision={} key={} requestId={}",
-                CacheHandlerChain.handlerTag(handler),
+                HandlerIdentity.of(handler).tag(),
                 result.decision(),
                 context.getRedisKey(),
-                MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY));
+                MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY));
     }
 }
