@@ -23,13 +23,13 @@ public enum HandlerOrder {
     private final String disableName;
     private final String description;
     /** 观测标签,链日志与 Micrometer {@code handler} tag 取值的单一事实源 */
-    private final String tag;
+    private final String handlerTag;
 
-    HandlerOrder(int order, String disableName, String description, String tag) {
+    HandlerOrder(int order, String disableName, String description, String handlerTag) {
         this.order = order;
         this.disableName = disableName;
         this.description = description;
-        this.tag = tag;
+        this.handlerTag = handlerTag;
     }
 
     public int getOrder() {
@@ -60,6 +60,6 @@ public enum HandlerOrder {
      * {@code HandlerIdentityContractTest} 钉住)。
      */
     public String getHandlerTag() {
-        return tag;
+        return handlerTag;
     }
 }
