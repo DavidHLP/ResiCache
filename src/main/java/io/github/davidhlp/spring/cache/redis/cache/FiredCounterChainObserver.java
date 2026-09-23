@@ -61,15 +61,15 @@ final class FiredCounterChainObserver implements ChainObserver {
     public void afterNode(CacheHandler handler, CacheContext context,
                           io.github.davidhlp.spring.cache.redis.chain.HandlerResult result) {
         if (disabled) {
-            // 关闭路径:跳过 handlerTag / ClassValue 查找、计数器注册、map 写入与 NoopCounter。
+            // 关闭路径:跳过 handlerLabel / ClassValue 查找、计数器注册、map 写入与 NoopCounter。
             return;
         }
-        String handlerTag = CacheHandlerChain.handlerTag(handler);
+        String handlerLabel = HandlerIdentity.of(handler).tag();
         Counter counter = firedCounters.computeIfAbsent(handler.getClass(), klass ->
                 MetricsWriter.counter(registry, "resicache.handler.fired",
                         "Cache protection chain: number of times each handler was evaluated by the engine "
                                 + "(per-handler observability; tag handler = runtime subclass simple name)",
-                        "handler", handlerTag));
+                        "handler", handlerLabel));
         MetricsWriter.increment(counter);
     }
 

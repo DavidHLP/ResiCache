@@ -361,10 +361,10 @@ class ChainEngine {
                     }
                     handler.afterChainExecution(context, mainResult);
                     log.debug("Post-processing executed for: {}",
-                            CacheHandlerChain.handlerTag(handler));
+                            HandlerIdentity.of(handler).tag());
                 } catch (Exception e) {
                     FailureReport.error(log,
-                            "Post-processing failed for " + CacheHandlerChain.handlerTag(handler)
+                            "Post-processing failed for " + HandlerIdentity.of(handler).tag()
                                     + ", operation: " + context.getOperation(),
                             context.getCacheName(), null, e);
                 }

@@ -25,7 +25,6 @@ import lombok.extern.slf4j.Slf4j;
  *       不可变快照({@code List.copyOf})后委派 {@link ChainEngine#execute(List, CacheContext)},
  *       提供完整并发隔离</li>
  *   <li>{@link #execute(CacheContext)} 委派给 {@link ChainEngine#execute(List, CacheContext)}</li>
- *   <li>{@link #MDC_REQUEST_ID_KEY} 常量（供 {@code MDCStampChainObserver} 引用）</li>
  * </ul>
  *
  * <p><b>快照归属</b>:链 list 单一真理源收敛在本 facade 上;Engine 通过
@@ -49,8 +48,6 @@ class CacheHandlerChain {
      * {@code ChainDebugLogChainObserver}（在 {@code afterNode} 读 MDC）共同引用。
      * 重命名此 key 需同步改两处 observer。
      */
-    public static final String MDC_REQUEST_ID_KEY = "requestId";
-
     /** 所有处理器列表（用于调试和后置处理；链结构单一真理源） */
     private final List<CacheHandler> handlers = new ArrayList<>();
 
@@ -69,10 +66,6 @@ class CacheHandlerChain {
     }
 
     /** Shared runtime label for handler logs and bounded observer tags. */
-    static String handlerTag(CacheHandler handler) {
-        return HandlerIdentity.of(handler).tag();
-    }
-
     /**
      * 添加处理器到责任链末尾 — O(N) 链表遍历。
      *
@@ -85,7 +78,7 @@ class CacheHandlerChain {
     public CacheHandlerChain addHandler(CacheHandler handler) {
         synchronized (chainGuard) {
             handlers.add(handler);
-            log.debug("Added handler to chain: {}", handlerTag(handler));
+            log.debug("Added handler to chain: {}", HandlerIdentity.of(handler).tag());
             return this;
         }
     }
@@ -137,7 +130,7 @@ class CacheHandlerChain {
      */
     public List<String> getHandlerNames() {
         synchronized (chainGuard) {
-            return handlers.stream().map(CacheHandlerChain::handlerTag).toList();
+            return handlers.stream().map(handler -> HandlerIdentity.of(handler).tag()).toList();
         }
     }
 }

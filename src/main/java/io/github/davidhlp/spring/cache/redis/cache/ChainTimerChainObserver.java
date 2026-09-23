@@ -70,7 +70,7 @@ final class ChainTimerChainObserver implements ChainObserver {
         // 不做防御性 instanceof 重检。
         TimerScope scope = (TimerScope) scopeToken;
         TimerKey key = new TimerKey(
-                CacheHandlerChain.handlerTag(handler),
+                HandlerIdentity.of(handler).tag(),
                 result.decision().name(),
                 context.getCacheName());
         Timer timer = timers.computeIfAbsent(key, this::registerTimer);
