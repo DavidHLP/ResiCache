@@ -26,8 +26,17 @@ RedisCacheAutoConfiguration
 `RedisCacheAutoConfiguration` is conditional on Redis classes and
 `resi-cache.enabled`; it does not add `@EnableCaching`. The internal component
 scan is deliberately limited to `io.github.davidhlp.spring.cache.redis.cache`
-and excludes tests and operator-only/configuration seams listed in the source.
-Host application packages are not scanned by the library.
+and excludes test classes plus the operator-boundary assembly root, which is
+named by class. Runtime bean ownership is never expressed as a name pattern:
+classes that only their boundary may register carry no component stereotype,
+and a class rename fails compilation instead of silently changing the
+assembled set. Host application packages are not scanned by the library.
+
+The operator CLI (`SerializationMigrationCli`) is the second assembly
+boundary: its context names the internal migration beans by class through
+`SerializationMigrationOperatorConfiguration` and excludes
+`RedisCacheAutoConfiguration` by class, so it never assembles the cache/AOP
+runtime and needs no enablement gate.
 
 ## Module ownership
 
@@ -55,7 +64,7 @@ classes can move or disappear without becoming a compatibility promise.
 | 100 | `BloomFilterHandler` | membership gate / penetration protection |
 | 200 | `SyncLockHandler` | distributed or explicit local-only synchronization |
 | 250 | `EarlyExpirationHandler` | hot-key refresh decision and scheduling |
-| 300 | `TtlHandler` | base TTL and jitter calculation |
+| 300 | `TtlHandler` | TTL decision application (precedence and jitter resolve in `TtlPolicy`) |
 | 400 | `NullValueHandler` | negative-result encoding |
 | 500 | `ActualCacheHandler` | actual cache operation |
 
@@ -64,6 +73,9 @@ classes can move or disappear without becoming a compatibility promise.
 assembles observers. `ChainEngine` owns advancement, flow decisions, observer
 hook ordering, and post-processing isolation. A custom handler must be supplied
 by the host application's component scan or as an application bean.
+`HandlerOrder` additionally carries each slot's protection disable name and its
+`handler` metric/log tag, which internal `cache/HandlerIdentity.java` resolves as
+one declaration so that renaming a handler class changes neither.
 
 ## Annotation and policy flow
 
@@ -77,8 +89,12 @@ The annotation path is intentionally split into two views:
    declaration; read-through write-back remains governed by the read side.
 
 The split is required by the Spring operation source and the chain-side policy
-resolver. It is not permission to reintroduce per-invocation parsing or to
-collapse the two operation representations without a new contract decision.
+resolver. Both views are projected from one `RedisCacheAttributes` instance per
+annotation, and the snapshot carries a `kind + cacheName` index built at
+registration time, so the two views cannot disagree and policy lookup does not
+depend on declaration order. The split is not permission to reintroduce
+per-invocation parsing or to collapse the two operation representations without
+a new contract decision.
 Class-level operation discovery and method-level policy application retain the
 current documented behavior in `COMPATIBILITY.md`.
 
@@ -89,9 +105,12 @@ current documented behavior in `COMPATIBILITY.md`.
   `CacheResult` carries typed operation outcomes internally.
 - `LoaderOrchestrator` owns the shared read → load → write-back protocol. A
   successful loaded value is returned even when write-back fails.
-- `CacheErrorHandler` owns count-once failure reporting for chain failures; the
-  failure metric uses finite operation/kind/strategy dimensions and diagnostics
-  omit raw keys at WARN/ERROR.
+- `FailureReport` owns the one failure-reporting shape: a WARN/ERROR carrying
+  only cacheName or the key fingerprint, and — when the report carries a
+  throwable — its exception type chain plus a paired DEBUG line holding the full
+  stack. A report without a throwable emits the WARN only; `CacheErrorHandler` owns count-once
+  reporting for chain failures on top of it, and the failure metric uses finite
+  operation/kind/strategy dimensions.
 - `SecureJacksonRedisSerializer` owns whitelist-backed serialization and the
   `{version, payload}` envelope. Refresh metadata required by policy/CAS is
   persisted; process-local monotonic time is not.

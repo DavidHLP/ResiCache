@@ -22,13 +22,15 @@ import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.types.Expiration;
-import org.springframework.stereotype.Component;
 
 /**
  * Bounded, resumable legacy-value migration engine used by the operator CLI.
+ *
+ * <p>Registered by the operator-boundary assembly root
+ * ({@link SerializationMigrationOperatorConfiguration}); it carries no component
+ * stereotype so the runtime context never assembles it.
  */
 @Slf4j
-@Component
 class SerializationMigrationEngine
         implements io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli.SerializationMigrationRunner {
 
@@ -42,6 +44,8 @@ class SerializationMigrationEngine
     private final LegacyValueDecoder legacyDecoder;
     private final SerializationMigrationProperties migration;
     private final MeterRegistry meterRegistry;
+    /** 关闭路径唯一判据 —— 构造期从 seam 推导一次,热路径只分支 final 字段。 */
+    private final boolean disabled;
 
     public SerializationMigrationEngine(
             RedisConnectionFactory connectionFactory,
@@ -56,6 +60,7 @@ class SerializationMigrationEngine
                 objectMapper, serializer.getAllowedPackagePrefixes(), serializer.getTypeProperty());
         this.migration = serializer.getMigration();
         this.meterRegistry = resolvedMetrics.meterRegistry();
+        this.disabled = DisabledMetricsRegistry.isDisabledSeam(this.meterRegistry);
     }
 
     /**
@@ -130,11 +135,7 @@ class SerializationMigrationEngine
         } catch (Exception ex) {
             report.failed++;
             record("failed");
-            // Key-privacy contract: WARN omits raw key and exception message (it may contain the key);
-            // only the type chain and fingerprint remain; the full stack stays at DEBUG.
-            log.warn("[ResiCache] Serialization migration rejected key fingerprint={}, cause={}",
-                    keyFingerprint(key), FailureDiagnostics.sanitizedFailure(ex));
-            log.debug("[ResiCache] Serialization migration rejection detail", ex);
+            FailureReport.warn(log, "[ResiCache] Serialization migration rejected key", null, key, ex);
         }
     }
 
@@ -180,9 +181,7 @@ class SerializationMigrationEngine
         } catch (Exception ex) {
             report.failed++;
             record("failed");
-            log.warn("[ResiCache] Serialization rollback rejected key fingerprint={}, cause={}",
-                    keyFingerprint(backupKey), FailureDiagnostics.sanitizedFailure(ex));
-            log.debug("[ResiCache] Serialization rollback rejection detail", ex);
+            FailureReport.warn(log, "[ResiCache] Serialization rollback rejected key", null, backupKey, ex);
         }
     }
 
@@ -292,10 +291,12 @@ class SerializationMigrationEngine
     }
 
     private void record(String outcome) {
-        if (meterRegistry != null) {
-            meterRegistry.counter(METRIC_NAME,
-                    "phase", migration.getPhase().name(), "outcome", outcome).increment();
+        if (disabled) {
+            // 关闭路径:跳过 tag 数组、Meter.Id 构造与 deny-all filter 遍历(单 key 可达 4 次)。
+            return;
         }
+        meterRegistry.counter(METRIC_NAME,
+                "phase", migration.getPhase().name(), "outcome", outcome).increment();
     }
 
     private static byte[] appendSuffix(byte[] key, String suffix) {
@@ -324,14 +325,6 @@ class SerializationMigrationEngine
             }
         }
         return true;
-    }
-
-    /**
-     * key 内容指纹 — 委托 {@link FailureDiagnostics} 的单一实现(key-privacy contract),
-     * 使 migration 路径与锁/刷新路径的指纹形式不再各自漂移。
-     */
-    private static String keyFingerprint(byte[] key) {
-        return FailureDiagnostics.keyFingerprint(key);
     }
 
     @FunctionalInterface

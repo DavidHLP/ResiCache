@@ -77,7 +77,8 @@ class RedisCachePutOperation extends CachePutOperation
 
     @EqualsAndHashCode(callSuper = true)
     public static class Builder extends CachePutOperation.Builder implements RedisCacheAttributeSink {
-        private long ttl = 60;
+        /** 未设置哨兵 —— 与 {@link RedisCacheableOperation.Builder} 一致:0 表示无方法级 TTL 声明。 */
+        private long ttl = 0;
         private Class<?> type = Object.class;
         private boolean cacheNullValues;
         private boolean useBloomFilter;

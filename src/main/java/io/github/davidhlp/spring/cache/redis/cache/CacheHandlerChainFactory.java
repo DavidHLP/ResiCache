@@ -8,14 +8,12 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
-import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.*;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -107,30 +105,6 @@ class CacheHandlerChainFactory {
     }
 
     /**
-     * 便捷构造(无 observer bean)—单元测试用;Spring 装配走带 ResolvedMetrics 的
-     * {@code @Autowired} 构造。
-     */
-    public CacheHandlerChainFactory(List<CacheHandler> handlers,
-                                 RedisProCacheProperties properties,
-                                 ObjectProvider<MeterRegistry> meterRegistryProvider,
-                                 ChainEngine engine) {
-        this(handlers, properties, ResolvedMetrics.resolve(meterRegistryProvider, null), engine,
-                List.of());
-    }
-
-    /**
-     * Convenience constructor for tests without an injected Environment.
-     */
-    public CacheHandlerChainFactory(List<CacheHandler> handlers,
-                                 RedisProCacheProperties properties,
-                                 ObjectProvider<MeterRegistry> meterRegistryProvider,
-                                 ChainEngine engine,
-                                 List<ChainObserver> observers) {
-        this(handlers, properties, ResolvedMetrics.resolve(meterRegistryProvider, null), engine,
-                observers);
-    }
-
-    /**
      * 主构造 — P1-API-001-C:注入有序 {@link ChainObserver} beans 单一装配。
      * {@code @Autowired} 使 Spring 在多个 public 构造器间选择本构造
      * (无默认构造器时必须有显式 @Autowired)。
@@ -181,7 +155,10 @@ class CacheHandlerChainFactory {
                 return cachedChain;
             }
 
-            // 1) 装配 observer(单一装配点):注入列表已由 Spring 按 @Order 排序。
+            // 1) 装配 observer(单一装配点):注册序即派发序,注入列表由 Spring 按其支持的
+            //    顺序来源排好(@Order、Ordered、@Bean 方法注解、元注解/代理),本工厂不再
+            //    二次排序 —— 实例级比较器只看得到类级注解,会把 Spring 认得而它看不到的
+            //    顺序(如 @Bean 方法上的 @Order(0))丢掉。
             //    idempotent 由本方法的单例缓存 miss pattern 保证,首次 miss 后不会再进本块。
             registerObserversOnce();
 
@@ -196,27 +173,27 @@ class CacheHandlerChainFactory {
             Set<String> disabled = new HashSet<>(properties.getDisabledHandlers());
             resolveProtectionDisabled(properties, disabled);
 
-            // 按 @HandlerPriority 注解排序
+            // 按 @HandlerPriority 注解排序(身份三项的解析见 HandlerIdentity)
             List<CacheHandler> sortedHandlers = handlers.stream()
-                .sorted(Comparator.comparingInt(this::getOrder))
+                .sorted(Comparator.comparingInt(handler -> HandlerIdentity.of(handler).order()))
                 .toList();
 
             // 添加到链，过滤禁用的 Handler
             for (CacheHandler handler : sortedHandlers) {
-                String handlerName = getHandlerDisableName(handler);
+                HandlerIdentity identity = HandlerIdentity.of(handler);
 
-                if (disabled.contains(handlerName)) {
-                    log.info("Handler disabled by configuration: {}", CacheHandlerChain.handlerTag(handler));
+                if (disabled.contains(identity.disableName())) {
+                    log.info("Handler disabled by configuration: {}", identity.tag());
                     continue;
                 }
 
                 chain.addHandler(handler);
-                if (registry != null && handler instanceof AbstractCacheHandler ach) {
+                if (handler instanceof AbstractCacheHandler ach) {
                     ach.attachMeterRegistry(registry);
                 }
                 log.debug("Added handler to chain: {} (order={})",
-                          CacheHandlerChain.handlerTag(handler),
-                          getOrder(handler));
+                          identity.tag(),
+                          identity.order());
             }
 
             log.info("Handler chain created with {} handlers: {}",
@@ -230,8 +207,12 @@ class CacheHandlerChainFactory {
     /**
      * 注册注入的 observer 到 Engine — 单一装配点。
      *
-     * <p>注入列表由 Spring 按 {@code @Order} 升序提供;此处按类型去重
-     * (同名同 tag counter 重复注册幂等,但 observer 实例重复注册会双计 — 去重保证
+     * <p>注册顺序即 {@code STABILITY.md §4} 承诺的 observer 执行顺序,也就是 Spring 解析
+     * 注入列表时给出的顺序(observation order = registration order)。标准
+     * MDC→DebugLog→Timer→FiredCounter 由各 observer 类级 {@code @Order(1..4)} 声明,Spring
+     * 与用户 observer 的其他顺序来源({@code Ordered}、{@code @Bean} 方法上的 {@code @Order}、
+     * 元注解/代理)同样由 Spring 解析 —— 工厂因此保持注入序,不再按类级注解二次排序。按类型
+     * 去重(同名同 tag counter 重复注册幂等,但 observer 实例重复注册会双计 — 去重保证
      * 每个 observer 类恰好注册一次),随后按序 addObserver。
      *
      * <p>registry 缺失时:MDC/DebugLog 无 registry 依赖;Timer/FiredCounter
@@ -239,22 +220,13 @@ class CacheHandlerChainFactory {
      */
     private void registerObserversOnce() {
         Set<Class<?>> seen = new HashSet<>();
-        List<ChainObserver> sorted = observers.stream()
-                .sorted(Comparator.comparingInt(this::observerOrder))
-                .toList();
-        for (ChainObserver observer : sorted) {
+        for (ChainObserver observer : observers) {
             if (observer == null || !seen.add(observer.getClass())) {
                 continue;
             }
             engine.addObserver(observer);
             log.debug("Registered ChainObserver: {}", observer.getClass().getSimpleName());
         }
-    }
-
-    private int observerOrder(ChainObserver observer) {
-        org.springframework.core.annotation.Order order =
-                observer.getClass().getAnnotation(org.springframework.core.annotation.Order.class);
-        return order != null ? order.value() : Integer.MAX_VALUE;
     }
 
     /**
@@ -292,34 +264,5 @@ class CacheHandlerChainFactory {
                 }
             }
         }
-    }
-
-    /**
-     * 获取 Handler 的禁用配置名称.
-     *
-     * <p>优先从 {@code @HandlerPriority} 注解关联的 {@link HandlerOrder} 反查
-     * {@link HandlerOrder#getDisableName()}(单一事实源),使 handler 类重命名不影响
-     * 配置禁用语义。未标注注解的 handler 回退到类名派生(kebab-case)以保持兼容。
-     */
-    private String getHandlerDisableName(CacheHandler handler) {
-        HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
-        if (annotation != null) {
-            return annotation.value().getDisableName();
-        }
-        String className = CacheHandlerChain.handlerTag(handler);
-        return className.replace("Handler", "")
-                        .replaceAll("([a-z])([A-Z])", "$1-$2")  // camelCase to kebab-case
-                        .toLowerCase();
-    }
-
-    /**
-     * 获取 Handler 的执行顺序
-     *
-     * @param handler Handler 实例
-     * @return 顺序值，未标注则返回 Integer.MAX_VALUE
-     */
-    private int getOrder(CacheHandler handler) {
-        HandlerPriority annotation = handler.getClass().getAnnotation(HandlerPriority.class);
-        return annotation != null ? annotation.value().getOrder() : Integer.MAX_VALUE;
     }
 }

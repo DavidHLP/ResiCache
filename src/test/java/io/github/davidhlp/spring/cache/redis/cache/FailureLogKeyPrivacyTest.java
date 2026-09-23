@@ -1,591 +1,473 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.IThrowableProxy;
 import ch.qos.logback.core.read.ListAppender;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
-import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
-import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationPhase;
+import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationProperties;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 失败诊断 key 隐私回归(key-privacy contract)。
+ * 各失败站点的 key 隐私 thin 覆盖 —— 每个站点断言「一条 WARN/ERROR 里不出现被放进上下文的
+ * raw key」。
  *
- * <p>契约:WARN/ERROR 日志与 typed exception message <b>不得</b>出现 raw key;
- * 配置级低基数的 {@code cacheName} 或 {@link FailureDiagnostics#keyFingerprint} 关联令牌可保留。
+ * <p>规则本体(配对、指纹、类型链渲染)只由 {@code FailureReportTest} 在 seam 级测一次;本类
+ * 不重复枚举 message 文本,只保证每个曾经泄露过 raw key 的站点保留一条会红的守卫 ——
+ * 站点把 raw key 拼进自由文本参数时,这里失败。
  *
- * <p>本测试覆盖此前直接打印 raw key 的路径:分布式锁获取/释放、single-flight 角色失败、
- * 异步提前过期重试、链后置处理。每条路径用 logback {@link ListAppender} 捕获实际日志事件断言。
+ * <p>覆盖站点:{@code RedisBloomIFilter}(add/check/delete)、{@code DistributedLockManager}
+ * (获取超时 / 中断 / 释放重试与耗尽 / 重试期中断)、{@code ChainEngine} 后置处理(执行与判定)、
+ * {@code EarlyRefresh} 异步刷新、{@code SyncRoleLockExecutor} 锁获取与释放、
+ * {@code SerializationMigrationEngine} 前向与回滚。
  */
-@DisplayName("Failure Log Key Privacy Tests (key-privacy contract)")
+@DisplayName("failure-log key privacy per site")
 class FailureLogKeyPrivacyTest {
 
-    /** 必须不出现的原始 key(测试专用哨兵值)。 */
+    /** 必须不出现在 WARN/ERROR 中的原始 key 哨兵。 */
     private static final String SECRET_KEY = "secret-customer-key-42";
-
-    private ListAppender<ILoggingEvent> attach(Class<?> loggerOwner) {
-        return attach(loggerOwner.getName());
-    }
-
-    private ListAppender<ILoggingEvent> attach(String loggerName) {
-        Logger logger = (Logger) LoggerFactory.getLogger(loggerName);
-        ListAppender<ILoggingEvent> appender = new ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
-        return appender;
-    }
-
-    private void detach(Class<?> loggerOwner, ListAppender<ILoggingEvent> appender) {
-        detach(loggerOwner.getName(), appender);
-    }
-
-    private void detach(String loggerName, ListAppender<ILoggingEvent> appender) {
-        ((Logger) LoggerFactory.getLogger(loggerName)).detachAppender(appender);
-    }
-
-    /**
-     * 临时把某个 logger 提升到 DEBUG —— Spring 测试默认 INFO,否则「栈保留在 DEBUG」的契约不可断言。
-     * 返回原 level(null 表示继承),调用方在 finally 里还原。
-     */
-    private Level enableDebug(Class<?> loggerOwner) {
-        Logger logger = (Logger) LoggerFactory.getLogger(loggerOwner);
-        Level previous = logger.getLevel();
-        logger.setLevel(Level.DEBUG);
-        return previous;
-    }
-
-    private void restoreLevel(Class<?> loggerOwner, Level previous) {
-        ((Logger) LoggerFactory.getLogger(loggerOwner)).setLevel(previous);
-    }
-
-    private List<ILoggingEvent> errorEvents(ListAppender<ILoggingEvent> captured) {
-        return captured.list.stream()
-                .filter(event -> event.getLevel() == Level.ERROR)
-                .toList();
-    }
-
-    /**
-     * 断言失败点<b>逐条</b>产生 ERROR 且各自带稳定操作文本 —— 只断言「不含 raw key」会放过
-     * 「把 ERROR 日志整段删掉」的回归;每个 fragment 必须命中不同事件。
-     */
-    private void assertErrorSites(ListAppender<ILoggingEvent> captured, String... fragments) {
-        List<ILoggingEvent> errors = errorEvents(captured);
-        assertThat(errors)
-                .as("每个失败点必须恰好产生一条 ERROR")
-                .hasSize(fragments.length);
-        List<ILoggingEvent> unmatched = new ArrayList<>(errors);
-        for (String fragment : fragments) {
-            ILoggingEvent matching = unmatched.stream()
-                    .filter(event -> event.getFormattedMessage().contains(fragment))
-                    .findFirst()
-                    .orElse(null);
-            assertThat(matching)
-                    .as("缺少失败点 ERROR 文本: %s", fragment)
-                    .isNotNull();
-            unmatched.remove(matching);
-        }
-        assertThat(errors)
-                .as("ERROR 必须渲染异常类型链")
-                .allMatch(event -> event.getFormattedMessage().contains("IllegalStateException"));
-        assertThat(warnAndErrorText(captured))
-                .as("WARN/ERROR 不得包含 raw key 或异常 message(key-privacy contract)")
-                .doesNotContain(SECRET_KEY)
-                .doesNotContain("boom");
-    }
-
-    private void assertDebugKeepsStack(
-            ListAppender<ILoggingEvent> captured, String... fragments) {
-        List<ILoggingEvent> debug = captured.list.stream()
-                .filter(event -> event.getLevel() == Level.DEBUG
-                        && event.getThrowableProxy() != null)
-                .toList();
-        assertThat(debug)
-                .as("每个失败点的完整栈必须保留在 DEBUG 供关联")
-                .hasSize(fragments.length);
-        List<ILoggingEvent> unmatched = new ArrayList<>(debug);
-        for (String fragment : fragments) {
-            ILoggingEvent matching = unmatched.stream()
-                    .filter(event -> event.getFormattedMessage().contains(fragment))
-                    .findFirst()
-                    .orElse(null);
-            assertThat(matching)
-                    .as("缺少失败点 DEBUG 栈文本: %s", fragment)
-                    .isNotNull();
-            unmatched.remove(matching);
-        }
-    }
-
-    /**
-     * 拼接全部 WARN/ERROR 事件的<b>完整渲染</b>:格式化消息 + 每个 throwable 的类型与 message
-     * (含 cause 链)。
-     *
-     * <p>只断言格式化消息是不够的 —— SLF4J 会把异常栈(含 message)一并打印,而
-     * {@code Cache.ValueRetrievalException} 的 message 内嵌 raw key。故本 helper 把
-     * throwable 的 message 也算进「诊断文本」。
-     */
-    private String warnAndErrorText(ListAppender<ILoggingEvent> captured) {
-        StringBuilder sb = new StringBuilder();
-        for (ILoggingEvent event : captured.list) {
-            if (!event.getLevel().isGreaterOrEqual(Level.WARN)) {
-                continue;
-            }
-            sb.append(event.getFormattedMessage()).append('\n');
-            for (ch.qos.logback.classic.spi.IThrowableProxy proxy = event.getThrowableProxy();
-                 proxy != null;
-                 proxy = proxy.getCause()) {
-                sb.append(proxy.getClassName()).append(": ").append(proxy.getMessage()).append('\n');
-                for (ch.qos.logback.classic.spi.StackTraceElementProxy frame
-                        : proxy.getStackTraceElementProxyArray()) {
-                    sb.append("  at ").append(frame.getSTEAsString()).append('\n');
-                }
-            }
-        }
-        return sb.toString();
-    }
-
-    @Test
-    @DisplayName("keyFingerprint:与 raw key 不同、稳定、null-safe,byte[] 按字节哈希")
-    void keyFingerprint_isStableTokenNotRawKey() {
-        assertThat(FailureDiagnostics.keyFingerprint(SECRET_KEY))
-                .isNotEqualTo(SECRET_KEY)
-                .isEqualTo(FailureDiagnostics.keyFingerprint(SECRET_KEY));
-        assertThat(FailureDiagnostics.keyFingerprint((String) null)).isEqualTo("null");
-        assertThat(FailureDiagnostics.keyFingerprint((byte[]) null)).isEqualTo("null");
-
-        byte[] bytes = SECRET_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        assertThat(FailureDiagnostics.keyFingerprint(bytes))
-                .as("字节形态按字节哈希(不经过 UTF-8 解码,避免非法序列碰撞)")
-                .isNotEqualTo(SECRET_KEY)
-                .isEqualTo(FailureDiagnostics.keyFingerprint(bytes));
-
-        byte[] withReplacementChar = SECRET_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        assertThat(FailureDiagnostics.keyFingerprint(new byte[] {(byte) 0xFF, (byte) 0xFE}))
-                .as("不同字节序列不得因解码替换而碰撞")
-                .isNotEqualTo(FailureDiagnostics.keyFingerprint(new byte[] {(byte) 0xFE, (byte) 0xFF}));
-    }
-
-    @Test
-    @DisplayName("RefreshRetryPolicy:重试耗尽后 WARN/ERROR 不含 raw key")
-    void refreshRetryPolicy_exhaustedRetries_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(RefreshRetryPolicy.class);
-        try {
-            RefreshRetryPolicy policy = new RefreshRetryPolicy();
-            AtomicInteger attempts = new AtomicInteger();
-
-            assertThatThrownBy(() -> policy.executeWithRetry(SECRET_KEY, () -> {
-                attempts.incrementAndGet();
-                // 异常 message 故意内嵌 raw key:WARN/ERROR 不得把它渲染出来
-                throw new IllegalStateException("redis down for key " + SECRET_KEY);
-            })).isInstanceOf(RuntimeException.class);
-
-            assertThat(attempts.get()).isEqualTo(RefreshRetryPolicy.MAX_RETRY_COUNT);
-            assertThat(warnAndErrorText(captured))
-                    .as("WARN/ERROR 不得包含 raw key(key-privacy contract)")
-                    .doesNotContain(SECRET_KEY)
-                    .contains(FailureDiagnostics.keyFingerprint(SECRET_KEY));
-        } finally {
-            detach(RefreshRetryPolicy.class, captured);
-        }
-    }
-
-    @Test
-    @DisplayName("ChainEngine:post-process 失败 ERROR 不含 raw key(带 cacheName)")
-    void chainEngine_postProcessFailure_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(ChainEngine.class);
-        try {
-            ChainEngine engine = new ChainEngine();
-            CacheContext context = CacheContext.of(CacheInput.builder()
-                    .operation(CacheOperation.GET)
-                    .cacheName("privacy-cache")
-                    .redisKey(SECRET_KEY)
-                    .actualKey(SECRET_KEY)
-                    .build());
-            CacheHandler failing = new CacheHandler() {
-                @Override
-                public HandlerResult handle(CacheContext ctx) {
-                    return HandlerResult.continueChain();
-                }
-
-                @Override
-                public boolean requiresPostProcess(CacheContext ctx) {
-                    return true;
-                }
-
-                @Override
-                public void afterChainExecution(CacheContext ctx, CacheResult result) {
-                    throw new IllegalStateException("post-process boom for key " + SECRET_KEY);
-                }
-            };
-
-            engine.execute(List.of(failing), context);
-
-            assertThat(warnAndErrorText(captured))
-                    .doesNotContain(SECRET_KEY)
-                    .contains("privacy-cache");
-        } finally {
-            detach(ChainEngine.class, captured);
-        }
-    }
-    @Test
-    @DisplayName("ChainEngine:post-process 判定失败也不泄露 raw key")
-    void chainEngine_postProcessPredicateFailure_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(ChainEngine.class);
-        try {
-            ChainEngine engine = new ChainEngine();
-            CacheContext context = CacheContext.of(CacheInput.builder()
-                    .operation(CacheOperation.GET)
-                    .cacheName("privacy-cache")
-                    .redisKey(SECRET_KEY)
-                    .actualKey(SECRET_KEY)
-                    .build());
-            CacheHandler failing = new CacheHandler() {
-                @Override
-                public HandlerResult handle(CacheContext ctx) {
-                    return HandlerResult.continueChain();
-                }
-
-                @Override
-                public boolean requiresPostProcess(CacheContext ctx) {
-                    throw new IllegalStateException("post-process predicate key " + SECRET_KEY);
-                }
-            };
-
-            CacheResult result = engine.execute(List.of(failing), context);
-
-            assertThat(result.isSuccess()).isTrue();
-            assertThat(warnAndErrorText(captured))
-                    .doesNotContain(SECRET_KEY)
-                    .contains("privacy-cache");
-        } finally {
-            detach(ChainEngine.class, captured);
-        }
-    }
+    private static final String CACHE = "privacy-cache";
+    /** {@code SyncRole.Leader} 的 logger 名(嵌套类在包外不可直接引用)。 */
+    private static final String SYNC_ROLE_LEADER_LOGGER = SyncRole.class.getName() + "$Leader";
 
 
     @Test
-    @DisplayName("ChainEngine:observer 失败 ERROR 只渲染异常类型链,栈保留在 DEBUG")
-    void chainEngine_observerFailure_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(ChainEngine.class);
-        Level previous = enableDebug(ChainEngine.class);
-        try {
-            ChainEngine engine = new ChainEngine();
-            engine.addObserver(new ChainObserver() {
-                @Override
-                public Object onChainStart(CacheContext context) {
-                    throw new IllegalStateException("observer boom for key " + SECRET_KEY);
-                }
-            });
-            CacheContext context = CacheContext.of(CacheInput.builder()
-                    .operation(CacheOperation.GET)
-                    .cacheName("privacy-cache")
-                    .redisKey(SECRET_KEY)
-                    .actualKey(SECRET_KEY)
-                    .build());
+    @DisplayName("RedisBloomIFilter:add/check/delete 失败各一条 ERROR,均不含 raw key")
+    @SuppressWarnings("unchecked")
+    void redisBloomFilter_failures_omitRawKey() {
+        RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
+        when(redisTemplate.executePipelined(any(RedisCallback.class)))
+                .thenThrow(new IllegalStateException("bloom redis boom for key " + SECRET_KEY));
+        when(redisTemplate.delete(anyString()))
+                .thenThrow(new IllegalStateException("bloom delete boom for key " + SECRET_KEY));
 
-            engine.execute(List.of(new CacheHandler() {
-                @Override
-                public HandlerResult handle(CacheContext ctx) {
-                    return HandlerResult.terminate(CacheResult.success());
-                }
-            }), context);
-
-            assertThat(warnAndErrorText(captured))
-                    .as("observer 失败的 ERROR 不得渲染异常 message/栈(key-privacy contract)")
-                    .doesNotContain(SECRET_KEY);
-            assertErrorSites(captured, "onChainStart failed");
-            assertDebugKeepsStack(captured, "onChainStart failure detail");
-        } finally {
-            detach(ChainEngine.class, captured);
-            restoreLevel(ChainEngine.class, previous);
-        }
-    }
-
-    @Test
-    @DisplayName("BloomSupport:三处 fail-open ERROR 只渲染类型链,栈保留在 DEBUG")
-    void bloomSupport_failOpen_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(BloomSupport.class);
-        Level previous = enableDebug(BloomSupport.class);
-        try {
-            BloomIFilter broken = new BloomIFilter() {
-                @Override
-                public void add(String cacheName, String key) {
-                    throw new IllegalStateException("bloom add boom for key " + SECRET_KEY);
-                }
-
-                @Override
-                public boolean mightContain(String cacheName, String key) {
-                    throw new IllegalStateException("bloom check boom for key " + SECRET_KEY);
-                }
-
-                @Override
-                public void clear(String cacheName) {
-                    throw new IllegalStateException("bloom clear boom for key " + SECRET_KEY);
-                }
-            };
-            BloomSupport support = new BloomSupport(broken);
-
-            assertThat(support.mightContain("privacy-cache", SECRET_KEY))
-                    .as("fail-open 行为必须保留")
-                    .isTrue();
-            support.add("privacy-cache", SECRET_KEY);
-            support.clear("privacy-cache");
-
-            assertErrorSites(captured,
-                    "mightContain failed, defaulting to may-contain",
-                    "Bloom filter add failed",
-                    "Bloom filter clear failed");
-            assertDebugKeepsStack(captured,
-                    "Bloom filter mightContain failure detail",
-                    "Bloom filter add failure detail",
-                    "Bloom filter clear failure detail");
-        } finally {
-            detach(BloomSupport.class, captured);
-            restoreLevel(BloomSupport.class, previous);
-        }
-    }
-
-    @Test
-    @DisplayName("RedisBloomIFilter:三个失败点 ERROR 只渲染类型链,栈保留在 DEBUG")
-    void redisBloomIFilter_failures_omitRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(RedisBloomIFilter.class);
-        Level previous = enableDebug(RedisBloomIFilter.class);
-        try {
-            @SuppressWarnings("unchecked")
-            RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
-            when(redisTemplate.executePipelined(any(RedisCallback.class)))
-                    .thenThrow(new IllegalStateException("bloom redis boom for key " + SECRET_KEY));
-            when(redisTemplate.delete(anyString()))
-                    .thenThrow(new IllegalStateException("bloom redis delete boom for key " + SECRET_KEY));
-            SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        try (Capture capture = new Capture(RedisBloomIFilter.class)) {
             RedisBloomIFilter filter = new RedisBloomIFilter(
-                    redisTemplate, new BloomFilterConfig("bf:", 4096, 3, 64), meterRegistry);
+                    redisTemplate, new BloomFilterConfig("bf:", 4096, 3, 64),
+                    DisabledMetricsRegistry.INSTANCE);
             filter.init();
 
-            filter.add("privacy-cache", SECRET_KEY);
-            assertThat(filter.mightContain("privacy-cache", SECRET_KEY))
+            filter.add(CACHE, SECRET_KEY);
+            assertThat(filter.mightContain(CACHE, SECRET_KEY))
                     .as("check 失败必须 fail-open")
                     .isTrue();
-            filter.clear("privacy-cache");
+            filter.clear(CACHE);
 
-            assertErrorSites(captured,
-                    "Bloom filter add failed",
-                    "Bloom filter check failed",
-                    "Bloom filter delete failed");
-            assertDebugKeepsStack(captured,
-                    "Bloom filter add failure detail",
-                    "Bloom filter check failure detail",
-                    "Bloom filter delete failure detail");
-            assertThat(meterRegistry.get("bloomsift.add.failures").counter().count())
-                    .as("add 失败计数必须仍然自增")
-                    .isEqualTo(1.0);
-            assertThat(meterRegistry.get("bloomsift.check.failures").counter().count())
-                    .as("check 失败计数必须仍然自增")
-                    .isEqualTo(1.0);
-        } finally {
-            detach(RedisBloomIFilter.class, captured);
-            restoreLevel(RedisBloomIFilter.class, previous);
+            assertThat(capture.warnErrorText())
+                    .contains("Bloom filter add failed")
+                    .contains("Bloom filter check failed")
+                    .contains("Bloom filter delete failed")
+                    .contains("cacheName=" + CACHE)
+                    .doesNotContain(SECRET_KEY);
+        }
+    }
+
+
+    @Test
+    @DisplayName("DistributedLockManager:获取超时 WARN 不含 raw key,只含指纹")
+    void distributedLockManager_acquireTimeout_omitsRawKey() throws InterruptedException {
+        RedisProCacheProperties properties = new RedisProCacheProperties();
+        RLock notAcquired = mock(RLock.class);
+        when(notAcquired.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(false);
+
+        try (Capture capture = new Capture(DistributedLockManager.class)) {
+            assertThat(managerWithLock(properties, notAcquired).tryAcquire(SECRET_KEY, 1)).isEmpty();
+
+            assertThat(capture.warnErrorText())
+                    .contains("Failed to acquire distributed lock")
+                    .contains("keyFingerprint=" + FailureReport.fingerprint(SECRET_KEY))
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain(properties.getSyncLock().getPrefix() + SECRET_KEY);
         }
     }
 
     @Test
-    @DisplayName("DistributedLockManager:获取超时 WARN 与被中断 ERROR/异常消息不含 raw key 与 lockKey")
-    void distributedLockManager_failures_omitRawKey() throws InterruptedException {
-        ListAppender<ILoggingEvent> captured = attach(DistributedLockManager.class);
-        try {
-            RedisProCacheProperties properties = new RedisProCacheProperties();
-            RLock notAcquired = mock(RLock.class);
-            when(notAcquired.tryLock(anyLong(), anyLong(), any())).thenReturn(false);
-            DistributedLockManager manager = managerWithLock(properties, notAcquired);
+    @DisplayName("DistributedLockManager:等待被中断 ERROR 与异常消息不含 raw key")
+    void distributedLockManager_interrupted_omitsRawKey() throws InterruptedException {
+        RedisProCacheProperties properties = new RedisProCacheProperties();
+        RLock interrupted = mock(RLock.class);
+        when(interrupted.tryLock(anyLong(), anyLong(), any(TimeUnit.class)))
+                .thenThrow(new InterruptedException("interrupted while holding " + SECRET_KEY));
+        DistributedLockManager manager = managerWithLock(properties, interrupted);
 
-            assertThat(manager.tryAcquire(SECRET_KEY, 1)).isEmpty();
-
-            assertThat(warnAndErrorText(captured))
-                    .doesNotContain(SECRET_KEY)
-                    .doesNotContain(manager.buildLockKey(SECRET_KEY))
-                    .contains(FailureDiagnostics.keyFingerprint(SECRET_KEY));
-
-            RLock interrupted = mock(RLock.class);
-            when(interrupted.tryLock(anyLong(), anyLong(), any()))
-                    .thenThrow(new InterruptedException("interrupted"));
-            DistributedLockManager interruptedManager = managerWithLock(properties, interrupted);
-
+        try (Capture capture = new Capture(DistributedLockManager.class)) {
             try {
-                assertThatThrownBy(() -> interruptedManager.tryAcquire(SECRET_KEY, 1))
+                assertThatThrownBy(() -> manager.tryAcquire(SECRET_KEY, 1))
                         .isInstanceOf(RuntimeException.class)
                         .hasMessageNotContaining(SECRET_KEY);
             } finally {
                 Thread.interrupted();
             }
 
-            assertThat(warnAndErrorText(captured)).doesNotContain(SECRET_KEY);
-        } finally {
-            detach(DistributedLockManager.class, captured);
+            assertThat(capture.warnErrorText())
+                    .contains("Interrupted while waiting for distributed lock")
+                    .doesNotContain(SECRET_KEY);
         }
+    }
+
+    @Test
+    @DisplayName("DistributedLockManager:释放重试 WARN 与耗尽 ERROR 不含 raw key 与异常 message")
+    void distributedLockManager_releaseFailures_omitRawKey() throws InterruptedException {
+        try (Capture capture = new Capture(DistributedLockManager.class)) {
+            RLock neverUnlocks = heldLock();
+            doThrow(new IllegalStateException("unlock failed for key " + SECRET_KEY))
+                    .when(neverUnlocks).unlock();
+
+            lockHandleOf(neverUnlocks).close();
+
+            assertThat(capture.warnErrorText())
+                    .contains("Failed to release distributed lock on attempt 1")
+                    .contains("Failed to release distributed lock after ")
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain("unlock failed for key");
+        }
+    }
+
+    @Test
+    @DisplayName("DistributedLockManager:重试等待期被中断 ERROR 不含 raw key")
+    void distributedLockManager_interruptedDuringRetry_omitsRawKey() throws InterruptedException {
+        try (Capture capture = new Capture(DistributedLockManager.class)) {
+            RLock neverUnlocks = heldLock();
+            doThrow(new IllegalStateException("unlock failed for key " + SECRET_KEY))
+                    .when(neverUnlocks).unlock();
+            LockManager.LockHandle handle = lockHandleOf(neverUnlocks);
+
+            Thread.currentThread().interrupt();
+            try {
+                handle.close();
+            } finally {
+                Thread.interrupted();
+            }
+
+            assertThat(capture.warnErrorText())
+                    .contains("Interrupted while retrying lock release")
+                    .doesNotContain(SECRET_KEY);
+        }
+    }
+
+    private RLock heldLock() throws InterruptedException {
+        RLock lock = mock(RLock.class);
+        when(lock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        when(lock.isHeldByCurrentThread()).thenReturn(true);
+        return lock;
+    }
+
+    private LockManager.LockHandle lockHandleOf(RLock lock) throws InterruptedException {
+        return managerWithLock(new RedisProCacheProperties(), lock)
+                .tryAcquire(SECRET_KEY, 1).orElseThrow();
     }
 
     private DistributedLockManager managerWithLock(RedisProCacheProperties properties, RLock lock) {
-        DistributedLockManager template = new DistributedLockManager(mock(RedissonClient.class), properties);
+        String lockKey = new DistributedLockManager(mock(RedissonClient.class), properties)
+                .buildLockKey(SECRET_KEY);
         RedissonClient client = mock(RedissonClient.class);
-        when(client.getLock(template.buildLockKey(SECRET_KEY))).thenReturn(lock);
+        when(client.getLock(lockKey)).thenReturn(lock);
         return new DistributedLockManager(client, properties);
     }
 
+
     @Test
-    @DisplayName("SyncSupport:fail-fast 异常消息与 local-only 降级 WARN 不含 raw key")
-    void syncSupport_failureDiagnostics_omitRawKey() {
-        // leader 角色的 WARN 走 SyncRole$Leader 自己的 logger;startup WARN 走 SyncSupport。
-        ListAppender<ILoggingEvent> captured = attach(SyncSupport.class);
-        ListAppender<ILoggingEvent> leaderCaptured = attach(SyncRoleLeaderLogger.NAME);
-        try {
-            RedisProCacheProperties failFastProperties = new RedisProCacheProperties();
-            SyncSupport failFast = new SyncSupport(new ArrayList<>(), failFastProperties);
+    @DisplayName("ChainEngine:后置处理执行失败 ERROR 带 cacheName 但不含 raw key")
+    void chainEngine_postProcessFailure_omitsRawKey() {
+        CacheHandler failing = new CacheHandler() {
+            @Override
+            public HandlerResult handle(CacheContext ctx) {
+                return HandlerResult.continueChain();
+            }
 
-            assertThatThrownBy(() -> failFast.executeSync(SECRET_KEY, () -> "v", 5))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageNotContaining(SECRET_KEY)
-                    .hasMessageContaining(FailureDiagnostics.keyFingerprint(SECRET_KEY));
+            @Override
+            public boolean requiresPostProcess(CacheContext ctx) {
+                return true;
+            }
 
-            RedisProCacheProperties localOnlyProperties = new RedisProCacheProperties();
-            localOnlyProperties.getSyncLock().setLocalOnly(true);
-            SyncSupport localOnly = new SyncSupport(new ArrayList<>(), localOnlyProperties);
+            @Override
+            public void afterChainExecution(CacheContext ctx, CacheResult result) {
+                throw new IllegalStateException("post-process boom for key " + SECRET_KEY);
+            }
+        };
 
-            assertThat(localOnly.executeSync(SECRET_KEY, () -> "v", 5)).isEqualTo("v");
+        try (Capture capture = new Capture(ChainEngine.class)) {
+            new ChainEngine().execute(List.of(failing), context());
 
-            assertThat(warnAndErrorText(captured)).doesNotContain(SECRET_KEY);
-            assertThat(warnAndErrorText(leaderCaptured))
-                    .as("local-only 降级 WARN 必须可关联但不含 raw key")
+            assertThat(capture.warnErrorText())
+                    .contains("Post-processing failed for")
+                    .contains(CACHE)
                     .doesNotContain(SECRET_KEY)
-                    .contains(FailureDiagnostics.keyFingerprint(SECRET_KEY));
-        } finally {
-            detach(SyncSupport.class, captured);
-            detach(SyncRoleLeaderLogger.NAME, leaderCaptured);
+                    .doesNotContain("post-process boom");
         }
     }
 
     @Test
-    @DisplayName("SyncRole:锁管理器获取失败 WARN 不含 raw key")
-    void syncRole_lockManagerAcquireFailure_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(SyncRoleLeaderLogger.NAME);
-        try {
-            RedisProCacheProperties properties = new RedisProCacheProperties();
-            LockManager refusing = new LockManager() {
-                @Override
-                public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) {
-                    return Optional.empty();
-                }
+    @DisplayName("ChainEngine:后置处理判定失败也不泄露 raw key")
+    void chainEngine_postProcessPredicateFailure_omitsRawKey() {
+        CacheHandler failing = new CacheHandler() {
+            @Override
+            public HandlerResult handle(CacheContext ctx) {
+                return HandlerResult.continueChain();
+            }
 
-                @Override
-                public int getOrder() {
-                    return 0;
-                }
-            };
-            SyncSupport support = new SyncSupport(new ArrayList<>(List.of(refusing)), properties);
+            @Override
+            public boolean requiresPostProcess(CacheContext ctx) {
+                throw new IllegalStateException("predicate boom for key " + SECRET_KEY);
+            }
+        };
 
+        try (Capture capture = new Capture(ChainEngine.class)) {
+            assertThat(new ChainEngine().execute(List.of(failing), context()).isSuccess()).isTrue();
+
+            assertThat(capture.warnErrorText())
+                    .contains(CACHE)
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain("predicate boom");
+        }
+    }
+
+    private CacheContext context() {
+        return CacheContext.of(CacheInput.builder()
+                .operation(CacheOperation.GET)
+                .cacheName(CACHE)
+                .redisKey(SECRET_KEY)
+                .actualKey(SECRET_KEY)
+                .build());
+    }
+
+
+    @Test
+    @DisplayName("EarlyRefresh:异步刷新失败 ERROR 带 cacheName 但不含 raw key")
+    @SuppressWarnings("unchecked")
+    void earlyRefresh_asyncRefreshFailure_omitsRawKey() {
+        ValueOperations<String, Object> valueOperations = mock(ValueOperations.class);
+        when(valueOperations.get(any()))
+                .thenThrow(new IllegalStateException("redis down for key " + SECRET_KEY));
+        EarlyRefresh earlyRefresh = new EarlyRefresh(
+                Clock.systemUTC(),
+                mock(ThreadPoolEarlyExpirationExecutor.class),
+                mock(RedisTemplate.class),
+                valueOperations);
+
+        try (Capture capture = new Capture(EarlyRefresh.class)) {
+            earlyRefresh.performAsyncRefresh(SECRET_KEY, CACHE, null);
+
+            assertThat(capture.warnErrorText())
+                    .contains("Async early-expiration failed")
+                    .contains(CACHE)
+                    .doesNotContain(SECRET_KEY)
+                    .doesNotContain("redis down for key");
+        }
+    }
+
+
+    @Test
+    @DisplayName("SyncRoleLockExecutor:锁获取失败 WARN 与异常消息不含 raw key")
+    void syncRoleLockExecutor_acquireFailure_omitsRawKey() {
+        SyncSupport support = new SyncSupport(
+                new ArrayList<>(List.of(refusingLockManager())), new RedisProCacheProperties());
+
+        try (Capture capture = new Capture(SYNC_ROLE_LEADER_LOGGER)) {
             assertThatThrownBy(() -> support.executeSync(SECRET_KEY, () -> "v", 5))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageNotContaining(SECRET_KEY);
 
-            assertThat(warnAndErrorText(captured))
-                    .as("获取锁失败的 WARN 必须被本测试捕获(否则断言空转)")
+            assertThat(capture.warnErrorText())
                     .contains("failed to acquire distributed lock")
                     .doesNotContain(SECRET_KEY);
-        } finally {
-            detach(SyncRoleLeaderLogger.NAME, captured);
         }
     }
 
     @Test
-    @DisplayName("SyncRole:锁释放失败 ERROR 只含异常类型链,不含 raw key 或异常 message")
-    void syncRole_lockReleaseFailure_sanitizesError() {
-        ListAppender<ILoggingEvent> captured = attach(SyncRoleLeaderLogger.NAME);
-        try {
-            LockManager releasingFailure = new LockManager() {
-                @Override
-                public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) {
-                    return Optional.of(() -> {
-                        throw new IllegalStateException("release failed for key " + SECRET_KEY);
-                    });
-                }
+    @DisplayName("SyncRoleLockExecutor:锁释放失败 ERROR 不含 raw key 与异常 message")
+    void syncRoleLockExecutor_releaseFailure_omitsRawKey() {
+        LockManager releasingFailure = new LockManager() {
+            @Override
+            public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) {
+                return Optional.of(() -> {
+                    throw new IllegalStateException("release failed for key " + SECRET_KEY);
+                });
+            }
 
-                @Override
-                public int getOrder() {
-                    return 0;
-                }
-            };
+            @Override
+            public int getOrder() {
+                return 0;
+            }
+        };
+        SyncSupport support = new SyncSupport(List.of(releasingFailure), new RedisProCacheProperties());
 
-            SyncSupport support = new SyncSupport(List.of(releasingFailure),
-                    new RedisProCacheProperties());
-
+        try (Capture capture = new Capture(SYNC_ROLE_LEADER_LOGGER)) {
             assertThat(support.executeSync(SECRET_KEY, () -> "v", 5)).isEqualTo("v");
-            assertThat(warnAndErrorText(captured))
+
+            assertThat(capture.warnErrorText())
                     .contains("Failed to release distributed lock")
                     .doesNotContain(SECRET_KEY)
                     .doesNotContain("release failed for key");
-        } finally {
-            detach(SyncRoleLeaderLogger.NAME, captured);
         }
     }
 
-    /** SyncRole.Leader 的 logger 名(嵌套类在包外不可直接引用,避免测试依赖其可见性)。 */
-    private static final class SyncRoleLeaderLogger {
-        static final String NAME = SyncRole.class.getName() + "$Leader";
+    private LockManager refusingLockManager() {
+        return new LockManager() {
+            @Override
+            public Optional<LockHandle> tryAcquire(String key, long timeoutSeconds) {
+                return Optional.empty();
+            }
 
-        private SyncRoleLeaderLogger() {
+            @Override
+            public int getOrder() {
+                return 0;
+            }
+        };
+    }
+
+
+    @Test
+    @DisplayName("SerializationMigrationEngine:前向 rejected key WARN 只含指纹")
+    void serializationMigration_forwardRejectedKey_omitsRawKey() {
+        try (Capture capture = new Capture(SerializationMigrationEngine.class)) {
+            assertThat(engineWithFailingKeyRead(SerializationMigrationPhase.CUTOVER).migrate().failed())
+                    .isEqualTo(1);
+
+            assertThat(capture.warnErrorText())
+                    .contains("Serialization migration rejected key")
+                    .contains("keyFingerprint=" + FailureReport.fingerprint(keyBytes()))
+                    .doesNotContain(SECRET_KEY);
         }
     }
 
     @Test
-    @DisplayName("EarlyExpirationHandler:异步刷新失败 ERROR 带 cacheName 但不含 raw key")
-    @SuppressWarnings("unchecked")
-    void earlyExpirationHandler_asyncRefreshFailure_omitsRawKey() {
-        ListAppender<ILoggingEvent> captured = attach(EarlyRefresh.class);
-        try {
-            ValueOperations<String, Object> valueOperations = mock(ValueOperations.class);
-            when(valueOperations.get(any()))
-                    .thenThrow(new IllegalStateException("redis down for key " + SECRET_KEY));
-            EarlyRefresh earlyRefresh = new EarlyRefresh(
-                    Clock.systemUTC(),
-                    mock(ThreadPoolEarlyExpirationExecutor.class),
-                    mock(RedisTemplate.class),
-                    valueOperations);
+    @DisplayName("SerializationMigrationEngine:回滚 rejected key WARN 不含 raw key 与备份后缀拼接")
+    void serializationMigration_rollbackRejectedKey_omitsRawKey() {
+        try (Capture capture = new Capture(SerializationMigrationEngine.class)) {
+            assertThat(engineWithFailingKeyRead(SerializationMigrationPhase.ROLLBACK).migrate().failed())
+                    .isEqualTo(1);
 
-            earlyRefresh.performAsyncRefresh(SECRET_KEY, "privacy-cache", null);
+            assertThat(capture.warnErrorText())
+                    .contains("Serialization rollback rejected key")
+                    .doesNotContain(SECRET_KEY);
+        }
+    }
 
-            assertThat(warnAndErrorText(captured))
-                    .doesNotContain(SECRET_KEY)
-                    .contains("privacy-cache");
-        } finally {
-            detach(EarlyRefresh.class, captured);
+    /**
+     * 迁移引擎的 key 是 {@code byte[]},泄露形态是 raw key 或 raw key+后缀。让
+     * {@code stringCommands().get(key)} 抛异常即命中两个站点各自的 catch。
+     */
+    private SerializationMigrationEngine engineWithFailingKeyRead(SerializationMigrationPhase phase) {
+        RedisProCacheProperties properties = new RedisProCacheProperties();
+        SerializationMigrationProperties migration = properties.getSerializer().getMigration();
+        migration.setPattern("privacy:*");
+        migration.setBatchSize(20);
+        migration.setMaxKeys(20);
+        migration.setDryRun(false);
+        migration.setPhase(phase);
+
+        @SuppressWarnings("unchecked")
+        Cursor<byte[]> cursor = mock(Cursor.class);
+        when(cursor.hasNext()).thenReturn(true, false);
+        when(cursor.next()).thenReturn(keyBytes());
+
+        org.springframework.data.redis.connection.RedisKeyCommands keyCommands =
+                mock(org.springframework.data.redis.connection.RedisKeyCommands.class);
+        // scan 有两个重载(ScanOptions / 更具体的 KeyScanOptions),须显式限定参数类型,
+        // 否则 when(...) 会绑到默认的 KeyScanOptions 重载上。
+        when(keyCommands.scan(any(org.springframework.data.redis.core.ScanOptions.class)))
+                .thenReturn(cursor);
+        org.springframework.data.redis.connection.RedisStringCommands stringCommands =
+                mock(org.springframework.data.redis.connection.RedisStringCommands.class);
+        when(stringCommands.get(any())).thenThrow(
+                new IllegalStateException("legacy read failed for key " + SECRET_KEY));
+
+        RedisConnection connection = mock(RedisConnection.class);
+        when(connection.keyCommands()).thenReturn(keyCommands);
+        when(connection.stringCommands()).thenReturn(stringCommands);
+
+        RedisConnectionFactory factory = mock(RedisConnectionFactory.class);
+        when(factory.getConnection()).thenReturn(connection);
+        return new SerializationMigrationEngine(
+                factory, new ObjectMapper(), properties, new SecureJacksonSerializerFactory(),
+                ResolvedMetrics.resolve(null, new MockEnvironment()));
+    }
+
+    private byte[] keyBytes() {
+        return (CACHE + ":migrated").getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 捕获某个 logger 的 WARN/ERROR 文本 —— 格式化消息 + throwable message 链(异常 message
+     * 可能内嵌 raw key,故一并断言)。
+     */
+    private static final class Capture implements AutoCloseable {
+
+        private final Logger logger;
+        private final Level previousLevel;
+        private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+
+        Capture(Class<?> owner) {
+            this((Logger) LoggerFactory.getLogger(owner));
+        }
+
+        Capture(String loggerName) {
+            this((Logger) LoggerFactory.getLogger(loggerName));
+        }
+
+        private Capture(Logger logger) {
+            this.logger = logger;
+            this.previousLevel = logger.getLevel();
+            appender.start();
+            logger.setLevel(Level.DEBUG);
+            logger.addAppender(appender);
+        }
+
+        String warnErrorText() {
+            StringBuilder text = new StringBuilder();
+            for (ILoggingEvent event : appender.list) {
+                if (!event.getLevel().isGreaterOrEqual(Level.WARN)) {
+                    continue;
+                }
+                text.append(event.getFormattedMessage()).append('\n');
+                for (IThrowableProxy proxy = event.getThrowableProxy();
+                     proxy != null;
+                     proxy = proxy.getCause()) {
+                    text.append(proxy.getClassName()).append(": ").append(proxy.getMessage()).append('\n');
+                }
+            }
+            return text.toString();
+        }
+
+        @Override
+        public void close() {
+            logger.detachAppender(appender);
+            logger.setLevel(previousLevel);
         }
     }
 }

@@ -48,18 +48,18 @@ class ActualCacheHandler extends AbstractCacheHandler {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ValueOperations<String, Object> valueOperations;
-    private final NullValueEncoder nullValueEncoder;
+    private final CacheValueCodec valueCodec;
     private final RefreshCancellation earlyExpirationExecutor;
     private final CacheErrorHandler errorHandler;
     public ActualCacheHandler(
             @Qualifier("redisCacheTemplate") RedisTemplate<String, Object> redisTemplate,
             ValueOperations<String, Object> valueOperations,
-            NullValueEncoder nullValueEncoder,
+            CacheValueCodec valueCodec,
             @Qualifier("earlyExpirationExecutor") RefreshCancellation earlyExpirationExecutor,
             CacheErrorHandler errorHandler) {
         this.redisTemplate = redisTemplate;
         this.valueOperations = valueOperations;
-        this.nullValueEncoder = nullValueEncoder;
+        this.valueCodec = valueCodec;
         this.earlyExpirationExecutor = earlyExpirationExecutor;
         this.errorHandler = errorHandler;
     }
@@ -146,10 +146,25 @@ class ActualCacheHandler extends AbstractCacheHandler {
         // 读路径默认不触发写操作，避免写放大。
         // 如需 TTI（读取刷新 TTL），应使用 Spring Data Redis 的 RedisCacheConfiguration.enableTimeToIdle()，
         // 由 Redis 6.2+ 的 GETEX 命令实现，无需重写 value。
-        byte[] result = nullValueEncoder.encodeForReturn(
-            cachedValue.getValue(), context.getCacheName(), context.getRedisKey());
+        byte[] result = encodeForReturn(cachedValue.getValue(), context);
 
         return CacheResult.success(result);
+    }
+
+    /**
+     * 返回路径的 value 字节 + null 决策的 DEBUG 行。
+     *
+     * <p>null 决策本身属于 {@link CacheValueCodec}(它产出占位字节),但 {@code cacheName} /
+     * {@code key} 上下文只存在于调用点,故 codec 保持无上下文,日志留在两个持上下文的调用点上;
+     * 判定条件用 codec 的 {@link CacheValueCodec#isNullDecision} 而非复制一份,两者不会漂移。
+     * 该行是 main 上 {@code NullValueEncoder} 的原样恢复(同一措辞与级别)。
+     */
+    private byte[] encodeForReturn(Object value, CacheContext context) {
+        if (CacheValueCodec.isNullDecision(value)) {
+            log.debug("Returning null value in standard format: cacheName={}, key={}",
+                    context.getCacheName(), context.getRedisKey());
+        }
+        return valueCodec.toValueBytes(value);
     }
 
     /**
@@ -222,8 +237,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
                       context.getCacheName(), context.getRedisKey());
             CachedValue existingValue = (CachedValue) valueOperations.get(context.getRedisKey());
             if (existingValue != null) {
-                byte[] result = nullValueEncoder.encodeForReturn(
-                    existingValue.getValue(), context.getCacheName(), context.getRedisKey());
+                byte[] result = encodeForReturn(existingValue.getValue(), context);
                 return CacheResult.existing(result);
             }
 

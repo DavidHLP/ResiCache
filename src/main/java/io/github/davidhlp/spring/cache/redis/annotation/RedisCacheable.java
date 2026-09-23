@@ -20,11 +20,16 @@ public @interface RedisCacheable {
 
     /**
      * 缓存名称，与 Spring Cache 的 value 相同.
+     *
+     * <p>同时声明 {@code value} 与 {@link #cacheNames()} 时 <b>{@code value} 优先</b>；
+     * 只声明其中一个时按声明的那个解析（见 {@code COMPATIBILITY.md} 的注解属性解析规则）。
      */
     String[] value() default {};
 
     /**
      * 缓存名称别名，与 value 相同.
+     *
+     * <p>同时声明 {@link #value()} 时由 {@code value} 决定——本属性只在其为空时生效。
      */
     String[] cacheNames() default {};
 
@@ -70,8 +75,13 @@ public @interface RedisCacheable {
 
     /**
      * 缓存过期时间（秒）.
+     *
+     * <p>{@code 0}（即未设置）表示不作方法级 TTL 声明：该方法的条目改用 cache 级
+     * {@code resi-cache.default-ttl}（默认 30 分钟，{@code caches.*.ttl} 可覆盖）。
+     * 只有大于 0 的值才覆盖该配置默认值。与 {@link RedisCacheEvict#ttl()} 的未设置
+     * 编码一致。
      */
-    long ttl() default 60;
+    long ttl() default 0;
 
     /**
      * 缓存值的声明类型（兼容性元数据）.

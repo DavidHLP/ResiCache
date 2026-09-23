@@ -22,7 +22,9 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RedisProCacheConfigurationContractTest {
@@ -41,9 +43,7 @@ class RedisProCacheConfigurationContractTest {
     @Test
     void disabledMasterSwitch_alsoSkipsMetricsConfiguration() {
         new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(
-                        RedisCacheAutoConfiguration.class,
-                        CachingEnablementValidation.class))
+                .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
                 .withPropertyValues(
                         "resi-cache.enabled=false",
                         "resi-cache.metrics.enabled=true")
@@ -52,6 +52,7 @@ class RedisProCacheConfigurationContractTest {
                     assertThat(context)
                             .doesNotHaveBean(
                                     io.github.davidhlp.spring.cache.redis.cache.RedisCacheHealthIndicator.class);
+                    // 启用门只在运行时装配根声明一次:关闭主开关即不再导入启用校验
                     assertThat(context)
                             .doesNotHaveBean(
                                     CachingEnablementValidation.CachingEnabledValidator.class);
@@ -89,7 +90,36 @@ class RedisProCacheConfigurationContractTest {
                         assertThat(context).doesNotHaveBean(MeterRegistry.class);
                         assertThat(context).hasSingleBean(ResolvedMetrics.class);
                         assertThat(context.getBean(ResolvedMetrics.class).meterRegistry())
-                                .isNull();
+                                .isInstanceOf(DisabledMetricsRegistry.class)
+                                .isSameAs(ResolvedMetrics.resolve(null, new MockEnvironment())
+                                        .meterRegistry());
+                        assertThat(context.getBean(ResolvedMetrics.class).meterRegistry().getMeters())
+                                .as("无状态 sink:没有 bean 也不得留下 meter 痕迹")
+                                .isEmpty();
+                    });
+        }
+    }
+
+    @Test
+    void metricsDisabled_withAmbiguousMeterRegistries_stillAssembles() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withBean("firstRegistry", MeterRegistry.class, SimpleMeterRegistry::new)
+                    .withBean("secondRegistry", MeterRegistry.class, SimpleMeterRegistry::new)
+                    .withBean(RedisProCacheWriter.class,
+                            () -> org.mockito.Mockito.mock(RedisProCacheWriter.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        // 未启用 metrics 时不解析 provider:多个非 primary MeterRegistry 不得让装配失败
+                        assertThat(context).hasNotFailed();
+                        assertThat(context.getBean(ResolvedMetrics.class).meterRegistry())
+                                .isNotSameAs(context.getBean("firstRegistry"))
+                                .isNotSameAs(context.getBean("secondRegistry"));
                     });
         }
     }
@@ -137,17 +167,40 @@ class RedisProCacheConfigurationContractTest {
     }
 
     @Test
-    void entry_componentScan_excludesOperatorAndExplicitlyImportedConfigurations() {
+    void entry_componentScan_excludesOperatorBoundaryByClass() {
         ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
-        assertThat(scan.excludeFilters())
-                .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*RedisProxyCachingConfiguration.*"));
-        assertThat(scan.excludeFilters())
-                .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*SerializationMigrationEngine"));
-        assertThat(scan.excludeFilters())
-                .anySatisfy(filter -> assertThat(filter.pattern())
-                        .containsExactly(".*ResolvedMetricsConfiguration"));
+        assertThat(scan).isNotNull();
+        assertThat(java.util.Arrays.stream(scan.excludeFilters())
+                .filter(filter -> filter.type() == FilterType.ASSIGNABLE_TYPE)
+                .flatMap(filter -> java.util.Arrays.stream(filter.classes()))
+                .toList())
+                .containsExactly(SerializationMigrationOperatorConfiguration.class);
+    }
+
+    @Test
+    void entry_componentScan_usesNoOwnershipNamePattern() {
+        // 仅保留同包测试类过滤;bean 归属不再由类名正则表达
+        ComponentScan scan = RedisCacheAutoConfiguration.class.getAnnotation(ComponentScan.class);
+        assertThat(java.util.Arrays.stream(scan.excludeFilters())
+                .filter(filter -> filter.type() == FilterType.REGEX)
+                .flatMap(filter -> java.util.Arrays.stream(filter.pattern()))
+                .toList())
+                .containsExactly(".*Test.*");
+    }
+
+    @Test
+    void autoConfigurationImports_registerOnlyTheRuntimeRoot() throws Exception {
+        try (java.io.InputStream imports = RedisCacheAutoConfiguration.class.getResourceAsStream(
+                "/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports")) {
+            assertThat(imports).as("auto-configuration imports resource").isNotNull();
+            assertThat(new java.io.BufferedReader(
+                            new java.io.InputStreamReader(imports, java.nio.charset.StandardCharsets.UTF_8))
+                    .lines()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty())
+                    .toList())
+                    .containsExactly(RedisCacheAutoConfiguration.class.getName());
+        }
     }
 
     @Test
@@ -298,7 +351,7 @@ class RedisProCacheConfigurationContractTest {
     }
 
     @Test
-    void standardObserverBeans_areDeclaredWithOrder() {
+    void standardObservers_declareOrderOnTheirClass() {
         var observerMethods = java.util.Arrays.stream(
                         RedisProCacheConfiguration.class.getDeclaredMethods())
                 .filter(method -> io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver.class
@@ -306,16 +359,23 @@ class RedisProCacheConfigurationContractTest {
                 .toList();
 
         assertThat(observerMethods).hasSize(4);
-        assertThat(observerMethods).allSatisfy(method -> {
-            assertThat(method.getAnnotation(Bean.class))
-                    .as("observer factory must be a bean method")
-                    .isNotNull();
-            assertThat(method.getAnnotation(org.springframework.core.annotation.Order.class))
-                    .as("observer bean must be ordered")
-                    .isNotNull();
-        });
-        assertThat(observerMethods)
-                .extracting(method -> method.getAnnotation(
+        assertThat(observerMethods).allSatisfy(method ->
+                assertThat(method.getAnnotation(Bean.class))
+                        .as("observer factory must be a bean method")
+                        .isNotNull());
+
+        // 顺序契约落在 observer 类级 @Order —— Spring 解析注入列表时读取该注解;
+        // 工厂保持注入序,不再按实例可见的类级注解二次排序。
+        var observerClasses = observerMethods.stream()
+                .map(java.lang.reflect.Method::getReturnType)
+                .toList();
+        assertThat(observerClasses).allSatisfy(observerClass ->
+                assertThat(observerClass.getAnnotation(
+                        org.springframework.core.annotation.Order.class))
+                        .as("%s must carry class-level @Order", observerClass.getSimpleName())
+                        .isNotNull());
+        assertThat(observerClasses)
+                .extracting(c -> c.getAnnotation(
                         org.springframework.core.annotation.Order.class).value())
                 .containsExactlyInAnyOrder(1, 2, 3, 4);
     }
@@ -327,25 +387,52 @@ class RedisProCacheConfigurationContractTest {
 
     @Test
     void everyDefaultBeanDeclaresBackoff() {
-        String[] defaultBeanMethods = {
-                "methodMetadataResolver",
-                "cacheErrorHandler",
-                "cacheOperationResolver",
-                "bloomFilterConfig",
-                "bloomIFilter",
-                "redisProCacheWriter",
-                "defaultRedisCacheConfiguration",
-                "cacheManager",
-                "keyGenerator",
-                "cacheStatisticsCollector",
-                "systemClock",
-                "earlyExpirationExecutor"
-        };
+        java.util.List<Method> beanMethods = java.util.Arrays.stream(
+                        RedisProCacheConfiguration.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(Bean.class))
+                .toList();
 
-        for (String methodName : defaultBeanMethods) {
-            assertThat(conditionOn(methodName))
-                    .as("default bean method %s", methodName)
-                    .isNotNull();
+        assertThat(beanMethods).isNotEmpty();
+        // 标准 observer 是叠加钩子(用户 observer 与它们共存),不是可替换默认 bean;
+        // 该集合由 standardObservers_declareOrderOnTheirClass 固定为 4 个。
+        // 其余每个 @Bean 方法都必须按类型 back off —— 新增服务 bean 缺少注解除即失败。
+        assertThat(beanMethods)
+                .filteredOn(method -> !io.github.davidhlp.spring.cache.redis.chain.observer
+                        .ChainObserver.class.isAssignableFrom(method.getReturnType()))
+                .allSatisfy(method -> assertThat(method.getAnnotation(ConditionalOnMissingBean.class))
+                        .as("default bean method %s must back off by type", method.getName())
+                        .isNotNull());
+    }
+
+    @Test
+    void standardObservers_injectInDeclaredOrder() throws Exception {
+        try (org.springframework.boot.test.context.FilteredClassLoader classLoader =
+                new org.springframework.boot.test.context.FilteredClassLoader(
+                        org.redisson.api.RedissonClient.class)) {
+            new ApplicationContextRunner()
+                    .withClassLoader(classLoader)
+                    .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class))
+                    .withBean(RedisProCacheWriter.class,
+                            () -> org.mockito.Mockito.mock(RedisProCacheWriter.class))
+                    .withBean(RedisConnectionFactory.class,
+                            () -> org.mockito.Mockito.mock(RedisConnectionFactory.class))
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        // 类级 @Order 必须真的落到 Spring 的注入顺序上(工厂保持该顺序);
+                        // 若注解不生效,顺序会退化成 bean 名序(DebugLog 先于 MDC)。
+                        assertThat(context
+                                        .getBeanProvider(
+                                                io.github.davidhlp.spring.cache.redis.chain.observer
+                                                        .ChainObserver.class)
+                                        .orderedStream()
+                                        .map(observer -> observer.getClass().getSimpleName())
+                                        .toList())
+                                .containsExactly(
+                                        "MDCStampChainObserver",
+                                        "ChainDebugLogChainObserver",
+                                        "ChainTimerChainObserver",
+                                        "FiredCounterChainObserver");
+                    });
         }
     }
 

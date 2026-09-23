@@ -18,9 +18,12 @@ import lombok.extern.slf4j.Slf4j;
  * 提前过期任务的 Micrometer 指标注册与计数：从 {@code ThreadPoolEarlyExpirationExecutor} 抽出，
  * 将指标注册（3 个 Counter + 2 个 Gauge）与计数逻辑集中于单一协作类，无锁、线程安全。
  *
- * <p>{@code meterRegistry} 为 {@code null} 时不注册任何指标，所有 record 方法为空操作，
- * 支持测试与无指标场景。提取收益（locality）：原本散落在执行器构造器与各方法中的
- * Counter/Gauge 注册及 null 判定，现收敛为一处，执行器只需调用 {@code recordXxx()}。
+ * <p>{@code meterRegistry} 永不为 {@code null}：指标未启用（或应用无 {@code MeterRegistry}
+ * bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
+ * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），此时构造期直接走 null
+ * 分支——不构造 meter、不走 deny-all filter、不分配 Noop* counter/gauge，3 个 counter 字段
+ * 保持 null，所有 record 方法为空操作。提取收益（locality）：原本散落在执行器构造器与各方法中
+ * 的 Counter/Gauge 注册及 null 判定，现收敛为一处，执行器只需调用 {@code recordXxx()}。
  */
 @Slf4j
 final class RefreshTaskMetrics {
@@ -32,7 +35,8 @@ final class RefreshTaskMetrics {
     /**
      * 注册指标到给定 registry。
      *
-     * @param meterRegistry   Micrometer registry（null 则不注册，所有计数为空操作）
+     * @param meterRegistry   Micrometer registry（永不为 null；关闭路径为共享 no-op seam，
+     *                        其上的注册不发布、不保留）
      * @param inFlight        活跃任务映射（用于 {@code prerefresh.active} Gauge）
      * @param executorService 线程池（为 {@link ThreadPoolExecutor} 时注册 {@code prerefresh.queue.size} Gauge）
      */
@@ -40,7 +44,7 @@ final class RefreshTaskMetrics {
             MeterRegistry meterRegistry,
             ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
             ExecutorService executorService) {
-        if (meterRegistry == null) {
+        if (meterRegistry == null || DisabledMetricsRegistry.isDisabledSeam(meterRegistry)) {
             this.submittedCounter = null;
             this.completedCounter = null;
             this.cancelledCounter = null;
@@ -89,5 +93,23 @@ final class RefreshTaskMetrics {
         if (cancelledCounter != null) {
             cancelledCounter.increment();
         }
+    }
+
+    /**
+     * 测试用：暴露 3 个已注册 counter 的个数。关闭 seam / null registry 下应为 0，
+     * 启用 registry 下应为 3。
+     */
+    int registeredCounterCount() {
+        int registered = 0;
+        if (submittedCounter != null) {
+            registered++;
+        }
+        if (completedCounter != null) {
+            registered++;
+        }
+        if (cancelledCounter != null) {
+            registered++;
+        }
+        return registered;
     }
 }

@@ -5,15 +5,18 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.EarlyExpirationDecision;
+import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -57,7 +61,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
     private ValueOperations<String, Object> valueOperations;
 
     @Autowired
-    private NullValueEncoder nullValueEncoder;
+    private CacheValueCodec valueCodec;
 
     private EarlyExpirationHandler handler;
     private EarlyRefresh earlyRefresh;
@@ -280,23 +284,29 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
      * Chain-level contract: a synchronous early-expiration skip must surface as a MISS
      * through the real engine — the documented producer/consumer pair
      * (EarlyExpirationHandler writes {@code PrefetchDecision}, ActualCacheHandler reads it).
+     *
+     * <p>Assembly goes through the production {@link CacheHandlerChainFactory}, so the slot order
+     * declared by {@code HandlerOrder}/{@code @HandlerPriority} is what this asserts: a slot moved
+     * ahead of the consumer, or a {@code skipAll()} at the early-expiration slot, ends the chain
+     * with a SUCCESS and turns these assertions red.
      */
     @Nested
     @DisplayName("chain-level contract - sync refresh surfaces a miss")
     class ChainLevelMissContractTests {
 
         private CacheHandlerChain productionChain() {
-            ActualCacheHandler actual = new ActualCacheHandler(
-                    redisTemplate,
-                    valueOperations,
-                    nullValueEncoder,
-                    earlyExpirationExecutor,
-                    new CacheErrorHandler());
-            return new CacheHandlerChain(new ChainEngine())
-                    .addHandler(handler)                 // EarlyExpirationHandler (250)
-                    .addHandler(new TtlHandler())        // 300 — write-path only
-                    .addHandler(new NullValueHandler())  // 400 — write-path only
-                    .addHandler(actual);                 // 500 — the documented consumer
+            List<CacheHandler> unordered = List.of(
+                    new ActualCacheHandler(
+                            redisTemplate,
+                            valueOperations,
+                            valueCodec,
+                            earlyExpirationExecutor,
+                            new CacheErrorHandler()),
+                    new NullValueHandler(),        // 400 — write-path only
+                    new TtlHandler(),              // 300 — write-path only
+                    handler);                      // 250 — EarlyExpirationHandler, the producer
+            return new CacheHandlerChainFactory(unordered, new RedisProCacheProperties(),
+                    ResolvedMetrics.resolve(null, new MockEnvironment()), new ChainEngine(), List.of()).createChain();
         }
 
         @Test

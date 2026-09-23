@@ -7,7 +7,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.bloom.filter.BloomIFilter;
-import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
@@ -29,8 +28,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Slf4j
 @Configuration(proxyBeanMethods = false)
 @Import({
-        // RedisCacheAutoConfiguration scans the internal runtime package. These two
-        // configurations are the intentional scan exclusions and remain explicit.
+        // 显式导入:ResolvedMetricsConfiguration 不是扫描候选,RedisProxyCachingConfiguration
+        // 必须在不做内部包扫描的上下文里同样完成装配。
         ResolvedMetricsConfiguration.class,
         RedisProxyCachingConfiguration.class
 })
@@ -41,24 +40,24 @@ class RedisProCacheConfiguration {
      * 标准 ChainObserver beans — P1-API-001-C:标准和用户 observer 均为有序 Bean,
      * 由 {@link CacheHandlerChainFactory} 单一装配点注入 Engine。
      *
-     * <p>顺序(MDC → DebugLog → Timer → FiredCounter)由 {@code @Order} 显式声明:
-     * MDC 先 stamp,DEBUG log 再读 requestId,Timer/FiredCounter 最后打点。
-     * registry 缺失时 Timer/FiredCounter observer 内部 no-op。
+     * <p>执行顺序(MDC → DebugLog → Timer → FiredCounter)由 observer 类自身的
+     * {@code @Order} 单一声明(见各 observer 类),Spring 注入列表时据此排序,工厂保持
+     * 注入序,故 bean 方法不再重复声明。用户 observer 用 {@code Ordered} 或 {@code @Bean}
+     * 方法上的 {@code @Order} 表达的顺序同样生效。MDC 先 stamp,DEBUG log 再读 requestId,
+     * Timer/FiredCounter 最后打点。registry 由 {@link ResolvedMetrics} 单一决议;
+     * metrics 未启用时它是 no-op seam,Timer/FiredCounter observer 照常装配。
      */
     @Bean
-    @org.springframework.core.annotation.Order(1)
     public io.github.davidhlp.spring.cache.redis.cache.MDCStampChainObserver mdcStampChainObserver() {
         return new io.github.davidhlp.spring.cache.redis.cache.MDCStampChainObserver();
     }
 
     @Bean
-    @org.springframework.core.annotation.Order(2)
     public io.github.davidhlp.spring.cache.redis.cache.ChainDebugLogChainObserver chainDebugLogChainObserver() {
         return new io.github.davidhlp.spring.cache.redis.cache.ChainDebugLogChainObserver();
     }
 
     @Bean
-    @org.springframework.core.annotation.Order(3)
     public io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver chainTimerChainObserver(
             ResolvedMetrics resolvedMetrics) {
         return new io.github.davidhlp.spring.cache.redis.cache.ChainTimerChainObserver(
@@ -66,7 +65,6 @@ class RedisProCacheConfiguration {
     }
 
     @Bean
-    @org.springframework.core.annotation.Order(4)
     public io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver firedCounterChainObserver(
             ResolvedMetrics resolvedMetrics) {
         return new io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver(
@@ -82,11 +80,11 @@ class RedisProCacheConfiguration {
     @Bean
     @ConditionalOnMissingBean(CacheErrorHandler.class)
     public CacheErrorHandler cacheErrorHandler(ResolvedMetrics resolvedMetrics) {
-        MeterRegistry registry = resolvedMetrics.meterRegistry();
-        // Failure-metrics contract:统一失败指标 reporter(registry 缺失 → 内部 no-op)
+        // Failure-metrics contract:统一失败指标 reporter;metrics 未启用时
+        // ResolvedMetrics 交出 no-op seam,此处不再按 null 分支。
         return new CacheErrorHandler(
-                registry == null ? null
-                        : new io.github.davidhlp.spring.cache.redis.cache.CacheFailureReporter(registry));
+                new io.github.davidhlp.spring.cache.redis.cache.CacheFailureReporter(
+                        resolvedMetrics.meterRegistry()));
     }
 
     @Bean
@@ -181,13 +179,8 @@ class RedisProCacheConfiguration {
         Map<String, RedisCacheConfiguration> initialCacheConfigurations =
                 buildInitialCacheConfigurations(properties, defaultRedisCacheConfiguration);
 
-        MeterRegistry meterRegistry = resolvedMetrics.meterRegistry();
-        if (meterRegistry == null) {
-            log.debug("MeterRegistry not available or metrics disabled — metrics will be disabled");
-        }
-
         ResiCacheFeatures features = ResiCacheFeatures.builder()
-                .meterRegistry(meterRegistry)
+                .meterRegistry(resolvedMetrics.meterRegistry())
                 .bloomGate(bloomGate)
                 .operationResolver(operationResolver)
                 .syncSupport(syncSupport)

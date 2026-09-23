@@ -6,23 +6,13 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
 
 /**
- * 通过 in-flight {@link CompletableFuture} 实现 single-flight 同步加载:
+ * 通过 in-flight {@code CompletableFuture} 实现 single-flight 同步加载:
  * 同一 key 的并发请求中,只有 leader 线程获取分布式锁并执行 loader,
  * follower 线程共享 leader 的结果(不重复获取分布式锁、不重复回源)。
  *
@@ -34,7 +24,7 @@ import org.springframework.stereotype.Component;
  *       (1 个回源)反而更硬。</li>
  *   <li><b>可重入(future 不可重入陷阱)</b>:chain 内 {@code SyncLockHandler} 会嵌套重入
  *       {@code executeSync}(同 key —— {@code RedisProCache.executeSyncLoad} 的 loader 内
- *       {@code super.get} → chain GET → SyncLockHandler 再次进入)。{@link CompletableFuture}
+ *       {@code super.get} → chain GET → SyncLockHandler 再次进入)。{@code CompletableFuture}
  *       不可重入(leader 重入会 join 自己 → 死锁),故用 {@link ThreadLocal} 标记当前线程
  *       已持有的 key,重入时走 fast-path 直接跑 loader —— 语义等价,且省去二次分布式锁往返。</li>
  *   <li><b>失败传播</b>:leader loader 抛异常 → future {@code completeExceptionally},
@@ -55,6 +45,9 @@ import org.springframework.stereotype.Component;
  * <p>注意:{@code sync=true} 是 per-method 注解属性,启动期不可穷举,故 fail-fast 的精确触发点
  * 在运行期 {@link #executeSync}(即用户确实声明了 sync 且缓存未命中);启动期仅在检测到空后端时
  * 发出告警(见 {@link #warnIfNoDistributedBackend()}),仍允许启动(用户可能根本不用 sync)。
+ *
+ * <p>本类的 {@link #protectionMode()} 同时是健康侧( {@code RedisCacheHealthIndicator} )
+ * 报告 sync 保护状态的唯一推导点。
  */
 @Slf4j
 @Component
@@ -103,17 +96,29 @@ class SyncSupport {
         }
     }
 
+    /** sync 保护的后端实测模式(构造期即固定:后端列表 + local-only 属性)。 */
+    enum ProtectionMode {
+        /** 分布式锁后端存在,sync=true 按设计工作。 */
+        DISTRIBUTED,
+        /** 无后端且显式 {@code local-only=true}:sync=true 降级为单 JVM 同步。 */
+        LOCAL_ONLY,
+        /** 无后端且未启用 local-only:sync=true 首次未命中即 fail-fast。 */
+        FAIL_FAST
+    }
+
     /**
-     * 健康查询:同步锁后端是否缺失。{@code true} = 未显式
-     * {@code localOnly=true} 且无分布式锁后端(Redisson 缺失);此时 sync=true
-     * 首次未命中会 fail-fast。暴露此信号供
-     * {@code RedisCacheHealthIndicator} 级联到 /actuator/health。
+     * 健康查询:sync 保护的实测模式。后端存在性与 {@code local-only} 属性都归本类
+     * 所有,消费方(如 {@code RedisCacheHealthIndicator})不重复推导。
      *
-     * @return 是否处于缺失分布式后端且未显式允许 local-only 的状态
+     * @return 当前保护模式
      */
-    public boolean isDegraded() {
-        return !properties.getSyncLock().isLocalOnly()
-                && distributedManagers.isEmpty();
+    public ProtectionMode protectionMode() {
+        if (!distributedManagers.isEmpty()) {
+            return ProtectionMode.DISTRIBUTED;
+        }
+        return properties.getSyncLock().isLocalOnly()
+                ? ProtectionMode.LOCAL_ONLY
+                : ProtectionMode.FAIL_FAST;
     }
 
     /**
@@ -137,34 +142,6 @@ class SyncSupport {
                       final Supplier<T> loader,
                       final SyncLockTimeout.Resolved timeout) {
         return electRole(key, loader, timeout).run();
-    }
-
-    /**
-     * 选择分布式锁、本地串行或 fail-fast 路径。local-only fallback 由 state owner
-     * 负责,锁执行器只处理真正的分布式锁。
-     */
-    static <T> T executeRoleWork(Logger log,
-                                  String key,
-                                  SyncLockTimeout.Resolved timeout,
-                                  Supplier<T> work,
-                                  List<LockManager> distributedManagers,
-                                  RedisProCacheProperties properties,
-                                  SyncStateAccess state) throws InterruptedException {
-        if (distributedManagers.isEmpty()) {
-            if (properties.getSyncLock().isLocalOnly()) {
-                log.warn("protection.degraded=local-only: sync=true 但无分布式锁后端, "
-                        + "已按 local-only=true 降级为单 JVM 同步 (keyFingerprint={})",
-                        FailureDiagnostics.keyFingerprint(key));
-                return state.executeLocalOnly(key, timeout, work);
-            }
-            // Key-privacy contract: exception message omits raw key.
-            throw new IllegalStateException(
-                    "sync=true 已声明但无分布式锁后端 (无 RedissonClient / LockManager bean)。"
-                            + "拒绝静默退化为单 JVM synchronized (多实例下无法防击穿)。"
-                            + "请引入 Redisson, 或显式设 resi-cache.sync-lock.local-only=true 接受单实例降级。"
-                            + " [keyFingerprint=" + FailureDiagnostics.keyFingerprint(key) + "]");
-        }
-        return SyncRoleLockExecutor.run(log, key, timeout, work, distributedManagers);
     }
 
     /**
@@ -207,104 +184,5 @@ class SyncSupport {
                     distributedManagers, properties, state);
         }
         return new SyncRole.Follower<>(key, registration.future(), timeout);
-    }
-
-    /**
-     * 一个 owner 统一管理 key registry 的 publication、completion、cleanup 和 local-only queue。
-     * 角色只能通过 {@link SyncStateAccess} 调用这些动作,不能直接操作 registry。
-     */
-    private static final class SyncState implements SyncStateAccess {
-
-        private final ConcurrentMap<String, CompletableFuture<Object>> inFlight = new ConcurrentHashMap<>();
-        private final ConcurrentMap<String, CompletableFuture<Void>> localOnlyTails = new ConcurrentHashMap<>();
-        private final ThreadLocal<Set<String>> reentrantKeys = ThreadLocal.withInitial(HashSet::new);
-
-        @Override
-        public boolean isReentrant(String key) {
-            return reentrantKeys.get().contains(key);
-        }
-
-        @Override
-        public void enter(String key) {
-            reentrantKeys.get().add(key);
-        }
-
-        @Override
-        public void exit(String key) {
-            reentrantKeys.get().remove(key);
-        }
-
-        @Override
-        public SyncRegistration publish(String key) {
-            CompletableFuture<Object> mine = new CompletableFuture<>();
-            CompletableFuture<Object> existing = inFlight.putIfAbsent(key, mine);
-            return existing == null
-                    ? new SyncRegistration(key, mine, true)
-                    : new SyncRegistration(key, existing, false);
-        }
-
-        @Override
-        public void complete(SyncRegistration registration, Object value, Throwable failure) {
-            if (failure == null) {
-                registration.future().complete(value);
-            } else {
-                registration.future().completeExceptionally(failure);
-            }
-        }
-
-        @Override
-        public void cleanup(SyncRegistration registration) {
-            if (registration.leader()) {
-                // 只移除自己发布的 future,避免误删后一个 leader。
-                inFlight.remove(registration.key(), registration.future());
-            }
-        }
-
-        @Override
-        public <T> T executeLocalOnly(String key,
-                                      SyncLockTimeout.Resolved timeout,
-                                      Supplier<T> work) {
-            AtomicReference<CompletableFuture<Void>> predecessorRef = new AtomicReference<>();
-            CompletableFuture<Void> current = new CompletableFuture<>();
-            CompletableFuture<Void> tail = localOnlyTails.compute(key, (ignored, predecessor) -> {
-                predecessorRef.set(predecessor);
-                return predecessor == null ? current : CompletableFuture.allOf(predecessor, current);
-            });
-            tail.whenComplete((ignored, failure) -> localOnlyTails.remove(key, tail));
-            CompletableFuture<Void> predecessor = predecessorRef.get();
-            try {
-                if (predecessor != null) {
-                    awaitPredecessor(key, predecessor, timeout);
-                }
-                return work.get();
-            } finally {
-                current.complete(null);
-            }
-        }
-
-        private static void awaitPredecessor(String key,
-                                             CompletableFuture<Void> predecessor,
-                                             SyncLockTimeout.Resolved timeout) {
-            long timeoutSeconds = timeout.seconds();
-            try {
-                predecessor.get(Math.max(timeoutSeconds, 0L), TimeUnit.SECONDS);
-            } catch (final TimeoutException e) {
-                throw new IllegalStateException(
-                        "Timed out after " + timeoutSeconds
-                                + "s waiting for the local-only predecessor (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
-            } catch (final ExecutionException e) {
-                // 前驱 future 只会 complete(null);兜底避免把 checked 异常漏给调用方。
-                throw new IllegalStateException(
-                        "Local-only predecessor failed (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")",
-                        e.getCause() != null ? e.getCause() : e);
-            } catch (final InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException(
-                        "Thread interrupted while waiting for the local-only predecessor (keyFingerprint="
-                                + FailureDiagnostics.keyFingerprint(key) + ")", e);
-            }
-        }
     }
 }

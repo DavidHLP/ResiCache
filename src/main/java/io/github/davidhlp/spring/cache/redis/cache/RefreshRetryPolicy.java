@@ -47,21 +47,16 @@ final class RefreshRetryPolicy {
                 return; // 成功，退出
             } catch (Exception ex) {
                 lastException = ex;
-                // Key-privacy contract: WARN/ERROR includes only keyFingerprint, never raw key
-                log.warn("Async early-expiration failed (attempt {}/{}): keyFingerprint={}, cause={}",
-                        attempt, MAX_RETRY_COUNT, FailureDiagnostics.keyFingerprint(key),
-                        FailureDiagnostics.sanitizedFailure(ex));
-                log.debug("Async early-expiration failure detail: attempt {}/{}",
-                        attempt, MAX_RETRY_COUNT, ex);
+                FailureReport.warn(log,
+                        "Async early-expiration failed (attempt " + attempt + "/" + MAX_RETRY_COUNT + ")",
+                        null, key, ex);
 
                 if (attempt < MAX_RETRY_COUNT) {
                     try {
                         Thread.sleep(RETRY_DELAY_MS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        log.warn("Retry interrupted, continuing with next attempt: keyFingerprint={}, cause={}",
-                                FailureDiagnostics.keyFingerprint(key),
-                                FailureDiagnostics.sanitizedFailure(ie));
+                        FailureReport.warn(log, "Retry interrupted, continuing with next attempt", null, key, ie);
                         continue; // 继续下一次重试而非退出循环
                     }
                 }
@@ -70,11 +65,8 @@ final class RefreshRetryPolicy {
 
         // 所有重试都失败
         if (lastException != null) {
-            log.error("Async early-expiration failed after {} attempts: keyFingerprint={}, cause={}",
-                    MAX_RETRY_COUNT, FailureDiagnostics.keyFingerprint(key),
-                    FailureDiagnostics.sanitizedFailure(lastException));
-            log.debug("Async early-expiration final failure detail ({} attempts)",
-                    MAX_RETRY_COUNT, lastException);
+            FailureReport.error(log, "Async early-expiration failed after " + MAX_RETRY_COUNT + " attempts",
+                    null, key, lastException);
             throw new RuntimeException(
                     "Pre-refresh failed after " + MAX_RETRY_COUNT + " attempts", lastException);
         }

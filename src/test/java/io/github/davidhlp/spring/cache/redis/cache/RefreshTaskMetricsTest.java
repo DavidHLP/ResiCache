@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
@@ -75,6 +76,34 @@ class RefreshTaskMetricsTest {
 
         org.assertj.core.api.Assertions.assertThat(
                 registry.counter("prerefresh.cancelled").count()).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("关闭 seam — 3 个 counter 都不注册(字段保持 null,record 走 null 短路)")
+    void disabledSeam_registersNoCounters() {
+        RefreshTaskMetrics metrics = new RefreshTaskMetrics(
+                DisabledMetricsRegistry.INSTANCE,
+                new ConcurrentHashMap<>(),
+                Executors.newSingleThreadExecutor());
+
+        assertThat(metrics.registeredCounterCount())
+                .as("关闭 seam 上注册不分配任何 counter")
+                .isZero();
+        assertThatCode(() -> {
+            metrics.recordSubmitted();
+            metrics.recordCompleted();
+            metrics.recordCancelled();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("启用 registry — 3 个 counter 全部注册")
+    void enabledRegistry_registersAllCounters() {
+        RefreshTaskMetrics metrics = new RefreshTaskMetrics(
+                new SimpleMeterRegistry(), new ConcurrentHashMap<>(),
+                Executors.newSingleThreadExecutor());
+
+        assertThat(metrics.registeredCounterCount()).isEqualTo(3);
     }
 
     @Test

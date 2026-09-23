@@ -14,6 +14,7 @@ import io.micrometer.core.instrument.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import org.springframework.core.annotation.Order;
 
 /**
  * 责任链节点级 Micrometer Timer。
@@ -28,30 +29,46 @@ import java.util.concurrent.TimeUnit;
  * handler 类型、三值 decision 与应用配置的 cacheName。
  *
  * <p>线程安全：Timer map 支持并发注册；{@link TimerScope} 是单次节点调用的不可变
- * token，不在 observer 内保存共享的 per-call 状态。registry 缺失时全程 no-op。
+ * token，不在 observer 内保存共享的 per-call 状态。registry 由 {@link ResolvedMetrics}
+ * 单一决议、永不为 null；metrics 未启用时它是 no-op seam，关闭路径不读时钟、不分配
+ * scope token、不注册、不分配、不保留任何 timer —— map 保持为空，节点起点返回 null。
  */
+@Order(3) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class ChainTimerChainObserver implements ChainObserver {
 
     static final String METRIC_NAME = "resicache.chain.execute";
 
     private final MeterRegistry registry;
+    /** 关闭路径唯一判据 —— 构造期从 seam 推导一次,热路径只分支 final 字段。 */
+    private final boolean disabled;
     private final ConcurrentMap<TimerKey, Timer> timers = new ConcurrentHashMap<>();
 
     public ChainTimerChainObserver(MeterRegistry registry) {
         this.registry = registry;
+        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
     }
 
     @Override
     public Object onNodeStart(CacheHandler handler, CacheContext context) {
-        return registry == null ? null : new TimerScope(System.nanoTime());
+        // 关闭路径不分配 token:Engine 按 index 配对回传 null,onNodeEnd 直接返回,
+        // 与 metrics 未启用时的历史行为一致(既不计时,也不读时钟)。
+        return disabled ? null : new TimerScope(System.nanoTime());
     }
 
     @Override
     public void onNodeEnd(CacheHandler handler, CacheContext context,
                           Object scopeToken, HandlerResult result) {
-        if (registry == null || result == null || !(scopeToken instanceof TimerScope scope)) {
+        if (disabled || result == null || scopeToken == null) {
+            // 故障节点没有 HandlerResult,不伪造 decision;token 为 null 有两处来源:
+            // 本 observer 在关闭 seam 时不分配 token,或本人 onNodeStart 抛异常
+            // (Engine 不产生 token)。两种情形都无样本可记录。
+            // disabled:关闭路径不构造 TimerKey、不写 map、不分配 NoopTimer。
             return;
         }
+        // Engine 按 observer index 严格配对回传,故 token 必然是本人 onNodeStart 返回的
+        // TimerScope(见 ChainObserver 的 scope token 机制说明)—— 协议保证的类型,
+        // 不做防御性 instanceof 重检。
+        TimerScope scope = (TimerScope) scopeToken;
         TimerKey key = new TimerKey(
                 CacheHandlerChain.handlerTag(handler),
                 result.decision().name(),
@@ -67,6 +84,11 @@ final class ChainTimerChainObserver implements ChainObserver {
                 .tag("decision", key.decision())
                 .tag("cacheName", key.cacheName())
                 .register(registry);
+    }
+
+    /** 测试用：暴露当前已注册的 timer 数。 */
+    int registeredTimerCount() {
+        return timers.size();
     }
 
     private record TimerScope(long startNanos) {

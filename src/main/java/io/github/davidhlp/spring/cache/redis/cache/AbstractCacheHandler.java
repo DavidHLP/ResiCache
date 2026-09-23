@@ -75,21 +75,27 @@ abstract class AbstractCacheHandler implements CacheHandler {
 
     /**
      * 语义 counter 字段 — 由 {@link #attachMeterRegistry} 在子类声明
-     * {@link #semanticCounter()} 非 null 时从元数据注册；registry 缺失时为 null。
+     * {@link #semanticCounter()} 非 null 时从元数据注册；传入 null registry
+     * （仅测试/防御路径）时为 null。
      */
     private Counter semanticCounter;
 
     /**
      * 工厂建链阶段注入 MeterRegistry（{@code ChainHandlerChainFactory} 在
-     * {@code createChain} 中遍历进链 handler 时调用）。registry 非空时子类
-     * override {@link #semanticCounter()} 声明自身语义 counter 元数据
+     * {@code createChain} 中遍历进链 handler 时调用）。生产路径注入的 registry 永不为 null
+     * —— 指标未启用（或应用无 {@code MeterRegistry} bean）时它是共享无状态的
+     * {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
+     * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），此时本方法直接返回：
+     * 不构造 counter、不走 deny-all filter、不分配 Noop* meter，{@code semanticCounter}
+     * 保持 null。registry 非空且非关闭 seam 时子类 override
+     * {@link #semanticCounter()} 声明自身语义 counter 元数据
      * （{@link CounterMetadata}），基类从元数据构建并持有唯一 counter 字段。
      * uniform fired counter 由 {@code FiredCounterChainObserver} 按进链 handler
-     * 类统一注册，不在本方法范围。registry 缺失或子类未声明元数据时本方法为
-     * no-op。幂等：同名同 tag 重复 register 返回既有实例。
+     * 类统一注册，不在本方法范围。registry 为 null（仅测试/防御路径）、为关闭 seam 或
+     * 子类未声明元数据时本方法为 no-op。幂等：同名同 tag 重复 register 返回既有实例。
      */
     public void attachMeterRegistry(MeterRegistry registry) {
-        if (registry == null) {
+        if (registry == null || DisabledMetricsRegistry.isDisabledSeam(registry)) {
             return;
         }
         CounterMetadata metadata = semanticCounter();
@@ -152,12 +158,12 @@ abstract class AbstractCacheHandler implements CacheHandler {
     }
 
     /**
-     * handle 默认实现 — 由 Engine 调用。
+     * handle 默认实现 — 单参形态没有剩余链可推进,委托二参形态并传入基类统一提供的
+     * "无剩余链"句柄;shouldHandle 分发决策只在二参形态实现一次。
      *
      * <p>Engine 已在调用本方法前完成：
      * <ul>
      *   <li>{@code skipRemaining} 短路检测（isSkipRemaining 返 true 时根本不调本方法）</li>
-     *   <li>observer.beforeNode（DEBUG / fired counter）</li>
      * </ul>
      * Engine 在本方法返回后做：
      * <ul>
@@ -166,14 +172,11 @@ abstract class AbstractCacheHandler implements CacheHandler {
      *   <li>推进到下一个 handler（CONTINUE）</li>
      * </ul>
      *
-     * 本方法只把单参调用转为统一的二参处理钩子，并提供显式的"无剩余链"句柄。
      * 链推进由 {@link ChainEngine} 统一驱动。
      */
     @Override
     public HandlerResult handle(CacheContext context) {
-        return shouldHandle(context)
-                ? doHandle(context, NO_REMAINDER)
-                : HandlerResult.continueChain();
+        return handle(context, NO_REMAINDER);
     }
 
     /**

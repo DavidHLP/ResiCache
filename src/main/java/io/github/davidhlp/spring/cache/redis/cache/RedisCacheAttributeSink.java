@@ -12,7 +12,10 @@ import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationM
  * <p><b>This interface is the real single source</b>: {@link RedisCacheAttributes} holds
  * ONE {@code COMMON_SINKS} constant typed against this interface, and the three builders realize
  * it. A missing or renamed setter on any builder is a <b>compile error</b>, not a silent drift.
- * Adding a common field is 2 touch points (one interface method + one COMMON_SINKS entry).
+ * Adding a common field is 2 touch points <em>on this seam</em> (one interface method + one
+ * COMMON_SINKS entry); the full end-to-end inventory — annotation declaration, projector,
+ * AOP face, builders, {@code CachePolicyView} — is enumerated in
+ * {@link RedisCacheAttributesProjector}.
  *
  * <p><b>Covariant returns</b>: each interface method returns {@code RedisCacheAttributeSink}.
  * The concrete builders' chainable setters already return their own {@code Builder} type, which

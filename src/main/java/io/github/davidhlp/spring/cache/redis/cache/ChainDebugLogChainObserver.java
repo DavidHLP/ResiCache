@@ -10,6 +10,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.core.annotation.Order;
 
 /**
  * ChainObserver 的 perNode 实现 — 每个被引擎求值的 handler 在 afterNode 阶段
@@ -27,9 +28,10 @@ import org.slf4j.MDC;
  * 则 requestId 为 null，日志降级为不含 id 形式（仅影响 DEBUG 可读性，不影响功能）。
  *
  * <p>线程安全：MDC 是 ThreadLocal，本类在调用方线程上读取（Engine 串行调用
- * beforeNode → handler → afterNode），无共享状态。
+ * onNodeStart → handler → afterNode），无共享状态。
  */
 @Slf4j
+@Order(2) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class ChainDebugLogChainObserver implements ChainObserver {
 
     @Override

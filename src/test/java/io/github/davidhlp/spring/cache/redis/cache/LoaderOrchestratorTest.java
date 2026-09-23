@@ -368,13 +368,7 @@ class LoaderOrchestratorTest {
         @Test
         @DisplayName("bound callback constructor exposes a small production call surface")
         void boundCallbacks_productionEntryUsesOnlyLoaderAndKey() {
-            LoaderOrchestrator boundOrchestrator = new LoaderOrchestrator(
-                    null,
-                    null,
-                    null,
-                    key -> testRedisKey,
-                    key -> null,
-                    (key, value) -> { });
+            LoaderOrchestrator boundOrchestrator = bound(key -> null, (key, value) -> { });
 
             LoadOutcome<String> outcome = boundOrchestrator.orchestrate(
                     "testCache", () -> "loaded-value", "key1", operation(false, false));
@@ -530,10 +524,11 @@ class LoaderOrchestratorTest {
         }
 
         @Test
-        @DisplayName("可选保护依赖为 null → 合法装配,构造不抛")
-        void nullProtectionDeps_stillAccepted() {
-            assertThat(new LoaderOrchestrator(null, null, null, keyFn, checkFn, putFn))
-                    .isNotNull();
+        @DisplayName("保护协作依赖为 null → 装配错误,构造期抛 NPE(bloomGate)")
+        void nullProtectionDeps_rejectedAtConstruction() {
+            assertThatThrownBy(() -> new LoaderOrchestrator(null, null, null, keyFn, checkFn, putFn))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("bloomGate");
         }
 
         @Test

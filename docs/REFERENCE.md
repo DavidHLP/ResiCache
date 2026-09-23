@@ -36,8 +36,18 @@ The main configuration groups are:
 - `redis.*` topology/TLS/deployment fields;
 - `serializer.*` and operator migration settings;
 - per-cache overrides under `caches.*`;
-- optional `disabled-handlers`, metrics, and feature controls defined by the
-  current source.
+- optional `disabled-handlers` and feature controls defined by the current
+  source;
+- `resi-cache.metrics.enabled` (`java.lang.Boolean`, default `false`) — the
+  metrics opt-in. It has no `RedisProCacheProperties` field: package-private
+  `ResolvedMetrics` (`cache/`) reads it in exactly one place and hands every
+  caller a non-null metrics seam — the application `MeterRegistry` when the
+  property is `true` and such a bean exists, otherwise the single shared
+  `DisabledMetricsRegistry`: one stateless sink for the whole JVM that registers
+  and retains nothing, so turning metrics off cannot accumulate meter ids or tag
+  strings for dynamically named caches, and the same instance serves every
+  context that resolves it. Its metadata comes from
+  `additional-spring-configuration-metadata.json`.
 
 Configuration is validated at binding time. Do not infer a default from an old
 README snippet when the properties class or generated metadata differs.
@@ -58,6 +68,32 @@ README snippet when the properties class or generated metadata differs.
 - Protection switches are resolved at startup. A global protection-off keeps
   TTL and disables Bloom, sync-lock, early-expiration, and null-value handlers;
   a per-mechanism true cannot re-enable one after global-off.
+
+### TTL resolution precedence
+
+Effective TTL resolves once, in package-private `TtlPolicy` (`cache/`; see
+[`ARCHITECTURE.md`](ARCHITECTURE.md)), from two inputs — the first match wins:
+
+1. **Annotation**: method-level `@RedisCacheable`/`@RedisCachePut` `ttl` when
+   greater than zero, optionally jittered by `randomTtl`/`variance`. An unset
+   attribute is `0` and declares no method-level TTL; `@RedisCacheEvict.ttl()`
+   uses the same unset encoding. The annotation is the only declaration that
+   can override the configured default.
+2. **Duration parameter**: the write-path TTL Spring Data Redis passes from the
+   cache-level `resi-cache.default-ttl` (default `30m`, overridable per cache
+   under `caches.*.ttl`). This is the only implicit default, and it applies
+   whenever no method-level TTL is declared — an annotation without `ttl`, a
+   plain Spring `@Cacheable` in `SELECTIVE` mode, or `ttl=0`.
+3. **Permanent entry**: a zero, negative, or `null` parameter applies no TTL
+   and the entry has no expiry. Spring Data Redis 4.0 has no separate `null`
+   case on a write path: `RedisCacheConfiguration`'s default `TtlFunction` is
+   `persistent()`, i.e. `Duration.ZERO`, and `entryTtl` rejects `null` — a
+   cache configured without expiry therefore produces a zero parameter.
+
+The `ttl` attribute no longer carries an implicit `60`-second default. An
+annotated method that does not set `ttl` now expires its entries after the
+configured default rather than after `60s`; the change and the migration
+options are recorded in [`COMPATIBILITY.md`](../COMPATIBILITY.md).
 
 ## Cache operation outcomes
 

@@ -28,13 +28,15 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>{@link FlowControl#CONTINUE} — 推进到下一个 handler；无下一个则返回当前 result</li>
  *   <li>{@link FlowControl#SKIP_ALL} — 物化 {@code context.markSkipRemaining()}，
- *       返回 result，下游 handler 短路（由 beforeNode 检测 skipRemaining 状态）</li>
+ *       返回 result，下游 handler 短路（由 {@link #driveChain} 每轮检测
+ *       {@code isSkipRemaining()} 状态）</li>
  *   <li>{@link FlowControl#TERMINATE} — 直接返回 result</li>
  * </ul>
  *
  * <p><b>观测编排</b>：Engine 在链入口调用所有 observer 的
  * {@link ChainObserver#onChainStart(CacheContext)}，节点前后调用
- * {@link ChainObserver#beforeNode}/{@link ChainObserver#afterNode}，
+ * {@link ChainObserver#onNodeStart(CacheHandler, CacheContext)} /
+ * {@link ChainObserver#afterNode(CacheHandler, CacheContext, HandlerResult)}，
  * 链出口调用 {@link ChainObserver#onChainEnd(CacheContext, Object, CacheResult)}；
  * 正常完成时传最终结果，主路径抛异常时传 {@code null}（表示未产生结果）。
  * Observer 实现以 default no-op 形式提供（见 {@link ChainObserver}），
@@ -104,7 +106,8 @@ class ChainEngine {
      * <ol>
      *   <li>快照当前 handler 链；空链打 WARN(由 ChainLifecycle 仍跑 around-hook 配对)</li>
      *   <li>所有 observer.onChainStart — ChainLifecycle 入口</li>
-     *   <li>节点循环:beforeNode → handler.handle(ctx, continuation) → afterNode → decision switch — driveChain</li>
+     *   <li>节点循环:onNodeStart → handler.handle(ctx, continuation) → afterNode
+     *       → onNodeEnd → decision switch — driveChain</li>
      *   <li>post-process 遍历 — ChainLifecycle 内部</li>
      *   <li>所有 observer.onChainEnd(即使主路径异常也调用) — ChainLifecycle finally 守护</li>
      * </ol>
@@ -293,7 +296,7 @@ class ChainEngine {
          * <p>driveChain 抛出的异常继续向上冒泡;onChainEnd 由 finally 守护保证触发。
          */
         CacheResult run() {
-            ObserverDispatch observation = new ObserverDispatch();
+            ObserverDispatch<CacheResult> observation = new ObserverDispatch<>();
             Object[] scopeTokens = observation.start(
                     "onChainStart", observer -> observer.onChainStart(context));
             CacheResult mainResult = null;
@@ -311,27 +314,24 @@ class ChainEngine {
                         scopeTokens,
                         mainResult,
                         (observer, token, result) ->
-                                observer.onChainEnd(context, token, (CacheResult) result));
+                                observer.onChainEnd(context, token, result));
             }
             return mainResult;
         }
 
         /**
-         * 单节点调用：onNodeStart → beforeNode → handler.handle(ctx, next) → afterNode →
+         * 单节点调用：onNodeStart → handler.handle(ctx, next) → afterNode →
          * onNodeEnd。handler 异常仍向调用方冒泡；token 化的 onNodeEnd 由 finally
          * 配对，避免 around-node observer 泄漏调用状态。
          */
         HandlerResult invokeNode(CacheHandler handler, CacheContext nodeContext,
                                  ChainContinuation next) {
             // 每个节点单独拍 observer 快照,保持节点间注册变更隔离语义。
-            ObserverDispatch observation = new ObserverDispatch();
+            ObserverDispatch<HandlerResult> observation = new ObserverDispatch<>();
             Object[] scopeTokens = observation.start(
                     "onNodeStart", observer -> observer.onNodeStart(handler, nodeContext));
             HandlerResult result = null;
             try {
-                observation.each(
-                        "beforeNode",
-                        observer -> observer.beforeNode(handler, nodeContext));
                 result = handler.handle(nodeContext, next);
                 HandlerResult completedResult = result;
                 observation.each(
@@ -343,9 +343,8 @@ class ChainEngine {
                         "onNodeEnd",
                         scopeTokens,
                         result,
-                        (observer, token, completedResult) ->
-                                observer.onNodeEnd(
-                                        handler, nodeContext, token, (HandlerResult) completedResult));
+                        (observer, token, nodeResult) ->
+                                observer.onNodeEnd(handler, nodeContext, token, nodeResult));
             }
         }
 
@@ -364,15 +363,10 @@ class ChainEngine {
                     log.debug("Post-processing executed for: {}",
                             CacheHandlerChain.handlerTag(handler));
                 } catch (Exception e) {
-                    // Key-privacy contract: ERROR includes cacheName and exception types only;
-                    // 完整栈留 DEBUG(异常 message 可能内嵌 key)。
-                    log.error("Post-processing failed for: {}, operation: {}, cacheName: {}, cause={}",
-                            CacheHandlerChain.handlerTag(handler),
-                            context.getOperation(),
-                            context.getCacheName(),
-                            FailureDiagnostics.sanitizedFailure(e));
-                    log.debug("Post-processing failure detail: cacheName={}",
-                            context.getCacheName(), e);
+                    FailureReport.error(log,
+                            "Post-processing failed for " + CacheHandlerChain.handlerTag(handler)
+                                    + ", operation: " + context.getOperation(),
+                            context.getCacheName(), null, e);
                 }
             }
         }
@@ -380,8 +374,14 @@ class ChainEngine {
         /**
          * One observer snapshot plus shared positional token/error protocol for either
          * chain-level or node-level dispatch.
+         *
+         * <p>{@code R} is the dispatch level's own result type —
+         * {@link CacheResult} at chain level, {@link HandlerResult} at node level —
+         * so the end hook receives its result without a downcast. Scope tokens stay
+         * {@code Object}: they are observer-private per-call state, paired back
+         * positionally to the observer that returned them.
          */
-        private final class ObserverDispatch {
+        private final class ObserverDispatch<R> {
 
             private final List<ChainObserver> observerList = List.copyOf(observers);
 
@@ -408,8 +408,8 @@ class ChainEngine {
                 }
             }
 
-            void finish(String hookName, Object[] scopeTokens, Object result,
-                        ObserverEndHook hook) {
+            void finish(String hookName, Object[] scopeTokens, R result,
+                        ObserverEndHook<R> hook) {
                 for (int i = 0; i < observerList.size(); i++) {
                     ChainObserver observer = observerList.get(i);
                     try {
@@ -421,12 +421,8 @@ class ChainEngine {
             }
 
             private void logFailure(ChainObserver observer, String hookName, Exception ex) {
-                // Key-privacy contract: ERROR renders only exception types;
-                log.error("Observer {} {} failed: {}",
-                        observer.getClass().getSimpleName(), hookName,
-                        FailureDiagnostics.sanitizedFailure(ex));
-                log.debug("Observer {} {} failure detail",
-                        observer.getClass().getSimpleName(), hookName, ex);
+                FailureReport.error(log,
+                        "Observer " + observer.getClass().getSimpleName() + " " + hookName + " failed", ex);
             }
 
             @FunctionalInterface
@@ -440,8 +436,8 @@ class ChainEngine {
             }
 
             @FunctionalInterface
-            private interface ObserverEndHook {
-                void invoke(ChainObserver observer, Object scopeToken, Object result);
+            private interface ObserverEndHook<T> {
+                void invoke(ChainObserver observer, Object scopeToken, T result);
             }
         }
     }

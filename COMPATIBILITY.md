@@ -56,9 +56,13 @@ baseline.
   sync operation fails fast unless `resi-cache.sync-lock.local-only=true` is
   explicitly configured. |
 | **Micrometer / Actuator** | Optional | Cache metrics require
-  `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`.
-  `RedisCacheHealthIndicator` additionally requires Actuator, the
-  `HealthIndicator` class, and the same metrics property set to `true`. |
+  `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`;
+  otherwise the resolved metrics seam is a no-op adapter.
+  `RedisCacheHealthIndicator` requires Actuator and the `HealthIndicator`
+  class; it is not gated on the metrics property, so an application with
+  Actuator and Redis assembles it and each `/actuator/health` probe issues a
+  synchronous Redis `connection.ping()` round trip (see the probe-cost note in
+  [`docs/OPERATIONS.md`](docs/OPERATIONS.md)). |
 | **Caffeine** | Bundled | Used internally for the local hash cache and
   bloom-filter bitset; not exposed as a multi-level cache. |
 
@@ -108,6 +112,42 @@ not require a cache flush.
   `clear` deletion counts and PUT_IF_ABSENT insertion. `withStatisticsCollector`
   fully rebinds statistics; lock-wait duration remains unreported (zero).
 - **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; this behavior is unchanged from `main`.
+- **`value` and `cacheNames` resolution**: the three annotations are not
+  `@AliasFor`-linked, so one declaration may set both attributes. There is one
+  resolution for both faces (`RedisCacheAttributesProjector.resolveCacheNames`)
+  and **`value` wins**; `cacheNames` is the fallback and only applies when
+  `value` is empty. A declaration that sets both targets the `value` cache.
+  This is the operation face's `main` behaviour, so the cache in use is
+  unchanged. The policy face changes for that same both-set declaration: on
+  `main` the operation targeted `value` while the policy snapshot was
+  registered under `cacheNames`, so the declared policy silently did not apply
+  to the cache that was used. Both faces now resolve to `value`, and the policy
+  applies to the cache in use.
+- **TTL default precedence**: one module owns the resolution (`TtlPolicy`; the
+  ordered rule is specified in [`docs/REFERENCE.md`](docs/REFERENCE.md)). A
+  method-level `ttl` greater than zero is the only declaration that overrides
+  the configured cache TTL. An annotated method that does not set `ttl` (the
+  attribute's value is then `0`, i.e. no declaration) expires its entries
+  after `resi-cache.default-ttl` (default `30m`, per-cache `caches.*.ttl`
+  overrides it), exactly like a plain Spring `@Cacheable` in `SELECTIVE` mode.
+  There is no second implicit TTL default: a zero or negative Duration
+  parameter means an entry without expiry, and a `null` parameter is treated
+  the same way — Spring Data Redis 4.0 expresses "no expiry" as
+  `Duration.ZERO` (`RedisCacheConfiguration`'s default `TtlFunction` is
+  `persistent()`, and `entryTtl` rejects `null`), so a write path never
+  carries a `null` TTL.
+- **Annotation TTL fallback (behaviour change)**: on the previous build line
+  the `@RedisCacheable`/`@RedisCachePut` `ttl` attribute defaulted to `60`
+  seconds, so an annotated method without an explicit `ttl` expired its
+  entries after `60s` even when `resi-cache.default-ttl` was configured. The
+  annotation-side implicit `60` is removed: such a method now uses the
+  configured default (`30m` unless overridden), and `60` is no longer
+  reachable from the resolution path. Methods that set `ttl` explicitly are
+  unaffected. Deployments relying on the old `60s` expiry for methods that
+  omit `ttl` must either set `ttl` explicitly or set `resi-cache.default-ttl`.
+  A cache configured with no expiry (a caller-supplied
+  `RedisCacheConfiguration`) stays without expiry instead of receiving a
+  `60s` entry lifetime.
 - **Refresh metadata**: the version-2 envelope persists the fields required by
   early-expiration policy and version CAS (`ttl`, `createdTime`, access/visit
   counters, `expired`, and `version`). `startNanoTime` is process-local and is

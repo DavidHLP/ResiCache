@@ -5,6 +5,7 @@ annotation.RedisCaching
 cache.CacheOperationException
 cache.RedisProCache
 cache.RedisProCacheManager
+cache.SerializationMigrationOperatorConfiguration
 cache.metrics.CacheMetrics
 chain.CacheHandler
 chain.ChainContinuation

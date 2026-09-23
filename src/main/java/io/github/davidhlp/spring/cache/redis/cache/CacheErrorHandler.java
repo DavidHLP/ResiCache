@@ -90,11 +90,9 @@ class CacheErrorHandler {
             return;
         }
         if (strategyFor(operation) != ErrorStrategy.FAIL_FAST) {
-            log.warn("Cache {} failed; continuing best-effort: cacheName={}, kind={}, cause={}",
-                    operation,
-                    cacheName,
-                    result.failureKind(),
-                    FailureDiagnostics.sanitizedFailure(result.cause()));
+            FailureReport.warn(log,
+                    "Cache " + operation + " failed; continuing best-effort, kind=" + result.failureKind(),
+                    cacheName, null, result.cause());
             return;
         }
         throw new CacheOperationException(
@@ -158,24 +156,21 @@ class CacheErrorHandler {
             case FAIL_FAST -> {
                 // Key-privacy contract:ERROR 不打印 raw key / 异常 message(可能嵌 key);
                 // 完整栈(含 cause message)仅留 DEBUG 供开发诊断
-                log.error("Cache {} failed: cacheName={}, kind={}, cause={}",
-                        operationName, cacheName, failureKind,
-                        e == null ? "null" : e.getClass().getSimpleName());
-                log.debug("Cache {} failure detail: cacheName={}, kind={}",
-                        operationName, cacheName, failureKind, e);
+                FailureReport.error(log, "Cache " + operationName + " failed, kind=" + failureKind,
+                        cacheName, null, e);
                 yield result;
             }
             case GRACEFUL_DEGRADATION -> {
-                // Key-privacy contract:WARN 不打印 raw key / exception message
-                log.warn("Cache {} failed, degrading to miss: cacheName={}, kind={}, cause={}",
-                        operationName, cacheName, failureKind,
-                        e == null ? "null" : e.getClass().getSimpleName());
+                FailureReport.warn(log,
+                        "Cache " + operationName + " failed, degrading to miss, kind=" + failureKind,
+                        cacheName, null, e);
                 yield result;
             }
             case SILENT -> {
-                log.warn("Cache {} failed, best-effort removal continues: cacheName={}, kind={}, cause={}",
-                        operationName, cacheName, failureKind,
-                        e == null ? "null" : e.getClass().getSimpleName());
+                FailureReport.warn(log,
+                        "Cache " + operationName + " failed, best-effort removal continues, kind="
+                                + failureKind,
+                        cacheName, null, e);
                 yield result;
             }
         };

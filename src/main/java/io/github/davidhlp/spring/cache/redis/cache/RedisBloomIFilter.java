@@ -50,7 +50,7 @@ class RedisBloomIFilter implements BloomIFilter {
         this.hashPositionCache = Caffeine.newBuilder()
                 .maximumSize(config.getHashCacheSize())
                 .build();
-        if (meterRegistry != null) {
+        if (meterRegistry != null && !DisabledMetricsRegistry.isDisabledSeam(meterRegistry)) {
             this.checkFailureCounter = Counter.builder("bloomsift.check.failures")
                     .description("Number of bloom filter check failures")
                     .register(meterRegistry);
@@ -89,9 +89,7 @@ class RedisBloomIFilter implements BloomIFilter {
                     key,
                     Arrays.toString(positions));
         } catch (Exception e) {
-            log.error("Bloom filter add failed: cacheName={}, cause={}",
-                    cacheName, FailureDiagnostics.sanitizedFailure(e));
-            log.debug("Bloom filter add failure detail: cacheName={}", cacheName, e);
+            FailureReport.error(log, "Bloom filter add failed", cacheName, null, e);
             if (addFailureCounter != null) {
                 addFailureCounter.increment();
             }
@@ -137,9 +135,7 @@ class RedisBloomIFilter implements BloomIFilter {
             log.debug("Bloom filter hit (might exist): cacheName={}, key={}", cacheName, key);
             return true;
         } catch (Exception e) {
-            log.error("Bloom filter check failed: cacheName={}, cause={}",
-                    cacheName, FailureDiagnostics.sanitizedFailure(e));
-            log.debug("Bloom filter check failure detail: cacheName={}", cacheName, e);
+            FailureReport.error(log, "Bloom filter check failed", cacheName, null, e);
             if (checkFailureCounter != null) {
                 checkFailureCounter.increment();
             }
@@ -159,13 +155,26 @@ class RedisBloomIFilter implements BloomIFilter {
             redisTemplate.delete(bloomKey);
             log.debug("Bloom filter deleted: cacheName={}", cacheName);
         } catch (Exception e) {
-            log.error("Bloom filter delete failed: cacheName={}, cause={}",
-                    cacheName, FailureDiagnostics.sanitizedFailure(e));
-            log.debug("Bloom filter delete failure detail: cacheName={}", cacheName, e);
+            FailureReport.error(log, "Bloom filter delete failed", cacheName, null, e);
         }
     }
 
     private String bloomKey(String cacheName) {
         return config.getKeyPrefix() + cacheName;
+    }
+
+    /**
+     * 测试用：暴露 2 个已注册 failure counter 的个数。关闭 seam / null registry 下应为 0，
+     * 启用 registry 下应为 2。
+     */
+    int registeredFailureCounterCount() {
+        int registered = 0;
+        if (checkFailureCounter != null) {
+            registered++;
+        }
+        if (addFailureCounter != null) {
+            registered++;
+        }
+        return registered;
     }
 }

@@ -13,6 +13,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.annotation.Order;
 
 /**
  * ChainObserver 的 perNode 实现 — per-handler uniform {@code resicache.handler.fired}
@@ -23,7 +24,8 @@ import lombok.extern.slf4j.Slf4j;
  * 注册钩子（{@code onAttachMetrics}）。
  *
  * <p>disabled handler 语义 counter 不注册；fired 与语义
- * counter 都在 handler 进链时统一注册。registry 缺失时本 observer 全 no-op。
+ * counter 都在 handler 进链时统一注册。registry 由 {@link ResolvedMetrics} 单一决议、
+ * 永不为 null；metrics 未启用时它是 no-op seam，本 observer 无副作用。
  *
  * <p>per-handler span child 可在本类的 {@code afterNode} 内挂载，
  * 零修改 Engine 即可与本 counter 同步打点。
@@ -32,14 +34,18 @@ import lombok.extern.slf4j.Slf4j;
  * handler 类型竞争同 observer）；{@link Counter#increment()} 自身线程安全。
  */
 @Slf4j
+@Order(4) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class FiredCounterChainObserver implements ChainObserver {
 
     private final MeterRegistry registry;
+    /** 关闭路径唯一判据 —— 构造期从 seam 推导一次。 */
+    private final boolean disabled;
     /** handler 类 → fired counter；同名同 tag 重复 register 幂等，故 map 仅按 type 持有。 */
     private final ConcurrentMap<Class<? extends CacheHandler>, Counter> firedCounters = new ConcurrentHashMap<>();
 
     public FiredCounterChainObserver(MeterRegistry registry) {
         this.registry = registry;
+        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
     }
 
     @Override
@@ -54,7 +60,8 @@ final class FiredCounterChainObserver implements ChainObserver {
     @Override
     public void afterNode(CacheHandler handler, CacheContext context,
                           io.github.davidhlp.spring.cache.redis.chain.HandlerResult result) {
-        if (registry == null) {
+        if (disabled) {
+            // 关闭路径:跳过 handlerTag / ClassValue 查找、Counter.builder、map 写入与 NoopCounter。
             return;
         }
         String handlerTag = CacheHandlerChain.handlerTag(handler);

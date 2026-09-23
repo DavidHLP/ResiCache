@@ -77,6 +77,21 @@ class SyncSupportTest {
     }
 
     @Test
+    @DisplayName("protectionMode reports the actual sync-protection state for health reporting")
+    void protectionMode_tracksBackendAndLocalOnly() {
+        properties.getSyncLock().setLocalOnly(true);
+        assertThat(new SyncSupport(new ArrayList<>(), properties).protectionMode())
+                .isEqualTo(SyncSupport.ProtectionMode.LOCAL_ONLY);
+
+        properties.getSyncLock().setLocalOnly(false);
+        assertThat(new SyncSupport(new ArrayList<>(), properties).protectionMode())
+                .isEqualTo(SyncSupport.ProtectionMode.FAIL_FAST);
+
+        assertThat(new SyncSupport(new ArrayList<>(List.of(lockManager)), properties).protectionMode())
+                .isEqualTo(SyncSupport.ProtectionMode.DISTRIBUTED);
+    }
+
+    @Test
     @DisplayName("returns result when lock acquired successfully")
     void executeSync_lockAcquired_returnsResult() throws InterruptedException {
         when(lockManager.tryAcquire(anyString(), anyLong())).thenReturn(Optional.of(mock(LockManager.LockHandle.class)));

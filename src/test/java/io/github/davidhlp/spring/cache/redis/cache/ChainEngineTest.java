@@ -164,7 +164,7 @@ class ChainEngineTest {
             engine.execute(snapshot, newCtx());
 
             assertThat(observer.events).containsExactly(
-                    "onChainStart", "onNodeStart", "beforeNode", "afterNode",
+                    "onChainStart", "onNodeStart", "afterNode",
                     "onNodeEnd", "onChainEnd");
         }
 
@@ -249,9 +249,9 @@ class ChainEngineTest {
             // 嵌套推进不重复 stamp / record
             assertThat(observer.events).containsExactly(
                     "onChainStart",
-                    "onNodeStart", "beforeNode",                                   // h0 进入
-                    "onNodeStart", "beforeNode", "afterNode", "onNodeEnd",          // h1(嵌套)
-                    "onNodeStart", "beforeNode", "afterNode", "onNodeEnd",          // h2(嵌套)
+                    "onNodeStart",                                                  // h0 进入
+                    "onNodeStart", "afterNode", "onNodeEnd",                        // h1(嵌套)
+                    "onNodeStart", "afterNode", "onNodeEnd",                        // h2(嵌套)
                     "afterNode", "onNodeEnd",                                       // h0 退出
                     "onChainEnd");
         }
@@ -379,7 +379,6 @@ class ChainEngineTest {
                 }
                 @Override public Object onNodeStart(CacheHandler h, CacheContext context) { throw new RuntimeException("node start boom"); }
                 @Override public void onNodeEnd(CacheHandler h, CacheContext context, Object token, HandlerResult r) { throw new RuntimeException("node end boom"); }
-                @Override public void beforeNode(CacheHandler h, CacheContext context) { throw new RuntimeException("before boom"); }
                 @Override public void afterNode(CacheHandler h, CacheContext context, HandlerResult r) { throw new RuntimeException("after boom"); }
             };
             engine.addObserver(throwing);
@@ -636,7 +635,7 @@ class ChainEngineTest {
     // ==================== 测试用 observer(替换 mock) ====================
 
     /**
-     * 录制 4 个钩子调用顺序的 ChainObserver — 替换 mock 验证。
+     * 录制 5 个钩子调用顺序的 ChainObserver — 替换 mock 验证。
      *
      * <p>为什么用真实 observer 而非 mock:onChainStart 返回 Object 时,
      * {@code inOrder.verify(observer).onChainStart(any())} 这种 mock-based 验证
@@ -656,11 +655,6 @@ class ChainEngineTest {
         public Object onNodeStart(CacheHandler handler, CacheContext context) {
             events.add("onNodeStart");
             return null;
-        }
-
-        @Override
-        public void beforeNode(CacheHandler handler, CacheContext context) {
-            events.add("beforeNode");
         }
 
         @Override

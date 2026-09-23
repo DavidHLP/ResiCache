@@ -1,6 +1,7 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
+import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -12,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -81,6 +83,30 @@ class SyncRoleTest {
         assertThat(state.events).doesNotContain("publish", "complete", "cleanup");
     }
 
+    @Test
+    @DisplayName("leader lifecycle fires enter/complete/exit/cleanup exactly once per publication")
+    void leaderLifecycle_runsEachPublicationStepExactlyOnce() {
+        RecordingState state = new RecordingState();
+        SyncRegistration registration = state.publish("once-key");
+
+        String value = new SyncRole.Leader<>(
+                "once-key",
+                SyncLockTimeout.Resolved.fromSeconds(5),
+                () -> "ONCE",
+                registration,
+                List.of(),
+                localOnlyProperties(),
+                state).run();
+
+        assertThat(value).isEqualTo("ONCE");
+        // Double-enter would corrupt the reentrancy mark; double-complete would double-publish
+        // the shared future. Both must be exactly once for a single leader run.
+        assertThat(state.enterCount).isEqualTo(1);
+        assertThat(state.completeCount).isEqualTo(1);
+        assertThat(state.exitCount).isEqualTo(1);
+        assertThat(state.cleanupCount).isEqualTo(1);
+    }
+
     private static RedisProCacheProperties localOnlyProperties() {
         RedisProCacheProperties properties = new RedisProCacheProperties();
         properties.getSyncLock().setLocalOnly(true);
@@ -103,6 +129,10 @@ class SyncRoleTest {
         private final CountDownLatch completionObserved = new CountDownLatch(1);
         private final CompletableFuture<Object> future = new CompletableFuture<>();
         private final SyncRegistration registration = new SyncRegistration("lifecycle-key", future, true);
+        private int enterCount;
+        private int completeCount;
+        private int exitCount;
+        private int cleanupCount;
 
         @Override
         public boolean isReentrant(String key) {
@@ -111,11 +141,13 @@ class SyncRoleTest {
 
         @Override
         public void enter(String key) {
+            enterCount++;
             events.add("enter");
         }
 
         @Override
         public void exit(String key) {
+            exitCount++;
             events.add("exit");
         }
 
@@ -127,6 +159,7 @@ class SyncRoleTest {
 
         @Override
         public void complete(SyncRegistration published, Object value, Throwable failure) {
+            completeCount++;
             events.add("complete");
             completionObserved.countDown();
             if (failure == null) {
@@ -138,12 +171,20 @@ class SyncRoleTest {
 
         @Override
         public void cleanup(SyncRegistration published) {
+            cleanupCount++;
             events.add("cleanup");
         }
 
         @Override
         public <T> T executeLocalOnly(String key, SyncLockTimeout.Resolved timeout,
                                       Supplier<T> work) {
+            return work.get();
+        }
+
+        @Override
+        public <T> T executeRoleWork(Logger log, String key, SyncLockTimeout.Resolved timeout,
+                                     Supplier<T> work, List<LockManager> distributedManagers,
+                                     RedisProCacheProperties properties) {
             return work.get();
         }
     }

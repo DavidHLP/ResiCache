@@ -35,8 +35,11 @@ import org.springframework.lang.Nullable;
  *   <li>{@link #metrics()} — 返回当前 cache 实例的不可变指标快照</li>
  * </ul>
  *
- * <p><b>null-safe 语义</b>：{@link MeterRegistry} 为 null 时（即未启用指标），全部 7 个内部
- * 字段为 null，所有 record 方法走 no-op 路径。
+ * <p><b>no-op seam 语义</b>：{@link MeterRegistry} 永不为 null —— 指标未启用（或应用无
+ * {@code MeterRegistry} bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}，
+ * 唯一判据是 {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}。在该 seam 上
+ * 7 个注册全部短路为 null 字段：不构造 {@link io.micrometer.core.instrument.Meter.Id}、
+ * 不走 deny-all filter、不分配 Noop* meter，所有 record 方法走类内既有的 null 短路。
  *
  * <p><b>线程安全</b>：本类仅在 cache 构造期由单线程初始化；运行期 record 方法调
  * {@link Timer#record} / {@link Counter#increment}（Micrometer 自身线程安全）。metrics() 仅读
@@ -87,8 +90,11 @@ final class RedisProCacheMetricsRegistry {
     /**
      * 构造期一次性注册 7 个 metric — 在 cache 构造期调用一次，运行期 record 路径直接复用。
      *
-     * <p>内部注册 helper 保证 {@code meterRegistry == null} 时所有字段保持 null。
-     * @param meterRegistry Micrometer 注册表（可为 null → 全部 7 字段为 null）
+     * <p>生产路径注入的 registry 永不为 null —— 指标未启用（或应用无 {@code MeterRegistry}
+     * bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}，此时 7 个注册全部
+     * 短路：字段保持 null，不构造 meter id、不走 deny-all filter、不分配 Noop* meter。
+     * {@code meterRegistry == null} 是测试/防御路径，与关闭 seam 落到同一组 null 字段。
+     * @param meterRegistry Micrometer 注册表（生产路径永不为 null；为 null 或关闭 seam 时全部 7 字段为 null）
      * @param cacheName     cache 标识，作为 {@code tags("cache", cacheName)} 写入每个 metric
      */
     public RedisProCacheMetricsRegistry(@Nullable MeterRegistry meterRegistry, String cacheName) {
@@ -186,7 +192,7 @@ final class RedisProCacheMetricsRegistry {
     /**
      * 当前 cache 实例的指标快照。
      *
-     * <p>Counter 字段为 null 时（registry 缺失）对应字段为 0L。
+     * <p>Counter 字段为 null 时（仅测试/防御路径传入 null registry）对应字段为 0L。
      *
      * @return 不可变指标快照
      */
@@ -207,11 +213,28 @@ final class RedisProCacheMetricsRegistry {
         return cacheName;
     }
 
+    /**
+     * 测试用：暴露 7 个注册字段中非 null 的个数。关闭 seam / null registry 下应为 0，
+     * 启用 registry 下应为 7。
+     */
+    int registeredMeterCount() {
+        Object[] fields = {
+            getTimer, putTimer, evictTimer, hitCounter, missCounter, putCounter, evictCounter
+        };
+        int registered = 0;
+        for (Object field : fields) {
+            if (field != null) {
+                registered++;
+            }
+        }
+        return registered;
+    }
+
     // ==================== 私有 helper ====================
 
     private static Timer registerTimer(@Nullable MeterRegistry registry, String name,
                                        String description, String cacheName) {
-        if (registry == null) {
+        if (registry == null || DisabledMetricsRegistry.isDisabledSeam(registry)) {
             return null;
         }
         return Timer.builder(name)
@@ -222,7 +245,7 @@ final class RedisProCacheMetricsRegistry {
 
     private static Counter registerCounter(@Nullable MeterRegistry registry, String name,
                                            String description, String cacheName) {
-        if (registry == null) {
+        if (registry == null || DisabledMetricsRegistry.isDisabledSeam(registry)) {
             return null;
         }
         return Counter.builder(name)

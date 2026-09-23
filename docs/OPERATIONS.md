@@ -39,12 +39,32 @@ and must not be treated as multi-instance protection.
 
 ## Observability and diagnosis
 
-Metrics and the Redis health indicator are opt-in. Metrics require both
-`resi-cache.metrics.enabled=true` and the application's `MeterRegistry`; the
-health indicator additionally requires the optional Actuator dependency and
-the same metrics property to be enabled. Writer statistics and failure
-reporting are bounded by the contracts in `STABILITY.md` and `COMPATIBILITY.md`;
-pre-1.0 metric names and log wording are not a general compatibility promise.
+Cache metrics are opt-in: they require both `resi-cache.metrics.enabled=true`
+and the application's `MeterRegistry`, a decision resolved once during
+assembly. When either is missing the metrics seam is a no-op adapter and
+nothing is published. The Redis health indicator is not gated by that switch;
+it needs the optional Actuator dependency and reports Redis connectivity plus
+the sync-protection state: `protection.degraded=local-only` when no distributed
+lock backend is present and `resi-cache.sync-lock.local-only=true` was
+explicitly enabled, `protection.degraded=fail-fast` when no backend is present
+without that opt-in, and no protection detail when a backend exists. The
+indicator's overall status tracks Redis connectivity only: it stays UP while a
+protection detail is attached.
+
+Because that indicator is assembled whenever Actuator, Redis and ResiCache are
+all present, **every `/actuator/health` probe costs one synchronous
+`connection.ping()` Redis round trip**. An orchestrator or load balancer that
+polls health frequently (a Kubernetes liveness/readiness probe on a short
+period, for example) therefore adds that traffic to Redis for each probe, per
+application instance. Previously the indicator was gated on
+`resi-cache.metrics.enabled`, so applications that left metrics off had no
+probe traffic at all. Size the health-check interval and any Redis connection
+pool accordingly, and prefer a dedicated low-frequency probe over reusing the
+health endpoint as a load-balancer check.
+
+Writer statistics and failure reporting are bounded by
+the contracts in `STABILITY.md` and `COMPATIBILITY.md`; pre-1.0 metric names
+and log wording are not a general compatibility promise.
 
 WARN/ERROR diagnostics omit raw cache keys. The source uses cache-name or a
 short diagnostic fingerprint where available and keeps fuller detail at lower

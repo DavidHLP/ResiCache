@@ -22,6 +22,10 @@ class RedisProCacheWriterStatisticsTest {
     private static final byte[] KEY = "stats-cache::key".getBytes();
     private static final byte[] VALUE = "value".getBytes();
 
+    /** 真实 no-metadata resolver(无激活上下文 → resolve 恒 null),取代旧的「传 null 关闭解析」。 */
+    private static final CacheOperationResolver NO_METADATA_RESOLVER =
+            new CacheOperationResolver(new DefaultMethodMetadataResolver(), new RedisCacheRegister());
+
     private CacheStatisticsCollector oldCollector;
 
 
@@ -41,14 +45,14 @@ class RedisProCacheWriterStatisticsTest {
         oldCollector = CacheStatisticsCollector.create();
         when(chainFactory.createChain()).thenReturn(chain);
         writer = new RedisProCacheWriter(
-                oldCollector, valueCodec, chainFactory, null);
+                oldCollector, valueCodec, chainFactory, NO_METADATA_RESOLVER);
     }
 
     @Test
     void writerOperations_recordSpringStatisticsAtOperationBoundary() {
         CacheStatisticsCollector collector = CacheStatisticsCollector.create();
         writer = new RedisProCacheWriter(
-                collector, valueCodec, chainFactory, null);
+                collector, valueCodec, chainFactory, NO_METADATA_RESOLVER);
 
         when(chain.execute(any())).thenReturn(CacheResult.miss());
         assertThat(writer.get(CACHE_NAME, KEY)).isNull();

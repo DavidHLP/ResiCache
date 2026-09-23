@@ -3,20 +3,23 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
-
-
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CachePutOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
+import org.springframework.lang.Nullable;
 
 /**
  * ResiCache 注解解析器(职责1).
@@ -25,16 +28,16 @@ import org.springframework.cache.interceptor.CacheableOperation;
  * 与复合注解 {@code @RedisCaching} 的解析与展开逻辑。纯函数、无状态、无 Spring 继承负担,
  * 可被 {@link RedisCacheOperationSource} 之外的代码(测试)直接调用。
  *
- * <p>设计要点:{@code parseRedisCacheable} 刻意构建 Spring 标准
+ * <p>设计要点:一个注解只投影一次 —— {@link RedisCacheAttributesProjector} 产出唯一的
+ * {@link RedisCacheAttributes},AOP operation 与 policy operation 都从这份投影派生
+ * ({@link RedisCacheAttributes#applyTo(CacheableOperation.Builder)} /
+ * {@code RedisCacheableOperation#fromAttributes})。AOP 面刻意使用 Spring 原生
  * {@link org.springframework.cache.interceptor.CacheableOperation}(而非 ResiCache 的
  * RedisCacheableOperation),确保 getClass() 返回 CacheableOperation.class —— 这样
  * CacheAspectSupport 的 CacheOperationContexts 能正确按类型索引(可缓存/可放入/可清除三桶)。
  *
  * <p>Method/Class 的注解读取与名称提取统一委派给
  * {@link AnnotationTargets#findMerged} 与 {@link AnnotationTargets#extractTargetName}。
- *
- * <p>3 个 parse 方法的字段填充(text + special)统一委派给
- * {@link BuilderPopulator#populate},新增 ResiCache 字段仅需追加 1 个 populate spec 行。
  */
 @Slf4j
 class AnnotationParser {
@@ -47,15 +50,10 @@ class AnnotationParser {
         this.springCacheableAdapter = new SpringCacheableAdapter();
     }
 
-    AnnotationParser(
-            RedisCacheAttributesProjector projector,
-            SpringCacheableAdapter springCacheableAdapter) {
-        this.projector = projector;
-        this.springCacheableAdapter = springCacheableAdapter;
-    }
-
     /**
      * 单次解析目标元素，同时产出 Spring operation 与 annotation chain policy operation。
+     *
+     * <p>每个注解投影一次，两副面孔共享同一份 {@link RedisCacheAttributes}。
      */
     ParsedAnnotations parse(final Object target) {
         final List<CacheOperation> operations = new ArrayList<>();
@@ -65,225 +63,200 @@ class AnnotationParser {
         final RedisCacheable cacheable =
                 AnnotationTargets.findMerged(target, RedisCacheable.class);
         if (cacheable != null) {
-            operations.add(parseRedisCacheable(cacheable, target));
-            addPolicy(policyOperations, cacheable, target);
+            addCacheable(operations, policyOperations, cacheable, target);
         } else {
             final Cacheable springCacheable =
                     AnnotationTargets.findMerged(target, Cacheable.class);
             if (springCacheable != null) {
-                addPolicy(policyOperations, springCacheable, target);
+                addSpringCacheablePolicy(policyOperations, springCacheable, target);
             }
         }
 
         final RedisCacheEvict cacheEvict =
                 AnnotationTargets.findMerged(target, RedisCacheEvict.class);
         if (cacheEvict != null) {
-            operations.add(parseRedisCacheEvict(cacheEvict, target));
-            addPolicy(policyOperations, cacheEvict, target);
+            addEvict(operations, policyOperations, cacheEvict, target);
         }
 
         final RedisCachePut cachePut =
                 AnnotationTargets.findMerged(target, RedisCachePut.class);
         if (cachePut != null) {
-            operations.add(parseRedisCachePut(cachePut, target));
-            addPolicy(policyOperations, cachePut, target);
+            addPut(operations, policyOperations, cachePut, target);
         }
 
         final RedisCaching caching =
                 AnnotationTargets.findMerged(target, RedisCaching.class);
         if (caching != null) {
             for (final RedisCacheable annotation : caching.redisCacheable()) {
-                operations.add(parseRedisCacheable(annotation, target));
-                addPolicy(policyOperations, annotation, target);
+                addCacheable(operations, policyOperations, annotation, target);
             }
             for (final RedisCacheEvict annotation : caching.redisCacheEvict()) {
-                operations.add(parseRedisCacheEvict(annotation, target));
-                addPolicy(policyOperations, annotation, target);
+                addEvict(operations, policyOperations, annotation, target);
             }
             for (final RedisCachePut annotation : caching.redisCachePut()) {
-                operations.add(parseRedisCachePut(annotation, target));
-                addPolicy(policyOperations, annotation, target);
+                addPut(operations, policyOperations, annotation, target);
             }
         }
 
         return new ParsedAnnotations(operations, policyOperations);
     }
 
+    /**
+     * {@code @RedisCacheable}:一份投影 → AOP operation + policy operation。
+     *
+     * <p>方法级目标才有 policy operation(类级声明只参与 Spring 侧发现)。
+     */
+    private void addCacheable(
+            final List<CacheOperation> operations,
+            final List<CacheOperation> policyOperations,
+            final RedisCacheable annotation,
+            final Object target) {
+        log.trace("Parsing @RedisCacheable annotation for target: {}", target);
+        final RedisCacheAttributes attributes = projector.from(annotation);
 
-    private void addPolicy(
-            List<CacheOperation> policies, RedisCacheable annotation, Object target) {
-        if (target instanceof java.lang.reflect.Method method) {
-            policies.add(RedisCacheableOperation.fromAttributes(
-                    method, annotation.key(), projector.from(annotation)));
+        // AOP 面走 Spring 原生 Builder(见类注释的 getClass() 约束)
+        final CacheableOperation.Builder builder = new CacheableOperation.Builder();
+        builder.setName(AnnotationTargets.extractTargetName(target));
+        attributes.applyTo(builder);
+        final CacheableOperation operation = builder.build();
+        log.debug("Built CacheableOperation: {}", operation);
+        operations.add(operation);
+
+        if (target instanceof Method method) {
+            policyOperations.add(RedisCacheableOperation.fromAttributes(
+                    method, annotation.key(), attributes));
         }
     }
 
-    private void addPolicy(
-            List<CacheOperation> policies, RedisCachePut annotation, Object target) {
-        if (target instanceof java.lang.reflect.Method method) {
-            policies.add(RedisCachePutOperation.fromAttributes(
-                    method, annotation.key(), projector.from(annotation)));
+    /**
+     * {@code @RedisCacheEvict}:一份投影 → AOP operation + policy operation。
+     */
+    private void addEvict(
+            final List<CacheOperation> operations,
+            final List<CacheOperation> policyOperations,
+            final RedisCacheEvict annotation,
+            final Object target) {
+        log.trace("Parsing @RedisCacheEvict annotation for target: {}", target);
+        final RedisCacheAttributes attributes = projector.from(annotation);
+
+        // 使用 Spring 标准的 CacheEvictOperation.Builder,确保 getClass() 返回
+        // CacheEvictOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
+        // 能正确按类型索引(可缓存/可放入/可清除三桶)。ResiCache 增强字段(ttl/bloom/
+        // early-expiration 等)不进 Spring operation,由同一份投影的 policy 面
+        // 提供给 RedisCacheRegister 查询。(@RedisCacheEvict 的 sync/syncTimeout 是
+        // ResiCache 扩展,Spring 原生 CacheEvictOperation 无此概念,此处不投影——
+        // 与 Spring 原生 @CacheEvict 行为一致。)
+        final CacheEvictOperation.Builder builder = new CacheEvictOperation.Builder();
+        builder.setName(AnnotationTargets.extractTargetName(target));
+        attributes.applyTo(builder);
+        final CacheEvictOperation operation = builder.build();
+        log.debug("Built CacheEvictOperation: {}", operation);
+        operations.add(operation);
+
+        if (target instanceof Method method) {
+            policyOperations.add(RedisCacheEvictOperation.fromAttributes(
+                    method, annotation.key(), attributes));
         }
     }
 
-    private void addPolicy(
-            List<CacheOperation> policies, RedisCacheEvict annotation, Object target) {
-        if (target instanceof java.lang.reflect.Method method) {
-            policies.add(RedisCacheEvictOperation.fromAttributes(
-                    method, annotation.key(), projector.from(annotation)));
+    /**
+     * {@code @RedisCachePut}:一份投影 → AOP operation + policy operation。
+     */
+    private void addPut(
+            final List<CacheOperation> operations,
+            final List<CacheOperation> policyOperations,
+            final RedisCachePut annotation,
+            final Object target) {
+        log.trace("Parsing @RedisCachePut annotation for target: {}", target);
+        final RedisCacheAttributes attributes = projector.from(annotation);
+
+        // 使用 Spring 标准的 CachePutOperation.Builder,确保 getClass() 返回
+        // CachePutOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
+        // 能正确按类型索引(可缓存/可放入/可清除三桶)。ResiCache 增强字段(ttl/bloom/
+        // nullValue/early-expiration 等)不进 Spring operation,由同一份投影的 policy 面
+        // 提供给 RedisCacheRegister 查询。
+        final CachePutOperation.Builder builder = new CachePutOperation.Builder();
+        builder.setName(AnnotationTargets.extractTargetName(target));
+        attributes.applyTo(builder);
+        final CachePutOperation operation = builder.build();
+        log.debug("Built CachePutOperation: {}", operation);
+        operations.add(operation);
+
+        if (target instanceof Method method) {
+            policyOperations.add(RedisCachePutOperation.fromAttributes(
+                    method, annotation.key(), attributes));
         }
     }
 
-    private void addPolicy(
-            List<CacheOperation> policies, Cacheable annotation, Object target) {
-        if (target instanceof java.lang.reflect.Method method) {
-            policies.add(springCacheableAdapter.create(method, annotation, annotation.key()));
+    /**
+     * Spring 原生 {@code @Cacheable}:只产出 policy operation —— AOP 面由
+     * {@link SpringAnnotationAdapter} 负责,避免同一注解解析两次。
+     */
+    private void addSpringCacheablePolicy(
+            final List<CacheOperation> policyOperations,
+            final Cacheable annotation,
+            final Object target) {
+        if (target instanceof Method method) {
+            policyOperations.add(springCacheableAdapter.create(method, annotation, annotation.key()));
         }
     }
 
     record ParsedAnnotations(
             List<CacheOperation> operations,
-            List<CacheOperation> policyOperations) {
+            List<CacheOperation> policyOperations,
+            PolicyIndex policyIndex) {
+
+        ParsedAnnotations(
+                List<CacheOperation> operations,
+                List<CacheOperation> policyOperations) {
+            this(operations, policyOperations, PolicyIndex.of(policyOperations));
+        }
 
         ParsedAnnotations {
             operations = List.copyOf(operations);
             policyOperations = List.copyOf(policyOperations);
         }
+
+        /**
+         * 按 kind + cacheName 取 policy operation,未命中返回 {@code null}。
+         *
+         * <p>查找与声明顺序无关({@link PolicyIndex} 在快照构造时一次建成);
+         * 同一 kind/cacheName 被多次声明时后声明者覆盖先声明者。
+         */
+        @Nullable
+        CacheOperation policy(OperationKind kind, String cacheName) {
+            return policyIndex.find(kind, cacheName);
+        }
     }
 
     /**
-     * 解析 @RedisCacheable 注解.
-     *
-     * @param ann 注解实例
-     * @param target 方法或类对象
-     * @return 缓存操作
+     * {@code kind + cacheName → policy operation} 的不可变索引 —— 覆盖语义
+     * ("后声明者覆盖先声明者")只在本类定义一次,读取方不再向后扫描列表。
      */
-    private CacheOperation parseRedisCacheable(
-            final RedisCacheable ann, final Object target) {
-        final String name = AnnotationTargets.extractTargetName(target);
-        log.trace("Parsing @RedisCacheable annotation for target: {}", target);
+    record PolicyIndex(Map<OperationKind, Map<String, CacheOperation>> byKind) {
 
-        // 使用 Spring 标准的 CacheableOperation.Builder，确保 getClass() 返回 CacheableOperation.class
-        // 这样 CacheAspectSupport 的 CacheOperationContexts 能正确按类型索引
-        final CacheableOperation.Builder builder = new CacheableOperation.Builder();
-        builder.setName(name);
-        builder.setCacheNames(
-                ann.value().length > 0 ? ann.value() : ann.cacheNames());
+        static PolicyIndex of(List<CacheOperation> policyOperations) {
+            EnumMap<OperationKind, Map<String, CacheOperation>> byKind =
+                    new EnumMap<>(OperationKind.class);
+            for (final CacheOperation operation : policyOperations) {
+                for (final OperationKind kind : OperationKind.values()) {
+                    if (!kind.operationType().isInstance(operation)) {
+                        continue;
+                    }
+                    final Map<String, CacheOperation> byName =
+                            byKind.computeIfAbsent(kind, ignored -> new HashMap<>());
+                    for (final String cacheName : operation.getCacheNames()) {
+                        byName.put(cacheName, operation);
+                    }
+                }
+            }
+            return new PolicyIndex(Map.copyOf(byKind));
+        }
 
-        // 6 文本字段 + 1 special 字段填充委派到 BuilderPopulator.populate。
-        // setter 引用形态兼容 Spring 标准 Builder(setX 命名)与 Lombok Builder(x 命名)。
-        BuilderPopulator.populate(builder, ann,
-                List.of(
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheable::key, CacheableOperation.Builder::setKey),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheable::condition, CacheableOperation.Builder::setCondition),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheable::unless, CacheableOperation.Builder::setUnless),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheable::keyGenerator, CacheableOperation.Builder::setKeyGenerator),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheable::cacheManager, CacheableOperation.Builder::setCacheManager),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheable::cacheResolver, CacheableOperation.Builder::setCacheResolver)
-                ),
-                List.of((b, a) -> b.setSync(a.sync())));
-
-        final CacheableOperation operation = builder.build();
-        log.debug("Built CacheableOperation: {}", operation);
-        return operation;
-    }
-
-    /**
-     * 解析 @RedisCacheEvict 注解.
-     *
-     * @param ann 注解实例
-     * @param target 方法或类对象
-     * @return 缓存操作
-     */
-    private CacheOperation parseRedisCacheEvict(
-            final RedisCacheEvict ann, final Object target) {
-        final String name = AnnotationTargets.extractTargetName(target);
-        log.trace("Parsing @RedisCacheEvict annotation for target: {}", target);
-
-        // 使用 Spring 标准的 CacheEvictOperation.Builder,确保 getClass() 返回
-        // CacheEvictOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
-        // 能正确按类型索引(可缓存/可放入/可清除三桶)。ResiCache 增强字段(ttl/bloom/
-        // early-expiration 等)不进 Spring operation,由本解析结果的 policy snapshot
-        // 提供给 RedisCacheRegister 查询。(@RedisCacheEvict 的 sync/syncTimeout 是
-        // ResiCache 扩展,Spring 原生 CacheEvictOperation 无此概念,此处不投影——
-        // 与 Spring 原生 @CacheEvict 行为一致。)
-        final CacheEvictOperation.Builder builder = new CacheEvictOperation.Builder();
-        builder.setName(name);
-        builder.setCacheNames(
-                ann.value().length > 0 ? ann.value() : ann.cacheNames());
-
-        // 5 文本字段 + 2 special 字段(cacheWide + beforeInvocation)填充委派
-        BuilderPopulator.populate(builder, ann,
-                List.of(
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheEvict::key, CacheEvictOperation.Builder::setKey),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheEvict::cacheResolver, CacheEvictOperation.Builder::setCacheResolver),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheEvict::condition, CacheEvictOperation.Builder::setCondition),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheEvict::keyGenerator, CacheEvictOperation.Builder::setKeyGenerator),
-                        BuilderPopulator.TextField.textField(
-                                RedisCacheEvict::cacheManager, CacheEvictOperation.Builder::setCacheManager)
-                ),
-                List.of(
-                        (b, a) -> b.setCacheWide(a.allEntries()),
-                        (b, a) -> b.setBeforeInvocation(a.beforeInvocation())));
-
-        final CacheEvictOperation operation = builder.build();
-        log.debug("Built CacheEvictOperation: {}", operation);
-        return operation;
-    }
-
-    /**
-     * 解析 @RedisCachePut 注解.
-     *
-     * @param ann 注解实例
-     * @param target 方法或类对象
-     * @return 缓存操作
-     */
-    private CacheOperation parseRedisCachePut(
-            final RedisCachePut ann, final Object target) {
-        final String name = AnnotationTargets.extractTargetName(target);
-        log.trace("Parsing @RedisCachePut annotation for target: {}", target);
-
-        // 使用 Spring 标准的 CachePutOperation.Builder,确保 getClass() 返回
-        // CachePutOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
-        // 能正确按类型索引(可缓存/可放入/可清除三桶)。ResiCache 增强字段(ttl/bloom/
-        // nullValue/early-expiration 等)不进 Spring operation,由 policy snapshot
-        // 提供给 RedisCacheRegister 查询。
-        final CachePutOperation.Builder builder = new CachePutOperation.Builder();
-        builder.setName(name);
-        builder.setCacheNames(
-                ann.value().length > 0 ? ann.value() : ann.cacheNames());
-
-        // 6 文本字段 + 0 special 字段委派(@RedisCachePut 不携带 Spring 标准
-        // CachePutOperation 没有的特殊字段,只是 key+condition+unless 等基础文本)
-        BuilderPopulator.populate(builder, ann,
-                List.of(
-                        BuilderPopulator.TextField.textField(
-                                RedisCachePut::key, CachePutOperation.Builder::setKey),
-                        BuilderPopulator.TextField.textField(
-                                RedisCachePut::condition, CachePutOperation.Builder::setCondition),
-                        BuilderPopulator.TextField.textField(
-                                RedisCachePut::unless, CachePutOperation.Builder::setUnless),
-                        BuilderPopulator.TextField.textField(
-                                RedisCachePut::keyGenerator, CachePutOperation.Builder::setKeyGenerator),
-                        BuilderPopulator.TextField.textField(
-                                RedisCachePut::cacheManager, CachePutOperation.Builder::setCacheManager),
-                        BuilderPopulator.TextField.textField(
-                                RedisCachePut::cacheResolver, CachePutOperation.Builder::setCacheResolver)
-                ),
-                List.of());
-
-        final CachePutOperation operation = builder.build();
-        log.debug("Built CachePutOperation: {}", operation);
-        return operation;
+        @Nullable
+        CacheOperation find(OperationKind kind, String cacheName) {
+            Map<String, CacheOperation> byName = byKind.get(kind);
+            return byName == null ? null : byName.get(cacheName);
+        }
     }
 }

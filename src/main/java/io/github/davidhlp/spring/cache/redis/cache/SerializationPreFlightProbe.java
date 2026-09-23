@@ -82,10 +82,8 @@ class SerializationPreFlightProbe {
                 }
             }
         } catch (Exception e) {
-            log.warn("[ResiCache] Serialization pre-flight probe failed to scan Redis "
-                            + "(non-fatal): {}",
-                    FailureDiagnostics.sanitizedFailure(e));
-            log.debug("[ResiCache] Serialization pre-flight probe failure detail", e);
+            FailureReport.warn(log,
+                    "[ResiCache] Serialization pre-flight probe failed to scan Redis (non-fatal)", e);
             return;
         }
         if (nonEnvelope > 0) {

@@ -67,7 +67,21 @@ class RedisProCacheLoaderFailurePrivacyTest {
 
     private RedisProCache newCache() {
         return new RedisProCache(CACHE_NAME, missWriter(),
-                RedisCacheConfiguration.defaultCacheConfig(), ResiCacheFeatures.none());
+                RedisCacheConfiguration.defaultCacheConfig(), noMechanisms());
+    }
+
+    /**
+     * 生产形状的 feature set:协作对象在场但 operation 无元数据 →
+     * loader 走 default 路径(不短路、不走锁)。
+     */
+    private static ResiCacheFeatures noMechanisms() {
+        return ResiCacheFeatures.builder()
+                .operationResolver(new CacheOperationResolver(
+                        new DefaultMethodMetadataResolver(), new RedisCacheRegister()))
+                .bloomGate(mock(BloomGate.class))
+                .syncSupport(mock(SyncSupport.class))
+                .syncLockTimeout(mock(SyncLockTimeout.class))
+                .build();
     }
 
     @Test

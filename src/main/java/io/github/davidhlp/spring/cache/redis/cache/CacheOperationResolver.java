@@ -20,11 +20,10 @@ import org.springframework.lang.Nullable;
  *
  * <p><b>problem</b>:"读 ThreadLocal AnnotatedElementKey → 查 RedisCacheRegister"协议若在
  * {@code RedisProCache} 与 {@code RedisProCacheWriter} 各持一份,两处 4 行近镜像任一写错
- * (null-safe 漏检查、log tag 漂移、查询命名空间不一致),另一边静默失效。
+ * (log tag 漂移、查询命名空间不一致),另一边静默失效。
  *
  * <p><b>solution</b>:本类把"读 ThreadLocal key → 查 register"协议收口到单一 seam,
- * 两个调用方简化为 {@code resolver.resolve(cacheName, operation)},null-safe + 命名空间
- * 选择 + 日志在一处。
+ * 两个调用方简化为 {@code resolver.resolve(cacheName, operation)},命名空间选择 + 日志在一处。
  *
  * <p><b>deletion test</b>:删本类 → 两调用方各自重新实现 4 行镜像;ThreadLocal 协议与
  * 日志形式在两处独立漂移。本 seam 挣得起存在代价。
@@ -49,13 +48,13 @@ class CacheOperationResolver {
     /**
      * Spring 装配构造入口:双依赖必传。
      *
-     * <p>允许 {@code register} 为 null(测试场景关闭元数据查找,fallback 到 null),
-     * {@code methodResolver} 为 null 同理(null resolver 直接短路返回 null,
-     * 等价于"无 ThreadLocal 上下文")。
+     * <p>「无元数据」不是本类的构造模式:无当前方法上下文时
+     * {@link #resolve(String, CacheOperation)} 读到的 ThreadLocal key 为 null,
+     * 直接返回 null(见 {@link MethodMetadataResolver#currentKey()})。
      */
     @Autowired
-    public CacheOperationResolver(@Nullable MethodMetadataResolver methodResolver,
-                                  @Nullable RedisCacheRegister register) {
+    public CacheOperationResolver(MethodMetadataResolver methodResolver,
+                                  RedisCacheRegister register) {
         this.methodResolver = methodResolver;
         this.register = register;
     }
@@ -65,9 +64,7 @@ class CacheOperationResolver {
      *
      * <p>流程:
      * <ol>
-     *   <li>若 {@link MethodMetadataResolver} 为 null,直接返回 null(无 ThreadLocal 上下文)</li>
      *   <li>读 ThreadLocal AnnotatedElementKey;为 null → 返回 null(无当前方法上下文)</li>
-     *   <li>若 {@link RedisCacheRegister} 为 null,返回 null(测试关闭 register)</li>
      *   <li>查 register;未命中 → 记 debug 日志,返回 null</li>
      * </ol>
      *
@@ -86,9 +83,6 @@ class CacheOperationResolver {
      */
     @Nullable
     public CachePolicyView.Source resolve(@Nullable String cacheName, CacheOperation operation) {
-        if (methodResolver == null || register == null) {
-            return null;
-        }
         AnnotatedElementKey key = methodResolver.currentKey();
         if (key == null) {
             return null;
@@ -128,7 +122,7 @@ class CacheOperationResolver {
      */
     @Nullable
     public MethodSnapshot capture() {
-        return methodResolver == null ? null : methodResolver.capture();
+        return methodResolver.capture();
     }
 
     /**
@@ -138,20 +132,6 @@ class CacheOperationResolver {
             @Nullable MethodSnapshot snapshot,
             @Nullable Map<String, String> mdcSnapshot,
             Supplier<T> work) {
-        if (methodResolver == null) {
-            return work.get();
-        }
         return methodResolver.runWithSnapshot(snapshot, mdcSnapshot, work);
-    }
-
-    /**
-     * Compatibility overload for synchronous callers. Async callers must use
-     * {@link #capture()} before queueing work.
-     */
-    public <T> T runWithSnapshot(Supplier<T> work) {
-        if (methodResolver == null) {
-            return work.get();
-        }
-        return methodResolver.runWithSnapshot(work);
     }
 }

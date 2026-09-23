@@ -126,8 +126,8 @@ Current milestones:
   `cacheNullValues` and early-expiration attributes (a writer that never filled
   the Bloom filter could leave a Bloom-enabled reader judging the key
   "definitely missing"). Write-only methods now honour their own declaration —
-  including `ttl()`, whose annotation default is 60 seconds, so such a method's
-  entries now expire after 60s where the cache-level TTL used to apply. A
+  including an explicitly set `ttl()`, which now overrides the cache-level TTL
+  on that path where it previously could not. A
   method that also declares `@RedisCacheable` keeps using the read-side
   declaration, because the read-through write-back is part of the read
   operation.
@@ -236,6 +236,101 @@ Current milestones:
   ResiCache–JetCache coverage is **3/5** (not 4/5); ResiCache's true
   technical increment is **Bloom + TTL jitter + pluggable responsibility
   chain**.
+
+### Architecture remediation (2026-09-22 review, c1–c9)
+
+- **One owner for failure reporting (c1)** — package-private `FailureReport`
+  emits the sanctioned WARN/ERROR plus paired DEBUG line for every failure site,
+  so callers state what failed instead of choosing log levels and re-deriving
+  the fingerprint rule; no `keyFingerprint` concatenation or hand-paired DEBUG
+  remains in `src/main`. Levels, count-once accounting, the failure metric
+  dimensions and the raw-key privacy rule are unchanged; message rendering
+  (field order and punctuation) is now produced by the one owner.
+- **Metrics resolved at one non-null seam (c2)** — `resi-cache.metrics.enabled`
+  is read in exactly one place and handed to every caller as a non-null metrics
+  seam; when the opt-in is off (or no `MeterRegistry` bean exists) that seam
+  publishes nothing and the application's registry beans are not even resolved,
+  so an ambiguous registry set cannot fail an assembly that disabled metrics.
+  The opt-in is declared in
+  `additional-spring-configuration-metadata.json`. The key has no
+  `RedisProCacheProperties` field: it is fixed, and binding it would require a
+  tenth public nested type (`STABILITY.md` §4 churn) for an assembly detail.
+- ⚠️ **Protection health is no longer gated by the metrics opt-in (c2)** —
+  `RedisCacheHealthIndicator` now reports Redis connectivity and protection
+  degradation regardless of `resi-cache.metrics.enabled`; previously the
+  unrelated metrics switch could suppress the indicator.
+- **The disabled metrics seam does no work (c2)** — with
+  `resi-cache.metrics.enabled` off (the default) the resolved seam is a shared
+  stateless registry, and every consumer short-circuits on it rather than
+  registering through it: the chain's timer observer, the fired-counter observer
+  and the failure reporter return before building a key; the per-cache registry,
+  the handler attach hook, the refresh-task metrics and the Bloom filter take
+  their existing null path; and the migration engine skips its per-key metric
+  record. A disabled application therefore allocates and keeps no meter, no
+  timer and no per-cache entry, and the chain timer observer neither reads the
+  clock nor allocates a scope token on that path. Two earlier revisions of this
+  change had moved that work instead of removing it — the retention into the
+  timer observer's own per-cache-name map, and the per-key allocation into the
+  migration engine. Metric names, tag keys and tag values are unchanged.
+- **The degraded-protection warning fires once per context and reports the real
+  mode (c2)** — `RedisCacheHealthIndicator` reports the actual sync-protection
+  state, derived in one place by `SyncSupport`: `protection.degraded=local-only`
+  only when no distributed lock backend is present and
+  `resi-cache.sync-lock.local-only=true` was explicitly enabled,
+  `protection.degraded=fail-fast` when no backend is present without that opt-in
+  (so `sync=true` rejects instead of degrading), and no protection detail when a
+  backend exists. The associated WARN fires at most once per context instead of
+  on every `/actuator/health` probe, which matters where a load balancer or
+  orchestrator probes frequently; the state itself is reported in every health
+  response's details.
+- **Observer order owned by the observer class (c3)** — the four standard
+  observers declare `@Order(1..4)` on the class instead of on their `@Bean`
+  methods, and the factory registers observers in the Spring-resolved injection
+  order instead of re-sorting by an annotation only it could see; observers
+  ordered through `Ordered`, a `@Bean`-method `@Order`, a meta-annotation or a
+  proxy keep the position Spring gave them. The dispatch itself is typed at both
+  levels — the chain-level and node-level results reach the end hooks as
+  `CacheResult` / `HandlerResult` without a cast — and the chain observer
+  protocol no longer checks its own scope token's runtime type.
+- ⚠️ **`ChainObserver.beforeNode` removed (c3)** — the hook had no production
+  implementer. An extension that overrode it must move that work to
+  `onNodeStart` / `afterNode`; every other hook keeps its name and semantics.
+  See `STABILITY.md` §4 for the migration note.
+- ⚠️ **An annotated method without an explicit `ttl` now takes the configured TTL (c8)** —
+  `@RedisCacheable#ttl` and `@RedisCachePut#ttl` default to `0`, which `TtlPolicy` reads as
+  "no method-level declaration", so a method that does not set `ttl` falls through to
+  `resi-cache.default-ttl` (default 30 minutes) instead of the previous implicit 60 seconds.
+  An explicitly set positive `ttl` still wins and still applies its jitter.
+  `TtlPolicy.DEFAULT_TTL_SECONDS` and its `null`-`Duration` branch are gone, and a zero,
+  negative or `null` TTL all mean "no expiry", matching Spring Data Redis's own
+  `DefaultRedisCacheWriter.shouldExpireWithin`; a direct writer/SPI `put(…, null)` therefore
+  writes a persistent entry where it previously wrote a 60-second one.
+- **Handler identity declared once (c4)** — order slot, protection disable name,
+  metric/log tag and the ordering requirement of each slot are declared
+  alongside `HandlerOrder` and resolved by `cache/HandlerIdentity`; emitted tag
+  values are unchanged, and a handler with no declared identity keeps the
+  previous class-simple-name tag.
+- **One assembly root per boundary (c5)** — the runtime context and the operator
+  CLI each name the beans they own by class instead of regex package-scan
+  patterns, `resi-cache.enabled` is declared once, and the bean-backoff
+  invariant enumerates `@Bean` methods.
+- **One projection feeds both operation views (c6)** — the AOP operation and the
+  policy view are derived from one `RedisCacheAttributes` instance per
+  annotation, so a new annotation field has one mapping site and the policy
+  lookup no longer depends on declaration order; the Spring/policy view split
+  itself is retained.
+- **Unreachable degradation modes deleted (c7)** — dead null guards, the
+  `NullValueEncoder` wrapper and test-only factory surface are gone. The
+  engine-side rejection of a malformed `HandlerResult` is retained because
+  `STABILITY.md` §4 documents it.
+- **TTL precedence in one module (c8)** — `TtlPolicy` owns the ordered
+  resolution and both defaults; every path keeps its previous effective TTL and
+  no default changed. See [`COMPATIBILITY.md`](./COMPATIBILITY.md) and
+  [`docs/REFERENCE.md`](docs/REFERENCE.md).
+- **Synchronization lifecycle owned by its state (c9)** — the single-flight
+  lifecycle (enter → complete → exit → cleanup, exactly once) now lives with the
+  state it mutates and the seven-argument static re-entry is gone; lock
+  acquire/release order and failure paths are unchanged.
 
 ### Fixed
 

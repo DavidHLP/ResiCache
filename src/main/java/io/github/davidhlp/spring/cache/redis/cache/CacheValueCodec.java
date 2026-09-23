@@ -52,15 +52,31 @@ class CacheValueCodec {
     }
 
     /**
+     * null 决策:{@code null} 与 {@link NullValue#INSTANCE} 都写出受限 Java 序列化的 null 占位字节。
+     *
+     * <p>决策只写在这里一次,字节产出({@link #toValueBytes})与调用点的观测日志
+     * ({@code ActualCacheHandler} 的返回路径)共用本谓词,判定条件不会两处漂移。
+     *
+     * @param chainValue chain-facing value
+     * @return 需要写出 null 占位字节时返回 {@code true}
+     */
+    static boolean isNullDecision(@Nullable Object chainValue) {
+        return chainValue == null || chainValue instanceof NullValue;
+    }
+
+    /**
      * 将 chain-facing value 写回 writer seam 所需的 value 字节。
      *
-     * @param chainValue chain-facing value；{@link NullValue} 使用受限 Java 序列化，其他值使用 JSON
+     * <p>null 决策与 {@link NullValue} 决策同属本类:{@code null} 与
+     * {@link NullValue#INSTANCE} 都写出受限 Java 序列化的 null 占位字节,其他值使用 JSON。
+     *
+     * @param chainValue chain-facing value；{@code null} / {@link NullValue} 使用受限 Java 序列化，其他值使用 JSON
      * @return plain-JSON 或受限 Java 序列化后的 value 字节
      * @throws SerializationException value 无法写出为 JSON
      */
     @NonNull
     public byte[] toValueBytes(@Nullable Object chainValue) {
-        if (chainValue instanceof NullValue) {
+        if (isNullDecision(chainValue)) {
             return SecureNullValueDeserializer.serializeNullValue();
         }
         try {
