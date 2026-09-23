@@ -1,0 +1,28 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChain.java
+  h_77173abe25c3ff 81,133
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainDebugLogChainObserver.java
+  h_77173abe25c3ff 40,43
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainEngine.java
+  h_77173abe25c3ff 364,367
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainTimerChainObserver.java
+  h_77173abe25c3ff 73
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/FiredCounterChainObserver.java
+  h_77173abe25c3ff 64,67,72
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/HandlerIdentity.java
+  h_77173abe25c3ff 20
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/MDCStampChainObserver.java
+  h_77173abe25c3ff 21,43,49-50,66,68
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java
+  h_77173abe25c3ff 26,28,32,63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "10619e654da793728d07235ce0a5dbea5e2fd340",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
