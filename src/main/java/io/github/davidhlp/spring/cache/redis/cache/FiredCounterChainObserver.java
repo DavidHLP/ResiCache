@@ -45,7 +45,7 @@ final class FiredCounterChainObserver implements ChainObserver {
 
     public FiredCounterChainObserver(MeterRegistry registry) {
         this.registry = registry;
-        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
+        this.disabled = MetricsWriter.disabled(registry);
     }
 
     @Override
@@ -61,21 +61,16 @@ final class FiredCounterChainObserver implements ChainObserver {
     public void afterNode(CacheHandler handler, CacheContext context,
                           io.github.davidhlp.spring.cache.redis.chain.HandlerResult result) {
         if (disabled) {
-            // 关闭路径:跳过 handlerTag / ClassValue 查找、Counter.builder、map 写入与 NoopCounter。
+            // 关闭路径:跳过 handlerTag / ClassValue 查找、计数器注册、map 写入与 NoopCounter。
             return;
         }
         String handlerTag = CacheHandlerChain.handlerTag(handler);
         Counter counter = firedCounters.computeIfAbsent(handler.getClass(), klass ->
-                Counter.builder("resicache.handler.fired")
-                        .description("Cache protection chain: number of times each handler was evaluated by the engine "
-                                + "(per-handler observability; tag handler = runtime subclass simple name)")
-                        .tag("handler", handlerTag)
-                        .register(registry));
-        counter.increment();
+                MetricsWriter.counter(registry, "resicache.handler.fired",
+                        "Cache protection chain: number of times each handler was evaluated by the engine "
+                                + "(per-handler observability; tag handler = runtime subclass simple name)",
+                        "handler", handlerTag));
+        MetricsWriter.increment(counter);
     }
 
-    /** 测试用：暴露当前已注册的 counter 数。 */
-    int registeredCounterCount() {
-        return firedCounters.size();
-    }
 }

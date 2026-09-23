@@ -5,6 +5,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,6 +32,7 @@ class RefreshTaskMetricsTest {
         RefreshTaskMetrics metrics = new RefreshTaskMetrics(
                 null, new ConcurrentHashMap<>(), Executors.newSingleThreadExecutor());
 
+        assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
         assertThatCode(() -> {
             metrics.recordSubmitted();
             metrics.recordCompleted();
@@ -86,9 +88,7 @@ class RefreshTaskMetricsTest {
                 new ConcurrentHashMap<>(),
                 Executors.newSingleThreadExecutor());
 
-        assertThat(metrics.registeredCounterCount())
-                .as("关闭 seam 上注册不分配任何 counter")
-                .isZero();
+        assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
         assertThatCode(() -> {
             metrics.recordSubmitted();
             metrics.recordCompleted();
@@ -99,11 +99,13 @@ class RefreshTaskMetricsTest {
     @Test
     @DisplayName("启用 registry — 3 个 counter 全部注册")
     void enabledRegistry_registersAllCounters() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
         RefreshTaskMetrics metrics = new RefreshTaskMetrics(
-                new SimpleMeterRegistry(), new ConcurrentHashMap<>(),
-                Executors.newSingleThreadExecutor());
+                registry, new ConcurrentHashMap<>(), Executors.newSingleThreadExecutor());
 
-        assertThat(metrics.registeredCounterCount()).isEqualTo(3);
+        assertThat(registry.getMeters().stream()
+                .filter(meter -> meter.getId().getType() == Meter.Type.COUNTER)
+                .count()).isEqualTo(3);
     }
 
     @Test

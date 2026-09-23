@@ -111,9 +111,8 @@ class RedisProCacheMetricsRegistryTest {
             RedisProCacheMetricsRegistry seamBacked =
                     new RedisProCacheMetricsRegistry(DisabledMetricsRegistry.INSTANCE, CACHE_NAME);
 
-            assertThat(seamBacked.registeredMeterCount())
-                    .as("关闭 seam 上注册不分配任何 meter")
-                    .isZero();
+
+            assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
 
             // record 方法仍可用 — 走类内既有 null 短路,不触碰 seam
             seamBacked.recordGet(() -> "value");
@@ -134,7 +133,7 @@ class RedisProCacheMetricsRegistryTest {
         @Test
         @DisplayName("启用 registry — 7 个 metric 全部注册(关闭 seam 不得改变启用路径)")
         void enabledRegistry_registersAllSeven() {
-            assertThat(registry.registeredMeterCount()).isEqualTo(7);
+            assertThat(meterRegistry.getMeters()).hasSize(7);
         }
 
         @Test

@@ -47,7 +47,7 @@ final class CacheFailureReporter {
 
     public CacheFailureReporter(MeterRegistry registry) {
         this.registry = registry;
-        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
+        this.disabled = MetricsWriter.disabled(registry);
     }
 
     /**
@@ -69,22 +69,14 @@ final class CacheFailureReporter {
                 kind == null ? "UNKNOWN" : kind.name(),
                 strategy == null ? "UNKNOWN" : strategy.name());
         Counter counter = counters.computeIfAbsent(key, this::register);
-        counter.increment();
+        MetricsWriter.increment(counter);
     }
 
     private Counter register(FailureKey key) {
-        return Counter.builder(METRIC_NAME)
-                .description("Cache operation failures, tagged by finite-enum operation/kind/strategy "
-                        + "(low cardinality; no cacheName/key/message tags)")
-                .tags("operation", key.operation(),
-                        "kind", key.kind(),
-                        "strategy", key.strategy())
-                .register(registry);
-    }
-
-    /** 测试用：暴露当前已注册的 counter 数。 */
-    int registeredCounterCount() {
-        return counters.size();
+        return MetricsWriter.counter(registry, METRIC_NAME,
+                "Cache operation failures, tagged by finite-enum operation/kind/strategy "
+                        + "(low cardinality; no cacheName/key/message tags)",
+                "operation", key.operation(), "kind", key.kind(), "strategy", key.strategy());
     }
 
     private record FailureKey(String operation, String kind, String strategy) {

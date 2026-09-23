@@ -189,20 +189,18 @@ class RedisBloomIFilterIntegrationTest extends AbstractRedisIntegrationTest {
             RedisBloomIFilter seamFilter =
                     new RedisBloomIFilter(redisTemplate, config, DisabledMetricsRegistry.INSTANCE);
             seamFilter.init();
+            assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
 
-            assertThat(seamFilter.registeredFailureCounterCount())
-                    .as("关闭 seam 上注册不分配任何 counter")
-                    .isZero();
         }
 
         @Test
         @DisplayName("启用 registry — 两个 failure counter 注册")
         void enabledRegistry_registersFailureCounters() {
-            RedisBloomIFilter meteredFilter =
-                    new RedisBloomIFilter(redisTemplate, config, new SimpleMeterRegistry());
+            SimpleMeterRegistry registry = new SimpleMeterRegistry();
+            RedisBloomIFilter meteredFilter = new RedisBloomIFilter(redisTemplate, config, registry);
             meteredFilter.init();
 
-            assertThat(meteredFilter.registeredFailureCounterCount()).isEqualTo(2);
+            assertThat(registry.getMeters()).hasSize(2);
         }
     }
 

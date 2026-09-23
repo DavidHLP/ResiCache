@@ -45,6 +45,8 @@ import java.util.function.ToLongFunction;
  *
  * <p>实例本身无状态(无 child registry、无 meter 表),所以 {@link #INSTANCE} 是被
  * {@link ResolvedMetrics} 共享的单例,而不是每次决议新建一个。
+ * 身份判据由本类的 {@link #isDisabledSeam(MeterRegistry)} 定义；下游写侧 guard、注册与记录原语由
+ * {@link MetricsWriter} 持有。
  */
 final class DisabledMetricsRegistry extends MeterRegistry {
 

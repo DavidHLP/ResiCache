@@ -45,7 +45,7 @@ final class ChainTimerChainObserver implements ChainObserver {
 
     public ChainTimerChainObserver(MeterRegistry registry) {
         this.registry = registry;
-        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
+        this.disabled = MetricsWriter.disabled(registry);
     }
 
     @Override
@@ -74,21 +74,13 @@ final class ChainTimerChainObserver implements ChainObserver {
                 result.decision().name(),
                 context.getCacheName());
         Timer timer = timers.computeIfAbsent(key, this::registerTimer);
-        timer.record(System.nanoTime() - scope.startNanos(), TimeUnit.NANOSECONDS);
+        MetricsWriter.record(timer, System.nanoTime() - scope.startNanos(), TimeUnit.NANOSECONDS);
     }
 
     private Timer registerTimer(TimerKey key) {
-        return Timer.builder(METRIC_NAME)
-                .description("Time spent invoking one cache protection handler")
-                .tag("handler", key.handler())
-                .tag("decision", key.decision())
-                .tag("cacheName", key.cacheName())
-                .register(registry);
-    }
-
-    /** 测试用：暴露当前已注册的 timer 数。 */
-    int registeredTimerCount() {
-        return timers.size();
+        return MetricsWriter.timer(registry, METRIC_NAME,
+                "Time spent invoking one cache protection handler",
+                "handler", key.handler(), "decision", key.decision(), "cacheName", key.cacheName());
     }
 
     private record TimerScope(long startNanos) {

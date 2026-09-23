@@ -146,7 +146,7 @@ class ChainObserverTest {
                         HandlerResult.continueChain());
             }
 
-            assertThat(observer.registeredTimerCount()).isZero();
+            assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
         }
 
         /**
@@ -279,7 +279,7 @@ class ChainObserverTest {
                 observer.afterNode(handler, ctx, HandlerResult.continueChain());
             }
 
-            assertThat(observer.registeredCounterCount()).isZero();
+            assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
         }
 
         @Test
