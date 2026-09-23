@@ -89,8 +89,4 @@ final class RefreshTaskMetrics {
         }
     }
 
-    /**
-     * 测试用：暴露 3 个已注册 counter 的个数。关闭 seam / null registry 下应为 0，
-     * 启用 registry 下应为 3。
-     */
 }

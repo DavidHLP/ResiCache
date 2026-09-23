@@ -14,18 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * 责任链管理器 — thin facade,链结构单一真理源。
  *
- * <p>链推进 + 节点级决策分发 + Timer 装配 / 记录 + MDC stamp 由 {@link ChainEngine}
- * 承担;本 facade 只保留：
- *
- * <ul>
- *   <li>{@code List<CacheHandler> handlers} 维护（addHandler / size / clear / getHandlerNames）—
- *       链结构唯一表示</li>
- *   <li>{@code synchronized(chainGuard)} 守护 handlers 结构性修改(addHandler/clear 与
- *       size/getHandlerNames 互斥);<b>execute() 无锁</b> —— 取本 facade 持有的 list
- *       不可变快照({@code List.copyOf})后委派 {@link ChainEngine#execute(List, CacheContext)},
- *       提供完整并发隔离</li>
- *   <li>{@link #execute(CacheContext)} 委派给 {@link ChainEngine#execute(List, CacheContext)}</li>
- * </ul>
+ * <p>本 facade 维护 handler list，使用 {@code chainGuard} 保护列表操作，并在执行前
+ * 拍摄不可变快照后委派 {@link ChainEngine#execute(List, CacheContext)}；链推进与节点决策由
+ * {@link ChainEngine} 承担。handler 日志使用 {@link HandlerIdentity#tag()} 标识 handler。
  *
  * <p><b>快照归属</b>:链 list 单一真理源收敛在本 facade 上;Engine 通过
  * {@link ChainEngine#execute(List, CacheContext)} 接收快照参数,并把「当前节点之后」的
@@ -41,13 +32,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 class CacheHandlerChain {
 
-    /**
-     * MDC key 用于 stamp 每次链执行的关联 id。
-     * <p>本常量被 {@code MDCStampChainObserver}（在
-     * {@code onChainStart}/{@code onChainEnd}）和
-     * {@code ChainDebugLogChainObserver}（在 {@code afterNode} 读 MDC）共同引用。
-     * 重命名此 key 需同步改两处 observer。
-     */
     /** 所有处理器列表（用于调试和后置处理；链结构单一真理源） */
     private final List<CacheHandler> handlers = new ArrayList<>();
 
@@ -65,7 +49,6 @@ class CacheHandlerChain {
         this.engine = engine;
     }
 
-    /** Shared runtime label for handler logs and bounded observer tags. */
     /**
      * 添加处理器到责任链末尾 — O(N) 链表遍历。
      *

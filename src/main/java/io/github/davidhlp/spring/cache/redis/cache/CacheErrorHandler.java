@@ -137,7 +137,7 @@ class CacheErrorHandler {
     }
 
     /**
-     * 链内唯一失败出口：在此处对每次失败分类、计数并记录日志。策略与 typed kind 由上面的
+     * 链内唯一失败出口：在此处对每次失败分类、恰好计数一次并记录日志。策略与 typed kind 由上面的
      * {@code handleError} 重载按 operation 选定,不再对外暴露显式策略入口。
      */
     private CacheResult handleException(

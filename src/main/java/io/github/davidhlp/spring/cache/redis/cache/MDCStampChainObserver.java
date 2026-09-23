@@ -18,8 +18,9 @@ import org.springframework.core.annotation.Order;
  * 进 MDC，使一次 GET/PUT 内所有 handler 的 {@code [chain]} DEBUG 行可被同一
  * id 关联；链出口恢复调用方原值（不误清宿主线程其它 MDC key，如 traceId）。
  *
- * <p>Engine 自身不持有 MDC 状态。本类对 {@link #MDC_REQUEST_ID_KEY}
- * 的引用保留(常量集中,重命名 MDC key 只需改一处)。
+ * <p>本类拥有并维护 {@link #MDC_REQUEST_ID_KEY}：在 {@code onChainStart} 写入，
+ * 在 {@code onChainEnd} 恢复调用方原值；{@link ChainDebugLogChainObserver} 随后在
+ * {@code afterNode} 读取该 key。
  *
  * <p>requestId 生成用 {@link ThreadLocalRandom}（非 SecureRandom）—
  * 缓存热路径每次 GET/PUT 必经，规避熵竞争 / 潜在阻塞；64-bit 随机数对

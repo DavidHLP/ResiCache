@@ -213,10 +213,6 @@ final class RedisProCacheMetricsRegistry {
         return cacheName;
     }
 
-    /**
-     * 测试用：暴露 7 个注册字段中非 null 的个数。关闭 seam / null registry 下应为 0，
-     * 启用 registry 下应为 7。
-     */
     // ==================== 私有 helper ====================
 
     private static Timer registerTimer(@Nullable MeterRegistry registry, String name,

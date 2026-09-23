@@ -70,19 +70,19 @@ class ChainObserverTest {
         void startAndEnd_roundtrip() {
             ChainObserver observer = new MDCStampChainObserver();
 
-            MDC.put(CacheHandlerChain.MDC_REQUEST_ID_KEY, "caller-id");
+            MDC.put(MDCStampChainObserver.MDC_REQUEST_ID_KEY, "caller-id");
             try {
                 // onChainStart 返回 scope token(MdcScope record),Engine 配对回传到
                 // onChainEnd。test 直接持有 token 模拟 Engine 协议
                 Object scopeToken = observer.onChainStart(ctx);
-                String stamped = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);
+                String stamped = MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY);
                 assertThat(stamped).isNotNull().isNotEqualTo("caller-id");
 
                 observer.onChainEnd(ctx, scopeToken, CacheResult.success());
                 // 恢复调用方原值
-                assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isEqualTo("caller-id");
+                assertThat(MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY)).isEqualTo("caller-id");
             } finally {
-                MDC.remove(CacheHandlerChain.MDC_REQUEST_ID_KEY);
+                MDC.remove(MDCStampChainObserver.MDC_REQUEST_ID_KEY);
             }
         }
 
@@ -90,13 +90,13 @@ class ChainObserverTest {
         @DisplayName("调用方未预设 MDC → onChainStart 写入,onChainEnd 移除(不残留)")
         void noCallerMdc_thenStartWritesEndRemoves() {
             ChainObserver observer = new MDCStampChainObserver();
-            assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNull();
+            assertThat(MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY)).isNull();
 
             Object scopeToken = observer.onChainStart(ctx);
-            assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNotNull();
+            assertThat(MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY)).isNotNull();
 
             observer.onChainEnd(ctx, scopeToken, CacheResult.success());
-            assertThat(MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY)).isNull();
+            assertThat(MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY)).isNull();
         }
 
         @Test
@@ -105,10 +105,10 @@ class ChainObserverTest {
             ChainObserver observer = new MDCStampChainObserver();
             String first, second;
             Object token1 = observer.onChainStart(ctx);
-            first = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);
+            first = MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY);
             observer.onChainEnd(ctx, token1, CacheResult.success());
             Object token2 = observer.onChainStart(ctx);
-            second = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);
+            second = MDC.get(MDCStampChainObserver.MDC_REQUEST_ID_KEY);
             observer.onChainEnd(ctx, token2, CacheResult.success());
 
             assertThat(first).isNotEqualTo(second);
