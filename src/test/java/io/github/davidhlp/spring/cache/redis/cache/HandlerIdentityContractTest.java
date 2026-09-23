@@ -78,7 +78,7 @@ class HandlerIdentityContractTest {
     }
 
     /**
-     * {@code handlerTag} 在每节点每次请求上求值(Engine 后置处理日志 /
+     * {@code HandlerIdentity} 的 {@code tag} 在每节点每次请求上求值(Engine 后置处理日志 /
      * {@code FiredCounterChainObserver.afterNode}),故身份必须按类解析一次:返回同一个实例
      * 即证明第二次调用没有重跑反射 {@code getAnnotation}(也未分配新 record)。
      * 类名派生路径(无 {@code @HandlerPriority} 的宿主 handler)同样走缓存。
@@ -96,9 +96,9 @@ class HandlerIdentityContractTest {
                 .isEqualTo("CustomTaglessHandler");
 
         CacheHandler tagless = new CustomTaglessHandler();
-        assertThat(CacheHandlerChain.handlerTag(tagless))
+        assertThat(HandlerIdentity.of(tagless).tag())
                 .as("每请求求值,取值稳定")
-                .isEqualTo(CacheHandlerChain.handlerTag(new CustomTaglessHandler()))
+                .isEqualTo(HandlerIdentity.of(new CustomTaglessHandler()).tag())
                 .isEqualTo("CustomTaglessHandler");
         assertThat(HandlerIdentity.of(tagless.getClass()))
                 .isSameAs(HandlerIdentity.of(CustomTaglessHandler.class));
