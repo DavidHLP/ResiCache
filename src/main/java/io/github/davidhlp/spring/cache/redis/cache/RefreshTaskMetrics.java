@@ -6,7 +6,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>{@code meterRegistry} 永不为 {@code null}：指标未启用（或应用无 {@code MeterRegistry}
  * bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
- * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），此时构造期直接走 null
+ * {@link MetricsWriter#disabled(MeterRegistry)}），此时构造期直接走 null
  * 分支——不构造 meter、不走 deny-all filter、不分配 Noop* counter/gauge，3 个 counter 字段
  * 保持 null，所有 record 方法为空操作。提取收益（locality）：原本散落在执行器构造器与各方法中
  * 的 Counter/Gauge 注册及 null 判定，现收敛为一处，执行器只需调用 {@code recordXxx()}。
@@ -44,54 +43,49 @@ final class RefreshTaskMetrics {
             MeterRegistry meterRegistry,
             ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
             ExecutorService executorService) {
-        if (meterRegistry == null || DisabledMetricsRegistry.isDisabledSeam(meterRegistry)) {
+        if (MetricsWriter.disabled(meterRegistry)) {
             this.submittedCounter = null;
             this.completedCounter = null;
             this.cancelledCounter = null;
             return;
         }
-        this.submittedCounter = Counter.builder("prerefresh.submitted")
-                .description("Number of early-expiration tasks submitted")
-                .register(meterRegistry);
-        this.completedCounter = Counter.builder("prerefresh.completed")
-                .description("Number of early-expiration tasks completed")
-                .register(meterRegistry);
-        this.cancelledCounter = Counter.builder("prerefresh.cancelled")
-                .description("Number of early-expiration tasks cancelled")
-                .register(meterRegistry);
+        this.submittedCounter = MetricsWriter.counter(
+                meterRegistry, "prerefresh.submitted", "Number of early-expiration tasks submitted");
+        this.completedCounter = MetricsWriter.counter(
+                meterRegistry, "prerefresh.completed", "Number of early-expiration tasks completed");
+        this.cancelledCounter = MetricsWriter.counter(
+                meterRegistry, "prerefresh.cancelled", "Number of early-expiration tasks cancelled");
 
         // Gauge: 活跃任务数
-        Gauge.builder("prerefresh.active", inFlight, map -> map.size())
-                .description("Number of active early-expiration tasks")
-                .register(meterRegistry);
+        MetricsWriter.gauge(meterRegistry, "prerefresh.active", inFlight, map -> map.size(),
+                "Number of active early-expiration tasks");
 
         // Gauge: 队列大小
         if (executorService instanceof ThreadPoolExecutor tpe) {
-            Gauge.builder("prerefresh.queue.size", tpe, tpe2 -> tpe2.getQueue().size())
-                    .tag("component", "prerefresh")
-                    .description("Size of the early-expiration task queue")
-                    .register(meterRegistry);
+            MetricsWriter.gauge(meterRegistry, "prerefresh.queue.size", tpe,
+                    tpe2 -> tpe2.getQueue().size(), "Size of the early-expiration task queue",
+                    "component", "prerefresh");
         }
     }
 
     /** 记录一次任务提交 */
     public void recordSubmitted() {
         if (submittedCounter != null) {
-            submittedCounter.increment();
+            MetricsWriter.increment(submittedCounter);
         }
     }
 
     /** 记录一次任务完成 */
     public void recordCompleted() {
         if (completedCounter != null) {
-            completedCounter.increment();
+            MetricsWriter.increment(completedCounter);
         }
     }
 
     /** 记录一次任务取消 */
     public void recordCancelled() {
         if (cancelledCounter != null) {
-            cancelledCounter.increment();
+            MetricsWriter.increment(cancelledCounter);
         }
     }
 
@@ -99,17 +93,4 @@ final class RefreshTaskMetrics {
      * 测试用：暴露 3 个已注册 counter 的个数。关闭 seam / null registry 下应为 0，
      * 启用 registry 下应为 3。
      */
-    int registeredCounterCount() {
-        int registered = 0;
-        if (submittedCounter != null) {
-            registered++;
-        }
-        if (completedCounter != null) {
-            registered++;
-        }
-        if (cancelledCounter != null) {
-            registered++;
-        }
-        return registered;
-    }
 }

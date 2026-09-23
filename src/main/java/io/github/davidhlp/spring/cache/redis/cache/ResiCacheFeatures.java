@@ -20,7 +20,7 @@ import org.springframework.lang.Nullable;
  * <p><b>no-op seam 语义</b>:只有 {@code meterRegistry} 承载「指标禁用」信息,但它永不为
  * {@code null} —— 指标未启用（或应用无 {@code MeterRegistry} bean）时它是共享无状态的
  * {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
- * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），在其上的注册是 no-op
+ * {@link MetricsWriter#disabled(MeterRegistry)}），在其上的注册是 no-op
  * 分配:不发布、不保留任何 meter;其余字段是生产恒装配的协作对象,消费方构造期校验非 null
  * (装配错误即抛,不静默降级)。
  */

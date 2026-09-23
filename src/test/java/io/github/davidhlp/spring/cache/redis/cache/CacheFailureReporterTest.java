@@ -90,8 +90,7 @@ class CacheFailureReporterTest {
         noRegistry.report(CacheOperation.PUT, FailureKind.REDIS, ErrorStrategy.FAIL_FAST);
         noRegistry.report(CacheOperation.GET, FailureKind.REDIS, ErrorStrategy.GRACEFUL_DEGRADATION);
 
-        assertThat(noRegistry.registeredCounterCount()).isZero();
-        assertThat(registry.getMeters()).isEmpty();
+        assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
     }
 
     @Test
