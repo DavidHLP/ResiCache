@@ -57,14 +57,12 @@ class LoaderOrchestratorTest {
     @Mock
     private SyncSupport syncSupport;
 
-    private BloomGate bloomGate;
     private SyncLockTimeout syncLockTimeout;
     private LoaderOrchestrator orchestrator;
     private String testRedisKey;
 
     @BeforeEach
     void setUp() {
-        bloomGate = new BloomGate(bloomSupport);
         syncLockTimeout = new SyncLockTimeout(new RedisProCacheProperties());
         testRedisKey = "testCache::key1";
         orchestrator = bound(key -> null, (key, value) -> { });
@@ -82,7 +80,7 @@ class LoaderOrchestratorTest {
     /** 构造绑定实例:redis key 派生自 {@link #testRedisKey} fixture。 */
     private LoaderOrchestrator bound(Function<Object, Cache.ValueWrapper> doubleCheckFn,
                                      BiConsumer<Object, Object> putAfterLoad) {
-        return new LoaderOrchestrator(bloomGate, syncSupport, syncLockTimeout,
+        return new LoaderOrchestrator(bloomSupport, syncSupport, syncLockTimeout,
                 key -> testRedisKey, doubleCheckFn, putAfterLoad);
     }
 
@@ -116,10 +114,10 @@ class LoaderOrchestratorTest {
         }
 
         @Test
-        @DisplayName("bloom rejects (mightContain=false) → return BloomShortCircuited, loader/write-back never invoked")
+        @DisplayName("definite miss short-circuits → return BloomShortCircuited, loader/write-back never invoked")
         void bloomRejects_returnsBloomShortCircuited() {
             RedisCacheableOperation op = operation(true, false);
-            when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(false);
+            when(bloomSupport.definiteMiss(eq("testCache"), anyString())).thenReturn(true);
 
             AtomicInteger putCalls = new AtomicInteger();
             Callable<String> loader = () -> {
@@ -135,10 +133,10 @@ class LoaderOrchestratorTest {
         }
 
         @Test
-        @DisplayName("bloom accepts (mightContain=true) → proceeds to default path, no short-circuit")
+        @DisplayName("possible hit proceeds → proceeds to default path, no short-circuit")
         void bloomAccepts_proceedsToDefaultPath() {
             RedisCacheableOperation op = operation(true, false);
-            when(bloomSupport.mightContain(eq("testCache"), anyString())).thenReturn(true);
+            when(bloomSupport.definiteMiss(eq("testCache"), anyString())).thenReturn(false);
 
             Callable<String> loader = () -> "value";
 
@@ -160,7 +158,7 @@ class LoaderOrchestratorTest {
         @DisplayName("sync enabled + syncSupport available → routes to syncSupport.executeSync, returns Loaded")
         void syncEnabled_routesToSyncSupport() {
             RedisCacheableOperation op = operation(false, true);
-            when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(true);
+            when(bloomSupport.definiteMiss(anyString(), anyString())).thenReturn(false);
 
             // syncSupport.executeSync 模拟「调 supplier 后返回值」
             when(syncSupport.executeSync(anyString(), any(java.util.function.Supplier.class),
@@ -186,7 +184,7 @@ class LoaderOrchestratorTest {
             RecordingSyncLockTimeout timeout = new RecordingSyncLockTimeout(properties);
             RecordingSyncSupport support = new RecordingSyncSupport(properties);
             LoaderOrchestrator underTest = new LoaderOrchestrator(
-                    new BloomGate(bloomSupport), support, timeout,
+                    bloomSupport, support, timeout,
                     key -> testRedisKey, key -> null, (key, value) -> { });
 
             LoadOutcome<String> outcome = underTest.orchestrate(
@@ -524,11 +522,11 @@ class LoaderOrchestratorTest {
         }
 
         @Test
-        @DisplayName("保护协作依赖为 null → 装配错误,构造期抛 NPE(bloomGate)")
+        @DisplayName("保护协作依赖为 null → 装配错误,构造期抛 NPE(bloomSupport)")
         void nullProtectionDeps_rejectedAtConstruction() {
             assertThatThrownBy(() -> new LoaderOrchestrator(null, null, null, keyFn, checkFn, putFn))
                     .isInstanceOf(NullPointerException.class)
-                    .hasMessage("bloomGate");
+                    .hasMessage("bloomSupport");
         }
 
         @Test

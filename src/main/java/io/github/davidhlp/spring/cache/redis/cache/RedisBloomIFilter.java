@@ -50,14 +50,10 @@ class RedisBloomIFilter implements BloomIFilter {
         this.hashPositionCache = Caffeine.newBuilder()
                 .maximumSize(config.getHashCacheSize())
                 .build();
-        if (meterRegistry != null && !DisabledMetricsRegistry.isDisabledSeam(meterRegistry)) {
-            this.checkFailureCounter = Counter.builder("bloomsift.check.failures")
-                    .description("Number of bloom filter check failures")
-                    .register(meterRegistry);
-            this.addFailureCounter = Counter.builder("bloomsift.add.failures")
-                    .description("Number of bloom filter add failures")
-                    .register(meterRegistry);
-        }
+        this.checkFailureCounter = MetricsWriter.counter(
+                meterRegistry, "bloomsift.check.failures", "Number of bloom filter check failures");
+        this.addFailureCounter = MetricsWriter.counter(
+                meterRegistry, "bloomsift.add.failures", "Number of bloom filter add failures");
     }
 
     @Override
@@ -91,7 +87,7 @@ class RedisBloomIFilter implements BloomIFilter {
         } catch (Exception e) {
             FailureReport.error(log, "Bloom filter add failed", cacheName, null, e);
             if (addFailureCounter != null) {
-                addFailureCounter.increment();
+                MetricsWriter.increment(addFailureCounter);
             }
         }
     }
@@ -137,7 +133,7 @@ class RedisBloomIFilter implements BloomIFilter {
         } catch (Exception e) {
             FailureReport.error(log, "Bloom filter check failed", cacheName, null, e);
             if (checkFailureCounter != null) {
-                checkFailureCounter.increment();
+                MetricsWriter.increment(checkFailureCounter);
             }
             // 异常时默认返回 true，避免误拒绝（安全侧）
             return true;
@@ -163,18 +159,5 @@ class RedisBloomIFilter implements BloomIFilter {
         return config.getKeyPrefix() + cacheName;
     }
 
-    /**
-     * 测试用：暴露 2 个已注册 failure counter 的个数。关闭 seam / null registry 下应为 0，
-     * 启用 registry 下应为 2。
-     */
-    int registeredFailureCounterCount() {
-        int registered = 0;
-        if (checkFailureCounter != null) {
-            registered++;
-        }
-        if (addFailureCounter != null) {
-            registered++;
-        }
-        return registered;
-    }
+
 }

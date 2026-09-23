@@ -37,7 +37,7 @@ import org.springframework.lang.Nullable;
  *
  * <p><b>no-op seam 语义</b>：{@link MeterRegistry} 永不为 null —— 指标未启用（或应用无
  * {@code MeterRegistry} bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}，
- * 唯一判据是 {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}。在该 seam 上
+ * 唯一判据是 {@link MetricsWriter#disabled(MeterRegistry)}。在该 seam 上
  * 7 个注册全部短路为 null 字段：不构造 {@link io.micrometer.core.instrument.Meter.Id}、
  * 不走 deny-all filter、不分配 Noop* meter，所有 record 方法走类内既有的 null 短路。
  *
@@ -155,7 +155,7 @@ final class RedisProCacheMetricsRegistry {
         try {
             body.run();
         } finally {
-            putTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+            MetricsWriter.record(putTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
             safeIncrement(putCounter);
         }
     }
@@ -175,7 +175,7 @@ final class RedisProCacheMetricsRegistry {
         try {
             body.run();
         } finally {
-            evictTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+            MetricsWriter.record(evictTimer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
             safeIncrement(evictCounter);
         }
     }
@@ -213,51 +213,26 @@ final class RedisProCacheMetricsRegistry {
         return cacheName;
     }
 
-    /**
-     * 测试用：暴露 7 个注册字段中非 null 的个数。关闭 seam / null registry 下应为 0，
-     * 启用 registry 下应为 7。
-     */
-    int registeredMeterCount() {
-        Object[] fields = {
-            getTimer, putTimer, evictTimer, hitCounter, missCounter, putCounter, evictCounter
-        };
-        int registered = 0;
-        for (Object field : fields) {
-            if (field != null) {
-                registered++;
-            }
-        }
-        return registered;
-    }
-
     // ==================== 私有 helper ====================
 
     private static Timer registerTimer(@Nullable MeterRegistry registry, String name,
                                        String description, String cacheName) {
-        if (registry == null || DisabledMetricsRegistry.isDisabledSeam(registry)) {
+        if (MetricsWriter.disabled(registry)) {
             return null;
         }
-        return Timer.builder(name)
-                .tag("cache", cacheName)
-                .description(description)
-                .register(registry);
+        return MetricsWriter.timer(registry, name, description, "cache", cacheName);
     }
 
     private static Counter registerCounter(@Nullable MeterRegistry registry, String name,
                                            String description, String cacheName) {
-        if (registry == null || DisabledMetricsRegistry.isDisabledSeam(registry)) {
+        if (MetricsWriter.disabled(registry)) {
             return null;
         }
-        return Counter.builder(name)
-                .tag("cache", cacheName)
-                .description(description)
-                .register(registry);
+        return MetricsWriter.counter(registry, name, description, "cache", cacheName);
     }
 
     private static void safeIncrement(@Nullable Counter counter) {
-        if (counter != null) {
-            counter.increment();
-        }
+        MetricsWriter.increment(counter);
     }
 
     private static void timed(@Nullable Timer timer, Runnable body) {
@@ -269,7 +244,7 @@ final class RedisProCacheMetricsRegistry {
         try {
             body.run();
         } finally {
-            timer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+            MetricsWriter.record(timer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
     }
 
@@ -281,7 +256,7 @@ final class RedisProCacheMetricsRegistry {
         try {
             return body.get();
         } finally {
-            timer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+            MetricsWriter.record(timer, System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
     }
 

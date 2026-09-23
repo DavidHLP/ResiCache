@@ -20,9 +20,8 @@ import java.util.concurrent.ConcurrentMap;
  * {@code strategy}({@link ErrorStrategy})。禁止 cacheName / key / message tag
  * (高基数),WARN/ERROR 日志与异常消息默认不含 raw key(由调用方保证)。
  *
- * <p>计数去重:由 writer PUT chain 产生的写回失败只经本类一次上报 — 链内
- * {@code CacheErrorHandler} 是唯一报告出口;{@code LoaderOrchestrator} 只保留脱敏 WARN
- * 与 {@code LoadedWithWriteBackFailure},不重复计数。
+ * <p>报告调用点与单次计数由 {@link CacheErrorHandler} 持有;{@code LoaderOrchestrator}
+ * 处理写回失败时只保留脱敏 WARN 与 {@code LoadedWithWriteBackFailure}。
  *
  * <p><b>边界</b>:本指标只统计<b>缓存操作失败</b>(GET degrade / 写 fail-fast /
  * REMOVE best-effort / write-back failure)。Bloom 过滤器底层 Redis 位操作的
@@ -47,11 +46,11 @@ final class CacheFailureReporter {
 
     public CacheFailureReporter(MeterRegistry registry) {
         this.registry = registry;
-        this.disabled = DisabledMetricsRegistry.isDisabledSeam(registry);
+        this.disabled = MetricsWriter.disabled(registry);
     }
 
     /**
-     * 上报一次失败事件 — 每事件恰好调用一次。
+     * 记录一条失败事件。
      *
      * @param operation 失败操作(可为 null → UNKNOWN tag)
      * @param kind      失败分类(可为 null → UNKNOWN tag)
@@ -69,22 +68,14 @@ final class CacheFailureReporter {
                 kind == null ? "UNKNOWN" : kind.name(),
                 strategy == null ? "UNKNOWN" : strategy.name());
         Counter counter = counters.computeIfAbsent(key, this::register);
-        counter.increment();
+        MetricsWriter.increment(counter);
     }
 
     private Counter register(FailureKey key) {
-        return Counter.builder(METRIC_NAME)
-                .description("Cache operation failures, tagged by finite-enum operation/kind/strategy "
-                        + "(low cardinality; no cacheName/key/message tags)")
-                .tags("operation", key.operation(),
-                        "kind", key.kind(),
-                        "strategy", key.strategy())
-                .register(registry);
-    }
-
-    /** 测试用：暴露当前已注册的 counter 数。 */
-    int registeredCounterCount() {
-        return counters.size();
+        return MetricsWriter.counter(registry, METRIC_NAME,
+                "Cache operation failures, tagged by finite-enum operation/kind/strategy "
+                        + "(low cardinality; no cacheName/key/message tags)",
+                "operation", key.operation(), "kind", key.kind(), "strategy", key.strategy());
     }
 
     private record FailureKey(String operation, String kind, String strategy) {

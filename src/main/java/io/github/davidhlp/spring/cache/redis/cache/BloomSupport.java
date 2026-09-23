@@ -12,10 +12,11 @@ import org.springframework.stereotype.Component;
 /**
  * Bloom 过滤器统一入口。
  *
- * <p><b>本类职责</b>:filter 代理 + fail-open 策略。
+ * <p><b>本类职责</b>:filter 代理 + fail-open 策略 + 读侧确定 miss 判定与日志。
  * <ul>
  *   <li>{@link #mightContain}:代理给 {@link BloomIFilter};底层异常时 fail-open(true),
  *       避免误拒绝(可能存在的 key 被短路)</li>
+ *   <li>{@link #definiteMiss}:统一封装否定判定与确定 miss 的 debug 日志</li>
  *   <li>{@link #add}:代理给 {@link BloomIFilter};底层异常仅记录日志不抛出
  *       (不污染缓存写入路径)</li>
  *   <li>{@link #clear}:代理给 {@link BloomIFilter};底层异常仅记录日志不抛出</li>
@@ -59,6 +60,24 @@ class BloomSupport {
                     cacheName, null, ex);
             return true;
         }
+    }
+
+    /**
+     * 判定 key 是否「确定不在缓存中」(布隆返回 false → 一定不存在).
+     *
+     * <p>命中确定 miss 时记一次统一 debug 日志。调用方据返回值决定短路 + 自身指标。
+     *
+     * @param cacheName 缓存名
+     * @param actualKey 去前缀的实际 key(与布隆回填 {@code add} 同源,避免键漂移)
+     * @return true 表示布隆确定该 key 不存在(可短路);false 表示可能存在(继续)
+     */
+    public boolean definiteMiss(String cacheName, String actualKey) {
+        if (mightContain(cacheName, actualKey)) {
+            return false;
+        }
+        log.debug("Bloom filter rejected (key does not exist): cacheName={}, key={}",
+                cacheName, actualKey);
+        return true;
     }
 
     /**

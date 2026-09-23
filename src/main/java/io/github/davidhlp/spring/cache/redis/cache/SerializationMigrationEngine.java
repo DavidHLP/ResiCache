@@ -60,7 +60,7 @@ class SerializationMigrationEngine
                 objectMapper, serializer.getAllowedPackagePrefixes(), serializer.getTypeProperty());
         this.migration = serializer.getMigration();
         this.meterRegistry = resolvedMetrics.meterRegistry();
-        this.disabled = DisabledMetricsRegistry.isDisabledSeam(this.meterRegistry);
+        this.disabled = MetricsWriter.disabled(this.meterRegistry);
     }
 
     /**
@@ -295,8 +295,8 @@ class SerializationMigrationEngine
             // 关闭路径:跳过 tag 数组、Meter.Id 构造与 deny-all filter 遍历(单 key 可达 4 次)。
             return;
         }
-        meterRegistry.counter(METRIC_NAME,
-                "phase", migration.getPhase().name(), "outcome", outcome).increment();
+        MetricsWriter.increment(MetricsWriter.taggedCounter(meterRegistry, METRIC_NAME,
+                "phase", migration.getPhase().name(), "outcome", outcome));
     }
 
     private static byte[] appendSuffix(byte[] key, String suffix) {

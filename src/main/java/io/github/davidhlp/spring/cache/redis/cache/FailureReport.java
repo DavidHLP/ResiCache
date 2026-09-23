@@ -4,6 +4,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import org.slf4j.Logger;
+import org.springframework.lang.Nullable;
 
 /**
  * 失败上报唯一 owner — key-privacy contract 的单点实现。
@@ -13,10 +14,8 @@ import org.slf4j.Logger;
  * 内嵌 raw key);含 message 的完整堆栈只留在 DEBUG。
  *
  * <p><b>调用方契约</b>:只说「什么失败了」—— 描述文本 + cacheName / raw key + 异常。级别选择、
- * 指纹格式化、类型链渲染全部由本类完成:raw key 只能以 raw 形态传入并被
- * {@link FailureDiagnostics#keyFingerprint} 转成指纹,异常只能以 {@link Throwable} 传入并被
- * {@link FailureDiagnostics#sanitizedFailure} 转成类型链 —— raw key 与异常 message 在 API
- * 形态上无法进入 WARN/ERROR。typed exception message 需要指纹时同样经 {@link #fingerprint}
+ * 指纹格式化、类型链渲染全部由本类完成:raw key 与异常 message 不会进入 WARN/ERROR。
+ * typed exception message 需要指纹时同样经 {@link #fingerprint}
  * 取用,调用点不自行拼装指纹。
  *
  * <p><b>为什么日志走调用方 logger</b>:保留各调用点的 log category(运维按类过滤、测试按类
@@ -37,7 +36,7 @@ final class FailureReport {
      * @return 16 进制内容指纹
      */
     static String fingerprint(String key) {
-        return FailureDiagnostics.keyFingerprint(key);
+        return key == null ? "null" : Integer.toHexString(key.hashCode());
     }
 
     /**
@@ -47,7 +46,21 @@ final class FailureReport {
      * @return 16 进制内容指纹
      */
     static String fingerprint(byte[] key) {
-        return FailureDiagnostics.keyFingerprint(key);
+        return key == null ? "null" : Integer.toHexString(java.util.Arrays.hashCode(key));
+    }
+
+    /** Render only the failure type chain, never exception messages. */
+    private static String sanitizedFailure(@Nullable Throwable failure) {
+        if (failure == null) {
+            return "null";
+        }
+        StringBuilder sb = new StringBuilder(failure.getClass().getSimpleName());
+        Throwable cause = failure.getCause();
+        while (cause != null && sb.length() < 160) {
+            sb.append(" <- ").append(cause.getClass().getSimpleName());
+            cause = cause.getCause();
+        }
+        return sb.toString();
     }
 
     static void warn(Logger log, String what, String cacheName, Object key) {
@@ -80,7 +93,7 @@ final class FailureReport {
         String message = failure == null
                 ? what + context
                 : what + context + (context.isEmpty() ? ": " : ", ")
-                        + "cause=" + FailureDiagnostics.sanitizedFailure(failure);
+                        + "cause=" + sanitizedFailure(failure);
         if (error) {
             log.error(message);
         } else {
@@ -110,10 +123,10 @@ final class FailureReport {
      */
     private static String contextFingerprint(Object key) {
         if (key instanceof String stringKey) {
-            return FailureDiagnostics.keyFingerprint(stringKey);
+            return fingerprint(stringKey);
         }
         if (key instanceof byte[] byteKey) {
-            return FailureDiagnostics.keyFingerprint(byteKey);
+            return fingerprint(byteKey);
         }
         return null;
     }

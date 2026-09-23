@@ -25,7 +25,7 @@ import org.springframework.lang.Nullable;
  * 的 read-through 编排:
  *
  * <ol>
- *   <li><b>Bloom 短路检查</b> — 经 {@link BloomGate#definiteMiss} 判定「确定不存在」 →
+ *   <li><b>Bloom 短路检查</b> — 经 {@link BloomSupport#definiteMiss} 判定「确定不存在」 →
  *       返回 {@link LoadOutcome.BloomShortCircuited};caller 据此自增 miss counter 并返回 null</li>
  *   <li><b>Sync 路径</b> — {@code sync=true} →
  *       {@link SyncSupport#executeSync} + 锁内 {@link #readThrough read-through protocol};
@@ -39,7 +39,7 @@ import org.springframework.lang.Nullable;
  * <ul>
  *   <li><b>locality</b>:bloom + sync + load 协议 + 异常翻译规则全部内聚在一处文件,
  *       无需在 {@code RedisProCache} 与若干 seam 间跳转</li>
- *   <li><b>testability</b>:orchestrator 仅依赖 {@link BloomGate} / {@link SyncSupport} /
+ *   <li><b>testability</b>:orchestrator 仅依赖 {@link BloomSupport} / {@link SyncSupport} /
  *       {@link SyncLockTimeout} + 3 个构造期绑定的 callback(redisKey / doubleCheck / putAfterLoad);
  *       单测可零 RedisProCache fixture 验证决策分支({@code BloomShortCircuited} /
  *       {@code Loaded} / {@code LoadedWithWriteBackFailure} / {@code LoadFailed})</li>
@@ -51,7 +51,7 @@ import org.springframework.lang.Nullable;
  * 均为必需,缺失属于装配错误,构造时用 {@link Objects#requireNonNull} 带参数名拒绝。
  * writer 入口不构造本类,直接使用静态 {@link #readThrough} 并传入字节适配:
  * <ul>
- *   <li>{@code Function<Object, String> redisKeyFn} — 派生 Redis key 用于 BloomGate 与 SyncSupport</li>
+ *   <li>{@code Function<Object, String> redisKeyFn} — 派生 Redis key 用于 BloomSupport 与 SyncSupport</li>
  *   <li>{@code Function<Object, Cache.ValueWrapper> doubleCheckFn} — 缓存读原语(走
  *       {@code super.get},含链 GET / bloom 短路 / null round-trip,无 metrics — metrics 在外层记)</li>
  *   <li>{@code BiConsumer<Object, Object> putAfterLoad} — load 成功后写回(走
@@ -59,9 +59,8 @@ import org.springframework.lang.Nullable;
  * </ul>
  *
  * <p><b>一条协议,两个入口</b>:cache 与 writer 入口都走 {@link #readThrough} —
- * 同一套 double-check 语义、同一套写回容错和单点脱敏 WARN。若写回经由 writer 的 PUT
- * chain 失败,失败指标已在 {@link CacheErrorHandler} 出口上报一次;本编排器只观察并返回
- * tolerated outcome,不再次上报。
+ * 同一套 double-check 语义、同一套写回容错和单点脱敏 WARN。失败指标的唯一报告点见
+ * {@link CacheErrorHandler};本编排器只观察并返回 tolerated outcome。
  * 两者只在读值表示与 loader 异常翻译上不同;sync 路径另外把 cache 协议跑在
  * {@link SyncSupport} 的分布式锁内。
  *
@@ -120,7 +119,7 @@ final class LoaderOrchestrator {
     public record LoadFailed<T>(Throwable cause) implements LoadOutcome<T> {
     }
 
-    private final BloomGate bloomGate;
+    private final BloomSupport bloomSupport;
     private final SyncSupport syncSupport;
     private final SyncLockTimeout syncLockTimeout;
     private final Function<Object, String> boundRedisKeyFn;
@@ -135,7 +134,7 @@ final class LoaderOrchestrator {
      * {@link NullPointerException}(装配错误,不静默降级)。
      */
     LoaderOrchestrator(
-            BloomGate bloomGate,
+            BloomSupport bloomSupport,
             SyncSupport syncSupport,
             SyncLockTimeout syncLockTimeout,
             Function<Object, String> redisKeyFn,
@@ -144,7 +143,7 @@ final class LoaderOrchestrator {
         this.boundRedisKeyFn = Objects.requireNonNull(redisKeyFn, "redisKeyFn");
         this.boundDoubleCheckFn = Objects.requireNonNull(doubleCheckFn, "doubleCheckFn");
         this.boundPutAfterLoad = Objects.requireNonNull(putAfterLoad, "putAfterLoad");
-        this.bloomGate = Objects.requireNonNull(bloomGate, "bloomGate");
+        this.bloomSupport = Objects.requireNonNull(bloomSupport, "bloomSupport");
         this.syncSupport = Objects.requireNonNull(syncSupport, "syncSupport");
         this.syncLockTimeout = Objects.requireNonNull(syncLockTimeout, "syncLockTimeout");
     }
@@ -153,7 +152,7 @@ final class LoaderOrchestrator {
      * 唯一实例入口:编排 loader 路径 — bloom 短路 → sync 路径(sync=true) → default
      * 路径(同一协议,无锁);cache-specific 操作使用构造期绑定的回调。
      *
-     * @param cacheName 缓存名(供 BloomGate 区分 cache;非 key 派生)
+     * @param cacheName 缓存名(供 BloomSupport 区分 cache;非 key 派生)
      * @param loader    Spring Cache {@link Callable} loader
      * @param key       缓存 key(用户传入的原始 key;由绑定的 redisKeyFn 派生 Redis key)
      * @param operation 方法级策略视图(可为 null,视作「无增强属性」→ 不走 bloom / sync)
@@ -314,6 +313,6 @@ final class LoaderOrchestrator {
             return false;
         }
         String bloomKey = CacheKeys.fromRedisKey(cacheName, redisKey).bloomKey();
-        return bloomGate.definiteMiss(cacheName, bloomKey);
+        return bloomSupport.definiteMiss(cacheName, bloomKey);
     }
 }

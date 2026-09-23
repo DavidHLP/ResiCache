@@ -83,7 +83,7 @@ class RedisProCacheConfiguration {
         // Failure-metrics contract:统一失败指标 reporter;metrics 未启用时
         // ResolvedMetrics 交出 no-op seam,此处不再按 null 分支。
         return new CacheErrorHandler(
-                new io.github.davidhlp.spring.cache.redis.cache.CacheFailureReporter(
+                new CacheFailureReporter(
                         resolvedMetrics.meterRegistry()));
     }
 
@@ -171,7 +171,7 @@ class RedisProCacheConfiguration {
             RedisProCacheWriter redisProCacheWriter,
             RedisCacheConfiguration defaultRedisCacheConfiguration,
             ResolvedMetrics resolvedMetrics,
-            BloomGate bloomGate,
+            BloomSupport bloomSupport,
             CacheOperationResolver operationResolver,
             SyncSupport syncSupport,
             SyncLockTimeout syncLockTimeout,
@@ -181,7 +181,7 @@ class RedisProCacheConfiguration {
 
         ResiCacheFeatures features = ResiCacheFeatures.builder()
                 .meterRegistry(resolvedMetrics.meterRegistry())
-                .bloomGate(bloomGate)
+                .bloomSupport(bloomSupport)
                 .operationResolver(operationResolver)
                 .syncSupport(syncSupport)
                 .syncLockTimeout(syncLockTimeout)

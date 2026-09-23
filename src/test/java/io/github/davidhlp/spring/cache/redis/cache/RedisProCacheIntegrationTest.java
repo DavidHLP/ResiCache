@@ -96,7 +96,7 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
                 .meterRegistry(registry)
                 .operationResolver(new CacheOperationResolver(
                         new DefaultMethodMetadataResolver(), new RedisCacheRegister()))
-                .bloomGate(org.mockito.Mockito.mock(BloomGate.class))
+                .bloomSupport(org.mockito.Mockito.mock(BloomSupport.class))
                 .syncSupport(org.mockito.Mockito.mock(SyncSupport.class))
                 .syncLockTimeout(org.mockito.Mockito.mock(SyncLockTimeout.class))
                 .build();
@@ -249,7 +249,7 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
                     ResiCacheFeatures.builder()
                             .meterRegistry(meterRegistry)
                             .operationResolver(operationResolver)
-                            .bloomGate(new BloomGate(bloomSupport))
+                            .bloomSupport(bloomSupport)
                             .syncSupport(org.mockito.Mockito.mock(SyncSupport.class))
                             .syncLockTimeout(org.mockito.Mockito.mock(SyncLockTimeout.class))
                             .build());
@@ -265,7 +265,7 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
                             .useBloomFilter(true)
                             .build());
 
-            when(bloomSupport.mightContain(eq(NAME), anyString())).thenReturn(false);
+            when(bloomSupport.definiteMiss(eq(NAME), anyString())).thenReturn(true);
 
             double beforeMiss = meterRegistry.find("resicache.cache.miss")
                     .tag("cache", NAME).counter().count();
@@ -292,7 +292,7 @@ class RedisProCacheIntegrationTest extends AbstractRedisIntegrationTest {
                             .build());
 
             // bloom 接受 → orchestrator 走 default load → 真实 Redis 未命中 → 调 loader → 持久化
-            when(bloomSupport.mightContain(eq(NAME), anyString())).thenReturn(true);
+            when(bloomSupport.definiteMiss(eq(NAME), anyString())).thenReturn(false);
 
             double beforeMiss = meterRegistry.find("resicache.cache.miss")
                     .tag("cache", NAME).counter().count();

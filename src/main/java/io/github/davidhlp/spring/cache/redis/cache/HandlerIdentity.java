@@ -17,7 +17,7 @@ import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
  * <p>标准 slot 的身份取值与跨 slot 的顺序要求由 {@code HandlerIdentityContractTest} 钉住。
  *
  * <p><b>按 handler 类解析一次</b>：{@link #of(Class)} 的入参是
- * {@code CacheHandlerChain.handlerTag} 的专用路径，而后者在<b>每个节点每次请求</b>上被求值
+ * {@code HandlerIdentity.of(handler).tag()} 的专用路径，而后者在<b>每个节点每次请求</b>上被求值
  * （Engine 后置处理日志、{@code FiredCounterChainObserver.afterNode}）。身份只由 handler 类
  * 决定，因此解析结果按类缓存（{@link ClassValue}，与类同生命周期，不产生跨类加载器的强引用
  * 表）；一次反射的 {@code getAnnotation} 换一次缓存查找。

@@ -12,8 +12,9 @@ import org.springframework.lang.Nullable;
  * <p>Callers always get a non-null seam. When metrics are disabled, or the application has
  * no {@code MeterRegistry} bean, the seam is the single shared
  * {@link DisabledMetricsRegistry#INSTANCE} — a stateless sink that registers nothing and
- * retains nothing. The disabled case is therefore not a {@code registry == null} re-check
- * at each caller, and it cannot accumulate meters either.
+ * retains nothing. {@link MetricsWriter#disabled(MeterRegistry)} owns the downstream
+ * disabled-shape guard so consumers do not reimplement seam identity checks; the disabled
+ * case cannot accumulate meters either.
  *
  * <p>The opt-in is read <em>before</em> the provider is touched: with metrics disabled the
  * application's registry beans are neither resolved nor instantiated, so an ambiguous

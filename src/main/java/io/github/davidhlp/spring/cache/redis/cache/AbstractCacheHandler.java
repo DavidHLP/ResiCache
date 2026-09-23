@@ -11,7 +11,6 @@ import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -46,9 +45,8 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #doHandle(CacheContext, ChainContinuation)},使用引擎交出的
  * {@link ChainContinuation} 句柄 —— 不再依赖任何从 handler 反查 Engine 的隐式通道。
  */
-@Getter
 @Slf4j
-abstract class AbstractCacheHandler implements CacheHandler {
+abstract class AbstractCacheHandler implements CacheHandler, MetricAttachable {
 
     /**
      * 单参 {@link #handle(CacheContext)} 没有剩余链可供推进。句柄由基类统一提供，
@@ -85,7 +83,7 @@ abstract class AbstractCacheHandler implements CacheHandler {
      * {@code createChain} 中遍历进链 handler 时调用）。生产路径注入的 registry 永不为 null
      * —— 指标未启用（或应用无 {@code MeterRegistry} bean）时它是共享无状态的
      * {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
-     * {@link DisabledMetricsRegistry#isDisabledSeam(MeterRegistry)}），此时本方法直接返回：
+     * {@link MetricsWriter#disabled(MeterRegistry)}），此时本方法直接返回：
      * 不构造 counter、不走 deny-all filter、不分配 Noop* meter，{@code semanticCounter}
      * 保持 null。registry 非空且非关闭 seam 时子类 override
      * {@link #semanticCounter()} 声明自身语义 counter 元数据
@@ -94,8 +92,9 @@ abstract class AbstractCacheHandler implements CacheHandler {
      * 类统一注册，不在本方法范围。registry 为 null（仅测试/防御路径）、为关闭 seam 或
      * 子类未声明元数据时本方法为 no-op。幂等：同名同 tag 重复 register 返回既有实例。
      */
+    @Override
     public void attachMeterRegistry(MeterRegistry registry) {
-        if (registry == null || DisabledMetricsRegistry.isDisabledSeam(registry)) {
+        if (MetricsWriter.disabled(registry)) {
             return;
         }
         CounterMetadata metadata = semanticCounter();
@@ -143,7 +142,7 @@ abstract class AbstractCacheHandler implements CacheHandler {
      * （后者由 FiredCounterChainObserver 统一注册）。
      */
     protected Counter registerCounter(MeterRegistry registry, String name, String description) {
-        return Counter.builder(name).description(description).register(registry);
+        return MetricsWriter.counter(registry, name, description);
     }
 
     /**
@@ -153,7 +152,7 @@ abstract class AbstractCacheHandler implements CacheHandler {
      */
     protected void safeIncrementSemantic() {
         if (semanticCounter != null) {
-            semanticCounter.increment();
+            MetricsWriter.increment(semanticCounter);
         }
     }
 

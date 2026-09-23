@@ -54,7 +54,7 @@ class RedisProCacheManagerTest {
                         .meterRegistry(meterRegistry)
                         .operationResolver(new CacheOperationResolver(
                                 new DefaultMethodMetadataResolver(), new RedisCacheRegister()))
-                        .bloomGate(mock(BloomGate.class))
+                        .bloomSupport(mock(BloomSupport.class))
                         .syncSupport(mock(SyncSupport.class))
                         .syncLockTimeout(mock(SyncLockTimeout.class))
                         .build(),   // 生产形状:协作对象在场;无元数据 → 不启用 bloom/sync

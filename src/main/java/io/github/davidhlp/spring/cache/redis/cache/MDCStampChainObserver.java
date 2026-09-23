@@ -18,8 +18,9 @@ import org.springframework.core.annotation.Order;
  * 进 MDC，使一次 GET/PUT 内所有 handler 的 {@code [chain]} DEBUG 行可被同一
  * id 关联；链出口恢复调用方原值（不误清宿主线程其它 MDC key，如 traceId）。
  *
- * <p>Engine 自身不持有 MDC 状态。本类对 {@link CacheHandlerChain#MDC_REQUEST_ID_KEY}
- * 的引用保留(常量集中,重命名 MDC key 只需改一处)。
+ * <p>本类拥有并维护 {@link #MDC_REQUEST_ID_KEY}：在 {@code onChainStart} 写入，
+ * 在 {@code onChainEnd} 恢复调用方原值；{@link ChainDebugLogChainObserver} 随后在
+ * {@code afterNode} 读取该 key。
  *
  * <p>requestId 生成用 {@link ThreadLocalRandom}（非 SecureRandom）—
  * 缓存热路径每次 GET/PUT 必经，规避熵竞争 / 潜在阻塞；64-bit 随机数对
@@ -40,13 +41,14 @@ import org.springframework.core.annotation.Order;
 // requestId,ChainDebugLogChainObserver 才能在 afterNode 读到 MDC 中的 id。
 @Order(1)
 final class MDCStampChainObserver implements ChainObserver {
+    static final String MDC_REQUEST_ID_KEY = "requestId";
 
     @Override
     public Object onChainStart(CacheContext context) {
         // snapshot/restore：只动自己的 key，try/finally 在 onChainEnd 恢复调用方原值
         // （不调 MDC.clear() 误清宿主线程其它 MDC，如 traceId）。
-        String previousRequestId = MDC.get(CacheHandlerChain.MDC_REQUEST_ID_KEY);
-        MDC.put(CacheHandlerChain.MDC_REQUEST_ID_KEY, generateRequestId());
+        String previousRequestId = MDC.get(MDC_REQUEST_ID_KEY);
+        MDC.put(MDC_REQUEST_ID_KEY, generateRequestId());
         // 把"原值"装入 MdcScope record 返回,Engine 在 onChainEnd 配对回传。
         return new MdcScope(previousRequestId);
     }
@@ -62,9 +64,9 @@ final class MDCStampChainObserver implements ChainObserver {
         }
         MdcScope scope = (MdcScope) scopeToken;
         if (scope.previousRequestId() == null) {
-            MDC.remove(CacheHandlerChain.MDC_REQUEST_ID_KEY);
+            MDC.remove(MDC_REQUEST_ID_KEY);
         } else {
-            MDC.put(CacheHandlerChain.MDC_REQUEST_ID_KEY, scope.previousRequestId());
+            MDC.put(MDC_REQUEST_ID_KEY, scope.previousRequestId());
         }
     }
 

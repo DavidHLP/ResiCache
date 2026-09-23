@@ -188,8 +188,8 @@ class CacheHandlerChainFactory {
                 }
 
                 chain.addHandler(handler);
-                if (handler instanceof AbstractCacheHandler ach) {
-                    ach.attachMeterRegistry(registry);
+                if (handler instanceof MetricAttachable metricAttachable) {
+                    metricAttachable.attachMeterRegistry(registry);
                 }
                 log.debug("Added handler to chain: {} (order={})",
                           identity.tag(),
