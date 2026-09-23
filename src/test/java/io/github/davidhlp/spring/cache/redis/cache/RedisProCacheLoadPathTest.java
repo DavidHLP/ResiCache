@@ -156,7 +156,7 @@ class RedisProCacheLoadPathTest {
         return ResiCacheFeatures.builder()
                 .meterRegistry(registry)
                 .operationResolver(noMetadataResolver())
-                .bloomGate(mock(BloomGate.class))
+                .bloomSupport(mock(BloomSupport.class))
                 .syncSupport(mock(SyncSupport.class))
                 .syncLockTimeout(mock(SyncLockTimeout.class))
                 .build();

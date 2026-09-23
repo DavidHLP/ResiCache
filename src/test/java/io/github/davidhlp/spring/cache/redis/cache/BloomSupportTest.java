@@ -63,6 +63,32 @@ class BloomSupportTest {
     }
 
     @Test
+    @DisplayName("definite miss negates a negative filter result")
+    void definiteMiss_filterRejects_returnsTrue() {
+        when(bloomFilter.mightContain(CACHE, "key")).thenReturn(false);
+
+        assertThat(bloomSupport.definiteMiss(CACHE, "key")).isTrue();
+        verify(bloomFilter).mightContain(CACHE, "key");
+    }
+
+    @Test
+    @DisplayName("definite miss allows keys the filter may contain")
+    void definiteMiss_filterAllows_returnsFalse() {
+        when(bloomFilter.mightContain(CACHE, "key")).thenReturn(true);
+
+        assertThat(bloomSupport.definiteMiss(CACHE, "key")).isFalse();
+    }
+
+    @Test
+    @DisplayName("definite miss fails open when the underlying filter fails")
+    void definiteMiss_filterThrows_returnsFalse() {
+        when(bloomFilter.mightContain(CACHE, "key"))
+                .thenThrow(new RuntimeException("Filter error"));
+
+        assertThat(bloomSupport.definiteMiss(CACHE, "key")).isFalse();
+    }
+
+    @Test
     @DisplayName("delegates add to the underlying filter")
     void add_delegatesToFilter() {
         bloomSupport.add(CACHE, "key");

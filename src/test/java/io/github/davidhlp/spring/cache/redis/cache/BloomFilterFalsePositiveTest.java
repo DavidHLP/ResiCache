@@ -39,7 +39,7 @@ class BloomFilterFalsePositiveTest {
 
     @BeforeEach
     void setUp() {
-        handler = new BloomFilterHandler(new BloomGate(bloomSupport), bloomSupport);
+        handler = new BloomFilterHandler(bloomSupport);
     }
 
     private CacheContext createContext(CacheOperation operation) {
@@ -68,25 +68,26 @@ class BloomFilterFalsePositiveTest {
         @Test
         @DisplayName("GET terminates with miss when bloom filter rejects key")
         void get_bloomRejects_terminatesWithMiss() {
+            when(bloomSupport.definiteMiss(anyString(), anyString())).thenReturn(true);
             CacheContext context = createContext(CacheOperation.GET);
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isTrue();
             assertThat(result.result()).isEqualTo(CacheResult.miss());
-            verify(bloomSupport).mightContain(anyString(), anyString());
+            verify(bloomSupport).definiteMiss(anyString(), anyString());
         }
 
         @Test
         @DisplayName("GET continues chain when bloom filter allows key")
         void get_bloomAllows_continuesChain() {
-            when(bloomSupport.mightContain(anyString(), anyString())).thenReturn(true);
+            when(bloomSupport.definiteMiss(anyString(), anyString())).thenReturn(false);
             CacheContext context = createContext(CacheOperation.GET);
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
-            verify(bloomSupport).mightContain(anyString(), anyString());
+            verify(bloomSupport).definiteMiss(anyString(), anyString());
         }
     }
 

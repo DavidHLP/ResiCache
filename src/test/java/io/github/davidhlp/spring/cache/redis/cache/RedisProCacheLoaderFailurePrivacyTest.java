@@ -78,7 +78,7 @@ class RedisProCacheLoaderFailurePrivacyTest {
         return ResiCacheFeatures.builder()
                 .operationResolver(new CacheOperationResolver(
                         new DefaultMethodMetadataResolver(), new RedisCacheRegister()))
-                .bloomGate(mock(BloomGate.class))
+                .bloomSupport(mock(BloomSupport.class))
                 .syncSupport(mock(SyncSupport.class))
                 .syncLockTimeout(mock(SyncLockTimeout.class))
                 .build();

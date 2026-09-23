@@ -171,7 +171,7 @@ class RedisProCacheConfiguration {
             RedisProCacheWriter redisProCacheWriter,
             RedisCacheConfiguration defaultRedisCacheConfiguration,
             ResolvedMetrics resolvedMetrics,
-            BloomGate bloomGate,
+            BloomSupport bloomSupport,
             CacheOperationResolver operationResolver,
             SyncSupport syncSupport,
             SyncLockTimeout syncLockTimeout,
@@ -181,7 +181,7 @@ class RedisProCacheConfiguration {
 
         ResiCacheFeatures features = ResiCacheFeatures.builder()
                 .meterRegistry(resolvedMetrics.meterRegistry())
-                .bloomGate(bloomGate)
+                .bloomSupport(bloomSupport)
                 .operationResolver(operationResolver)
                 .syncSupport(syncSupport)
                 .syncLockTimeout(syncLockTimeout)
