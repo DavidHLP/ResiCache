@@ -2,6 +2,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -11,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -64,6 +66,23 @@ class SyncSupportSingleFlightTest {
         }
     }
 
+    /**
+     * 等待工作线程进入单飞阻塞态({@code WAITING}/{@code TIMED_WAITING} —— follower 的
+     * {@code future.get(...)}),即证明它已越过 {@code SyncState.publish} 注册点。
+     * 条件等待 + 5 秒死亡线,不使用 sleep;超时以断言失败暴露,不静默降级。
+     */
+    private static void awaitJoinedSingleFlight(Thread thread) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            Thread.State state = thread.getState();
+            if (state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING) {
+                return;
+            }
+            Thread.onSpinWait();
+        }
+        throw new AssertionError("thread never joined the in-flight future within 5s: " + thread);
+    }
+
     @Test
     @DisplayName("concurrent followers: loader invoked exactly once, all share leader's result")
     void singleFlight_concurrentFollowers_loaderInvokedOnce_allShareResult() throws Exception {
@@ -72,10 +91,16 @@ class SyncSupportSingleFlightTest {
         SyncSupport support = new SyncSupport(List.of(lockManager), properties);
 
         AtomicInteger loaderCount = new AtomicInteger();
+        AtomicReference<Thread> leaderThread = new AtomicReference<>();
         CountDownLatch leaderStarted = new CountDownLatch(1);
         CountDownLatch leaderProceed = new CountDownLatch(1);
         int n = 10;
-        ExecutorService ex = Executors.newFixedThreadPool(n);
+        List<Thread> spawned = new ArrayList<>();
+        ExecutorService ex = Executors.newFixedThreadPool(n, runnable -> {
+            Thread thread = new Thread(runnable);
+            spawned.add(thread);
+            return thread;
+        });
         CountDownLatch done = new CountDownLatch(n);
         CountDownLatch callersReady = new CountDownLatch(n);
         ConcurrentLinkedQueue<Object> results = new ConcurrentLinkedQueue<>();
@@ -86,6 +111,7 @@ class SyncSupportSingleFlightTest {
                     callersReady.countDown();
                     Object r = support.executeSync("shared-key", () -> {
                         loaderCount.incrementAndGet();
+                        leaderThread.set(Thread.currentThread());
                         leaderStarted.countDown();
                         await(leaderProceed); // 阻塞 leader,让其余 9 线程落到 follower 路径
                         return "VALUE";
@@ -101,6 +127,16 @@ class SyncSupportSingleFlightTest {
                 .as("leader should enter loader").isTrue();
         assertThat(callersReady.await(5, TimeUnit.SECONDS))
                 .as("all callers should reach executeSync").isTrue();
+        // 注册屏障:countDown 发生在 executeSync 之前,主线程不能据此认定 follower 已完成
+        // in-flight 注册。放行 leader 前,逐一确认每个非 leader 线程都已阻塞在 follower
+        // 的 future.get 上(publish 已越过),否则迟到线程可能在 leader 清理后开启第二班。
+        Thread leader = leaderThread.get();
+        assertThat(leader).as("leader thread identified inside loader").isNotNull();
+        for (Thread thread : spawned) {
+            if (thread != leader) {
+                awaitJoinedSingleFlight(thread);
+            }
+        }
         assertThat(loaderCount.get())
                 .as("followers must share the blocked leader").isEqualTo(1);
         leaderProceed.countDown(); // 放行 leader
