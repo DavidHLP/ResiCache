@@ -46,7 +46,7 @@ import lombok.extern.slf4j.Slf4j;
  * {@link ChainContinuation} 句柄 —— 不再依赖任何从 handler 反查 Engine 的隐式通道。
  */
 @Slf4j
-abstract class AbstractCacheHandler implements CacheHandler {
+abstract class AbstractCacheHandler implements CacheHandler, MetricAttachable {
 
     /**
      * 单参 {@link #handle(CacheContext)} 没有剩余链可供推进。句柄由基类统一提供，
@@ -92,6 +92,7 @@ abstract class AbstractCacheHandler implements CacheHandler {
      * 类统一注册，不在本方法范围。registry 为 null（仅测试/防御路径）、为关闭 seam 或
      * 子类未声明元数据时本方法为 no-op。幂等：同名同 tag 重复 register 返回既有实例。
      */
+    @Override
     public void attachMeterRegistry(MeterRegistry registry) {
         if (MetricsWriter.disabled(registry)) {
             return;

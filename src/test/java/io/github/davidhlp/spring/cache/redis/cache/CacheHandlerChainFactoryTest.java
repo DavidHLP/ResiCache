@@ -398,6 +398,7 @@ class CacheHandlerChainFactoryTest {
                     List.of(new io.github.davidhlp.spring.cache.redis.cache.FiredCounterChainObserver(registry)));
 
             CacheHandlerChain chain = factory.createChain();
+            assertThat(((FiredCounterProbe) probe).attachedRegistry).isSameAs(registry);
             CacheContext ctx = CacheContext.of(CacheInput.builder()
                     .operation(CacheOperation.GET)
                     .cacheName("probe-cache")
@@ -413,7 +414,15 @@ class CacheHandlerChainFactoryTest {
                     .isEqualTo(1.0);
         }
 
-        static class FiredCounterProbe implements CacheHandler {
+        static class FiredCounterProbe implements CacheHandler, MetricAttachable {
+            private MeterRegistry attachedRegistry;
+
+            @Override
+            public void attachMeterRegistry(MeterRegistry registry) {
+                attachedRegistry = registry;
+            }
+
+
             @Override
             public HandlerResult handle(CacheContext context) {
                 return HandlerResult.continueWith(CacheResult.success());
