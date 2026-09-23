@@ -50,7 +50,7 @@ public class RedisProCache extends RedisCache {
     /**
      * Loader 路径编排器 — loader-path deep seam。
      *
-     * <p>{@code bloomGate} / {@code syncSupport} / {@code syncLockTimeout} 3 个 protection
+     * <p>{@code bloomSupport} / {@code syncSupport} / {@code syncLockTimeout} 3 个 protection
      * 协作 bean 全部由 {@link LoaderOrchestrator} 持有,本类在构造期一次性 build 后委派
      * {@link LoaderOrchestrator#orchestrate}。
      *
@@ -94,7 +94,7 @@ public class RedisProCache extends RedisCache {
         // loader 路径编排器 build — protection 依赖 + cache-specific callbacks 一次性绑定;
         // 生产 get(key, loader) 只需传入 key/loader/operation,不再重复装配 3 个 callback。
         this.loaderOrchestrator = new LoaderOrchestrator(
-                features.getBloomGate(),
+                features.getBloomSupport(),
                 features.getSyncSupport(),
                 features.getSyncLockTimeout(),
                 this::deriveRedisKey,
@@ -142,7 +142,7 @@ public class RedisProCache extends RedisCache {
      *
      * <p>3 个 callback 已在构造期绑定到 {@link LoaderOrchestrator};此处不重复组装:
      * <ul>
-     *   <li>{@code redisKeyFn} → {@link #deriveRedisKey}(super.createCacheKey) — BloomGate/SyncSupport 用</li>
+     *   <li>{@code redisKeyFn} → {@link #deriveRedisKey}(super.createCacheKey) — BloomSupport/SyncSupport 用</li>
      *   <li>{@code doubleCheckFn} → {@link #doubleCheckLookup}(super.get) — 缓存读原语,绕过 override 不打 metrics</li>
      *   <li>{@code putAfterLoad} → {@code (k, v) -> put(k, v)} — 走 override,保留 putTimer + putCounter</li>
      * </ul>

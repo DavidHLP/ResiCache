@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
  *   <li>GET:布隆判定确定 miss → 短路 miss + 计一次语义 counter;判定允许 → 继续链</li>
  *   <li>PUT / PUT_IF_ABSENT:仅在成功且非 skip 时回填 {@link BloomSupport#add}</li>
  *   <li>CLEAN:不触碰 Bloom(不 add、不 clear、无 rebuilding marker)</li>
- *   <li>{@link BloomGate} 只承担读侧判定;add/clear 全部收口于 {@link BloomSupport}</li>
+ *   <li>{@link BloomSupport} 统一承担读侧判定与 add/clear</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -44,9 +44,6 @@ class BloomFilterHandlerTest {
     @Mock
     private BloomSupport bloomSupport;
 
-    @Mock
-    private BloomGate bloomGate;
-
 
     @Mock
     private RedisCacheableOperation cacheOperation;
@@ -55,7 +52,7 @@ class BloomFilterHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new BloomFilterHandler(bloomGate, bloomSupport);
+        handler = new BloomFilterHandler(bloomSupport);
     }
 
     private CacheContext createContext(CacheOperation operation) {
@@ -128,7 +125,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("returns miss and terminates when bloom filter rejects key")
         void handleGet_bloomRejects_returnsMissAndTerminates() {
-            when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(true);
+            when(bloomSupport.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(true);
             CacheContext context = createContext(CacheOperation.GET);
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
@@ -140,7 +137,7 @@ class BloomFilterHandlerTest {
         @Test
         @DisplayName("continues chain when bloom filter allows key")
         void handleGet_bloomAllows_returnsContinueChain() {
-            when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
+            when(bloomSupport.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
             CacheContext context = createContext(CacheOperation.GET);
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
@@ -181,7 +178,7 @@ class BloomFilterHandlerTest {
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
             assertThat(result.shouldTerminate()).isFalse();
-            verify(bloomGate, never()).definiteMiss(anyString(), anyString());
+            verify(bloomSupport, never()).definiteMiss(anyString(), anyString());
             verify(bloomSupport, never()).clear(anyString());
         }
     }
@@ -322,7 +319,7 @@ class BloomFilterHandlerTest {
             verify(bloomSupport, never()).clear(anyString());
 
             // 同一 key 的后续 GET:布隆判定基于"可能存在",不短路,loader 可达
-            when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
+            when(bloomSupport.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
             HandlerResult getResult = handler.doHandle(createContext(CacheOperation.GET), CacheResult::success);
 
             assertThat(getResult.shouldTerminate()).isFalse();
@@ -352,14 +349,14 @@ class BloomFilterHandlerTest {
          * Scenario 3:并发 GET 与 CLEAN —— 判定层故障时走 fail-open,GET 决策不短路。
          *
          * <p>BloomSupport 的 fail-open(true)契约由 BloomSupportTest 锁定;此处锁定
-         * handler 侧:只要 {@link BloomGate#definiteMiss} 返回 false(可能 miss 判定
+         * handler 侧:只要 {@link BloomSupport#definiteMiss} 返回 false(可能 miss 判定
          * 无法作出),GET 必须继续,不许返回静默 miss。
          */
         @Test
         @DisplayName("concurrent GET/CLEAN keeps the GET decision fail-open")
         void concurrentCleanGet_getDecisionStaysFailOpen() {
             CacheContext getContext = createContext(CacheOperation.GET);
-            when(bloomGate.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
+            when(bloomSupport.definiteMiss(CACHE_NAME, ACTUAL_KEY)).thenReturn(false);
 
             HandlerResult result = handler.doHandle(getContext, CacheResult::success);
 

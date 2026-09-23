@@ -18,8 +18,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>职责：
  * <ul>
- *   <li>GET: 经 {@link BloomGate#definiteMiss} 判定「确定不存在」→ 短路返回 miss
- *       (读侧穿透判定 + 统一日志收口到 BloomGate,与 {@code RedisProCache} loader 路径共享)</li>
+ *   <li>GET: 经 {@link BloomSupport#definiteMiss} 判定「确定不存在」→ 短路返回 miss
+ *       (读侧穿透判定 + 统一日志收口到 BloomSupport,与 {@code RedisProCache} loader 路径共享)</li>
  *   <li>PUT / PUT_IF_ABSENT:标记需要后置处理，由
  *       {@link #afterChainExecution} 在责任链执行完成后经 {@link BloomSupport} 回填布隆。
  *       CLEAN 只清缓存数据,不改变 Bloom。</li>
@@ -30,12 +30,9 @@ import org.springframework.stereotype.Component;
 @HandlerPriority(HandlerOrder.BLOOM_FILTER)
 class BloomFilterHandler extends AbstractCacheHandler {
 
-    private final BloomGate bloomGate;
     private final BloomSupport bloomSupport;
 
-    public BloomFilterHandler(BloomGate bloomGate,
-                              BloomSupport bloomSupport) {
-        this.bloomGate = bloomGate;
+    public BloomFilterHandler(BloomSupport bloomSupport) {
         this.bloomSupport = bloomSupport;
     }
 
@@ -74,8 +71,8 @@ class BloomFilterHandler extends AbstractCacheHandler {
      * 会在调用 loader 前再做一次 Bloom 拦截，防止触发数据源查询。
      */
     private HandlerResult handleGet(CacheContext context) {
-        // 读侧确定 miss 判定 + 统一 debug 日志收口到 BloomGate(与 RedisProCache loader 路径共享)
-        if (bloomGate.definiteMiss(context.getCacheName(), context.getActualKey())) {
+        // 读侧确定 miss 判定 + 统一 debug 日志收口到 BloomSupport(与 RedisProCache loader 路径共享)
+        if (bloomSupport.definiteMiss(context.getCacheName(), context.getActualKey())) {
             // GET 统计统一由 RedisProCacheWriter 按链结果记录，避免
             // withStatisticsCollector 复用链时写入旧 collector。
             safeIncrementSemantic();
