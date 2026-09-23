@@ -1,0 +1,48 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandler.java
+  h_77173abe25c3ff 86,96,144,154
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheFailureReporter.java
+  h_77173abe25c3ff 50,72,76-79
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ChainTimerChainObserver.java
+  h_77173abe25c3ff 48,77,81-83
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DisabledMetricsRegistry.java
+  h_77173abe25c3ff 48-49
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/FiredCounterChainObserver.java
+  h_77173abe25c3ff 48,64,69-73,76
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/MetricsWriter.java
+  h_77173abe25c3ff 1-71
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisBloomIFilter.java
+  h_77173abe25c3ff 53-56,90,136,162
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistry.java
+  h_77173abe25c3ff 40,158,178,224,227,232,235,239,251,263
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RefreshTaskMetrics.java
+  h_77173abe25c3ff 22,46,52-57,60-61,65-67,74,81,88
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResiCacheFeatures.java
+  h_77173abe25c3ff 23
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResolvedMetrics.java
+  h_77173abe25c3ff 15-17
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationEngine.java
+  h_77173abe25c3ff 63,298-299
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractCacheHandlerSemanticCounterTest.java
+  h_77173abe25c3ff 140-141,143
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheFailureReporterTest.java
+  h_77173abe25c3ff 93
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ChainObserverTest.java
+  h_77173abe25c3ff 149,282
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisBloomIFilterIntegrationTest.java
+  h_77173abe25c3ff 192,199-200,203
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheMetricsRegistryTest.java
+  h_77173abe25c3ff 114-115,136
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RefreshTaskMetricsTest.java
+  h_77173abe25c3ff 8,35,91,102,104,106-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04799c52cc419f276c801ecccfc389cac2484216",
+  "prompts": {},
+  "humans": {
+    "h_77173abe25c3ff": {
+      "author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
