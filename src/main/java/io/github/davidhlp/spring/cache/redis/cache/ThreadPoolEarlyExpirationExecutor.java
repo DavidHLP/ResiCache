@@ -158,8 +158,8 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
                         k -> {
                             scheduled.set(true);
                             return CompletableFuture.runAsync(
-                                            () -> retryPolicy.executeWithRetry(k, task),
-                                            executorService);
+                                    () -> retryPolicy.executeWithRetry(k, task),
+                                    executorService);
                         });
 
         if (scheduled.get()) {

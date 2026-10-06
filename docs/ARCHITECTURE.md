@@ -110,6 +110,8 @@ current documented behavior in `COMPATIBILITY.md`.
   exhausted failures are reported and isolated there, including when a full
   queue runs the task on the submitting thread. `prerefresh.completed` counts
   task termination, including failure, rather than successful CAS operations.
+  The executor attaches completion callbacks only after publishing the future,
+  avoiding recursive map updates when execution completes inline.
 - `ResiCacheFeatures` validates required collaborators when the value is
   constructed and normalizes absent metrics to the shared disabled registry.
   Cache creation consumes that validated value; standalone loader construction
