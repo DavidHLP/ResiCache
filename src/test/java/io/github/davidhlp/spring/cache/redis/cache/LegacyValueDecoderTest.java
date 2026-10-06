@@ -13,6 +13,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -136,6 +137,50 @@ class LegacyValueDecoderTest {
                 SerializationMigrationProperties.LegacySerializer.JDK))
                 .isInstanceOf(SerializationException.class)
                 .hasMessageContaining("16 MiB input limit");
+    }
+
+    @Test
+    void jdk_rejectsDistinctStringsInNestedArray() throws Exception {
+        String[] strings = new String[100_001];
+        for (int i = 0; i < strings.length; i++) {
+            strings[i] = "value-" + i;
+        }
+        List<Object> value = new ArrayList<>();
+        value.add(strings);
+        byte[] bytes = jdkBytes(value);
+        assertThat(bytes.length).isLessThan(16 * 1024 * 1024);
+
+        assertThatThrownBy(() -> decoder.decode(bytes,
+                SerializationMigrationProperties.LegacySerializer.JDK))
+                .isInstanceOf(SerializationException.class)
+                .hasRootCauseInstanceOf(InvalidClassException.class)
+                .hasStackTraceContaining("100000 reference limit");
+    }
+
+    @Test
+    void jdk_rejectsDistinctStringsWithoutArrayFilterCallback() throws Exception {
+        List<String> value = new LinkedList<>();
+        for (int i = 0; i < 100_001; i++) {
+            value.add("value-" + i);
+        }
+        byte[] bytes = jdkBytes(value);
+
+        assertThatThrownBy(() -> decoder.decode(bytes,
+                SerializationMigrationProperties.LegacySerializer.JDK))
+                .isInstanceOf(SerializationException.class)
+                .hasRootCauseInstanceOf(InvalidClassException.class)
+                .hasStackTraceContaining("100000 reference limit");
+    }
+
+    @Test
+    void jdk_decodesBoundedDistinctStrings() throws Exception {
+        List<String> value = new LinkedList<>();
+        for (int i = 0; i < 1000; i++) {
+            value.add("value-" + i);
+        }
+
+        assertThat(decoder.decode(jdkBytes(value),
+                SerializationMigrationProperties.LegacySerializer.JDK)).isEqualTo(value);
     }
 
     @Test

@@ -33,7 +33,8 @@ Current milestones:
   over 16 MiB, graphs deeper than 64, more than 100,000 references, or arrays
   over 1,000,000 elements before allocation, while preserving the class
   whitelist and host input filter. Larger entries must be regenerated with
-  the current serializer. Lenient JSON deserialization logs only exception
+  the current serializer. Newly read strings are counted explicitly because
+  JDK input-filter callbacks skip them. Lenient JSON deserialization logs only exception
   types at WARN; detailed exceptions remain at DEBUG.
 
 - **⚠️ Early-expiration task failures now reach retries** — actual async
