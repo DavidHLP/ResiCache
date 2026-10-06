@@ -13,10 +13,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Benchmark: Chain Pass-Through vs Spring-native caching baseline.
+ * Benchmark: Chain pass-through vs direct ConcurrentHashMap lookup.
  *
  * <p>Measures the baseline execution overhead of ResiCache's {@link ChainEngine}
- * pass-through against direct method execution and native in-memory cache lookup.
+ * pass-through against direct method execution and direct map lookup, without Spring AOP or Redis I/O.
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
@@ -27,9 +27,11 @@ import java.util.concurrent.TimeUnit;
 public class ChainPassThroughBenchmark {
 
     private ChainEngine engine;
+    private CacheHandlerChain facade;
     private CacheContext sampleContext;
     private List<CacheHandler> passthroughChain;
-    private Map<String, Object> springNativeMockCache;
+    private List<CacheHandler> mutableBaseline;
+    private Map<String, Object> mapBaseline;
     private static final String KEY = "order:1001";
     private static final String VALUE = "order-payload-data";
 
@@ -50,8 +52,26 @@ public class ChainPassThroughBenchmark {
                 .actualKey(KEY)
                 .build());
         passthroughChain = List.of(new PassthroughHandler());
-        springNativeMockCache = new ConcurrentHashMap<>();
-        springNativeMockCache.put(KEY, VALUE);
+        facade = new CacheHandlerChain(engine).addHandler(passthroughChain.get(0));
+        mutableBaseline = new java.util.ArrayList<>(passthroughChain);
+        mapBaseline = new ConcurrentHashMap<>();
+        mapBaseline.put(KEY, VALUE);
+    }
+
+    /** Current facade reuses its published immutable handler list. */
+    @Benchmark
+    public Object immutableFacade() {
+        return facade.execute(sampleContext);
+    }
+
+    /** Former facade path: take the mutation lock and copy a mutable list per call. */
+    @Benchmark
+    public Object copiedFacadeBaseline() {
+        List<CacheHandler> snapshot;
+        synchronized (this) {
+            snapshot = List.copyOf(mutableBaseline);
+        }
+        return engine.execute(snapshot, sampleContext);
     }
 
     /**
@@ -63,11 +83,11 @@ public class ChainPassThroughBenchmark {
     }
 
     /**
-     * Baseline 2: Spring-native concurrent map cache lookup.
+     * Baseline 2: Direct ConcurrentHashMap lookup.
      */
     @Benchmark
-    public Object springNativeCacheLookup() {
-        return springNativeMockCache.get(KEY);
+    public Object concurrentMapLookup() {
+        return mapBaseline.get(KEY);
     }
 
     /**

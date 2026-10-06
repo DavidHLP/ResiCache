@@ -24,6 +24,18 @@ All measurements were produced by the `resicache-bench` module using JMH 1.37 on
 > works; it does not validate or replace this historical table.
 
 
+The historical benchmark identifiers below predate a scope correction. The
+`springNativeCacheLookup` result is a direct `ConcurrentHashMap.get()` baseline,
+not a Spring interceptor or Redis cache measurement. The additive handler
+results measure dispatch through pass-through nodes (the former TTL node used
+GET and did not calculate TTL); they do not measure full protection cost.
+`ttlJitter_concurrent_uniformity` measures concurrent computation throughput,
+not distribution correctness. Current method names state those scopes.
+`CacheSerializationBenchmark` now measures v2 serializer/codec/storage round trips
+at several payload sizes, excluding Redis network I/O. Its mapper codec is a
+reference for adaptation cost; the copied facade recreates the former facade path.
+These are not release SLO gates.
+
 ## Running the Benchmarks
 
 ```bash
@@ -60,7 +72,7 @@ Measures single-flight leader-follower synchronization under cache breakdown / t
 
 | Benchmark | Threads | Score (ops/s) | Interpretation | Status |
 |---|---|---|---|---|
-| `noSync` | 1 | **1,787,267** | Baseline: direct loader execution (~100 µs simulated work) | Reference |
+| `noSync` | 1 | **1,787,267** | Baseline: direct CPU-bound loader substitute | Reference |
 | `syncLocalOnly_8threads` | 8 | **81,128,097** | Leader-follower coordination with 8 concurrent threads | **OK** |
 | `syncContended_32threads` | 32 | **455,369,392** | Worst-case stampede (32 threads hammered on 1 key) | **OK** (gate remains stable) |
 
@@ -74,7 +86,7 @@ Measures `TtlHandler` Gaussian random variance calculation to prevent cache aval
 | `ttlBaseline` | 0.1 | **478,945,558** | Direct unjittered return baseline | Reference |
 | `ttlJitter_compute` | 0.1 | **54,806,459** | Gaussian jitter per cache put (~18 ns overhead) | **OK** (SLO ≥ 10.0 M ops/s) |
 | `ttlJitter_compute` | 0.2 | **52,697,903** | Configurable ratio variance sweep | **OK** |
-| `ttlJitter_concurrent_uniformity` | 0.1 (8 threads) | **5,551,344** | Concurrent ThreadLocalRandom write distribution | **OK** |
+| `ttlJitter_concurrent_uniformity` | 0.1 (8 threads) | **5,551,344** | Concurrent jitter computation throughput | **OK** |
 
 ---
 
@@ -94,10 +106,10 @@ Measures the additive overhead per installed handler in the execution chain.
 
 | Benchmark | Installed Handlers | Score (ops/s) | Marginal Delay |
 |---|---|---|---|
-| `cost_1_handler_ttl` | 1 (TTL) | **31,466,289** | ~31.8 ns baseline |
+| `cost_1_handler_ttl` | 1 (dispatch) | **31,466,289** | ~31.8 ns baseline |
 | `cost_2_handlers` | 2 (TTL + Bloom) | **28,108,769** | +3.8 ns |
 | `cost_3_handlers` | 3 (TTL + Bloom + Null) | **25,716,085** | +3.3 ns |
 | `cost_4_handlers` | 4 (TTL + Bloom + Null + Sync) | **24,240,836** | +2.4 ns |
-| `cost_5_handlers_full` | 5 (Full Depth Protection) | **22,488,609** | +3.2 ns |
+| `cost_5_handlers_full` | 5 (dispatch) | **22,488,609** | +3.2 ns |
 
 *Conclusion: Each additional protection handler adds ~2.5–3.8 ns of chain advancement overhead in memory.*
