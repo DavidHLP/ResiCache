@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
@@ -12,7 +7,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 
 /**
@@ -33,7 +27,6 @@ import org.springframework.core.annotation.Order;
  * <p>线程安全：counter map 用 {@link ConcurrentHashMap}（lazy register 时多个
  * handler 类型竞争同 observer）；{@link Counter#increment()} 自身线程安全。
  */
-@Slf4j
 @Order(4) // 执行顺序单一真值源=类级 @Order,见 MDCStampChainObserver 注释
 final class FiredCounterChainObserver implements ChainObserver {
 

@@ -6,7 +6,6 @@ import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Benchmark: SyncLock (cache-breakdown / cache-stampede protection).
@@ -37,13 +36,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SyncLockBenchmark {
 
     private SyncSupport syncLocalOnly;
-    private final AtomicInteger loaderCallCount = new AtomicInteger(0);
     private static final String CACHE_KEY = "product:42";
 
-    /** Simulates a DB lookup taking ~100 µs */
+    /** CPU-bound loader substitute; duration depends on the measured machine. */
     private String simulateDbLoad() {
-        Blackhole.consumeCPU(500); // ~100 µs on a 5 GHz CPU
-        loaderCallCount.incrementAndGet();
+        Blackhole.consumeCPU(500);
         return "loaded-value";
     }
 
@@ -79,7 +76,7 @@ public class SyncLockBenchmark {
 
     /**
      * Worst-case contention: 32 threads vs single key.
-     * Verifies the single-flight gate stays stable under high concurrency.
+     * Measures combined leader/follower throughput; unit tests verify the single-flight protocol.
      */
     @Benchmark
     @Threads(32)

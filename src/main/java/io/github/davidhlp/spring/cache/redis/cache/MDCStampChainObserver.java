@@ -1,15 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
 import java.util.concurrent.ThreadLocalRandom;
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
 
@@ -35,7 +29,6 @@ import org.springframework.core.annotation.Order;
  * <p>线程安全：MDC 本身是 ThreadLocal，每次 execute 调用在调用方线程内做
  * snapshot/restore 配对，无共享状态。
  */
-@Slf4j
 // 标准 observer 执行顺序由类级 @Order 单一拥有(MDC→DebugLog→Timer→FiredCounter):
 // Spring 注入 observer 列表时按同一注解排序,工厂保持注入序 —— 故本 observer 先 stamp
 // requestId,ChainDebugLogChainObserver 才能在 afterNode 读到 MDC 中的 id。

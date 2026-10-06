@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.DisplayName;
@@ -12,18 +7,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * {@code XxxOperation.fromAttributes(method, key, attributes)} seam 的契约测试。
- *
- * <p>本测试覆盖三个 Operation 的静态 {@code fromAttributes} 方法,验证:
- * <ul>
- *   <li>字段映射完整(21 字段全量 / Evict 17 字段子集)</li>
- *   <li>空入参 / 默认值路径</li>
- *   <li>跨 Operation 字段集差异(Cacheable/Put 全集 vs Evict 子集)</li>
- * </ul>
- *
- * <p>{@code expectedInsertions} 为 long 类型,直传无窄化。
- */
+/** Regression coverage for active read/write policy mapping from the shared projection. */
 @DisplayName("Operation.fromAttributes seam")
 class OperationFromAttributesTest {
 
@@ -59,7 +43,7 @@ class OperationFromAttributesTest {
     class CacheableFromAttributes {
 
         @Test
-        @DisplayName("全部 21 字段正确映射")
+        @DisplayName("读策略字段正确映射")
         void fromAttributes_allFieldsPropagate() throws Exception {
             RedisCacheAttributes a = RedisCacheAttributes.builder()
                     .cacheNames(new String[]{"c1"})
@@ -73,8 +57,6 @@ class OperationFromAttributesTest {
                     .type(String.class)
                     .cacheNullValues(true)
                     .useBloomFilter(true)
-                    .expectedInsertions(5000L)
-                    .falseProbability(0.005)
                     .randomTtl(true)
                     .variance(0.3F)
                     .enableEarlyExpiration(true)
@@ -100,8 +82,6 @@ class OperationFromAttributesTest {
             assertThat(op.getType()).isEqualTo(String.class);
             assertThat(op.isCacheNullValues()).isTrue();
             assertThat(op.isUseBloomFilter()).isTrue();
-            assertThat(op.getExpectedInsertions()).isEqualTo(5000);
-            assertThat(op.getFalseProbability()).isEqualTo(0.005);
             assertThat(op.isRandomTtl()).isTrue();
             assertThat(op.getVariance()).isEqualTo(0.3F);
             assertThat(op.isEnableEarlyExpiration()).isTrue();
@@ -109,19 +89,6 @@ class OperationFromAttributesTest {
             assertThat(op.getEarlyExpirationMode()).isEqualTo(EarlyExpirationMode.ASYNC);
             assertThat(op.isSync()).isTrue();
             assertThat(op.getSyncTimeout()).isEqualTo(30L);
-        }
-
-        @Test
-        @DisplayName("expectedInsertions long 值直传不窄化")
-        void fromAttributes_passesExpectedInsertionsThrough() throws Exception {
-            // Cacheable Builder 槽位是 long,直传无窄化。
-            RedisCacheAttributes a = emptyExcept(RedisCacheAttributes.builder()
-                    .cacheNames(new String[]{"c"})
-                    .expectedInsertions(Long.MAX_VALUE));
-
-            RedisCacheableOperation op = RedisCacheableOperation.fromAttributes(testMethod(), "k", a);
-
-            assertThat(op.getExpectedInsertions()).isEqualTo(Long.MAX_VALUE);
         }
 
         @Test
@@ -153,11 +120,10 @@ class OperationFromAttributesTest {
     class PutFromAttributes {
 
         @Test
-        @DisplayName("Put 字段集与 Cacheable 相同,直接 long→long 透传 expectedInsertions")
+        @DisplayName("Put 字段集与 Cacheable 相同,同步策略正确映射")
         void fromAttributes_putIsLongType() throws Exception {
             RedisCacheAttributes a = emptyExcept(RedisCacheAttributes.builder()
                     .cacheNames(new String[]{"c"})
-                    .expectedInsertions(50_000L)
                     .sync(true));
 
             RedisCachePutOperation op = RedisCachePutOperation.fromAttributes(testMethod(), "k", a);
@@ -165,8 +131,6 @@ class OperationFromAttributesTest {
             assertThat(op.getName()).isEqualTo("sample");
             assertThat(op.getKey()).isEqualTo("k");
             assertThat(op.isSync()).isTrue();
-            // Put 的 expectedInsertions 是 long,无窄化
-            assertThat(op.getExpectedInsertions()).isEqualTo(50_000L);
         }
 
         @Test
@@ -186,65 +150,4 @@ class OperationFromAttributesTest {
         }
     }
 
-    // -----------------------------------------------------------------
-    // RedisCacheEvictOperation.fromAttributes
-    // -----------------------------------------------------------------
-
-    @Nested
-    @DisplayName("RedisCacheEvictOperation.fromAttributes")
-    class EvictFromAttributes {
-
-        @Test
-        @DisplayName("Evict 缺失字段(unless/type/cacheNullValues/randomTtl/variance)不映射")
-        void fromAttributes_dropsMissingEvictFields() throws Exception {
-            // String 字段填 ""(非 null),与 Spring 注解默认对齐
-            RedisCacheAttributes a = RedisCacheAttributes.builder()
-                    .cacheNames(new String[]{"c"})
-                    .key("").keyGenerator("").cacheManager("").cacheResolver("")
-                    .condition("").unless("#r==null")
-                    .type(String.class)
-                    .cacheNullValues(true)
-                    .randomTtl(true)
-                    .variance(0.5F)
-                    .allEntries(true)
-                    .beforeInvocation(true)
-                    .build();
-
-            RedisCacheEvictOperation op = RedisCacheEvictOperation.fromAttributes(testMethod(), "k", a);
-
-            assertThat(op.getName()).isEqualTo("sample");
-            assertThat(op.isCacheWide()).isTrue();
-            assertThat(op.isBeforeInvocation()).isTrue();
-            // Evict 无 unless / type / cacheNullValues / randomTtl / variance 槽位
-            // ——这些字段在 Evict 注解上本身就无对应语义
-        }
-
-        @Test
-        @DisplayName("Evict 共享字段(布隆/早过期/同步)透传")
-        void fromAttributes_evictSharedFields() throws Exception {
-            RedisCacheAttributes a = emptyExcept(RedisCacheAttributes.builder()
-                    .cacheNames(new String[]{"c"})
-                    .useBloomFilter(true)
-                    .expectedInsertions(50_000L)
-                    .falseProbability(0.01)
-                    .enableEarlyExpiration(true)
-                    .earlyExpirationThreshold(0.5)
-                    .earlyExpirationMode(EarlyExpirationMode.ASYNC)
-                    .sync(true)
-                    .syncTimeout(20L)
-                    .ttl(60L));
-
-            RedisCacheEvictOperation op = RedisCacheEvictOperation.fromAttributes(testMethod(), "k", a);
-
-            assertThat(op.isUseBloomFilter()).isTrue();
-            assertThat(op.getExpectedInsertions()).isEqualTo(50_000L);
-            assertThat(op.getFalseProbability()).isEqualTo(0.01);
-            assertThat(op.isEnableEarlyExpiration()).isTrue();
-            assertThat(op.getEarlyExpirationThreshold()).isEqualTo(0.5);
-            assertThat(op.getEarlyExpirationMode()).isEqualTo(EarlyExpirationMode.ASYNC);
-            assertThat(op.isSync()).isTrue();
-            assertThat(op.getSyncTimeout()).isEqualTo(20L);
-            assertThat(op.getTtl()).isEqualTo(60L);
-        }
-    }
 }

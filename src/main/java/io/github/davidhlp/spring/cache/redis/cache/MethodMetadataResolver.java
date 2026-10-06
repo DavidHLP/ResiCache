@@ -1,9 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -27,9 +23,6 @@ interface MethodMetadataResolver {
 
     /** @return current target class, or {@code null} outside activation. */
     Class<?> currentTargetClass();
-
-    /** @return immutable current method context, or {@code null} when inactive. */
-    MethodSnapshot currentContext();
 
     /**
      * Activates metadata and returns a LIFO handle that restores prior state.
@@ -96,10 +89,4 @@ interface MethodMetadataResolver {
         return runWithSnapshot(snapshot, MDC.getCopyOfContextMap(), work);
     }
 
-    /**
-     * Compatibility overload. New async callers must capture before queueing.
-     */
-    default <T> T runWithSnapshot(Supplier<T> work) {
-        return runWithSnapshot(capture(), MDC.getCopyOfContextMap(), work);
-    }
 }

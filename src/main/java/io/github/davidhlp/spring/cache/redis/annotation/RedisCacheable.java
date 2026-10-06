@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
-
-
-
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.lang.annotation.*;
@@ -101,16 +98,16 @@ public @interface RedisCacheable {
     boolean useBloomFilter() default false;
 
     /**
-     * 布隆过滤器预期插入数量.
-     *
-     * <p>类型为 {@code long},与 {@code @RedisCachePut}/{@code @RedisCacheEvict} 保持一致,
-     * 避免负值裁剪 + bloom sizing DoS 风险(超大值 int 溢出后被 narrowToInt 截为负数 →
-     * bloom 分配异常)。字段类型契约与 {@link io.github.davidhlp.spring.cache.redis.cache.RedisCacheAttributes#expectedInsertions}
-     * 双向一致,无隐式拓宽/窄化。
+     * Compatibility-only Bloom sizing metadata; not consumed by the runtime.
+     * Configure {@code resi-cache.bloom.bit-size} and {@code hash-functions} instead.
      */
     @PositiveOrZero
     long expectedInsertions() default 100000L;
 
+    /**
+     * Compatibility-only Bloom sizing metadata; not consumed by the runtime.
+     * Configure {@code resi-cache.bloom.bit-size} and {@code hash-functions} instead.
+     */
     double falseProbability() default 0.01;
 
     /**

@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import org.redisson.Redisson;
@@ -13,7 +10,6 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -57,13 +53,6 @@ public class TestRedisConfiguration {
         template.setEnableDefaultSerializer(true);
         template.afterPropertiesSet();
         return template;
-    }
-
-    @Bean
-    @Primary
-    public HashOperations<String, String, String> hashOperations(
-            RedisTemplate<String, Object> redisTemplate) {
-        return redisTemplate.opsForHash();
     }
 
     @Bean

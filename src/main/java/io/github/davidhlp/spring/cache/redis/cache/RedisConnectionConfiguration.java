@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +7,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -64,14 +58,6 @@ class RedisConnectionConfiguration {
                 properties.getSerializer().getAllowedPackagePrefixes(),
                 properties.getSerializer().isPolymorphicTypingEnabled());
         return template;
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public HashOperations<String, String, String> hashOperations(
-            @org.springframework.beans.factory.annotation.Qualifier("redisCacheTemplate")
-            RedisTemplate<String, Object> redisTemplate) {
-        return redisTemplate.opsForHash();
     }
 
     @Bean

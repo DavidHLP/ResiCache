@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.annotation;
 
-
-
-
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.lang.annotation.*;
@@ -78,49 +75,37 @@ public @interface RedisCacheEvict {
      */
     boolean beforeInvocation() default false;
 
-    /**
-     * 是否使用分布式锁防缓存击穿.
-     */
+    /** Compatibility-only sync metadata; eviction has no read/write chain policy. */
     boolean sync() default false;
 
-    /**
-     * 同步锁超时时间（秒）.
-     */
+    /** Compatibility-only syncTimeout metadata; eviction has no read/write chain policy. */
     long syncTimeout() default 10;
 
-    /**
-     * 缓存过期时间（秒）.
-     */
+    /** Compatibility-only ttl metadata; eviction has no read/write chain policy. */
     long ttl() default 0;
 
-    /**
-     * 是否使用布隆过滤器防缓存穿透.
-     */
+    /** Compatibility-only useBloomFilter metadata; eviction has no read/write chain policy. */
     boolean useBloomFilter() default false;
 
     /**
-     * 布隆过滤器预期插入数量.
+     * Compatibility-only Bloom sizing metadata; not consumed by the runtime.
+     * Configure {@code resi-cache.bloom.bit-size} and {@code hash-functions} instead.
      */
     @PositiveOrZero
     long expectedInsertions() default 100000L;
 
     /**
-     * 布隆过滤器误判率.
+     * Compatibility-only Bloom sizing metadata; not consumed by the runtime.
+     * Configure {@code resi-cache.bloom.bit-size} and {@code hash-functions} instead.
      */
     double falseProbability() default 0.01;
 
-    /**
-     * 是否启用提前过期.
-     */
+    /** Compatibility-only enableEarlyExpiration metadata; eviction has no read/write chain policy. */
     boolean enableEarlyExpiration() default false;
 
-    /**
-     * 提前过期阈值.
-     */
+    /** Compatibility-only earlyExpirationThreshold metadata; eviction has no read/write chain policy. */
     double earlyExpirationThreshold() default 0.3;
 
-    /**
-     * 提前过期模式.
-     */
+    /** Compatibility-only earlyExpirationMode metadata; eviction has no read/write chain policy. */
     EarlyExpirationMode earlyExpirationMode() default EarlyExpirationMode.SYNC;
 }

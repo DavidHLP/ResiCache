@@ -1,11 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
@@ -17,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.interceptor.CachePutOperation;
+import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
 
@@ -127,28 +123,28 @@ final class SpringAnnotationAdapter {
 
     /**
      * 转换 Spring 原生 {@code @CachePut} 为 ResiCache 的
-     * {@link RedisCachePutOperation}.
+     * {@link CachePutOperation}.
      *
      * <p>走多态 {@link AnnotatedElement} 路径。
      */
     private void convertSpringCachePut(Object target, String name, List<CacheOperation> ops) {
         CachePut ann = AnnotationTargets.findMerged(target, CachePut.class);
         if (ann != null) {
-            ops.add(buildRedisCachePutOperation(ann, name));
+            ops.add(buildCachePutOperation(ann, name));
             log.debug("Converted Spring @CachePut on target: {}", name);
         }
     }
 
     /**
      * 转换 Spring 原生 {@code @CacheEvict} 为 ResiCache 的
-     * {@link RedisCacheEvictOperation}.
+     * {@link CacheEvictOperation}.
      *
      * <p>走多态 {@link AnnotatedElement} 路径。
      */
     private void convertSpringCacheEvict(Object target, String name, List<CacheOperation> ops) {
         CacheEvict ann = AnnotationTargets.findMerged(target, CacheEvict.class);
         if (ann != null) {
-            ops.add(buildRedisCacheEvictOperation(ann, name));
+            ops.add(buildCacheEvictOperation(ann, name));
             log.debug("Converted Spring @CacheEvict on target: {}", name);
         }
     }
@@ -179,60 +175,56 @@ final class SpringAnnotationAdapter {
         return builder.build();
     }
 
-    private RedisCachePutOperation buildRedisCachePutOperation(
+    private CachePutOperation buildCachePutOperation(
             CachePut ann, String name) {
-        RedisCachePutOperation.Builder builder = RedisCachePutOperation.builder();
-        builder.name(name);
-        builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
+        CachePutOperation.Builder builder = new CachePutOperation.Builder();
+        builder.setName(name);
+        builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
-        // 6 文本字段 + 0 special 字段委派(Lombok 链式 builder 用 x 命名 setter)
+        // Standard Spring PUT has six text fields and no special flags.
         BuilderPopulator.populate(builder, ann,
                 List.of(
                         BuilderPopulator.TextField.textField(
-                                CachePut::key, RedisCachePutOperation.Builder::key),
+                                CachePut::key, CachePutOperation.Builder::setKey),
                         BuilderPopulator.TextField.textField(
-                                CachePut::condition, RedisCachePutOperation.Builder::condition),
+                                CachePut::condition, CachePutOperation.Builder::setCondition),
                         BuilderPopulator.TextField.textField(
-                                CachePut::unless, RedisCachePutOperation.Builder::unless),
+                                CachePut::unless, CachePutOperation.Builder::setUnless),
                         BuilderPopulator.TextField.textField(
-                                CachePut::keyGenerator, RedisCachePutOperation.Builder::keyGenerator),
+                                CachePut::keyGenerator, CachePutOperation.Builder::setKeyGenerator),
                         BuilderPopulator.TextField.textField(
-                                CachePut::cacheManager, RedisCachePutOperation.Builder::cacheManager),
+                                CachePut::cacheManager, CachePutOperation.Builder::setCacheManager),
                         BuilderPopulator.TextField.textField(
-                                CachePut::cacheResolver, RedisCachePutOperation.Builder::cacheResolver)
+                                CachePut::cacheResolver, CachePutOperation.Builder::setCacheResolver)
                 ),
                 List.of());
         return builder.build();
     }
 
-    private RedisCacheEvictOperation buildRedisCacheEvictOperation(
+    private CacheEvictOperation buildCacheEvictOperation(
             CacheEvict ann, String name) {
-        RedisCacheEvictOperation.Builder builder = RedisCacheEvictOperation.builder();
-        builder.name(name);
-        builder.cacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
+        CacheEvictOperation.Builder builder = new CacheEvictOperation.Builder();
+        builder.setName(name);
+        builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
 
         // 5 文本字段 + 2 special 字段(allEntries + beforeInvocation)委派。
-        // 注:本方法返回 RedisCacheEvictOperation(ResiCache 子类)而非 Spring 标准
-        // CacheEvictOperation,与 AnnotationParser 产出 Spring 标准类的语义不同——
-        // ResiCache 自家 build 走 ResiCache 子类(持有 ResiCache 增强字段)。
-        // Evict 的 5 文本字段覆盖 key + condition + cacheResolver + keyGenerator +
-        // cacheManager(与 parseRedisCacheEvict 同结构,语义对齐)。
+        // Spring indexes operations by their concrete standard class.
         BuilderPopulator.populate(builder, ann,
                 List.of(
                         BuilderPopulator.TextField.textField(
-                                CacheEvict::key, RedisCacheEvictOperation.Builder::key),
+                                CacheEvict::key, CacheEvictOperation.Builder::setKey),
                         BuilderPopulator.TextField.textField(
-                                CacheEvict::condition, RedisCacheEvictOperation.Builder::condition),
+                                CacheEvict::condition, CacheEvictOperation.Builder::setCondition),
                         BuilderPopulator.TextField.textField(
-                                CacheEvict::keyGenerator, RedisCacheEvictOperation.Builder::keyGenerator),
+                                CacheEvict::keyGenerator, CacheEvictOperation.Builder::setKeyGenerator),
                         BuilderPopulator.TextField.textField(
-                                CacheEvict::cacheManager, RedisCacheEvictOperation.Builder::cacheManager),
+                                CacheEvict::cacheManager, CacheEvictOperation.Builder::setCacheManager),
                         BuilderPopulator.TextField.textField(
-                                CacheEvict::cacheResolver, RedisCacheEvictOperation.Builder::cacheResolver)
+                                CacheEvict::cacheResolver, CacheEvictOperation.Builder::setCacheResolver)
                 ),
                 List.of(
-                        (b, a) -> b.allEntries(a.allEntries()),
-                        (b, a) -> b.beforeInvocation(a.beforeInvocation())));
+                        (b, a) -> b.setCacheWide(a.allEntries()),
+                        (b, a) -> b.setBeforeInvocation(a.beforeInvocation())));
         return builder.build();
     }
 }

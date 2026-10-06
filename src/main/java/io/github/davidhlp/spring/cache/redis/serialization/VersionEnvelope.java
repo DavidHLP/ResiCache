@@ -1,6 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.serialization;
 
-
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -29,7 +28,7 @@ import lombok.NoArgsConstructor;
  * <ol>
  *   <li>ObjectMapper 全局 {@code BasicPolymorphicTypeValidator}（{@code
  *       polymorphicTypingEnabled=true} 时生效）</li>
- *   <li>{@link SecureJacksonRedisSerializer#validateTypeIdsStreaming} 预检
+ *   <li>Serializer streaming type-id validation 预检
  *       （始终生效，递归验证所有 typeProperty 字段）</li>
  * </ol>
  * 即便 {@code polymorphicTypingEnabled=false} 关闭了全局 default typing,
@@ -44,17 +43,37 @@ class VersionEnvelope {
     private int version;
 
     /**
-     * 实际承载的缓存值 —— 字段级 type info 始终嵌入（{@code @class} 属性）。
-     * <p>注意：本字段的 {@code @JsonTypeInfo.property} 值
-     * <b>必须</b>与 {@link SecureJacksonRedisSerializer} 构造期 {@code typeProperty}
-     * 参数一致；当前硬编码为 {@code "@class"}（与默认配置对齐）。如果用户修改
-     * {@code resi-cache.serializer.type-property}，需同步本注解的 {@code property} 值。
-     * 实际配置检查在 {@link SecureJacksonRedisSerializer} 构造期完成,本字段
-     * 永远使用 {@code "@class"}(默认配置下与 {@code typeProperty} 一致)。
+     * Payload type information always uses the v2 wire property {@code @class}.
+     * Configurable global default typing is independent of this field-level annotation.
+     * The serializer validates both type-id paths before binding.
      */
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
     private Object payload;
 
     /** 当前支持的版本号 */
     public static final int CURRENT_VERSION = 2;
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    static VersionEnvelope create(Object payload) {
+        return new VersionEnvelope(CURRENT_VERSION, payload);
+    }
+
+    static VersionEnvelope read(com.fasterxml.jackson.databind.ObjectMapper mapper, byte[] bytes)
+            throws java.io.IOException {
+        return mapper.readValue(bytes, VersionEnvelope.class);
+    }
+
+    static boolean isEnvelope(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return false;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = JSON.readTree(bytes);
+            return node != null && node.isObject() && node.has("version") && node.has("payload");
+        } catch (java.io.IOException e) {
+            return false;
+        }
+    }
 }

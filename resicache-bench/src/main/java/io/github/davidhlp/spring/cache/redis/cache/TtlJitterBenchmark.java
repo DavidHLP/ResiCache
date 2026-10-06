@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
  * <p>We measure:
  * <ul>
  *   <li><b>ttlJitter_compute</b>   – cost of computing a jittered TTL per put operation</li>
- *   <li><b>ttlJitter_concurrent_uniformity</b> – distribution check: verify jitter is within bounds</li>
+ *   <li><b>ttlJitter_concurrentThroughput</b> – 8-thread computation throughput; distribution is verified by unit tests</li>
  *   <li><b>ttlBaseline</b>         – raw {@code calculateFinalTtl} with no jitter (reference)</li>
  * </ul>
  *
@@ -66,14 +66,10 @@ public class TtlJitterBenchmark {
         return TtlPolicy.calculateFinalTtl(baseTtlSeconds, false, 0.0f);
     }
 
-    /**
-     * Multi-threaded uniformity: 8 threads compute jitter concurrently.
-     * Validates that {@link ThreadLocalRandom} usage inside the policy
-     * has no contention under parallel write pressure.
-     */
+    /** Measures computation throughput with 8 threads; does not assert distribution. */
     @Benchmark
     @Threads(8)
-    public void ttlJitter_concurrent_uniformity(Blackhole bh) {
+    public void ttlJitter_concurrentThroughput(Blackhole bh) {
         long jittered = TtlPolicy.calculateFinalTtl(baseTtlSeconds, true, jitterRatio);
         bh.consume(jittered);
     }

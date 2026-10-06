@@ -126,7 +126,7 @@ class AnnotationAopBehaviorMatrixTest {
         Collection<CacheOperation> springOperations =
                 operationSource.getCacheOperations(method, Matrix.class);
 
-        assertThat(chainOperations).singleElement().isInstanceOf(RedisCacheEvictOperation.class);
+        assertThat(chainOperations).isEmpty();
         assertThat(springOperations).singleElement().isInstanceOf(CacheEvictOperation.class);
         CacheEvictOperation springOperation = (CacheEvictOperation) springOperations.iterator().next();
         assertThat(springOperation.getKey()).isEqualTo("#id");
@@ -145,7 +145,7 @@ class AnnotationAopBehaviorMatrixTest {
                 operationSource.getCacheOperations(method, Matrix.class);
 
         assertThat(chainOperations).extracting(Object::getClass)
-                .containsExactly(RedisCacheableOperation.class, RedisCacheEvictOperation.class,
+                .containsExactly(RedisCacheableOperation.class,
                         RedisCachePutOperation.class);
         assertThat(springOperations).extracting(Object::getClass)
                 .containsExactly(CacheableOperation.class, CacheEvictOperation.class, CachePutOperation.class);
@@ -198,7 +198,7 @@ class AnnotationAopBehaviorMatrixTest {
     private List<CacheOperation> execute(Method method) {
         AnnotationParser.ParsedAnnotations parsed = new AnnotationParser().parse(method);
         register.registerSnapshot(method, Matrix.class, parsed);
-        when(metadataResolver.currentKey()).thenReturn(new AnnotatedElementKey(method, Matrix.class));
+        when(metadataResolver.capture()).thenReturn(MethodSnapshot.of(method, Matrix.class));
         return parsed.policyOperations();
     }
 

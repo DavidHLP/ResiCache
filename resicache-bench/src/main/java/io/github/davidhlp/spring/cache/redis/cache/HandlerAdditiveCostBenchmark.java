@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
  * Benchmark: Additive execution cost per handler in the responsibility chain.
  *
  * <p>Measures the marginal latency introduced by evaluating 1, 2, 3, 4, and 5
- * handlers in the {@link ChainEngine}.
+ * no-op handlers in the {@link ChainEngine}; no protection policy or Redis I/O is measured.
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
@@ -34,8 +34,6 @@ public class HandlerAdditiveCostBenchmark {
     private List<CacheHandler> chain5;
 
     private static class PassthroughHandler implements CacheHandler {
-        private final String name;
-        PassthroughHandler(String name) { this.name = name; }
         @Override
         public HandlerResult handle(CacheContext context) {
             return HandlerResult.continueChain();
@@ -52,41 +50,41 @@ public class HandlerAdditiveCostBenchmark {
                 .actualKey("order:1001")
                 .build());
 
-        TtlHandler ttlHandler = new TtlHandler();
-        PassthroughHandler p1 = new PassthroughHandler("bloomGate");
-        PassthroughHandler p2 = new PassthroughHandler("nullValue");
-        PassthroughHandler p3 = new PassthroughHandler("syncLock");
-        PassthroughHandler p4 = new PassthroughHandler("earlyExp");
+        PassthroughHandler p0 = new PassthroughHandler();
+        PassthroughHandler p1 = new PassthroughHandler();
+        PassthroughHandler p2 = new PassthroughHandler();
+        PassthroughHandler p3 = new PassthroughHandler();
+        PassthroughHandler p4 = new PassthroughHandler();
 
-        chain1 = List.of(ttlHandler);
-        chain2 = List.of(ttlHandler, p1);
-        chain3 = List.of(ttlHandler, p1, p2);
-        chain4 = List.of(ttlHandler, p1, p2, p3);
-        chain5 = List.of(ttlHandler, p1, p2, p3, p4);
+        chain1 = List.of(p0);
+        chain2 = List.of(p0, p1);
+        chain3 = List.of(p0, p1, p2);
+        chain4 = List.of(p0, p1, p2, p3);
+        chain5 = List.of(p0, p1, p2, p3, p4);
     }
 
     @Benchmark
-    public void cost_1_handler_ttl(Blackhole bh) {
+    public void cost_1_passthrough(Blackhole bh) {
         bh.consume(engine.execute(chain1, sampleContext));
     }
 
     @Benchmark
-    public void cost_2_handlers(Blackhole bh) {
+    public void cost_2_passthrough(Blackhole bh) {
         bh.consume(engine.execute(chain2, sampleContext));
     }
 
     @Benchmark
-    public void cost_3_handlers(Blackhole bh) {
+    public void cost_3_passthrough(Blackhole bh) {
         bh.consume(engine.execute(chain3, sampleContext));
     }
 
     @Benchmark
-    public void cost_4_handlers(Blackhole bh) {
+    public void cost_4_passthrough(Blackhole bh) {
         bh.consume(engine.execute(chain4, sampleContext));
     }
 
     @Benchmark
-    public void cost_5_handlers_full(Blackhole bh) {
+    public void cost_5_passthrough(Blackhole bh) {
         bh.consume(engine.execute(chain5, sampleContext));
     }
 }

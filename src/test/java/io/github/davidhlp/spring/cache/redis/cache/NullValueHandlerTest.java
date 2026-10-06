@@ -85,8 +85,8 @@ class NullValueHandlerTest {
 
         @Test
         void doHandle_nullValue_notCacheable_returnsSkipAll() {
-            CacheContext context = createContext(CacheOperation.PUT, null);
             when(cacheOperation.isCacheNullValues()).thenReturn(false);
+            CacheContext context = createContext(CacheOperation.PUT, null);
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
@@ -96,9 +96,8 @@ class NullValueHandlerTest {
 
         @Test
         void doHandle_nullValue_cacheable_continuesWithNullStoreValue() {
-            CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT, null);
             when(cacheOperation.isCacheNullValues()).thenReturn(true);
-
+            CacheContext context = createContext(CacheOperation.PUT_IF_ABSENT, null);
 
             HandlerResult result = handler.doHandle(context, CacheResult::success);
 
@@ -133,9 +132,9 @@ class NullValueHandlerTest {
 
         @Test
         void handle_skipRemaining_isNoLongerHandledByHandler() {
+            when(cacheOperation.isCacheNullValues()).thenReturn(false);
             CacheContext context = createContext(CacheOperation.PUT, null);
             context.markSkipRemaining();
-            when(cacheOperation.isCacheNullValues()).thenReturn(false);
 
             HandlerResult result = handler.handle(context);
 

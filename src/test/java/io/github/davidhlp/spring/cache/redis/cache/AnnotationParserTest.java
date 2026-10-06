@@ -79,7 +79,7 @@ class AnnotationParserTest {
         assertThat(parsed.operations()).extracting(Object::getClass)
                 .containsExactly(CacheableOperation.class, CacheEvictOperation.class, CachePutOperation.class);
         assertThat(parsed.policyOperations()).extracting(Object::getClass)
-                .containsExactly(RedisCacheableOperation.class, RedisCacheEvictOperation.class,
+                .containsExactly(RedisCacheableOperation.class,
                         RedisCachePutOperation.class);
         assertThat(parsed.operations()).extracting(CacheOperation::getCacheNames)
                 .containsExactly(Set.of("composite-cache"), Set.of("composite-evict"), Set.of("composite-put"));

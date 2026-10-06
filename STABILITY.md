@@ -36,9 +36,15 @@ active runtime controls on the current blocking Spring Cache path:
 - `@RedisCacheable.type` and `@RedisCachePut.type` are retained as declaration
   metadata. They do not coerce or validate the runtime value; the returned value
   and serializer determine its actual type.
+- Bloom `expectedInsertions` and `falseProbability` on all three annotations are
+  retained metadata. Runtime sizing uses `resi-cache.bloom.bit-size` and
+  `hash-functions`; these annotation values never resize the shared filter.
+- Eviction `ttl`, `sync`, `syncTimeout`, `useBloomFilter`, and the early-expiration
+  fields are compatibility-only metadata. REMOVE/CLEAN do not resolve a
+  method-level policy; cache/lock cleanup retains its existing runtime behavior.
 
-Activating either behavior requires a separate operation-semantics decision and
-regression contract; these members must not be removed as dead code in 0.x.
+Activating any of these behaviors requires a separate operation-semantics
+decision and regression contract; these members must not be removed as dead code in 0.x.
 
 If you pin to a specific 0.x.y version, these are guaranteed within the 0.x
 line.

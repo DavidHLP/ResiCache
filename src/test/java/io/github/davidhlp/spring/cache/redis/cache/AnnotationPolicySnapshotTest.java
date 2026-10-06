@@ -27,8 +27,8 @@ class AnnotationPolicySnapshotTest {
                 RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, parser, register);
         Method method = SnapshotService.class.getMethod("read", String.class);
         MethodMetadataResolver metadataResolver = Mockito.mock(MethodMetadataResolver.class);
-        when(metadataResolver.currentKey()).thenReturn(
-                new AnnotatedElementKey(method, SnapshotService.class));
+        when(metadataResolver.capture()).thenReturn(
+                MethodSnapshot.of(method, SnapshotService.class));
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
 
         source.getCacheOperations(method, SnapshotService.class);
@@ -50,8 +50,8 @@ class AnnotationPolicySnapshotTest {
                 RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, register);
         Method method = SnapshotService.class.getMethod("read", String.class);
         MethodMetadataResolver metadataResolver = Mockito.mock(MethodMetadataResolver.class);
-        when(metadataResolver.currentKey()).thenReturn(
-                new AnnotatedElementKey(method, SnapshotService.class));
+        when(metadataResolver.capture()).thenReturn(
+                MethodSnapshot.of(method, SnapshotService.class));
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
 
         java.util.Collection<CacheOperation> sourceOperations =

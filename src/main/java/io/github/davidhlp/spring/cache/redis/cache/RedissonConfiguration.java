@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import java.io.File;
@@ -155,7 +150,7 @@ class RedissonConfiguration {
         String host = redis.getHost() != null && !redis.getHost().isBlank()
                 ? redis.getHost()
                 : redisProperties.getHost();
-        int port = redis.getPort() != 0 ? redis.getPort() : redisProperties.getPort();
+        int port = redis.getPort();
         int database = redis.getDatabase() != 0 ? redis.getDatabase() : redisProperties.getDatabase();
 
         String address = scheme + host + ":" + port;

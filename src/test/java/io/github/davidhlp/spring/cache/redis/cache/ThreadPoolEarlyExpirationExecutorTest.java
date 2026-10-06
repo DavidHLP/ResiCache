@@ -1,13 +1,9 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -30,10 +26,42 @@ class ThreadPoolEarlyExpirationExecutorTest {
         executor = new ThreadPoolEarlyExpirationExecutor(
                 Executors.newCachedThreadPool(),
                 inFlight,
-                null,
-                10_000L
+                null
         );
-        executor.initCleanupScheduler();
+    }
+
+    @AfterEach
+    void tearDown() {
+        executor.shutdown();
+    }
+
+    @Test
+    void saturatedPoolRunsInlineAndRemovesCompletedEntry() throws Exception {
+        ThreadPoolEarlyExpirationExecutor bounded = new ThreadPoolEarlyExpirationExecutor(1, 1, 1, null);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Runnable blocker = () -> {
+            started.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+        try {
+            bounded.submit("running", blocker);
+            assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+            bounded.submit("queued", blocker);
+            Thread caller = Thread.currentThread();
+            java.util.concurrent.atomic.AtomicReference<Thread> executedBy = new java.util.concurrent.atomic.AtomicReference<>();
+            bounded.submit("inline", () -> executedBy.set(Thread.currentThread()));
+            assertThat(executedBy.get()).isSameAs(caller);
+            assertThat(bounded.getActiveCount()).isEqualTo(2);
+        } finally {
+            release.countDown();
+            bounded.shutdown();
+        }
+        assertThat(bounded.getActiveCount()).isZero();
     }
 
     @Nested
@@ -56,7 +84,7 @@ class ThreadPoolEarlyExpirationExecutorTest {
         void submit_nullKey_skipsSubmission() {
             executor.submit(null, () -> {});
 
-            // No exception means success
+            assertThat(inFlight).isEmpty();
         }
 
         @Test
@@ -64,7 +92,7 @@ class ThreadPoolEarlyExpirationExecutorTest {
         void submit_nullTask_skipsSubmission() {
             executor.submit("test-key", null);
 
-            // No exception means success
+            assertThat(inFlight).isEmpty();
         }
 
         @Test
@@ -90,26 +118,29 @@ class ThreadPoolEarlyExpirationExecutorTest {
         void cancel_runningTask_cancelsSuccessfully() throws InterruptedException {
             String key = "cancel-key";
             CountDownLatch startedLatch = new CountDownLatch(1);
-            AtomicBoolean cancelled = new AtomicBoolean(false);
-
-            executor.submit(key, () -> {
-                try {
+            CountDownLatch release = new CountDownLatch(1);
+            CountDownLatch finished = new CountDownLatch(1);
+            try {
+                executor.submit(key, () -> {
                     startedLatch.countDown();
-                    Thread.sleep(5000); // Long running task
-                } catch (InterruptedException e) {
-                    cancelled.set(true);
-                    Thread.currentThread().interrupt();
-                }
-            });
-
-            assertThat(startedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-
-            executor.cancel(key);
-
-            // Give some time for cancellation to take effect
-            Thread.sleep(200);
-            // The task should have been interrupted (cancelled flag set)
-            // Note: cancellation is best-effort
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        finished.countDown();
+                    }
+                });
+                assertThat(startedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+                CompletableFuture<Void> future = inFlight.get(key);
+                assertThat(future).isNotNull();
+                executor.cancel(key);
+                assertThat(future).isCancelled();
+                assertThat(inFlight).doesNotContainKey(key);
+            } finally {
+                release.countDown();
+                assertThat(finished.await(5, TimeUnit.SECONDS)).isTrue();
+            }
         }
 
         @Test
@@ -174,7 +205,6 @@ class ThreadPoolEarlyExpirationExecutorTest {
         }
     }
 
-
     @Nested
     @DisplayName("shutdown tests")
     class ShutdownTests {
@@ -215,18 +245,20 @@ class ThreadPoolEarlyExpirationExecutorTest {
             ThreadPoolEarlyExpirationExecutor testExecutor = new ThreadPoolEarlyExpirationExecutor(
                     Executors.newCachedThreadPool(),
                     new ConcurrentHashMap<>(),
-                    null,
-                    100L
+                    null
             );
-            testExecutor.initCleanupScheduler();
 
-            CountDownLatch latch = new CountDownLatch(1);
-            testExecutor.submit("cleanup-key", latch::countDown);
-            assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+            try {
+                CountDownLatch latch = new CountDownLatch(1);
+                testExecutor.submit("cleanup-key", latch::countDown);
+                assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
-            testExecutor.shutdown();
+                testExecutor.shutdown();
 
-            assertThat(testExecutor.getActiveCount()).isEqualTo(0);
+                assertThat(testExecutor.getActiveCount()).isEqualTo(0);
+            } finally {
+                testExecutor.shutdown();
+            }
         }
     }
 

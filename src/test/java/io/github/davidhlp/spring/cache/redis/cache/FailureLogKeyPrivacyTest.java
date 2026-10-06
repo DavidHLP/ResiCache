@@ -67,7 +67,6 @@ class FailureLogKeyPrivacyTest {
     /** {@code SyncRole.Leader} 的 logger 名(嵌套类在包外不可直接引用)。 */
     private static final String SYNC_ROLE_LEADER_LOGGER = SyncRole.class.getName() + "$Leader";
 
-
     @Test
     @DisplayName("RedisBloomIFilter:add/check/delete 失败各一条 ERROR,均不含 raw key")
     @SuppressWarnings("unchecked")
@@ -98,7 +97,6 @@ class FailureLogKeyPrivacyTest {
                     .doesNotContain(SECRET_KEY);
         }
     }
-
 
     @Test
     @DisplayName("DistributedLockManager:获取超时 WARN 不含 raw key,只含指纹")
@@ -202,7 +200,6 @@ class FailureLogKeyPrivacyTest {
         return new DistributedLockManager(client, properties);
     }
 
-
     @Test
     @DisplayName("ChainEngine:后置处理执行失败 ERROR 带 cacheName 但不含 raw key")
     void chainEngine_postProcessFailure_omitsRawKey() {
@@ -268,7 +265,6 @@ class FailureLogKeyPrivacyTest {
                 .build());
     }
 
-
     @Test
     @DisplayName("EarlyRefresh:执行器隔离最终失败，ERROR 只带 keyFingerprint")
     @SuppressWarnings("unchecked")
@@ -282,7 +278,7 @@ class FailureLogKeyPrivacyTest {
             return null;
         }).when(worker).execute(any(Runnable.class));
         ThreadPoolEarlyExpirationExecutor executor = new ThreadPoolEarlyExpirationExecutor(
-                worker, new ConcurrentHashMap<>(), null, 30_000L);
+                worker, new ConcurrentHashMap<>(), null);
         EarlyRefresh earlyRefresh = new EarlyRefresh(
                 Clock.systemUTC(), executor, mock(RedisTemplate.class), valueOperations);
 
@@ -297,7 +293,6 @@ class FailureLogKeyPrivacyTest {
             executor.shutdown();
         }
     }
-
 
     @Test
     @DisplayName("SyncRoleLockExecutor:锁获取失败 WARN 与异常消息不含 raw key")
@@ -357,7 +352,6 @@ class FailureLogKeyPrivacyTest {
             }
         };
     }
-
 
     @Test
     @DisplayName("SerializationMigrationEngine:前向 rejected key WARN 只含指纹")

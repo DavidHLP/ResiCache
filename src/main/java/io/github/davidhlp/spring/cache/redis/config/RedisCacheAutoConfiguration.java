@@ -1,10 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.config;
 
-
-
-
 import io.github.davidhlp.spring.cache.redis.cache.SerializationMigrationOperatorConfiguration;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,7 +23,6 @@ import org.springframework.data.redis.core.RedisOperations;
  * <p>注意：@EnableCaching已移除，避免与用户应用中的其他@EnableCaching冲突。
  *       用户应确保应用中已启用Spring Cache功能。
  */
-@Slf4j
 @AutoConfiguration(after = DataRedisAutoConfiguration.class)
 @ConditionalOnClass({RedisOperations.class})
 @ConditionalOnProperty(prefix = "resi-cache", name = "enabled", matchIfMissing = true)

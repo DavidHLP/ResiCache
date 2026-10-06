@@ -139,7 +139,6 @@ class RedisCacheRegister {
         }
     }
 
-
     // ============================ 查询（单一 seam）============================
 
     /**
@@ -150,16 +149,14 @@ class RedisCacheRegister {
      * 读取侧不再依赖列表扫描顺序。
      */
     @SuppressWarnings("unchecked")
-    public <O extends CacheOperation> O get(String name, AnnotatedElementKey elementKey, OperationKind kind) {
-        Method method = MetadataKeys.extractMethod(elementKey);
-        Class<?> targetClass = MetadataKeys.extractTargetClass(elementKey);
-        AnnotationParser.ParsedAnnotations snapshot =
-                method == null || targetClass == null ? null : getSnapshot(method, targetClass);
+    public <O extends CacheOperation> O get(String name, MethodSnapshot metadata, OperationKind kind) {
+        AnnotationParser.ParsedAnnotations snapshot = metadata == null ? null
+                : getSnapshot(metadata.method(), metadata.targetClass());
         final CacheOperation operation = snapshot == null ? null : snapshot.policy(kind, name);
         if (operation != null) {
             return (O) operation;
         }
-        log.debug("{} operation not found: name={}, elementKey={}", kind.tag(), name, elementKey);
+        log.debug("{} operation not found: name={}, elementKey={}", kind.tag(), name, metadata);
         return null;
     }
 

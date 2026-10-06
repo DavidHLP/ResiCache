@@ -1,9 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -154,19 +150,13 @@ class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
             return SecureNullValueDeserializer.deserializeNullValue(bytes);
         }
         try {
-            // 单遍流式反序列化:用 JsonParser 一次性走完 bytes 验证
-            // 所有 typeProperty 字段(走白名单),再收口为 VersionEnvelope。
-            // 对大 payload(>10KB)避免完整 JsonNode 树构建 + 二次遍历,
-            // ~30-40% CPU 节省、显著降低 GC 压力(transient JsonNode 消失)。
+            // Validate nested type ids before binding the version envelope.
             try (com.fasterxml.jackson.core.JsonParser parser = objectMapper.createParser(bytes)) {
                 validateTypeIdsStreaming(parser);
                 // 流式 parser 不支持 rewind,验证后需重新 open 一个 parser 反序列化。
             }
 
-            Object envelope;
-            try (com.fasterxml.jackson.core.JsonParser parser = objectMapper.createParser(bytes)) {
-                envelope = EnvelopeCodec.read(objectMapper, bytes);
-            }
+            Object envelope = EnvelopeCodec.read(objectMapper, bytes);
 
             if (EnvelopeCodec.version(envelope) != EnvelopeCodec.currentVersion()) {
                 String message = String.format(

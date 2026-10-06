@@ -1,9 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -32,14 +28,15 @@ final class CachedValue {
     @JsonProperty("value")
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
     private Object value;
-    private Class<?> type;
     @JsonProperty("ttl")
     private long ttl;
     @JsonProperty("createdTime")
     private long createdTime;
     private long startNanoTime;
+    /** Compatibility-only v2 metadata; reads do not update access statistics. */
     @JsonProperty("lastAccessTime")
     private long lastAccessTime;
+    /** Compatibility-only v2 metadata; not used by refresh decisions. */
     @JsonProperty("visitTimes")
     private long visitTimes;
     @JsonProperty("expired")
@@ -51,11 +48,10 @@ final class CachedValue {
     private CachedValue() {
     }
 
-    private CachedValue(Object value, Class<?> type, long ttl, long createdTime,
+    private CachedValue(Object value, long ttl, long createdTime,
                         long startNanoTime, long lastAccessTime, long visitTimes,
                         boolean expired, long version) {
         this.value = value;
-        this.type = type;
         this.ttl = ttl;
         this.createdTime = createdTime;
         this.startNanoTime = startNanoTime;
@@ -70,7 +66,6 @@ final class CachedValue {
         long nowMillis = System.currentTimeMillis();
         return new CachedValue(
                 value,
-                value != null ? value.getClass() : Object.class,
                 ttl,
                 nowMillis,
                 nowNano,
@@ -80,26 +75,13 @@ final class CachedValue {
                 nowNano);
     }
 
-    /**
-     * 仅供测试使用：用指定 {@code createdTime} / {@code version} / {@code expired}
-     * 三维覆盖构造 {@link CachedValue}（{@code type} / {@code startNanoTime} 仍按
-     * {@link #of(Object, long)} 默认自动派生，避免与生产 seam 行为漂移）。
-     *
-     * <p>替换被删除的 {@code CachedValueBuilder}（75 行死代码路径：唯一生产 seam
-     * 是 {@link #of(Object, long)}，builder 仅剩 3 处测试 helper 在用）。
-     *
-     * <p><b>Visible for testing</b>：因测试类分布在不同包（{@code chain}、
-     * {@code protection.refresh}、{@code serialization}），使用 {@code public}
-     * 以便跨包访问；调用契约由 Javadoc 与单元测试约束，<b>生产代码严禁引用</b>，
-     * 唯一生产 seam 仍是 {@link #of(Object, long)}。
-     */
+    /** Test fixture with explicit wall-clock creation time, version and expiry state. */
     public static CachedValue forTest(@Nullable Object value, long ttl,
                                       long createdTime, long version, boolean expired) {
         long nowNano = System.nanoTime();
         // lastAccessTime 维持与 of() 一致：createdTime 时刻即最后访问。
         return new CachedValue(
                 value,
-                value != null ? value.getClass() : Object.class,
                 ttl,
                 createdTime,
                 nowNano,
@@ -111,11 +93,6 @@ final class CachedValue {
 
     public Object getValue() {
         return value;
-    }
-
-    @JsonIgnore
-    public Class<?> getType() {
-        return type;
     }
 
     public long getTtl() {
@@ -164,11 +141,6 @@ final class CachedValue {
     @JsonIgnore
     public long getRemainingTtl() {
         return Expiry.remainingSeconds(ttl, startNanoTime, createdTime);
-    }
-
-    @JsonIgnore
-    public long getAge() {
-        return (System.currentTimeMillis() - createdTime) / 1000;
     }
 
     @JsonIgnore

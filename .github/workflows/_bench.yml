@@ -25,9 +25,19 @@ jobs:
       - name: Build resicache-bench Fat-JAR
         run: mvn -f resicache-bench/pom.xml clean package -DskipTests -B
 
+      - name: Smoke-test v2 serializer and storage adaptation
+        run: >-
+          java -jar resicache-bench/target/resicache-bench.jar
+          'CacheSerializationBenchmark.storageRoundTrip'
+          -p payloadBytes=64 -wi 0 -i 1 -r 100ms -f 1 -foe true
+          -jvmArgs '-Xms128m -Xmx256m'
+          -rf json -rff resicache-bench/target/jmh-smoke.json
+
       - name: Upload Benchmark Artifact
         uses: actions/upload-artifact@v7
         with:
           name: resicache-bench-fatjar
-          path: resicache-bench/target/resicache-bench-*.jar
+          path: |
+            resicache-bench/target/resicache-bench.jar
+            resicache-bench/target/jmh-smoke.json
           retention-days: 7

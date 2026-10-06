@@ -1,295 +1,86 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import java.lang.annotation.Annotation;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * {@link RedisCacheAttributesProjector} 单元测试。
- *
- * <p>聚焦 3 处默认值对齐：{@code syncTimeout} /
- * {@code expectedInsertions} / {@code falseProbability}。
- */
+/** Annotation aliases, active policy and compatibility-only sizing contracts. */
 @DisplayName("RedisCacheAttributesProjector Tests")
 class RedisCacheAttributesProjectorTest {
 
     private final RedisCacheAttributesProjector projector = new RedisCacheAttributesProjector();
 
-    @Nested
-    @DisplayName("null 输入")
-    class NullInputs {
-
-        @Test
-        @DisplayName("from(RedisCacheable) 为 null 返回 null")
-        void from_redisCacheable_null_returnsNull() {
-            assertThat(projector.from((RedisCacheable) null)).isNull();
-        }
-
-        @Test
-        @DisplayName("from(RedisCachePut) 为 null 返回 null")
-        void from_redisCachePut_null_returnsNull() {
-            assertThat(projector.from((RedisCachePut) null)).isNull();
-        }
-
-        @Test
-        @DisplayName("from(RedisCacheEvict) 为 null 返回 null")
-        void from_redisCacheEvict_null_returnsNull() {
-            assertThat(projector.from((RedisCacheEvict) null)).isNull();
-        }
+    @Test
+    void nullAnnotationsHaveNoProjection() {
+        assertThat(projector.from((RedisCacheable) null)).isNull();
+        assertThat(projector.from((RedisCachePut) null)).isNull();
+        assertThat(projector.from((RedisCacheEvict) null)).isNull();
     }
 
-    @Nested
-    @DisplayName("3 处默认值契约（核心）")
-    class DefaultValueContracts {
-
-        @Test
-        @DisplayName("三注解默认值已对齐，投影器无差别通过")
-        void defaultsAligned_acrossAllThreeAnnotations() {
-            // @interface 默认值: Cacheable/Put/Evict 都是 syncTimeout=10, expectedInsertions=100000, falseProbability=0.01
-            assertThat(projector.from(stubCacheable(s -> {})).getSyncTimeout()).isEqualTo(10L);
-            assertThat(projector.from(stubPut(p -> {})).getSyncTimeout()).isEqualTo(10L);
-            assertThat(projector.from(stubEvict(e -> {})).getSyncTimeout()).isEqualTo(10L);
-
-            assertThat(projector.from(stubCacheable(s -> {})).getExpectedInsertions()).isEqualTo(100_000L);
-            assertThat(projector.from(stubPut(p -> {})).getExpectedInsertions()).isEqualTo(100_000L);
-            assertThat(projector.from(stubEvict(e -> {})).getExpectedInsertions()).isEqualTo(100_000L);
-
-            assertThat(projector.from(stubCacheable(s -> {})).getFalseProbability()).isEqualTo(0.01);
-            assertThat(projector.from(stubPut(p -> {})).getFalseProbability()).isEqualTo(0.01);
-            assertThat(projector.from(stubEvict(e -> {})).getFalseProbability()).isEqualTo(0.01);
-        }
-
-        @Test
-        @DisplayName("显式覆盖仍生效（投影器不修改用户设置）")
-        void explicitOverrides_arePassThrough() {
-            assertThat(projector.from(stubPut(p -> p.syncTimeout = 60L)).getSyncTimeout()).isEqualTo(60L);
-            assertThat(projector.from(stubCacheable(s -> s.expectedInsertions = 500_000)).getExpectedInsertions())
-                    .isEqualTo(500_000L);
-            assertThat(projector.from(stubEvict(e -> e.falseProbability = 0.001)).getFalseProbability())
-                    .isEqualTo(0.001);
-        }
+    @Test
+    void activeDefaultsAndOverridesAreProjected() {
+        RedisCacheAttributes read = projector.from(stubCacheable(s -> {}));
+        RedisCacheAttributes put = projector.from(stubPut(s -> {}));
+        assertThat(read).isEqualTo(put);
+        assertThat(read.getTtl()).isEqualTo(60L);
+        assertThat(read.getSyncTimeout()).isEqualTo(10L);
+        assertThat(read.getVariance()).isEqualTo(0.2F);
+        assertThat(read.getEarlyExpirationMode()).isEqualTo(EarlyExpirationMode.SYNC);
+        RedisCacheAttributes custom = projector.from(stubPut(s -> {
+            s.ttl = 120L;
+            s.syncTimeout = 60L;
+            s.useBloomFilter = true;
+        }));
+        assertThat(custom.getTtl()).isEqualTo(120L);
+        assertThat(custom.getSyncTimeout()).isEqualTo(60L);
+        assertThat(custom.isUseBloomFilter()).isTrue();
     }
 
-    @Nested
-    @DisplayName("value / cacheNames 合并")
-    class CacheNamesResolution {
-
-        @Test
-        @DisplayName("同时声明时 value 优先(与 main 的 operation 面一致)")
-        void value_wins_over_cacheNames() {
-            RedisCacheable ann = stubCacheable(s -> {
-                s.cacheNames = new String[]{"primary"};
-                s.values = new String[]{"fallback"};
-            });
-            assertThat(projector.from(ann).getCacheNames()).containsExactly("fallback");
-        }
-
-        @Test
-        @DisplayName("value 为空时回退到 cacheNames")
-        void cacheNames_used_when_value_empty() {
-            RedisCacheable ann = stubCacheable(s -> {
-                s.cacheNames = new String[]{"fromCacheNames"};
-                s.values = new String[0];
-            });
-            assertThat(projector.from(ann).getCacheNames()).containsExactly("fromCacheNames");
-        }
+    @Test
+    void valueAliasWinsAndNamesFallbackIsStable() {
+        assertThat(projector.from(stubCacheable(s -> {
+            s.values = new String[]{"alias"};
+            s.cacheNames = new String[]{"names"};
+        })).getCacheNames()).containsExactly("alias");
+        assertThat(projector.from(stubPut(s -> s.cacheNames = new String[]{"names"}))
+                .getCacheNames()).containsExactly("names");
+        assertThat(RedisCacheAttributesProjector.resolveCacheNames(null, null)).isEmpty();
     }
 
-    @Nested
-    @DisplayName("Evict-only 字段")
-    class EvictOnlyFields {
-
-        @Test
-        @DisplayName("Cacheable/Put 投影不携带 allEntries / beforeInvocation")
-        void cacheablePutDoNotCarryEvictFields() {
-            RedisCacheable c = stubCacheable(s -> {});
-            RedisCachePut p = stubPut(pp -> {});
-            assertThat(projector.from(c).isAllEntries()).isFalse();
-            assertThat(projector.from(c).isBeforeInvocation()).isFalse();
-            assertThat(projector.from(p).isAllEntries()).isFalse();
-            assertThat(projector.from(p).isBeforeInvocation()).isFalse();
+    @Test
+    void bloomSizingMembersRemainCompatibleButDoNotEnterRuntimePolicy() throws Exception {
+        for (Class<?> annotation : java.util.List.of(RedisCacheable.class, RedisCachePut.class, RedisCacheEvict.class)) {
+            assertThat(annotation.getMethod("expectedInsertions").getReturnType()).isEqualTo(long.class);
+            assertThat(annotation.getMethod("expectedInsertions").getDefaultValue()).isEqualTo(100_000L);
+            assertThat(annotation.getMethod("falseProbability").getDefaultValue()).isEqualTo(0.01);
         }
-
-        @Test
-        @DisplayName("Evict 投影正确传递 allEntries / beforeInvocation")
-        void evictCarriesEvictFields() {
-            RedisCacheEvict e = stubEvict(ee -> {
-                ee.allEntries = true;
-                ee.beforeInvocation = true;
-            });
-            assertThat(projector.from(e).isAllEntries()).isTrue();
-            assertThat(projector.from(e).isBeforeInvocation()).isTrue();
-        }
-
-        @Test
-        @DisplayName("Evict 没有的字段 (type/cacheNullValues/randomTtl/variance) 取合理默认")
-        void evictMissingFieldsFallBackSensibly() {
-            RedisCacheEvict e = stubEvict(ee -> {});
-            RedisCacheAttributes a = projector.from(e);
-            assertThat(a.getType()).isEqualTo(Object.class);
-            assertThat(a.isCacheNullValues()).isFalse();
-            assertThat(a.isRandomTtl()).isFalse();
-        }
+        assertThat(projector.from(stubCacheable(s -> {
+            s.expectedInsertions = Long.MAX_VALUE;
+            s.falseProbability = 0.0001;
+        }))).isEqualTo(projector.from(stubCacheable(s -> {})));
     }
 
-    @Nested
-    @DisplayName("静态工具方法")
-    class StaticUtils {
-
-        @Test
-        @DisplayName("resolveCacheNames: 全部 null-safe,且同时声明时 value 优先")
-        void resolveCacheNames_nullSafe() {
-            assertThat(RedisCacheAttributesProjector.resolveCacheNames(null, null))
-                    .isEmpty();
-            assertThat(RedisCacheAttributesProjector.resolveCacheNames(new String[0], new String[]{"v"}))
-                    .containsExactly("v");
-            assertThat(RedisCacheAttributesProjector.resolveCacheNames(new String[]{"c"}, null))
-                    .containsExactly("c");
-            assertThat(RedisCacheAttributesProjector.resolveCacheNames(
-                    new String[]{"names-cache"}, new String[]{"value-cache"}))
-                    .as("main 的 operation 面用 value;c6 统一后两面都必须是 value")
-                    .containsExactly("value-cache");
-        }
-    }
-
-
-    @Nested
-    @DisplayName("FieldSource seam — Cacheable ≡ Put identity")
-    class CacheablePutProjectionContract {
-
-        @Test
-        @DisplayName("from(Cacheable) 与 from(Put) 在相同输入下产出 byte-for-byte 一致的 RedisCacheAttributes")
-        void cacheableAndPut_produceIdenticalProjection() {
-            // Arrange: 用相同字段值构造两个 stub
-            RedisCacheable c = stubCacheable(s -> {
-                s.cacheNames = new String[]{"ns-a"};
-                s.key = "k1";
-                s.ttl = 120L;
-                s.useBloomFilter = true;
-                s.expectedInsertions = 200_000;
-                s.falseProbability = 0.005;
-                s.sync = true;
-                s.syncTimeout = 30L;
-            });
-            RedisCachePut p = stubPut(pp -> {
-                pp.cacheNames = new String[]{"ns-a"};
-                pp.key = "k1";
-                pp.ttl = 120L;
-                pp.useBloomFilter = true;
-                pp.expectedInsertions = 200_000L;
-                pp.falseProbability = 0.005;
-                pp.sync = true;
-                pp.syncTimeout = 30L;
-            });
-
-            // Act
-            RedisCacheAttributes ac = projector.from(c);
-            RedisCacheAttributes ap = projector.from(p);
-
-            // Assert: 22 共享字段逐一对比（Evict-only 字段应均为 false）
-            assertThat(ac.getCacheNames()).containsExactly(ap.getCacheNames());
-            assertThat(ac.getKey()).isEqualTo(ap.getKey());
-            assertThat(ac.getTtl()).isEqualTo(ap.getTtl());
-            assertThat(ac.getType()).isEqualTo(ap.getType());
-            assertThat(ac.isCacheNullValues()).isEqualTo(ap.isCacheNullValues());
-            assertThat(ac.getExpectedInsertions()).isEqualTo(ap.getExpectedInsertions());
-            assertThat(ac.getFalseProbability()).isEqualTo(ap.getFalseProbability());
-            assertThat(ac.isRandomTtl()).isEqualTo(ap.isRandomTtl());
-            assertThat(ac.getVariance()).isEqualTo(ap.getVariance());
-            assertThat(ac.isSync()).isEqualTo(ap.isSync());
-            assertThat(ac.getSyncTimeout()).isEqualTo(ap.getSyncTimeout());
-            // Evict-only 字段：Cacheable/Put 走 NO_EVICT_DELTA（@Builder 默认 false）
-            assertThat(ac.isAllEntries()).isFalse();
-            assertThat(ap.isAllEntries()).isFalse();
-            assertThat(ac.isBeforeInvocation()).isFalse();
-            assertThat(ap.isBeforeInvocation()).isFalse();
-        }
-    }
-
-    @Nested
-    @DisplayName("FieldSource seam — Evict 默认字段 fallback")
-    class EvictDefaultsContract {
-
-        @Test
-        @DisplayName("Evict 不持有 type/cacheNullValues/randomTtl/variance,extractFrom 填入合理默认")
-        void evictMissingFields_filledWithSensibleDefaults() {
-            RedisCacheEvict e = stubEvict(ee -> {});
-
-            RedisCacheAttributes a = projector.from(e);
-
-            // type → Object.class (no Class<?>) override
-            assertThat(a.getType()).isEqualTo(Object.class);
-            // cacheNullValues → false (Evict 不缓存值, 无意义)
-            assertThat(a.isCacheNullValues()).isFalse();
-            // randomTtl → false (Evict 不写, TTL 抖动无意义)
-            assertThat(a.isRandomTtl()).isFalse();
-            // variance → 0.0F (同上, randomTtl 关闭时无意义)
-            assertThat(a.getVariance()).isEqualTo(0.0F);
-        }
-
-        @Test
-        @DisplayName("Evict 持有 ttl=0 语义(不设置过期),原样传入")
-        void evictTtl_passThrough() {
-            // Evict 注解 ttl 默认 0,与 Cacheable/Put 默认 60 不同
-            RedisCacheEvict e = stubEvict(ee -> {});
-            assertThat(projector.from(e).getTtl()).isEqualTo(0L);
-        }
-    }
-
-    @Nested
-    @DisplayName("expectedInsertions 类型契约")
-    class ExpectedInsertionsTypeContract {
-
-        @Test
-        @DisplayName("Put/Evict/Cacheable 的 expectedInsertions 都是 long, 可承载 > Integer.MAX_VALUE 的值")
-        void allThree_expectedInsertions_areLong_acceptsLargeValues() {
-            // expectedInsertions 为 long 类型,与 Put/Evict 对齐。
-            long largeValue = 5_000_000_000L; // 5B > Integer.MAX_VALUE (~2.147B)
-            RedisCachePut p = stubPut(pp -> pp.expectedInsertions = largeValue);
-            RedisCacheEvict e = stubEvict(ee -> ee.expectedInsertions = largeValue);
-            RedisCacheable c = stubCacheable(s -> s.expectedInsertions = largeValue);
-
-            assertThat(projector.from(p).getExpectedInsertions()).isEqualTo(largeValue);
-            assertThat(projector.from(e).getExpectedInsertions()).isEqualTo(largeValue);
-            assertThat(projector.from(c).getExpectedInsertions()).isEqualTo(largeValue);
-        }
-    }
-
-    @Nested
-    @DisplayName("expectedInsertions 默认值与投影契约")
-    class ExpectedInsertionsDefaultContract {
-
-        @Test
-        @DisplayName("Cacheable 默认 expectedInsertions=100000 投影为 long 100_000L")
-        void cacheableDefaultExpectedInsertions_projectsTo100_000L() {
-            RedisCacheable c = stubCacheable(s -> {});
-            assertThat(projector.from(c).getExpectedInsertions()).isEqualTo(100_000L);
-        }
-
-        @Test
-        @DisplayName("Put 默认 expectedInsertions=100000L 投影为 long 100_000L")
-        void putDefaultExpectedInsertions_projectsTo100_000L() {
-            RedisCachePut p = stubPut(pp -> {});
-            assertThat(projector.from(p).getExpectedInsertions()).isEqualTo(100_000L);
-        }
-
-        @Test
-        @DisplayName("Evict 默认 expectedInsertions=100000L 投影为 long 100_000L")
-        void evictDefaultExpectedInsertions_projectsTo100_000L() {
-            RedisCacheEvict e = stubEvict(ee -> {});
-            assertThat(projector.from(e).getExpectedInsertions()).isEqualTo(100_000L);
-        }
+    @Test
+    void evictionProjectsOnlyAopFields() {
+        RedisCacheAttributes evict = projector.from(stubEvict(s -> {
+            s.cacheNames = new String[]{"evict"};
+            s.allEntries = true;
+            s.beforeInvocation = true;
+            s.ttl = 120L;
+            s.sync = true;
+            s.useBloomFilter = true;
+        }));
+        assertThat(evict.getCacheNames()).containsExactly("evict");
+        assertThat(evict.isAllEntries()).isTrue();
+        assertThat(evict.isBeforeInvocation()).isTrue();
+        assertThat(evict.getTtl()).isZero();
+        assertThat(evict.isSync()).isFalse();
+        assertThat(evict.isUseBloomFilter()).isFalse();
     }
 
     // ----- Test stubs -----

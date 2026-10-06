@@ -79,7 +79,9 @@ follow [`CONTRIBUTING.md`](../CONTRIBUTING.md)'s PR checklist.
 ## CI shape
 
 Pushes to `main`/`master` and pull requests run lint, docs consistency, quality,
-core build, benchmark, and packaging jobs. The docs job is a required input to
+core build, benchmark, and packaging jobs. The benchmark job builds the JMH
+fat JAR and runs a bounded v2 storage round-trip smoke test; it does not enforce
+throughput or latency SLOs. The docs job is a required input to
 the build job. Product packaging is conditional in the PR pipeline, but the
 core build and docs gates still run for documentation changes. Release tags
 use the separate release workflow described in [`OPERATIONS.md`](OPERATIONS.md).

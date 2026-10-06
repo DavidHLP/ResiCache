@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -23,8 +20,6 @@ class RedisCachePutOperation extends CachePutOperation
     private final Class<?> type;
     private final boolean cacheNullValues;
     private final boolean useBloomFilter;
-    private final long expectedInsertions;
-    private final double falseProbability;
     private final boolean sync;
     private final long syncTimeout;
     private final boolean randomTtl;
@@ -39,8 +34,6 @@ class RedisCachePutOperation extends CachePutOperation
         this.type = b.type;
         this.cacheNullValues = b.cacheNullValues;
         this.useBloomFilter = b.useBloomFilter;
-        this.expectedInsertions = b.expectedInsertions;
-        this.falseProbability = b.falseProbability;
         this.sync = b.sync;
         this.syncTimeout = b.syncTimeout;
         this.randomTtl = b.randomTtl;
@@ -54,26 +47,11 @@ class RedisCachePutOperation extends CachePutOperation
         return new Builder();
     }
 
-    /**
-     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCachePutOperation} — 单一字段映射 seam。
-     *
-     * <p>本方法为 1 行委派,把"attribute → operation field"的映射知识完全下放给
-     * {@link RedisCacheAttributes#applyTo(RedisCachePutOperation.Builder)} (字段拥有者)。
-     *
-     * <p>与 Cacheable.fromAttributes 唯一字段类型差异:{@code expectedInsertions} 在 Put
-     * 是 {@code long} 槽位,直传(无窄化),由 {@link RedisCacheAttributes#applyTo(RedisCachePutOperation.Builder)}
-     * 内部决定。
-     *
-     * <p>Factory 调用形态:
-     * <pre>
-     *   return RedisCachePutOperation.fromAttributes(method, key, attributes);
-     * </pre>
-     */
+    /** Builds the internal policy model from the shared annotation projection. */
     public static RedisCachePutOperation fromAttributes(
             java.lang.reflect.Method method, String key, RedisCacheAttributes a) {
         return a.applyTo(builder().name(method.getName()).key(key)).build();
     }
-
 
     @EqualsAndHashCode(callSuper = true)
     public static class Builder extends CachePutOperation.Builder implements RedisCacheAttributeSink {
@@ -82,8 +60,6 @@ class RedisCachePutOperation extends CachePutOperation
         private Class<?> type = Object.class;
         private boolean cacheNullValues;
         private boolean useBloomFilter;
-        private long expectedInsertions = 100000;
-        private double falseProbability = 0.01;
         private boolean sync;
         private long syncTimeout = 10;
         private boolean randomTtl;
@@ -149,16 +125,6 @@ class RedisCachePutOperation extends CachePutOperation
 
         public Builder useBloomFilter(boolean useBloomFilter) {
             this.useBloomFilter = useBloomFilter;
-            return this;
-        }
-
-        public Builder expectedInsertions(long expectedInsertions) {
-            this.expectedInsertions = expectedInsertions;
-            return this;
-        }
-
-        public Builder falseProbability(double falseProbability) {
-            this.falseProbability = falseProbability;
             return this;
         }
 
