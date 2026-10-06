@@ -19,6 +19,7 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -102,6 +103,40 @@ class RedisProCacheManagerTest {
             assertThat(cache).isNotNull();
             assertThat(cache.getCacheConfiguration().getTtlFunction().getTimeToLive(null, null)).isEqualTo(Duration.ofSeconds(60));
         }
+    }
+
+    @Test
+    @DisplayName("feature construction rejects each missing collaborator before cache creation")
+    void features_missingCollaborator_failsAtConstruction() {
+        BloomSupport bloom = mock(BloomSupport.class);
+        CacheOperationResolver resolver = mock(CacheOperationResolver.class);
+        SyncSupport sync = mock(SyncSupport.class);
+        SyncLockTimeout timeout = mock(SyncLockTimeout.class);
+
+        assertThatThrownBy(() -> new ResiCacheFeatures(null, null, resolver, sync, timeout))
+                .isInstanceOf(NullPointerException.class).hasMessage("bloomSupport");
+        assertThatThrownBy(() -> new ResiCacheFeatures(null, bloom, null, sync, timeout))
+                .isInstanceOf(NullPointerException.class).hasMessage("operationResolver");
+        assertThatThrownBy(() -> new ResiCacheFeatures(null, bloom, resolver, null, timeout))
+                .isInstanceOf(NullPointerException.class).hasMessage("syncSupport");
+        assertThatThrownBy(() -> new ResiCacheFeatures(null, bloom, resolver, sync, null))
+                .isInstanceOf(NullPointerException.class).hasMessage("syncLockTimeout");
+        assertThatThrownBy(() -> ResiCacheFeatures.builder().build())
+                .isInstanceOf(NullPointerException.class).hasMessage("bloomSupport");
+    }
+
+    @Test
+    @DisplayName("feature construction normalizes absent metrics and preserves an enabled registry")
+    void features_metricsAbsence_usesSharedDisabledRegistry() {
+        BloomSupport bloom = mock(BloomSupport.class);
+        CacheOperationResolver resolver = mock(CacheOperationResolver.class);
+        SyncSupport sync = mock(SyncSupport.class);
+        SyncLockTimeout timeout = mock(SyncLockTimeout.class);
+
+        assertThat(new ResiCacheFeatures(null, bloom, resolver, sync, timeout).getMeterRegistry())
+                .isSameAs(DisabledMetricsRegistry.INSTANCE);
+        assertThat(new ResiCacheFeatures(meterRegistry, bloom, resolver, sync, timeout).getMeterRegistry())
+                .isSameAs(meterRegistry);
     }
 
     @Nested

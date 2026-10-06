@@ -157,34 +157,23 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
                         key,
                         k -> {
                             scheduled.set(true);
-                            CompletableFuture<Void> created =
-                                    CompletableFuture.runAsync(
-                                            () -> retryPolicy.executeWithRetry(k, task),
-                                            executorService);
-
-                            created.whenComplete(
-                                    (result, throwable) -> {
-                                        inFlight.remove(k, created);
-                                        metrics.recordCompleted();
-                                        if (throwable != null) {
-                                            FailureReport.error(log,
-                                                    "Async early-expiration failed after all retries",
-                                                    null, k, throwable);
-                                        }
-                                    });
-                            return created;
+                            return CompletableFuture.runAsync(
+                                    () -> retryPolicy.executeWithRetry(k, task),
+                                    executorService);
                         });
-
-        // Close the publication race: a task that completed inline (before the
-        // future was published) had its whenComplete remove run too early and
-        // the done future just landed in the map — drop it now so it is not
-        // counted as in-flight work.
-        if (future.isDone()) {
-            inFlight.remove(key, future);
-        }
 
         if (scheduled.get()) {
             metrics.recordSubmitted();
+            // Register only after publication: CallerRunsPolicy can complete
+            // inline, and removing inside computeIfAbsent is a recursive update.
+            future.whenComplete((result, throwable) -> {
+                inFlight.remove(key, future);
+                metrics.recordCompleted();
+                if (throwable != null) {
+                    FailureReport.error(log, "Async early-expiration failed after all retries",
+                            null, key, throwable);
+                }
+            });
         }
         if (!scheduled.get() && !future.isDone()) {
             log.debug("Key {} is already being refreshed, skipping", key);
@@ -252,11 +241,7 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         log.info("Shutting down early-expiration executor thread pool...");
         shutdownGracefully(cleanupScheduler, 5, "Pre-refresh cleanup scheduler");
         shutdownGracefully(executorService, 10, "Pre-refresh executor");
-        // After both pools are down no completion callback can still run and no
-        // cleanup tick will fire again; drop whatever completed futures are left
-        // so getActiveCount()/inFlight reflect the terminated state. (A stale
-        // done entry can survive shutdown because the remove in whenComplete may
-        // have run before computeIfAbsent published the future.)
+        // Drop completed entries after pool shutdown as a final cleanup pass.
         inFlight.entrySet().removeIf(e -> e.getValue() == null || e.getValue().isDone());
     }
 

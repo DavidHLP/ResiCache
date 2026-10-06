@@ -29,6 +29,16 @@ The project is on a **single build line**: Spring Boot
 
 Current milestones:
 
+- **⚠️ Early-expiration task failures now reach retries** — actual async
+  value reads and TTL CAS failures use the executor's existing three-attempt
+  retry path instead of being swallowed inside the task. Exhausted failures
+  remain isolated from cache reads and use fingerprint-only diagnostics;
+  `prerefresh.completed` retains its task-termination meaning. Completion
+  callbacks now attach after future publication, so inline execution cannot
+  lose completion metrics or terminal diagnostics to a recursive map update. Required
+  feature collaborators now fail at feature construction, with absent metrics
+  normalized to the shared disabled registry; no public surface changes.
+
 - **Annotation compatibility members are explicit** — `RedisCacheEvict.unless`
   remains source/binary compatible but is not evaluated on the current Spring
   eviction path; `RedisCacheable.type` and `RedisCachePut.type` remain metadata

@@ -4,6 +4,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Objects;
 import lombok.Builder;
 import lombok.Value;
 import org.springframework.lang.Nullable;
@@ -21,15 +22,13 @@ import org.springframework.lang.Nullable;
  * {@code null} —— 指标未启用（或应用无 {@code MeterRegistry} bean）时它是共享无状态的
  * {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
  * {@link MetricsWriter#disabled(MeterRegistry)}），在其上的注册是 no-op
- * 分配:不发布、不保留任何 meter;其余字段是生产恒装配的协作对象,消费方构造期校验非 null
+ * 分配:不发布、不保留任何 meter;其余字段是生产恒装配的协作对象,本集合构造期校验非 null
  * (装配错误即抛,不静默降级)。
  */
 @Value
-@Builder
 class ResiCacheFeatures {
 
     /** 指标注册表 —— 永不为 null;关闭路径为共享 no-op seam(不采集 timer/counter). */
-    @Nullable
     MeterRegistry meterRegistry;
 
     /** 布隆读侧穿透闸门 —— 生产恒装配. */
@@ -43,4 +42,19 @@ class ResiCacheFeatures {
 
     /** 分布式锁超时解析规则 —— 生产恒装配. */
     SyncLockTimeout syncLockTimeout;
+
+    /** 构造时收拢特性不变量；null registry 保留为内部调用方的禁用指标写法。 */
+    @Builder
+    ResiCacheFeatures(
+            @Nullable MeterRegistry meterRegistry,
+            BloomSupport bloomSupport,
+            CacheOperationResolver operationResolver,
+            SyncSupport syncSupport,
+            SyncLockTimeout syncLockTimeout) {
+        this.meterRegistry = meterRegistry != null ? meterRegistry : DisabledMetricsRegistry.INSTANCE;
+        this.bloomSupport = Objects.requireNonNull(bloomSupport, "bloomSupport");
+        this.operationResolver = Objects.requireNonNull(operationResolver, "operationResolver");
+        this.syncSupport = Objects.requireNonNull(syncSupport, "syncSupport");
+        this.syncLockTimeout = Objects.requireNonNull(syncLockTimeout, "syncLockTimeout");
+    }
 }
