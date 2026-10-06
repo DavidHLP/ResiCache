@@ -1,78 +1,12 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import lombok.experimental.UtilityClass;
 import org.springframework.util.StringUtils;
 
-/**
- * 注解 → Builder 字段填充的 deep seam.
- *
- * <p><b>problem (背景)</b>:两条注解 → Spring {@code CacheOperation} 解析路径
- * ({@link RedisCacheAttributes#applyTo(org.springframework.cache.interceptor.CacheableOperation.Builder)}
- * 把 ResiCache 注解投影出的 AOP 面填入 Spring builder,
- *  {@link SpringAnnotationAdapter} 解析 Spring {@code @Cacheable/@CachePut/@CacheEvict})
- * 各持有 3 个近镜像的 builder 方法,共 6 处.每个方法都遵循同一形状:
- * <ol>
- *   <li>new Builder()</li>
- *   <li>{@code setName(name)}</li>
- *   <li>{@code setCacheNames(value-or-cacheNames)}</li>
- *   <li>6 个文本字段({@code key / condition / unless / keyGenerator / cacheManager /
- *       cacheResolver})逐个做{@code if (hasText) setX} 守卫式赋值 — 6 处 in
- *       {@code RedisCacheAttributes#applyToSpringCommonFields} + 17 处 in
- *       {@code SpringAnnotationAdapter}</li>
- *   <li>1-2 个 special 字段({@code sync} / {@code cacheWide} / {@code beforeInvocation})直接赋值</li>
- *   <li>{@code build()}</li>
- * </ol>
- *
- * <p>两处的实现各自把同一形状重写一次 — 添加 1 个 AOP 面注解字段需同时改两处,
- * 且 AOP 面不会复用 {@code SpringAnnotationAdapter}
- * 已有的私有 {@code applyText} helper.同一形状在两文件中独立漂移.
- *
- * <p><b>solution</b>:把"形状 → 字段填充"收口到本类两个 seam:
- * <ul>
- *   <li>{@link #applyText(Object, String, BiConsumer)} — 单字段 null-safe 写入,
- *       替换 {@code if (hasText) b.setX(value)} 样板.两处的 23 处 if-守卫收敛为一处.</li>
- *   <li>{@link #populate(Object, Object, List, List)} — 整个 builder 的字段填充
- *       编排:迭代 textFields(应用 {@code applyText}) + 迭代 specialFields(直接应用).
- *       每个 parse/build 方法仅含 1 个 populate(...) 调用 + 1 个 build().</li>
- * </ul>
- *
- * <p><b>name + cacheNames 不在 populate 范围内</b>:这两个字段的 setter 类型/语义各 Builder
- * 一致(setName(String) + setCacheNames(String[])),且 parse/build 方法各自有不同的"value
- * vs cacheNames 合并"逻辑 — 抽出后增加 2 个参数(name + cacheNames)与 2 个 setter
- * (BiConsumer)的传递成本大于收益.由 caller 预 set name + cacheNames,本类只负责
- * "text + special"两阶段编排.
- *
- * <p><b>deletion test</b>:删本类 + 内联回两个 caller →
- * <ul>
- *   <li>{@code RedisCacheAttributes#applyToSpringCommonFields} 的 6 个 if-守卫 +
- *       AOP 面 3 个重载的 special 字段填充回归为手写样板</li>
- *   <li>{@link SpringAnnotationAdapter} 私有 {@code applyText} 重新出现 + 3 个 build 方法
- *       17 个 applyText 调用恢复</li>
- *   <li>两处继续持有"同一形状"2 份独立实现</li>
- * </ul>
- * seam 挣得起存在代价(单类 ~60 SLOC 含 Javadoc).
- *
- * <p><b>包归属</b>:放在 {@code annotation} 包 — {@link RedisCacheAttributes} /
- * {@link SpringAnnotationAdapter} 是本 utility 的两个生产 consumer,utility 自身无 domain
- * 依赖(纯 {@code StringUtils} + 标准 JDK functional API).
- *
- * <p><b>不可变性</b>:
- * <ul>
- *   <li>{@link UtilityClass}(Lombok)生成 private 构造 + final class 阻止实例化</li>
- *   <li>helper 全为 {@code public static},无状态,线程安全</li>
- * </ul>
- *
- * @see RedisCacheAttributes
- * @see SpringAnnotationAdapter
- */
+/** Shared nonblank text assignment and typed Spring annotation builder mapping. */
 @UtilityClass
 final class BuilderPopulator {
 

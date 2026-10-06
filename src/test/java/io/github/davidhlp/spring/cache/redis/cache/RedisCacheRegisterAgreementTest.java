@@ -45,10 +45,10 @@ class RedisCacheRegisterAgreementTest {
         MethodMetadataResolver metadataResolver = Mockito.mock(MethodMetadataResolver.class);
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
         AnnotatedElementKey firstKey = new AnnotatedElementKey(firstMethod, AgreementService.class);
-        when(metadataResolver.currentKey()).thenReturn(firstKey);
+        when(metadataResolver.capture()).thenReturn(MethodSnapshot.of(firstMethod, AgreementService.class));
 
         RedisCacheableOperation registered = register.get(
-                "cache-a", firstKey, OperationKind.CACHEABLE);
+                "cache-a", MethodSnapshot.of(firstMethod, AgreementService.class), OperationKind.CACHEABLE);
         assertThat(registered).isSameAs(firstOperation);
         assertThat(resolver.resolve("cache-a", io.github.davidhlp.spring.cache.redis.chain.CacheOperation.GET))
                 .isSameAs(firstOperation);
@@ -91,7 +91,7 @@ class RedisCacheRegisterAgreementTest {
         assertThat(register.getSnapshot(anchorMethod, AgreementService.class))
                 .isNotNull();
         RedisCacheableOperation resolved = register.get(
-                "anchor-cache", anchorKey, OperationKind.CACHEABLE);
+                "anchor-cache", MethodSnapshot.of(anchorMethod, AgreementService.class), OperationKind.CACHEABLE);
         assertThat(resolved).isSameAs(anchorOperation);
     }
 
@@ -113,11 +113,13 @@ class RedisCacheRegisterAgreementTest {
                 implementationMethod, AnnotatedServiceImpl.class);
 
         RedisCacheableOperation firstResolved = register.get(
-                "interface-cache", requestKey, OperationKind.CACHEABLE);
+                "interface-cache", MethodSnapshot.of(
+                implementationMethod, AnnotatedServiceImpl.class), OperationKind.CACHEABLE);
         assertThat(firstResolved).isSameAs(operation);
         assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
         RedisCacheableOperation secondResolved = register.get(
-                "interface-cache", requestKey, OperationKind.CACHEABLE);
+                "interface-cache", MethodSnapshot.of(
+                implementationMethod, AnnotatedServiceImpl.class), OperationKind.CACHEABLE);
         assertThat(secondResolved).isSameAs(operation);
         assertThat(register.interfaceSnapshotLookups).isEqualTo(1);
     }
@@ -206,7 +208,6 @@ class RedisCacheRegisterAgreementTest {
         }
     }
 
-
     @Test
     @DisplayName("snapshot registration preserves native operations")
     void snapshotRegistration_preservesNativeOperationTypes() throws Exception {
@@ -228,7 +229,7 @@ class RedisCacheRegisterAgreementTest {
 
         AnnotatedElementKey elementKey = new AnnotatedElementKey(method, AgreementService.class);
         RedisCacheableOperation resolved = register.get(
-                "cache-a", elementKey, OperationKind.CACHEABLE);
+                "cache-a", MethodSnapshot.of(method, AgreementService.class), OperationKind.CACHEABLE);
         assertThat(resolved).isSameAs(newestOperation);
         assertThat(register.getSnapshot(method, AgreementService.class).operations())
                 .containsExactly(springOperation, newestOperation);

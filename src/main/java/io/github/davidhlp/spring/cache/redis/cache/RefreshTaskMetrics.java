@@ -1,17 +1,11 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * 提前过期任务的 Micrometer 指标注册与计数：从 {@code ThreadPoolEarlyExpirationExecutor} 抽出，
@@ -24,7 +18,6 @@ import lombok.extern.slf4j.Slf4j;
  * 保持 null，所有 record 方法为空操作。提取收益（locality）：原本散落在执行器构造器与各方法中
  * 的 Counter/Gauge 注册及 null 判定，现收敛为一处，执行器只需调用 {@code recordXxx()}。
  */
-@Slf4j
 final class RefreshTaskMetrics {
 
     private final Counter submittedCounter;

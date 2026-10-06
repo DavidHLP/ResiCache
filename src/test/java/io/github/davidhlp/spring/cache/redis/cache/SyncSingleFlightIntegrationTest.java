@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -70,8 +65,7 @@ class SyncSingleFlightIntegrationTest extends AbstractRedisIntegrationTest {
         loadService.loadExpensiveData(arg);
 
         Method method = LoadService.class.getMethod("loadExpensiveData", String.class);
-        org.springframework.context.expression.AnnotatedElementKey elementKey =
-                new org.springframework.context.expression.AnnotatedElementKey(method, LoadService.class);
+        MethodSnapshot elementKey = MethodSnapshot.of(method, LoadService.class);
         var operation = redisCacheRegister.get("test", elementKey, io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
 
         assertThat(operation).isNotNull();

@@ -86,6 +86,7 @@ class EarlyRefreshTest {
             assertThat(executor.getActiveCount()).isZero();
             assertThat(registry.get("prerefresh.submitted").counter().count()).isEqualTo(1);
             assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(1);
+            assertThat(executor.getActiveCount()).isZero();
         } finally {
             executor.shutdown();
             registry.close();
@@ -113,6 +114,7 @@ class EarlyRefreshTest {
             verify(redis, times(RefreshRetryPolicy.MAX_RETRY_COUNT)).execute(any(RedisCallback.class));
             assertThat(executor.getActiveCount()).isZero();
             assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(1);
+            assertThat(executor.getActiveCount()).isZero();
         } finally {
             executor.shutdown();
             registry.close();
@@ -125,7 +127,7 @@ class EarlyRefreshTest {
             invocation.<Runnable>getArgument(0).run();
             return null;
         }).when(worker).execute(any(Runnable.class));
-        return new ThreadPoolEarlyExpirationExecutor(worker, new ConcurrentHashMap<>(), registry, 30_000L);
+        return new ThreadPoolEarlyExpirationExecutor(worker, new ConcurrentHashMap<>(), registry);
     }
 
     private RedisCacheableOperation asyncOperation() {

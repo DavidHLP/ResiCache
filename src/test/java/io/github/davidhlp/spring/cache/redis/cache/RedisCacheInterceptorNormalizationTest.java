@@ -33,7 +33,7 @@ class RedisCacheInterceptorNormalizationTest {
         operationSource.getCacheOperations(implementationMethod, JdkServiceImpl.class);
         RedisCacheableOperation declaredPolicy = register.get(
                 "jdk-cache",
-                new AnnotatedElementKey(implementationMethod, JdkServiceImpl.class),
+                MethodSnapshot.of(implementationMethod, JdkServiceImpl.class),
                 OperationKind.CACHEABLE);
         RecordingMethodMetadataResolver metadataResolver = new RecordingMethodMetadataResolver();
         CacheOperationResolver resolver = new CacheOperationResolver(metadataResolver, register);
@@ -130,8 +130,8 @@ class RedisCacheInterceptorNormalizationTest {
         }
 
         @Override
-        public MethodSnapshot currentContext() {
-            return delegate.currentContext();
+        public MethodSnapshot capture() {
+            return delegate.capture();
         }
 
         @Override

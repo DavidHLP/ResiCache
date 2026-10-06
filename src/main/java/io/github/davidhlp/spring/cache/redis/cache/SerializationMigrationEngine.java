@@ -1,9 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationPhase;
@@ -126,7 +122,7 @@ class SerializationMigrationEngine
             switch (migration.getPhase()) {
                 case SHADOW_READ -> { }
                 case DUAL_WRITE -> writeSidecar(
-                        connection, key, migration.getShadowSuffix(), envelopeBytes, report, true);
+                        connection, key, migration.getShadowSuffix(), envelopeBytes, report);
                 case CUTOVER -> cutover(connection, key, legacyBytes, envelopeBytes, report);
                 case ROLLBACK -> throw new IllegalStateException("ROLLBACK uses backup scan");
                 default -> throw new IllegalStateException(
@@ -141,7 +137,7 @@ class SerializationMigrationEngine
 
     private void cutover(RedisConnection connection, byte[] key, byte[] legacyBytes,
                          byte[] envelopeBytes, MutableReport report) {
-        writeSidecar(connection, key, migration.getBackupSuffix(), legacyBytes, report, true);
+        writeSidecar(connection, key, migration.getBackupSuffix(), legacyBytes, report);
         if (migration.isDryRun()) {
             return;
         }
@@ -232,13 +228,10 @@ class SerializationMigrationEngine
     }
 
     private void writeSidecar(RedisConnection connection, byte[] sourceKey, String suffix,
-                              byte[] value, MutableReport report, boolean overwrite) {
+                              byte[] value, MutableReport report) {
         byte[] targetKey = appendSuffix(sourceKey, suffix);
         byte[] existing = connection.stringCommands().get(targetKey);
         if (Arrays.equals(existing, value)) {
-            return;
-        }
-        if (existing != null && !overwrite) {
             return;
         }
         if (migration.isDryRun()) {

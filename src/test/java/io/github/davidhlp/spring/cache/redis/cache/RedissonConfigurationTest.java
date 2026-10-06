@@ -1,9 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.io.File;
 import java.io.FileWriter;
@@ -58,18 +54,18 @@ class RedissonConfigurationTest {
         }
 
         @Test
-        @DisplayName("当 ResiCache 属性未设置时，回退到 Spring RedisProperties")
-        void singleMode_fallsBackToRedisProperties() {
-            // 显式设置 ResiCache 属性为 null/0，触发回退逻辑
+        @DisplayName("空 host 回退到 Spring，合法端口仍由 ResiCache 指定")
+        void singleMode_blankHostFallsBackButPortRemainsIndependent() {
+            // Blank host has a fallback; a validated port cannot be zero.
             properties.getRedis().setHost(null);
-            properties.getRedis().setPort(0);
+            properties.getRedis().setPort(6380);
             redisProperties.setHost("spring-redis.example.com");
             redisProperties.setPort(7000);
 
             Config config = configuration.buildConfig(redisProperties, properties);
 
             assertThat(config.useSingleServer().getAddress())
-                    .isEqualTo("redis://spring-redis.example.com:7000");
+                    .isEqualTo("redis://spring-redis.example.com:6380");
         }
 
         @Test

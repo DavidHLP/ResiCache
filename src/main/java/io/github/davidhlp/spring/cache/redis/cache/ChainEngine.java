@@ -1,18 +1,13 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
 import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +16,7 @@ import org.springframework.stereotype.Component;
  * 四件关注点集中到单一 {@code @Component} seam。
  *
  * <p><b>推进协议</b>：Engine 接收有序的 {@link CacheHandler} 快照（由
- * {@link CacheHandlerChain#execute(CacheContext)} 在 synchronized 块内一次性拍出），
+ * {@link CacheHandlerChain#execute(CacheContext)} 提供已发布的不可变列表），
  * 按顺序调用每个 handler 的 {@code handle(ctx, continuation)}；handler 返回的
  * {@link HandlerResult#decision()} 决定走向：
  *
@@ -57,7 +52,7 @@ import org.springframework.stereotype.Component;
  * 引擎不再持任何静态状态,handler 不再反查引擎,fragment API 与测试专用 setter 一并消失。
  *
  * <p><b>线程安全</b>：Engine 单例 Bean，{@link #observers} 字段为
- * {@link java.util.concurrent.CopyOnWriteArrayList}（启动期单写、热期多读），
+ * {@code volatile List<ChainObserver>} 不可变发布快照（启动期单写、热期多读），
  * observer 自身必须线程安全。Handler 列表由 {@link CacheHandlerChain}
  * 完全持有;Engine 内部不修改该列表。
  *
@@ -66,14 +61,14 @@ import org.springframework.stereotype.Component;
  * 子链以 {@link ChainContinuation} 形态交给正在执行的 handler。
  *
  * <p><b>Observer 列表管理</b>:{@code addObserver} / 遍历逻辑均由 Engine
- * 持有的 CopyOnWriteArrayList 完成。
+ * 持有的不可变发布快照完成。
  */
 @Slf4j
 @Component
 class ChainEngine {
 
     /** 注册的 observer 列表 — 启动期单写、热期多读。 */
-    private final List<ChainObserver> observers = new CopyOnWriteArrayList<>();
+    private volatile List<ChainObserver> observers = List.of();
 
     public ChainEngine() {
         // observers 由外部 addObserver(...) 注入；ChainHandlerChainFactory 在装配时调用
@@ -87,13 +82,14 @@ class ChainEngine {
      * @param observer 待注册的 observer（不为 null）
      * @throws IllegalArgumentException 若 observer 为 null
      */
-    public void addObserver(ChainObserver observer) {
+    public synchronized void addObserver(ChainObserver observer) {
         if (observer == null) {
             throw new IllegalArgumentException("observer must not be null");
         }
-        observers.add(observer);
+        List<ChainObserver> updated = new ArrayList<>(observers);
+        updated.add(observer);
+        observers = List.copyOf(updated);
     }
-
 
     /**
      * 执行责任链 — 整条 chain 全生命周期(head handle + post-process + 观测)。
@@ -254,7 +250,6 @@ class ChainEngine {
         }
     }
 
-
     /**
      * 把 {@link HandlerResult} 物化为 {@link CacheResult} —— null 退化为 success
      * 的单一权威 helper,三处 decision 分支走同一行委派,deletion test 保护语义。
@@ -383,7 +378,7 @@ class ChainEngine {
          */
         private final class ObserverDispatch<R> {
 
-            private final List<ChainObserver> observerList = List.copyOf(observers);
+            private final List<ChainObserver> observerList = observers;
 
             Object[] start(String hookName, ObserverStartHook hook) {
                 Object[] scopeTokens = new Object[observerList.size()];
@@ -441,7 +436,5 @@ class ChainEngine {
             }
         }
     }
-
-
 
 }

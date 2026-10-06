@@ -1,24 +1,18 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.util.Map;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.expression.AnnotatedElementKey;
 import org.springframework.lang.Nullable;
 
 /**
  * 当前方法缓存操作元数据解析器 —— 收敛 {@code RedisProCache} 与
  * {@code RedisProCacheWriter} 两处 4 行镜像 lookup 协议的 deep seam。
  *
- * <p><b>problem</b>:"读 ThreadLocal AnnotatedElementKey → 查 RedisCacheRegister"协议若在
+ * <p><b>problem</b>:"读当前 typed MethodSnapshot → 查 RedisCacheRegister"协议若在
  * {@code RedisProCache} 与 {@code RedisProCacheWriter} 各持一份,两处 4 行近镜像任一写错
  * (log tag 漂移、查询命名空间不一致),另一边静默失效。
  *
@@ -50,7 +44,7 @@ class CacheOperationResolver {
      *
      * <p>「无元数据」不是本类的构造模式:无当前方法上下文时
      * {@link #resolve(String, CacheOperation)} 读到的 ThreadLocal key 为 null,
-     * 直接返回 null(见 {@link MethodMetadataResolver#currentKey()})。
+     * 直接返回 null(见 {@link MethodMetadataResolver#capture()})。
      */
     @Autowired
     public CacheOperationResolver(MethodMetadataResolver methodResolver,
@@ -64,7 +58,7 @@ class CacheOperationResolver {
      *
      * <p>流程:
      * <ol>
-     *   <li>读 ThreadLocal AnnotatedElementKey;为 null → 返回 null(无当前方法上下文)</li>
+     *   <li>读当前 typed MethodSnapshot;为 null → 返回 null(无当前方法上下文)</li>
      *   <li>查 register;未命中 → 记 debug 日志,返回 null</li>
      * </ol>
      *
@@ -83,7 +77,7 @@ class CacheOperationResolver {
      */
     @Nullable
     public CachePolicyView.Source resolve(@Nullable String cacheName, CacheOperation operation) {
-        AnnotatedElementKey key = methodResolver.currentKey();
+        MethodSnapshot key = methodResolver.capture();
         if (key == null) {
             return null;
         }
@@ -110,7 +104,7 @@ class CacheOperationResolver {
      * 单次命名空间查询 —— 未命中,或类型不实现 {@link CachePolicyView.Source} 时返回 null。
      */
     @Nullable
-    private CachePolicyView.Source lookup(String cacheName, AnnotatedElementKey key,
+    private CachePolicyView.Source lookup(String cacheName, MethodSnapshot key,
                                           OperationKind kind) {
         org.springframework.cache.interceptor.CacheOperation registered =
                 register.get(cacheName, key, kind);

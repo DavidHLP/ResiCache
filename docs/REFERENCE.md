@@ -57,7 +57,10 @@ README snippet when the properties class or generated metadata differs.
 - `@RedisCacheable` describes read-through caching and its protection policy.
 - `@RedisCachePut` describes an explicit write and supplies policy for a
   write-only declaration.
-- `@RedisCacheEvict` describes removal/clear operations.
+- `@RedisCacheEvict` describes removal/clear operations; only its Spring eviction
+  fields are active. Its read/write protection metadata is compatibility-only.
+- Bloom capacity is global (`resi-cache.bloom.bit-size` / `hash-functions`). The
+  annotation sizing hints are compatibility-only; see `STABILITY.md`.
 - `@RedisCaching` groups operations on a method or type. Type-level discovery
   does not apply policy fields to otherwise unannotated methods; add the needed
   method-level declaration when the policy matters.

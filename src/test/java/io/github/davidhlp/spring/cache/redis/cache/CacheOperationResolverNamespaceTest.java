@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>测试通过生产 {@link RedisCacheRegister#registerSnapshot} seam 写入快照，锁定：
  * <ol>
- *   <li>GET → CACHEABLE,PUT / PUT_IF_ABSENT → CACHE_PUT,REMOVE / CLEAN → CACHE_EVICT</li>
+ *   <li>GET → CACHEABLE,PUT / PUT_IF_ABSENT → CACHE_PUT,REMOVE / CLEAN → 无方法级策略</li>
  *   <li>写路径在自身命名空间未命中时回退 CACHEABLE —— 读穿透写回由 {@code @RedisCacheable}
  *       方法承担,该场景策略不得丢失</li>
  * </ol>
@@ -40,7 +40,7 @@ class CacheOperationResolverNamespaceTest {
         register = new RedisCacheRegister();
 
         MethodMetadataResolver metadata = Mockito.mock(MethodMetadataResolver.class);
-        Mockito.when(metadata.currentKey()).thenReturn(elementKey);
+        Mockito.when(metadata.capture()).thenReturn(MethodSnapshot.of(annotatedMethod, CacheOperationResolverNamespaceTest.class));
         resolver = new CacheOperationResolver(metadata, register);
     }
 
@@ -73,7 +73,7 @@ class CacheOperationResolverNamespaceTest {
         registerSnapshot(put(120));
 
         assertThat(resolver.resolve(CACHE, CacheOperation.PUT)).isSameAs(
-                register.get(CACHE, elementKey, OperationKind.CACHE_PUT));
+                register.get(CACHE, MethodSnapshot.of(annotatedMethod, CacheOperationResolverNamespaceTest.class), OperationKind.CACHE_PUT));
         assertThat(resolver.resolve(CACHE, CacheOperation.PUT).getTtl())
                 .as("@RedisCachePut(ttl) 必须真正生效")
                 .isEqualTo(120L);
@@ -94,7 +94,7 @@ class CacheOperationResolverNamespaceTest {
 
         assertThat(resolver.resolve(CACHE, CacheOperation.PUT))
                 .as("读穿透写回的策略来自 @RedisCacheable 声明,不得丢失")
-                .isSameAs(register.get(CACHE, elementKey, OperationKind.CACHEABLE));
+                .isSameAs(register.get(CACHE, MethodSnapshot.of(annotatedMethod, CacheOperationResolverNamespaceTest.class), OperationKind.CACHEABLE));
         assertThat(resolver.resolve(CACHE, CacheOperation.PUT_IF_ABSENT).getTtl()).isEqualTo(300L);
     }
 

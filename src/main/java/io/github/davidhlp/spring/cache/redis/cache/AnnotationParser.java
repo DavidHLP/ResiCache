@@ -1,8 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheEvict;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCachePut;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
@@ -75,7 +72,7 @@ class AnnotationParser {
         final RedisCacheEvict cacheEvict =
                 AnnotationTargets.findMerged(target, RedisCacheEvict.class);
         if (cacheEvict != null) {
-            addEvict(operations, policyOperations, cacheEvict, target);
+            addEvict(operations, cacheEvict, target);
         }
 
         final RedisCachePut cachePut =
@@ -91,7 +88,7 @@ class AnnotationParser {
                 addCacheable(operations, policyOperations, annotation, target);
             }
             for (final RedisCacheEvict annotation : caching.redisCacheEvict()) {
-                addEvict(operations, policyOperations, annotation, target);
+                addEvict(operations, annotation, target);
             }
             for (final RedisCachePut annotation : caching.redisCachePut()) {
                 addPut(operations, policyOperations, annotation, target);
@@ -129,23 +126,16 @@ class AnnotationParser {
     }
 
     /**
-     * {@code @RedisCacheEvict}:一份投影 → AOP operation + policy operation。
+     * {@code @RedisCacheEvict}:只产出 Spring AOP operation。
      */
     private void addEvict(
             final List<CacheOperation> operations,
-            final List<CacheOperation> policyOperations,
             final RedisCacheEvict annotation,
             final Object target) {
         log.trace("Parsing @RedisCacheEvict annotation for target: {}", target);
         final RedisCacheAttributes attributes = projector.from(annotation);
 
-        // 使用 Spring 标准的 CacheEvictOperation.Builder,确保 getClass() 返回
-        // CacheEvictOperation.class —— 这样 CacheAspectSupport 的 CacheOperationContexts
-        // 能正确按类型索引(可缓存/可放入/可清除三桶)。ResiCache 增强字段(ttl/bloom/
-        // early-expiration 等)不进 Spring operation,由同一份投影的 policy 面
-        // 提供给 RedisCacheRegister 查询。(@RedisCacheEvict 的 sync/syncTimeout 是
-        // ResiCache 扩展,Spring 原生 CacheEvictOperation 无此概念,此处不投影——
-        // 与 Spring 原生 @CacheEvict 行为一致。)
+        // Eviction has no chain policy: REMOVE/CLEAN never query one.
         final CacheEvictOperation.Builder builder = new CacheEvictOperation.Builder();
         builder.setName(AnnotationTargets.extractTargetName(target));
         attributes.applyTo(builder);
@@ -153,10 +143,6 @@ class AnnotationParser {
         log.debug("Built CacheEvictOperation: {}", operation);
         operations.add(operation);
 
-        if (target instanceof Method method) {
-            policyOperations.add(RedisCacheEvictOperation.fromAttributes(
-                    method, annotation.key(), attributes));
-        }
     }
 
     /**
@@ -250,6 +236,7 @@ class AnnotationParser {
                     }
                 }
             }
+            byKind.replaceAll((kind, byName) -> Map.copyOf(byName));
             return new PolicyIndex(Map.copyOf(byKind));
         }
 

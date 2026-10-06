@@ -1,23 +1,18 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
-import org.springframework.context.expression.AnnotatedElementKey;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MethodMetadataResolverTest {
 
     @Test
     void capturedContext_crossesWorkerAndRestoresWorkerState() throws Exception {
-        TestResolver resolver = new TestResolver();
+        DefaultMethodMetadataResolver resolver = new DefaultMethodMetadataResolver();
         Method method = Fixture.class.getMethod("load");
         ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -46,7 +41,7 @@ class MethodMetadataResolverTest {
 
     @Test
     void nestedActivation_restoresPreviousContextInLifoOrder() throws Exception {
-        TestResolver resolver = new TestResolver();
+        DefaultMethodMetadataResolver resolver = new DefaultMethodMetadataResolver();
         Method outer = Fixture.class.getMethod("outer");
         Method inner = Fixture.class.getMethod("inner");
 
@@ -72,43 +67,4 @@ class MethodMetadataResolverTest {
         public void inner() { }
     }
 
-    private static final class TestResolver implements MethodMetadataResolver {
-        private final ThreadLocal<MethodSnapshot> current = new ThreadLocal<>();
-
-        @Override
-        public AnnotatedElementKey currentKey() {
-            MethodSnapshot snapshot = current.get();
-            return snapshot == null ? null : snapshot.annotatedElementKey();
-        }
-
-        @Override
-        public Method currentMethod() {
-            MethodSnapshot snapshot = current.get();
-            return snapshot == null ? null : snapshot.method();
-        }
-
-        @Override
-        public Class<?> currentTargetClass() {
-            MethodSnapshot snapshot = current.get();
-            return snapshot == null ? null : snapshot.targetClass();
-        }
-
-        @Override
-        public MethodSnapshot currentContext() {
-            return current.get();
-        }
-
-        @Override
-        public ScopedActivation activate(Method method, Class<?> targetClass) {
-            MethodSnapshot previous = current.get();
-            current.set(MethodSnapshot.of(method, targetClass));
-            return new ScopedActivation(() -> {
-                if (previous == null) {
-                    current.remove();
-                } else {
-                    current.set(previous);
-                }
-            });
-        }
-    }
 }

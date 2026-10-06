@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import java.lang.reflect.Method;
 import java.util.Set;
@@ -15,6 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.expression.AnnotatedElementKey;
@@ -46,6 +44,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import({TestRedisConfiguration.class, SelectiveModeIntegrationTest.SelectiveTestConfig.class})
 @DisplayName("SELECTIVE Mode Integration Tests")
 class SelectiveModeIntegrationTest extends AbstractRedisIntegrationTest {
+
+    @Autowired
+    private CacheManager cacheManager;
 
     @Autowired
     private SelectiveService selectiveService;
@@ -102,13 +103,23 @@ class SelectiveModeIntegrationTest extends AbstractRedisIntegrationTest {
         // SELECTIVE:纯 @Cacheable 的 OperationSource 返回 null → redisCacheAdvisor 不匹配
         // → RedisCacheInterceptor 不触发 → RedisCacheRegister 无对应操作注册
         Method method = SelectiveService.class.getMethod("getPlain", String.class);
-        AnnotatedElementKey elementKey = new AnnotatedElementKey(method, SelectiveService.class);
+        MethodSnapshot elementKey = MethodSnapshot.of(method, SelectiveService.class);
         io.github.davidhlp.spring.cache.redis.cache.RedisCacheableOperation op =
                 redisCacheRegister.get("plain-cache", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
         assertThat((Object) op)
                 .as("纯 @Cacheable 在 SELECTIVE 模式下不应被 ResiCache 注册")
                 .isNull();
+    }
+
+    @Test
+    void mixedNativePutAndEvictHaveRealRedisEffects() {
+        var cache = cacheManager.getCache("mixed-native-write");
+        cache.put("key", "old");
+        assertThat(selectiveService.mixedPut("key")).isEqualTo("new");
+        assertThat(cache.get("key", String.class)).isEqualTo("new");
+        selectiveService.mixedEvict("key");
+        assertThat(cache.get("key")).isNull();
     }
 
     @TestConfiguration
@@ -140,5 +151,13 @@ class SelectiveModeIntegrationTest extends AbstractRedisIntegrationTest {
         public String getPlain(String id) {
             return "plain-" + id;
         }
+
+        @RedisCacheable(cacheNames = "unused-meta", condition = "false")
+        @CachePut(cacheNames = "mixed-native-write", key = "#p0")
+        public String mixedPut(String key) { return "new"; }
+
+        @RedisCacheable(cacheNames = "unused-meta", condition = "false")
+        @CacheEvict(cacheNames = "mixed-native-write", key = "#p0")
+        public void mixedEvict(String key) { }
     }
 }

@@ -1,12 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -15,23 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 
 /**
- * Internal early-expiration executor. The public class is retained for
- * construction compatibility, but {@link #submit(String, Runnable)} is not a
- * supported extension seam; cross-package callers receive only
- * {@link RefreshCancellation#cancel(String)}.
- *
- * <p>由自动配置按 {@code resi-cache.early-expiration.*} 构造。提交、重试、清理调度、
- * shutdown 和失败处理均属于本实现，不新增 public executor interface。
- *
- * <p>内部职责委托给两个协作类：
- * <ul>
- *   <li>{@link RefreshRetryPolicy} —— 同步重试循环（纯函数，独立可测）</li>
- *   <li>{@link RefreshTaskMetrics} —— Micrometer 指标注册与计数（无锁）</li>
- * </ul>
- * 去重提交({@code inFlight} + {@code executorService})与生命周期(清理调度、shutdown)
- * 均属于本实现，不向测试或跨包调用暴露内部线程池字段。
- *
- * <p>失败的任务由 {@link RefreshRetryPolicy} 自动重试，最多 {@value RefreshRetryPolicy#MAX_RETRY_COUNT} 次。
+ * Internal bounded refresh executor with per-key deduplication and bounded retries.
+ * Completed and cancelled futures remove themselves from the in-flight index;
+ * no periodic scheduler is needed. Cancellation is best-effort and does not
+ * promise interruption of the runnable. Shutdown waits for accepted work.
  */
 @Slf4j
 class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
@@ -39,12 +20,6 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
     private final ExecutorService executorService;
     private final ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
     private static final String THREAD_NAME_PREFIX = "early-expiration-";
-
-    /** 独立调度器用于定期清理已完成任务 */
-    private final ScheduledExecutorService cleanupScheduler;
-
-    /** 清理间隔（毫秒） */
-    private final long cleanupIntervalMs;
 
     private final RefreshRetryPolicy retryPolicy;
     private final RefreshTaskMetrics metrics;
@@ -70,34 +45,24 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
      */
     public ThreadPoolEarlyExpirationExecutor(int corePoolSize, int maxPoolSize, int queueCapacity, MeterRegistry meterRegistry) {
         this(createExecutor(corePoolSize, maxPoolSize, queueCapacity),
-             new ConcurrentHashMap<>(), meterRegistry, 30_000L);
+             new ConcurrentHashMap<>(), meterRegistry);
     }
 
     /**
      * 构造函数，允许注入自定义的执行器服务和进行中的任务映射（测试主路径：直接控制
-     * {@code ExecutorService} / {@code inFlight} / 清理周期，绕开配置化构造）。
+     * {@code ExecutorService} / {@code inFlight}，绕开配置化构造）。
      *
      * @param executorService 线程池执行器服务
      * @param inFlight        正在进行中的任务映射
      * @param meterRegistry   Micrometer meter注册表（可选，为null时不注册指标）
-     * @param cleanupIntervalMs 清理调度器周期（毫秒）
      */
     ThreadPoolEarlyExpirationExecutor(
             ExecutorService executorService,
             ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
-            MeterRegistry meterRegistry,
-            long cleanupIntervalMs) {
+            MeterRegistry meterRegistry) {
         this.executorService = executorService;
         this.inFlight = inFlight;
-        this.cleanupIntervalMs = cleanupIntervalMs;
         this.retryPolicy = new RefreshRetryPolicy();
-
-        // 创建独立的清理调度器
-        this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "early-expiration-cleanup");
-            t.setDaemon(true);
-            return t;
-        });
 
         try {
             // 初始化 Micrometer 指标（注册逻辑收敛于 RefreshTaskMetrics）
@@ -110,7 +75,6 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
                     poolDesc, RefreshRetryPolicy.MAX_RETRY_COUNT);
         } catch (RuntimeException e) {
             // 初始化失败时，确保清理已创建的资源
-            cleanupScheduler.shutdownNow();
             executorService.shutdownNow();
             throw e;
         }
@@ -148,8 +112,7 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         }
         AtomicBoolean scheduled = new AtomicBoolean(false);
 
-        // If the key's previous run already finished (done future lingering until
-        // the cleanup tick), drop it so the new submit actually schedules.
+        // A completion callback may still be pending when the next submission arrives.
         inFlight.computeIfPresent(key, (k, existing) -> existing.isDone() ? null : existing);
 
         CompletableFuture<Void> future =
@@ -202,20 +165,6 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         }
     }
 
-
-    /**
-     * 启动定期清理调度器
-     */
-    @PostConstruct
-    public void initCleanupScheduler() {
-        cleanupScheduler.scheduleAtFixedRate(
-                this::cleanFinished,
-                cleanupIntervalMs,
-                cleanupIntervalMs,
-                TimeUnit.MILLISECONDS);
-        log.info("Pre-refresh cleanup scheduler started with interval={}ms", cleanupIntervalMs);
-    }
-
     /**
      * 获取当前正在进行的提前过期任务数量
      *
@@ -226,20 +175,12 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
     }
 
     /**
-     * 清理已完成的任务，从进行中的映射中移除已完成的任务
-     */
-    private void cleanFinished() {
-        inFlight.entrySet().removeIf(e -> e.getValue() != null && e.getValue().isDone());
-    }
-
-    /**
      * 关闭执行器，释放所有资源
      * 此方法在应用关闭时自动调用
      */
     @PreDestroy
     public void shutdown() {
         log.info("Shutting down early-expiration executor thread pool...");
-        shutdownGracefully(cleanupScheduler, 5, "Pre-refresh cleanup scheduler");
         shutdownGracefully(executorService, 10, "Pre-refresh executor");
         // Drop completed entries after pool shutdown as a final cleanup pass.
         inFlight.entrySet().removeIf(e -> e.getValue() == null || e.getValue().isDone());
@@ -248,11 +189,6 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
     /**
      * 优雅关闭单个 ExecutorService：先 {@code shutdown()} 拒收新任务，等待已有任务在
      * {@code timeoutSeconds} 内结束；超时则 {@code shutdownNow()} 强制中断，中断期间同样强制关闭。
-     *
-     * <p>收敛自 {@link #shutdown()} 中 {@code cleanupScheduler} 与 {@code executorService} 两段
-     * 逐字重复的关闭样板（仅超时阈值与日志名称不同）——优雅关闭策略变更现只改本方法一处，
-     * 不再两处同步维护（locality）。两段调用 byte-for-byte 行为等价：{@code cleanupScheduler}
-     * 走 5s + "Pre-refresh cleanup scheduler"，{@code executorService} 走 10s + "Pre-refresh executor"。
      *
      * @param executor       待关闭的执行器
      * @param timeoutSeconds 优雅等待超时（秒）

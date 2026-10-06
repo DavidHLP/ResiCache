@@ -1,42 +1,29 @@
 package io.github.davidhlp.spring.cache.redis.serialization;
 
-
-
 import org.springframework.core.NestedRuntimeException;
 
 public class SerializationException extends NestedRuntimeException {
 
-    /** Internal envelope bridge; keeps the wire-format type name in this package. */
+    /**
+     * Internal cross-package bridge retained for source/binary compatibility.
+     * Encoding and wire-format ownership live in {@link VersionEnvelope}.
+     */
     public static final class EnvelopeCodec {
-        private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
-                new com.fasterxml.jackson.databind.ObjectMapper();
-
-        private EnvelopeCodec() {
-        }
+        private EnvelopeCodec() { }
 
         public static Object create(Object payload) {
-            return new VersionEnvelope(VersionEnvelope.CURRENT_VERSION, payload);
+            return VersionEnvelope.create(payload);
         }
 
         public static boolean isEnvelope(byte[] bytes) {
-            if (bytes == null || bytes.length == 0) {
-                return false;
-            }
-            try {
-                com.fasterxml.jackson.databind.JsonNode node = JSON.readTree(bytes);
-                return node != null
-                        && node.isObject()
-                        && node.has("version")
-                        && node.has("payload");
-            } catch (Exception e) {
-                return false;
-            }
+            return VersionEnvelope.isEnvelope(bytes);
         }
 
         public static Object read(com.fasterxml.jackson.databind.ObjectMapper mapper, byte[] bytes)
                 throws java.io.IOException {
-            return mapper.readValue(bytes, VersionEnvelope.class);
+            return VersionEnvelope.read(mapper, bytes);
         }
+
         public static int version(Object envelope) {
             return ((VersionEnvelope) envelope).getVersion();
         }

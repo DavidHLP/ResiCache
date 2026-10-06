@@ -70,8 +70,11 @@ classes can move or disappear without becoming a compatibility promise.
 
 `CacheHandlerChainFactory` discovers internal handlers, orders them through
 `@HandlerPriority(HandlerOrder.X)`, applies startup protection switches, and
-assembles observers. `ChainEngine` owns advancement, flow decisions, observer
-hook ordering, and post-processing isolation. A custom handler must be supplied
+assembles observers. Handler mutations publish an immutable snapshot; execution
+reuses it without taking the mutation lock or copying the handler list. Each
+execution captures its observer set once, preserving start/end pairing even
+when an observer is registered during a callback. `ChainEngine` owns advancement,
+flow decisions, observer hook ordering, and post-processing isolation. A custom handler must be supplied
 by the host application's component scan or as an application bean.
 `HandlerOrder` additionally carries each slot's protection disable name and its
 `handler` metric/log tag, which internal `cache/HandlerIdentity.java` resolves as
@@ -89,12 +92,17 @@ The annotation path is intentionally split into two views:
    declaration; read-through write-back remains governed by the read side.
 
 The split is required by the Spring operation source and the chain-side policy
-resolver. Both views are projected from one `RedisCacheAttributes` instance per
-annotation, and the snapshot carries a `kind + cacheName` index built at
-registration time, so the two views cannot disagree and policy lookup does not
-depend on declaration order. The split is not permission to reintroduce
+resolver. Read/write views share one `RedisCacheAttributes` projection per annotation;
+eviction produces only a Spring AOP operation because REMOVE/CLEAN have no
+method-level policy. All AOP operations, including adapted native PUT/EVICT,
+use the concrete standard Spring operation classes. The snapshot builds its
+`kind + cacheName` policy index at registration, so requests do not rescan the
+annotation declarations. Later duplicate declarations override earlier ones. The split is not permission to reintroduce
 per-invocation parsing or to collapse the two operation representations without
 a new contract decision.
+Request inputs construct one immutable `CachePolicyView`. Metadata activation
+stores a typed `MethodSnapshot`, so policy lookup and async capture do not read
+Spring private key fields through reflection.
 Class-level operation discovery and method-level policy application retain the
 current documented behavior in `COMPATIBILITY.md`.
 
@@ -111,7 +119,8 @@ current documented behavior in `COMPATIBILITY.md`.
   queue runs the task on the submitting thread. `prerefresh.completed` counts
   task termination, including failure, rather than successful CAS operations.
   The executor attaches completion callbacks only after publishing the future,
-  avoiding recursive map updates when execution completes inline.
+  avoiding recursive map updates when execution completes inline. Completion and
+  cancellation remove entries directly; no periodic cleanup thread is needed.
 - `ResiCacheFeatures` validates required collaborators when the value is
   constructed and normalizes absent metrics to the shared disabled registry.
   Cache creation consumes that validated value; standalone loader construction
@@ -122,9 +131,20 @@ current documented behavior in `COMPATIBILITY.md`.
   stack. A report without a throwable emits the WARN only; `CacheErrorHandler` owns count-once
   reporting for chain failures on top of it, and the failure metric uses finite
   operation/kind/strategy dimensions.
+- The host Jackson 2 `ObjectMapper` takes precedence; `JacksonConfig` supplies
+  the dedicated `resiCacheObjectMapper` fallback only when that type is absent.
+  Template hash access remains available through `redisCacheTemplate.opsForHash()`;
+  no unused standalone `HashOperations` bean is registered.
+- `VersionEnvelope` owns envelope encoding/decoding; the existing nested
+  `SerializationException.EnvelopeCodec` is a compatibility forwarding bridge.
 - `SecureJacksonRedisSerializer` owns whitelist-backed serialization and the
   `{version, payload}` envelope. Refresh metadata required by policy/CAS is
-  persisted; process-local monotonic time is not.
+  persisted; process-local monotonic time is not. `lastAccessTime` and `visitTimes`
+  are retained v2 fields, not live hit statistics. The writer's nested envelope
+  representation remains compatible with existing stored bytes; the serialization
+  benchmark measures its adaptation cost without Redis network I/O. `CacheValueCodec`
+  reuses immutable Jackson readers/writers; it retains the existing envelope-shaped
+  Map and null-placeholder contract.
 - Redis is an acceleration layer, not the application source of truth. A
   tolerated write-back failure can leave stale cache state and has no implicit
   retry/backoff contract.

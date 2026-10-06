@@ -29,6 +29,24 @@ The project is on a **single build line**: Spring Boot
 
 Current milestones:
 
+- **Native annotation correctness and internal cleanup** — adapted Spring PUT
+  and EVICT now use Spring's concrete operation classes and update/delete the
+  cache in FULL and SELECTIVE mixed modes. A host Jackson 2 mapper takes
+  precedence over the dedicated fallback, avoiding same-name bean conflicts.
+  Eviction no longer constructs unused chain policy; Bloom annotation sizing
+  hints are explicitly compatibility-only. Typed annotation mapping, immutable
+  chain snapshots, request policy reuse, typed method metadata, reusable codec
+  readers/writers, and completion cleanup remove unused data flows and per-execution work. The v2 byte shape,
+  stored compatibility metadata, and annotation signatures remain unchanged.
+  Envelope implementation ownership moves to `VersionEnvelope` behind the
+  existing bridge; unused members/parser/loggers and the unreachable zero-port
+  fallback are removed. Executor cancellation tests now assert the promised
+  effects and consistently close fixtures. JMH names describe their measured
+  scope and a serializer/storage round-trip benchmark covers multiple sizes.
+- **⚠️ Internal hash bean cleanup** — the unconsumed standalone `hashOperations`
+  bean is no longer supplied. Applications needing it can declare their own bean
+  or use `redisCacheTemplate.opsForHash()`; template hash support is unchanged.
+
 - **⚠️ Bound JDK legacy migration resources** — decoding now rejects streams
   over 16 MiB, graphs deeper than 64, more than 100,000 references, or arrays
   over 1,000,000 elements before allocation, while preserving the class

@@ -1,19 +1,12 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
 import io.github.davidhlp.spring.cache.redis.protection.refresh.EarlyExpirationMode;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.lang.NonNull;
 
-/**
- * Redis cacheable operation that extends Spring's {@link CacheableOperation}
- * to participate in the standard cacheable execution path while carrying
- * ResiCache-specific metadata.
- */
+/** Internal chain policy; Spring AOP receives a separate standard operation. */
 @Getter
 @EqualsAndHashCode(callSuper = true)
 class RedisCacheableOperation extends CacheableOperation
@@ -23,8 +16,6 @@ class RedisCacheableOperation extends CacheableOperation
     private final Class<?> type;
     private final boolean cacheNullValues;
     private final boolean useBloomFilter;
-    private final long expectedInsertions;
-    private final double falseProbability;
     private final boolean randomTtl;
     private final float variance;
     private final boolean enableEarlyExpiration;
@@ -38,8 +29,6 @@ class RedisCacheableOperation extends CacheableOperation
         this.type = b.type;
         this.cacheNullValues = b.cacheNullValues;
         this.useBloomFilter = b.useBloomFilter;
-        this.expectedInsertions = b.expectedInsertions;
-        this.falseProbability = b.falseProbability;
         this.randomTtl = b.randomTtl;
         this.variance = b.variance;
         this.enableEarlyExpiration = b.enableEarlyExpiration;
@@ -52,30 +41,11 @@ class RedisCacheableOperation extends CacheableOperation
         return new Builder();
     }
 
-    /**
-     * 从 {@link RedisCacheAttributes} 投影构造 {@link RedisCacheableOperation} — 单一字段映射 seam。
-     *
-     * <p>本方法为 1 行委派,把"attribute → operation field"的映射知识完全下放给
-     * {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)} (字段拥有者)。
-     *
-     * <p>Factory 调用形态:
-     * <pre>
-     *   return RedisCacheableOperation.fromAttributes(method, key, attributes);
-     * </pre>
-     *
-     * <p>字段映射规则:22 字段全量应用;{@code expectedInsertions} 在 Cacheable Builder 是
-     * {@code long} 槽位,直传无窄化,由 {@link RedisCacheAttributes#applyTo(RedisCacheableOperation.Builder)}
-     * 内部决定。
-     *
-     * <p>本方法<strong>不是</strong> Spring {@code @Cacheable} 适配路径,后者经
-     * {@code SpringCacheableAdapter} 处理(走 hasText 守卫,因
-     * Spring {@code CacheableOperation.Builder} 对 null/空串敏感)。
-     */
+    /** Builds the internal policy model from the shared annotation projection. */
     public static RedisCacheableOperation fromAttributes(
             java.lang.reflect.Method method, String key, RedisCacheAttributes a) {
         return a.applyTo(builder().name(method.getName()).key(key)).build();
     }
-
 
     @EqualsAndHashCode(callSuper = true)
     public static class Builder extends CacheableOperation.Builder implements RedisCacheAttributeSink {
@@ -83,8 +53,6 @@ class RedisCacheableOperation extends CacheableOperation
         private Class<?> type = Object.class;
         private boolean cacheNullValues;
         private boolean useBloomFilter;
-        private long expectedInsertions = 100000L;
-        private double falseProbability = 0.01;
         private boolean randomTtl;
         private float variance = 0.2F;
         private boolean enableEarlyExpiration;
@@ -159,16 +127,6 @@ class RedisCacheableOperation extends CacheableOperation
 
         public Builder useBloomFilter(boolean useBloomFilter) {
             this.useBloomFilter = useBloomFilter;
-            return this;
-        }
-
-        public Builder expectedInsertions(long expectedInsertions) {
-            this.expectedInsertions = expectedInsertions;
-            return this;
-        }
-
-        public Builder falseProbability(double falseProbability) {
-            this.falseProbability = falseProbability;
             return this;
         }
 

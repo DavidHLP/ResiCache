@@ -8,7 +8,6 @@ cache.LoaderOrchestrator$LoadOutcome
 cache.LoaderOrchestrator$Loaded
 cache.LoaderOrchestrator$LoadedWithWriteBackFailure
 cache.RedisCacheAttributes$RedisCacheAttributesBuilder
-cache.RedisCacheEvictOperation$Builder
 cache.RedisCachePutOperation$Builder
 cache.RedisCacheableOperation$Builder
 cache.ResiCacheFeatures$ResiCacheFeaturesBuilder

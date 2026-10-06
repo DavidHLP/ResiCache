@@ -1,51 +1,51 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import java.time.Duration;
 import java.util.Arrays;
-import org.springframework.lang.Nullable;
 
 /**
  * 缓存操作输入参数（不可变）
  *
  * 包含请求的原始数据，在整个责任链中只读。
- * 设计为 record 确保不可变性。
+ * 构造时生成一次不可变策略视图。
  */
-record CacheInput(
-    /** 缓存操作类型 */
-    CacheOperation operation,
+final class CacheInput implements CacheContext.InputView {
+    private final CachePolicyView policy;
 
-    /** 缓存名称 */
-    String cacheName,
+    private final CacheOperation operation;
+    private final String cacheName;
+    private final String redisKey;
+    private final String actualKey;
+    private final byte[] valueBytes;
+    private final Object deserializedValue;
+    private final Duration ttl;
 
-    /** Redis 完整 key */
-    String redisKey,
-
-    /** 实际 key（去除前缀） */
-    String actualKey,
-
-    /** 缓存值（字节数组） */
-    @Nullable byte[] valueBytes,
-
-    /** 反序列化后的值 */
-    @Nullable Object deserializedValue,
-
-    /** TTL */
-    @Nullable Duration ttl,
-
-    /** 缓存操作配置 */
-    @Nullable CachePolicyView.Source cacheOperation
-) implements CacheContext.InputView {
-    CacheInput {
-        valueBytes = valueBytes == null ? null : Arrays.copyOf(valueBytes, valueBytes.length);
+    CacheInput(CacheOperation operation, String cacheName, String redisKey, String actualKey,
+               byte[] valueBytes, Object deserializedValue, Duration ttl, CachePolicyView.Source cacheOperation) {
+        this.operation = operation;
+        this.cacheName = cacheName;
+        this.redisKey = redisKey;
+        this.actualKey = actualKey;
+        this.valueBytes = valueBytes == null ? null : Arrays.copyOf(valueBytes, valueBytes.length);
+        this.deserializedValue = deserializedValue;
+        this.ttl = ttl;
+        policy = cacheOperation == null ? CachePolicyView.NONE : new CachePolicyView(
+                cacheOperation.getTtl(), cacheOperation.isRandomTtl(), cacheOperation.getVariance(),
+                cacheOperation.isUseBloomFilter(), cacheOperation.isSync(), cacheOperation.getSyncTimeout(),
+                cacheOperation.isCacheNullValues(), cacheOperation.isEnableEarlyExpiration(),
+                cacheOperation.getEarlyExpirationThreshold(), cacheOperation.getEarlyExpirationMode());
     }
+
+    public CacheOperation operation() { return operation; }
+    public String cacheName() { return cacheName; }
+    public String redisKey() { return redisKey; }
+    public String actualKey() { return actualKey; }
+    public byte[] valueBytes() { return valueBytes; }
+    public Object deserializedValue() { return deserializedValue; }
+    public Duration ttl() { return ttl; }
 
     public static Builder builder() {
         return new Builder();
@@ -80,13 +80,6 @@ record CacheInput(
 
     @Override
     public CachePolicyView policy() {
-        if (cacheOperation == null) {
-            return CachePolicyView.NONE;
-        }
-        return new CachePolicyView(
-                cacheOperation.getTtl(), cacheOperation.isRandomTtl(), cacheOperation.getVariance(),
-                cacheOperation.isUseBloomFilter(), cacheOperation.isSync(), cacheOperation.getSyncTimeout(),
-                cacheOperation.isCacheNullValues(), cacheOperation.isEnableEarlyExpiration(),
-                cacheOperation.getEarlyExpirationThreshold(), cacheOperation.getEarlyExpirationMode());
+        return policy;
     }
 }

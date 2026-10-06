@@ -1,17 +1,11 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
 import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * 抽象缓存处理器 — 链推进完全由 {@link ChainEngine} 承担，本类只保留：
@@ -45,7 +39,6 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #doHandle(CacheContext, ChainContinuation)},使用引擎交出的
  * {@link ChainContinuation} 句柄 —— 不再依赖任何从 handler 反查 Engine 的隐式通道。
  */
-@Slf4j
 abstract class AbstractCacheHandler implements CacheHandler, MetricAttachable {
 
     /**
@@ -196,7 +189,6 @@ abstract class AbstractCacheHandler implements CacheHandler, MetricAttachable {
      * @return true 表示应该处理
      */
     protected abstract boolean shouldHandle(CacheContext context);
-
 
     /**
      * 执行实际处理逻辑的唯一 handler 钩子。

@@ -1,10 +1,5 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
-
-
-
-
-
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,7 +61,7 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             testService.getById(id);
 
             Method method = TestService.class.getMethod("getById", Long.class);
-            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
+            MethodSnapshot elementKey = MethodSnapshot.of(method, TestService.class);
             RedisCacheableOperation operation = redisCacheRegister.get("users", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
 
@@ -81,7 +76,7 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             testService.getByIdComposite(id);
 
             Method method = TestService.class.getMethod("getByIdComposite", Long.class);
-            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
+            MethodSnapshot elementKey = MethodSnapshot.of(method, TestService.class);
             RedisCacheableOperation operation = redisCacheRegister.get("items", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
 
@@ -100,7 +95,7 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             testService.getWithCustomKey("arg1", "arg2");
 
             Method method = TestService.class.getMethod("getWithCustomKey", String.class, String.class);
-            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
+            MethodSnapshot elementKey = MethodSnapshot.of(method, TestService.class);
             RedisCacheableOperation operation = redisCacheRegister.get("custom", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
 
@@ -119,7 +114,7 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             classLevelService.classLevelMethod("key1");
 
             Method method = ClassLevelService.class.getMethod("classLevelMethod", String.class);
-            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, ClassLevelService.class);
+            MethodSnapshot elementKey = MethodSnapshot.of(method, ClassLevelService.class);
             RedisCacheableOperation operation = redisCacheRegister.get("class-cache", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
 
@@ -138,7 +133,7 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             testService.getMultiCache("key1");
 
             Method method = TestService.class.getMethod("getMultiCache", String.class);
-            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
+            MethodSnapshot elementKey = MethodSnapshot.of(method, TestService.class);
 
             RedisCacheableOperation op1 = redisCacheRegister.get("cache-a", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
@@ -162,7 +157,7 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             testService.getWithComposedAnnotation("composed");
 
             Method method = TestService.class.getMethod("getWithComposedAnnotation", String.class);
-            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
+            MethodSnapshot elementKey = MethodSnapshot.of(method, TestService.class);
             RedisCacheableOperation operation = redisCacheRegister.get("composed-cache", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
 
@@ -182,7 +177,7 @@ class KeyResolutionIntegrationTest extends AbstractRedisIntegrationTest {
             testService.getWithSpringCacheable("native");
 
             Method method = TestService.class.getMethod("getWithSpringCacheable", String.class);
-            AnnotatedElementKey elementKey = new AnnotatedElementKey(method, TestService.class);
+            MethodSnapshot elementKey = MethodSnapshot.of(method, TestService.class);
             RedisCacheableOperation operation = redisCacheRegister.get("spring-cache", elementKey,
                 io.github.davidhlp.spring.cache.redis.cache.OperationKind.CACHEABLE);
 
