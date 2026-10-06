@@ -1,0 +1,19 @@
+docs/REFERENCE.md
+  s_bc9bc48114d702::t_6a2ec3d4d52f18 126-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b223b9bca76b974209ff74f7a7c77a0b1f4c0dc3",
+  "prompts": {},
+  "sessions": {
+    "s_bc9bc48114d702": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1108c-90c9-7023-b97d-e2c601c09c16",
+        "model": "unknown"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
