@@ -1,0 +1,40 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyRefreshTest.java
+  s_b2912cafc969b3::t_4310f7072e05f7 11-13,17,21-24,64-79,81-108,110-128
+  s_b2912cafc969b3::t_4aeca77f327939 80,109,129-136
+  s_b2912cafc969b3::t_b900e3feaae7ff 137
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCacheManagerTest.java
+  s_b2912cafc969b3::t_81662035ba571b 22,108-140
+  s_b2912cafc969b3::t_b7e7247d669ddc 141
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandlerIntegrationTest.java
+  s_b2912cafc969b3::t_f44960cfa818c3 407,425,437,455,468,475-476,487-488,494-495,509-510
+  s_b2912cafc969b3::t_81662035ba571b 26
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisProCache.java
+  s_b2912cafc969b3::t_482043a218a37b 91
+  s_b2912cafc969b3::t_f4a7e4a0b53a4f 67-68
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/FailureLogKeyPrivacyTest.java
+  s_b2912cafc969b3::t_4310f7072e05f7 23-24,44,273,279-285,287,289-290,292-293,296-297
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/EarlyRefresh.java
+  s_b2912cafc969b3::t_f4a7e4a0b53a4f 196,203,222,229,234,240-250,252-258,260-265
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ResiCacheFeatures.java
+  s_b2912cafc969b3::t_482043a218a37b 7,25,45-59
+docs/ARCHITECTURE.md
+  s_b2912cafc969b3::t_4aeca77f327939 108-116
+CHANGELOG.md
+  s_b2912cafc969b3::t_4aeca77f327939 32-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6b76892c9693ac8072188a1f9c4e566f7219a939",
+  "prompts": {},
+  "sessions": {
+    "s_b2912cafc969b3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11023-1f6c-7071-90b5-6bd0433acc85",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
