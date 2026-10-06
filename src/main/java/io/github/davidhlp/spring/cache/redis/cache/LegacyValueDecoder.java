@@ -15,6 +15,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectStreamClass;
 import java.util.List;
@@ -28,6 +29,9 @@ import org.springframework.data.redis.serializer.SerializationException;
 final class LegacyValueDecoder {
 
     private static final int JAVA_STREAM_MAGIC = 0xACED;
+    private static final int MAX_JDK_BYTES = 16 * 1024 * 1024;
+    private static final ObjectInputFilter JDK_RESOURCE_FILTER = ObjectInputFilter.Config.createFilter(
+            "maxdepth=64;maxrefs=100000;maxarray=1000000;maxbytes=" + MAX_JDK_BYTES);
 
     private final String typeProperty;
     private final WhitelistPolicy whitelistPolicy;
@@ -77,6 +81,10 @@ final class LegacyValueDecoder {
     }
 
     private Object decodeJdk(byte[] bytes) {
+        // Concrete strings do not invoke ObjectInputFilter, so bound the input as well.
+        if (bytes.length > MAX_JDK_BYTES) {
+            throw new SerializationException("JDK legacy value exceeds the 16 MiB input limit");
+        }
         if (bytes.length < 2 || (bytes[0] & 0xFF) != (JAVA_STREAM_MAGIC >>> 8)
                 || (bytes[1] & 0xFF) != (JAVA_STREAM_MAGIC & 0xFF)) {
             throw new SerializationException("Legacy value is not a JDK serialization stream");
@@ -131,6 +139,10 @@ final class LegacyValueDecoder {
 
         RestrictedObjectInputStream(InputStream input) throws IOException {
             super(input);
+            // Preserve the host filter: neither its rejections nor our resource limits may be relaxed.
+            ObjectInputFilter hostFilter = getObjectInputFilter();
+            setObjectInputFilter(hostFilter == null ? JDK_RESOURCE_FILTER
+                    : ObjectInputFilter.merge(hostFilter, JDK_RESOURCE_FILTER));
         }
 
         @Override

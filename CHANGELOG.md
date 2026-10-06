@@ -29,6 +29,13 @@ The project is on a **single build line**: Spring Boot
 
 Current milestones:
 
+- **⚠️ Bound JDK legacy migration resources** — decoding now rejects streams
+  over 16 MiB, graphs deeper than 64, more than 100,000 references, or arrays
+  over 1,000,000 elements before allocation, while preserving the class
+  whitelist and host input filter. Larger entries must be regenerated with
+  the current serializer. Lenient JSON deserialization logs only exception
+  types at WARN; detailed exceptions remain at DEBUG.
+
 - **⚠️ Early-expiration task failures now reach retries** — actual async
   value reads and TTL CAS failures use the executor's existing three-attempt
   retry path instead of being swallowed inside the task. Exhausted failures

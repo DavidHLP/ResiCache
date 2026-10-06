@@ -118,6 +118,15 @@ ResiCache stores an internal `{version, payload}` envelope through
 and `.*` dot-boundary behavior are defined by `WhitelistPolicy` and the
 serializer properties. Polymorphic typing is off by default.
 
+JDK legacy migration rejects inputs larger than 16 MiB and limits deserialization
+to depth 64, 100,000 references, and arrays of at most 1,000,000 elements before
+allocation. These resource limits supplement the class whitelist and preserve
+any host input filter. Oversized legacy entries must be regenerated through the
+current serializer instead of migrated with the JDK decoder.
+With `serializer.fail-on-unknown-type=false`, failed JSON deserialization still
+returns a miss; WARN reports only exception types, with detailed exceptions at
+DEBUG.
+
 Use the bounded shadow-read → dual-write → cutover migration described in
 [`COMPATIBILITY.md`](../COMPATIBILITY.md) and [`OPERATIONS.md`](OPERATIONS.md).
 Do not claim that an in-place serializer swap, a cache flush, or a historical

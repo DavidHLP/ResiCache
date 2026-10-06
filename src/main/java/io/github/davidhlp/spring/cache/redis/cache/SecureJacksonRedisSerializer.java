@@ -186,7 +186,7 @@ class SecureJacksonRedisSerializer implements RedisSerializer<Object> {
             if (failOnUnknownType) {
                 throw new SerializationException("Could not deserialize value: " + e.getMessage(), e);
             }
-            log.warn("Deserialization failed (failOnUnknownType=false, returning null): {}", e.getMessage());
+            FailureReport.warn(log, "Deserialization failed (failOnUnknownType=false, returning null)", e);
             return null;
         }
     }

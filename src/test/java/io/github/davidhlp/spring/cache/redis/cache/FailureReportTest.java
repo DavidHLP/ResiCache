@@ -7,6 +7,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
@@ -69,6 +70,26 @@ class FailureReportTest {
             assertThat(capture.events(Level.DEBUG))
                     .as("完整栈只在 DEBUG")
                     .allMatch(event -> event.getThrowableProxy() != null);
+        }
+    }
+
+    @Test
+    @DisplayName("宽容反序列化失败:WARN 不含敏感 payload,诊断栈只留在 DEBUG")
+    void lenientDeserializationFailure_reportsThroughSeam() {
+        SecureJacksonRedisSerializer serializer = new SecureJacksonRedisSerializer(
+                new ObjectMapper(), List.of("io.github.davidhlp"), false, "@class", false);
+        byte[] bytes = ("{\"version\":\"" + SECRET_KEY + "\",\"payload\":\"value\"}")
+                .getBytes(StandardCharsets.UTF_8);
+
+        try (Capture capture = new Capture(SecureJacksonRedisSerializer.class.getName())) {
+            assertThat(serializer.deserialize(bytes)).isNull();
+
+            assertThat(capture.events(Level.WARN)).hasSize(1);
+            assertThat(capture.highLevelText()).contains("Deserialization failed").doesNotContain(SECRET_KEY);
+            assertThat(capture.highLevelEvents()).allMatch(event -> event.getThrowableProxy() == null);
+            assertThat(capture.events(Level.DEBUG)).hasSize(1);
+            assertThat(capture.events(Level.DEBUG).getFirst().getThrowableProxy().getMessage())
+                    .contains(SECRET_KEY);
         }
     }
 
