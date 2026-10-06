@@ -1,0 +1,21 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ThreadPoolEarlyExpirationExecutor.java
+  s_b2912cafc969b3::t_5eb77d404f699e 161-162
+docs/ARCHITECTURE.md
+  s_b2912cafc969b3::t_5eb77d404f699e 113-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe0e9f3b87fd13dd3c04d5d8d7df3627747bb5c9",
+  "prompts": {},
+  "sessions": {
+    "s_b2912cafc969b3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11023-1f6c-7071-90b5-6bd0433acc85",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
