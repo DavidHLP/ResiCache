@@ -123,9 +123,9 @@ to depth 64, 100,000 references, and arrays of at most 1,000,000 elements before
 allocation. These resource limits supplement the class whitelist and preserve
 any host input filter. Oversized legacy entries must be regenerated through the
 current serializer instead of migrated with the JDK decoder.
-With `serializer.fail-on-unknown-type=false`, failed JSON deserialization still
-returns a miss; WARN reports only exception types, with detailed exceptions at
-DEBUG.
+With `serializer.fail-on-unknown-type=false`, ordinary JSON decoding failures
+return a miss; whitelist violations remain fail-fast regardless of this setting.
+WARN reports only exception types, with detailed exceptions at DEBUG.
 
 Use the bounded shadow-read → dual-write → cutover migration described in
 [`COMPATIBILITY.md`](../COMPATIBILITY.md) and [`OPERATIONS.md`](OPERATIONS.md).
