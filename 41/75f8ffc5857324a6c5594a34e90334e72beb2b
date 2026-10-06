@@ -1,0 +1,27 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyExpirationHandlerIntegrationTest.java
+  s_b2912cafc969b3::t_100eed90ab4c72 34
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ThreadPoolEarlyExpirationExecutor.java
+  s_b2912cafc969b3::t_100eed90ab4c72 160,167-176,244
+CHANGELOG.md
+  s_b2912cafc969b3::t_100eed90ab4c72 36-38
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/EarlyRefreshTest.java
+  s_b2912cafc969b3::t_100eed90ab4c72 7,17,20,22,24
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/FailureLogKeyPrivacyTest.java
+  s_b2912cafc969b3::t_100eed90ab4c72 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4175f8ffc5857324a6c5594a34e90334e72beb2b",
+  "prompts": {},
+  "sessions": {
+    "s_b2912cafc969b3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11023-1f6c-7071-90b5-6bd0433acc85",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
