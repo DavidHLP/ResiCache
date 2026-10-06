@@ -15,6 +15,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectStreamClass;
 import java.util.List;
@@ -28,6 +29,10 @@ import org.springframework.data.redis.serializer.SerializationException;
 final class LegacyValueDecoder {
 
     private static final int JAVA_STREAM_MAGIC = 0xACED;
+    private static final int MAX_JDK_BYTES = 16 * 1024 * 1024;
+    private static final int MAX_JDK_REFERENCES = 100_000;
+    private static final ObjectInputFilter JDK_RESOURCE_FILTER = ObjectInputFilter.Config.createFilter(
+            "maxdepth=64;maxrefs=" + MAX_JDK_REFERENCES + ";maxarray=1000000;maxbytes=" + MAX_JDK_BYTES);
 
     private final String typeProperty;
     private final WhitelistPolicy whitelistPolicy;
@@ -77,6 +82,10 @@ final class LegacyValueDecoder {
     }
 
     private Object decodeJdk(byte[] bytes) {
+        // Concrete strings do not invoke ObjectInputFilter, so bound the input as well.
+        if (bytes.length > MAX_JDK_BYTES) {
+            throw new SerializationException("JDK legacy value exceeds the 16 MiB input limit");
+        }
         if (bytes.length < 2 || (bytes[0] & 0xFF) != (JAVA_STREAM_MAGIC >>> 8)
                 || (bytes[1] & 0xFF) != (JAVA_STREAM_MAGIC & 0xFF)) {
             throw new SerializationException("Legacy value is not a JDK serialization stream");
@@ -129,8 +138,29 @@ final class LegacyValueDecoder {
 
     private final class RestrictedObjectInputStream extends ObjectInputStream {
 
+        private long references;
+
         RestrictedObjectInputStream(InputStream input) throws IOException {
             super(input);
+            enableResolveObject(true);
+            // Preserve the host filter: neither its rejections nor our resource limits may be relaxed.
+            ObjectInputFilter hostFilter = getObjectInputFilter();
+            ObjectInputFilter resourceFilter = info -> {
+                // JDK totals include strings, but callbacks skip newly read strings.
+                references = Math.max(references, info.references());
+                return references > MAX_JDK_REFERENCES ? ObjectInputFilter.Status.REJECTED
+                        : JDK_RESOURCE_FILTER.checkInput(info);
+            };
+            setObjectInputFilter(hostFilter == null ? resourceFilter
+                    : ObjectInputFilter.merge(hostFilter, resourceFilter));
+        }
+
+        @Override
+        protected Object resolveObject(Object value) throws IOException {
+            if (value instanceof String && ++references > MAX_JDK_REFERENCES) {
+                throw new InvalidClassException("JDK legacy value exceeds the 100000 reference limit");
+            }
+            return value;
         }
 
         @Override
