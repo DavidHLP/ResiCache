@@ -142,9 +142,8 @@ current documented behavior in `COMPATIBILITY.md`.
   persisted; process-local monotonic time is not. `lastAccessTime` and `visitTimes`
   are retained v2 fields, not live hit statistics. The writer's nested envelope
   representation remains compatible with existing stored bytes; the serialization
-  benchmark measures its adaptation cost without Redis network I/O. `CacheValueCodec`
-  reuses immutable Jackson readers/writers; it retains the existing envelope-shaped
-  Map and null-placeholder contract.
+  benchmark measures its adaptation cost without Redis network I/O. It retains the
+  existing envelope-shaped Map and null-placeholder contract.
 - Redis is an acceleration layer, not the application source of truth. A
   tolerated write-back failure can leave stale cache state and has no implicit
   retry/backoff contract.

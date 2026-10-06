@@ -35,8 +35,7 @@ Current milestones:
   precedence over the dedicated fallback, avoiding same-name bean conflicts.
   Eviction no longer constructs unused chain policy; Bloom annotation sizing
   hints are explicitly compatibility-only. Typed annotation mapping, immutable
-  chain snapshots, request policy reuse, typed method metadata, reusable codec
-  readers/writers, and completion cleanup remove unused data flows and per-execution work. The v2 byte shape,
+  chain snapshots, request policy reuse, typed method metadata, and completion cleanup remove unused data flows and per-execution work. The v2 byte shape,
   stored compatibility metadata, and annotation signatures remain unchanged.
   Envelope implementation ownership moves to `VersionEnvelope` behind the
   existing bridge; unused members/parser/loggers and the unreachable zero-port

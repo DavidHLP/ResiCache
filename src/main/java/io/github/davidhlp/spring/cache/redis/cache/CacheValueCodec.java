@@ -2,8 +2,6 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import io.github.davidhlp.spring.cache.redis.serialization.SerializationException;
 import org.springframework.cache.support.NullValue;
 import org.springframework.lang.NonNull;
@@ -24,12 +22,10 @@ import org.springframework.stereotype.Component;
 @Component
 class CacheValueCodec {
 
-    private final ObjectReader valueReader;
-    private final ObjectWriter valueWriter;
+    private final ObjectMapper objectMapper;
 
     public CacheValueCodec(ObjectMapper objectMapper) {
-        this.valueReader = objectMapper.readerFor(Object.class);
-        this.valueWriter = objectMapper.writer();
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -49,7 +45,7 @@ class CacheValueCodec {
             return SecureNullValueDeserializer.deserializeNullValue(valueBytes);
         }
         try {
-            return valueReader.readValue(valueBytes);
+            return objectMapper.readValue(valueBytes, Object.class);
         } catch (Exception e) {
             throw new SerializationException("Failed to deserialize value", e);
         }
@@ -84,7 +80,7 @@ class CacheValueCodec {
             return SecureNullValueDeserializer.serializeNullValue();
         }
         try {
-            return valueWriter.writeValueAsBytes(chainValue);
+            return objectMapper.writeValueAsBytes(chainValue);
         } catch (JsonProcessingException e) {
             throw new SerializationException("Failed to serialize value", e);
         }
