@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -403,7 +404,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         void performAsyncRefresh_liveValueNull_returnsEarly() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
 
-            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, captured);
 
             assertThat(redisTemplate.hasKey(REDIS_KEY)).isFalse();
         }
@@ -421,7 +422,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     mockedRedisTemplate,
                     mockedValueOperations);
 
-            rawValueRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            rawValueRefresh.performAsyncRefresh(REDIS_KEY, captured);
 
             verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
         }
@@ -433,7 +434,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CachedValue live = CachedValue.forTest("v", 2L, System.currentTimeMillis(), 1L, false);
             store(live, 30);
 
-            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, captured);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
         }
@@ -451,7 +452,7 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CachedValue live = createCachedValue(60, System.currentTimeMillis(), 42L, false);
             store(live, 30);
 
-            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, captured);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS))
                     .isBetween(1L, 5L);
@@ -464,15 +465,15 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
             CachedValue live = createCachedValue("live", 60, System.currentTimeMillis(), 43L, false);
             store(live, 30);
 
-            earlyRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, captured);
 
             assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
             assertThat(((CachedValue) valueOperations.get(REDIS_KEY)).getValue()).isEqualTo("live");
         }
 
         @Test
-        @DisplayName("catches a value-fetch exception from a mocked I/O seam")
-        void performAsyncRefresh_valueFetchThrows_catchesAndLogs() {
+        @DisplayName("propagates a value-fetch exception to the executor retry path")
+        void performAsyncRefresh_valueFetchThrows_propagates() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
             RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
             ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
@@ -483,14 +484,15 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     mockedRedisTemplate,
                     mockedValueOperations);
 
-            faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            assertThatThrownBy(() -> faultRefresh.performAsyncRefresh(REDIS_KEY, captured))
+                    .isInstanceOf(RuntimeException.class).hasMessage("Redis down");
 
             verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
         }
 
         @Test
-        @DisplayName("catches a Lua CAS exception from a mocked I/O seam")
-        void performAsyncRefresh_casThrows_catchesAndLogs() {
+        @DisplayName("propagates a Lua CAS exception to the executor retry path")
+        void performAsyncRefresh_casThrows_propagates() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
             CachedValue live = createCachedValue(60, System.currentTimeMillis());
             RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
@@ -504,7 +506,8 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
                     mockedRedisTemplate,
                     mockedValueOperations);
 
-            faultRefresh.performAsyncRefresh(REDIS_KEY, CACHE_NAME, captured);
+            assertThatThrownBy(() -> faultRefresh.performAsyncRefresh(REDIS_KEY, captured))
+                    .isInstanceOf(RuntimeException.class).hasMessage("Lua eval failed");
 
             verify(mockedRedisTemplate).execute(any(RedisCallback.class));
         }

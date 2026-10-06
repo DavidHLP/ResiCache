@@ -20,6 +20,8 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -267,26 +270,31 @@ class FailureLogKeyPrivacyTest {
 
 
     @Test
-    @DisplayName("EarlyRefresh:异步刷新失败 ERROR 带 cacheName 但不含 raw key")
+    @DisplayName("EarlyRefresh:执行器隔离最终失败，ERROR 只带 keyFingerprint")
     @SuppressWarnings("unchecked")
     void earlyRefresh_asyncRefreshFailure_omitsRawKey() {
         ValueOperations<String, Object> valueOperations = mock(ValueOperations.class);
         when(valueOperations.get(any()))
                 .thenThrow(new IllegalStateException("redis down for key " + SECRET_KEY));
+        ExecutorService worker = mock(ExecutorService.class);
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(0).run();
+            return null;
+        }).when(worker).execute(any(Runnable.class));
+        ThreadPoolEarlyExpirationExecutor executor = new ThreadPoolEarlyExpirationExecutor(
+                worker, new ConcurrentHashMap<>(), null, 30_000L);
         EarlyRefresh earlyRefresh = new EarlyRefresh(
-                Clock.systemUTC(),
-                mock(ThreadPoolEarlyExpirationExecutor.class),
-                mock(RedisTemplate.class),
-                valueOperations);
+                Clock.systemUTC(), executor, mock(RedisTemplate.class), valueOperations);
 
-        try (Capture capture = new Capture(EarlyRefresh.class)) {
-            earlyRefresh.performAsyncRefresh(SECRET_KEY, CACHE, null);
-
+        try (Capture capture = new Capture(ThreadPoolEarlyExpirationExecutor.class)) {
+            executor.submit(SECRET_KEY, () -> earlyRefresh.performAsyncRefresh(SECRET_KEY, null));
             assertThat(capture.warnErrorText())
-                    .contains("Async early-expiration failed")
-                    .contains(CACHE)
+                    .contains("Async early-expiration failed after all retries")
+                    .contains("keyFingerprint=" + FailureReport.fingerprint(SECRET_KEY))
                     .doesNotContain(SECRET_KEY)
                     .doesNotContain("redis down for key");
+        } finally {
+            executor.shutdown();
         }
     }
 

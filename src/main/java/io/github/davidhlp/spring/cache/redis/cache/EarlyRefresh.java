@@ -193,14 +193,14 @@ class EarlyRefresh {
     }
 
     /**
-     * 安排异步提前过期任务 — 委派给 {@link #performAsyncRefresh(String, String, CachedValue)}。
+     * 安排异步提前过期任务 — 委派给 {@link #performAsyncRefresh(String, CachedValue)}。
      */
     private void scheduleAsyncRefresh(CacheContext context, CachedValue cachedValue) {
         String redisKey = context.getRedisKey();
         String cacheName = context.getCacheName();
 
         earlyExpirationExecutor.submit(redisKey,
-                () -> performAsyncRefresh(redisKey, cacheName, cachedValue));
+                () -> performAsyncRefresh(redisKey, cachedValue));
 
         log.info("Async early-expiration scheduled: cacheName={}, key={}", cacheName, redisKey);
     }
@@ -219,55 +219,50 @@ class EarlyRefresh {
      *         <li>返回 true → 调试日志 "shortened TTL"</li>
      *         <li>返回 false → 调试日志 "value changed"(并发写覆盖)</li>
      *       </ul></li>
-     *   <li>任意异常 → ERROR 日志(异常吞,不污染外层)</li>
+     *   <li>I/O 异常交给 executor 的重试与终止诊断，不在任务体内吞掉失败。</li>
      * </ol>
      *
      * <p>设计纪律:
      * <ul>
      *   <li><b>package-private 而非 private</b>:直接单测入口 ——
      *       {@code EarlyExpirationHandlerIntegrationTest} 可绕过 executor 直接调,
-     *       验证 3 个决策分支 + 异常翻译,而无需制造并发竞态。
+     *       验证 3 个决策分支 + 异常传播,而无需制造并发竞态。
      *       同文件 {@code atomicShortenTtlIfValueUnchanged} 保持 {@code private}
      *       因其单测入口已由本方法覆盖。</li>
      *   <li><b>不返回 mainResult</b>:无返回值,3 决策分支各自有副作用(log + return);
      *       调用方不需要 mainResult,避免 split-knowledge。</li>
-     *   <li><b>异常吞咽</b>:try/catch 在本方法体内,不向上抛。</li>
+     *   <li><b>失败归属</b>:executor 隔离最终失败，调用线程不因后台 I/O 失败而失败。</li>
      * </ul>
      *
      * @param redisKey     缓存键(完整 Redis key)
-     * @param cacheName    缓存名(用于 ERROR 日志)
      * @param capturedValue 触发本次异步刷新的原始缓存值(用于 Lua CAS 比对)
      */
-    void performAsyncRefresh(String redisKey, String cacheName, CachedValue capturedValue) {
-        try {
-            Object rawLiveValue = valueOperations.get(redisKey);
-            if (rawLiveValue == null) {
-                log.debug("Async early-expiration: key already missing: {}", redisKey);
-                return;
-            }
-            if (!(rawLiveValue instanceof CachedValue liveValue)) {
-                log.debug("Async early-expiration skipped: unsupported cached value type: key={}, type={}",
-                        redisKey, rawLiveValue.getClass().getName());
-                return;
-            }
+    void performAsyncRefresh(String redisKey, CachedValue capturedValue) {
+        Object rawLiveValue = valueOperations.get(redisKey);
+        if (rawLiveValue == null) {
+            log.debug("Async early-expiration: key already missing: {}", redisKey);
+            return;
+        }
+        if (!(rawLiveValue instanceof CachedValue liveValue)) {
+            log.debug("Async early-expiration skipped: unsupported cached value type: key={}, type={}",
+                    redisKey, rawLiveValue.getClass().getName());
+            return;
+        }
 
-            // 检查 TTL 是否即将过期（避免刷新已过期数据）
-            long remainingTtl = liveValue.getRemainingTtl();
-            if (remainingTtl > 0 && remainingTtl < REFRESH_GRACE_PERIOD_SECONDS) {
-                log.debug("Async early-expiration skipped: key={} remainingTtl={}s is below grace period {}s",
-                          redisKey, remainingTtl, REFRESH_GRACE_PERIOD_SECONDS);
-                return;
-            }
+        // 检查 TTL 是否即将过期（避免刷新已过期数据）
+        long remainingTtl = liveValue.getRemainingTtl();
+        if (remainingTtl > 0 && remainingTtl < REFRESH_GRACE_PERIOD_SECONDS) {
+            log.debug("Async early-expiration skipped: key={} remainingTtl={}s is below grace period {}s",
+                      redisKey, remainingTtl, REFRESH_GRACE_PERIOD_SECONDS);
+            return;
+        }
 
-            boolean shortened = atomicShortenTtlIfValueUnchanged(redisKey, capturedValue);
-            if (shortened) {
-                log.debug("Async early-expiration shortened TTL: key={}, gracePeriod={}s",
-                          redisKey, REFRESH_GRACE_PERIOD_SECONDS);
-            } else {
-                log.debug("Async early-expiration skipped: value changed: {}", redisKey);
-            }
-        } catch (Exception ex) {
-            FailureReport.error(log, "Async early-expiration failed", cacheName, redisKey, ex);
+        boolean shortened = atomicShortenTtlIfValueUnchanged(redisKey, capturedValue);
+        if (shortened) {
+            log.debug("Async early-expiration shortened TTL: key={}, gracePeriod={}s",
+                      redisKey, REFRESH_GRACE_PERIOD_SECONDS);
+        } else {
+            log.debug("Async early-expiration skipped: value changed: {}", redisKey);
         }
     }
 

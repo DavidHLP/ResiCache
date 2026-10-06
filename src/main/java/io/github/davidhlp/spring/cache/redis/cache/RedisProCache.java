@@ -10,7 +10,6 @@ import io.github.davidhlp.spring.cache.redis.cache.LoaderOrchestrator.LoadOutcom
 import io.github.davidhlp.spring.cache.redis.cache.metrics.CacheMetrics;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
-import java.util.Objects;
 import java.util.concurrent.Callable;
 import org.springframework.cache.Cache;
 import org.springframework.data.redis.cache.RedisCache;
@@ -65,8 +64,8 @@ public class RedisProCache extends RedisCache {
      *
      * <p><b>单一 seam</b>:本类是 ResiCache 与 Spring {@code RedisCache} 的扩展点。
      * 可选特性收口到单一 {@link ResiCacheFeatures} 值对象。只有指标是可降解特性
-     * ({@code meterRegistry} null ⇒ no-op);元数据解析与 protection 协作对象在生产始终
-     * 装配,构造期校验非 null(缺失即装配错误,不静默降级)。
+     * (缺失 registry 在特性集合构造时归一化为 no-op);元数据解析与 protection 协作对象
+     * 由特性集合构造期校验非 null(缺失即装配错误,不静默降级)。
      *
      * <p>构造期委派 3 个 deep seam:
      * <ol>
@@ -89,8 +88,7 @@ public class RedisProCache extends RedisCache {
             ResiCacheFeatures features) {
         super(name, cacheWriter, cacheConfiguration);
         this.metricsRegistry = new RedisProCacheMetricsRegistry(features.getMeterRegistry(), name);
-        this.operationResolver = Objects.requireNonNull(
-                features.getOperationResolver(), "operationResolver");
+        this.operationResolver = features.getOperationResolver();
         // loader 路径编排器 build — protection 依赖 + cache-specific callbacks 一次性绑定;
         // 生产 get(key, loader) 只需传入 key/loader/operation,不再重复装配 3 个 callback。
         this.loaderOrchestrator = new LoaderOrchestrator(

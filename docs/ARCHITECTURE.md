@@ -105,6 +105,15 @@ current documented behavior in `COMPATIBILITY.md`.
   `CacheResult` carries typed operation outcomes internally.
 - `LoaderOrchestrator` owns the shared read → load → write-back protocol. A
   successful loaded value is returned even when write-back fails.
+- `EarlyRefresh` owns refresh evaluation and the version-CAS task. Task I/O
+  failures propagate to the internal executor's existing bounded retry path;
+  exhausted failures are reported and isolated there, including when a full
+  queue runs the task on the submitting thread. `prerefresh.completed` counts
+  task termination, including failure, rather than successful CAS operations.
+- `ResiCacheFeatures` validates required collaborators when the value is
+  constructed and normalizes absent metrics to the shared disabled registry.
+  Cache creation consumes that validated value; standalone loader construction
+  still validates its own dependencies and callbacks.
 - `FailureReport` owns the one failure-reporting shape: a WARN/ERROR carrying
   only cacheName or the key fingerprint, and — when the report carries a
   throwable — its exception type chain plus a paired DEBUG line holding the full
