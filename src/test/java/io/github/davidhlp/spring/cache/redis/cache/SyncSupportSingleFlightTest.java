@@ -105,128 +105,131 @@ class SyncSupportSingleFlightTest {
         CountDownLatch callersReady = new CountDownLatch(n);
         ConcurrentLinkedQueue<Object> results = new ConcurrentLinkedQueue<>();
 
-        for (int i = 0; i < n; i++) {
-            ex.submit(() -> {
-                try {
-                    callersReady.countDown();
-                    Object r = support.executeSync("shared-key", () -> {
-                        loaderCount.incrementAndGet();
-                        leaderThread.set(Thread.currentThread());
-                        leaderStarted.countDown();
-                        await(leaderProceed); // 阻塞 leader,让其余 9 线程落到 follower 路径
-                        return "VALUE";
-                    }, 10);
-                    results.add(r);
-                } finally {
-                    done.countDown();
-                }
-            });
-        }
-
-        assertThat(leaderStarted.await(5, TimeUnit.SECONDS))
-                .as("leader should enter loader").isTrue();
-        assertThat(callersReady.await(5, TimeUnit.SECONDS))
-                .as("all callers should reach executeSync").isTrue();
-        // 注册屏障:countDown 发生在 executeSync 之前,主线程不能据此认定 follower 已完成
-        // in-flight 注册。放行 leader 前,逐一确认每个非 leader 线程都已阻塞在 follower
-        // 的 future.get 上(publish 已越过),否则迟到线程可能在 leader 清理后开启第二班。
-        Thread leader = leaderThread.get();
-        assertThat(leader).as("leader thread identified inside loader").isNotNull();
-        for (Thread thread : spawned) {
-            if (thread != leader) {
-                awaitJoinedSingleFlight(thread);
+        try {
+            for (int i = 0; i < n; i++) {
+                ex.submit(() -> {
+                    try {
+                        callersReady.countDown();
+                        Object r = support.executeSync("shared-key", () -> {
+                            loaderCount.incrementAndGet();
+                            leaderThread.set(Thread.currentThread());
+                            leaderStarted.countDown();
+                            await(leaderProceed); // 阻塞 leader,让其余 9 线程落到 follower 路径
+                            return "VALUE";
+                        }, 10);
+                        results.add(r);
+                    } finally {
+                        done.countDown();
+                    }
+                });
             }
+
+            assertThat(leaderStarted.await(5, TimeUnit.SECONDS))
+                    .as("leader should enter loader").isTrue();
+            assertThat(callersReady.await(5, TimeUnit.SECONDS))
+                    .as("all callers should reach executeSync").isTrue();
+            // 注册屏障:countDown 发生在 executeSync 之前,主线程不能据此认定 follower 已完成
+            // in-flight 注册。放行 leader 前,逐一确认每个非 leader 线程都已阻塞在 follower
+            // 的 future.get 上(publish 已越过),否则迟到线程可能在 leader 清理后开启第二班。
+            Thread leader = leaderThread.get();
+            assertThat(leader).as("leader thread identified inside loader").isNotNull();
+            for (Thread thread : spawned) {
+                if (thread != leader) {
+                    awaitJoinedSingleFlight(thread);
+                }
+            }
+            assertThat(loaderCount.get())
+                    .as("followers must share the blocked leader").isEqualTo(1);
+            leaderProceed.countDown(); // 放行 leader
+
+            assertThat(done.await(5, TimeUnit.SECONDS))
+                    .as("all threads should complete").isTrue();
+            ex.shutdown();
+
+            assertThat(loaderCount.get())
+                    .as("loader invoked exactly once (single-flight)").isEqualTo(1);
+            assertThat(results).hasSize(n);
+            assertThat(results).allMatch(r -> "VALUE".equals(r));
+        } finally {
+            leaderProceed.countDown();
+            ex.shutdownNow();
+            assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
-        assertThat(loaderCount.get())
-                .as("followers must share the blocked leader").isEqualTo(1);
-        leaderProceed.countDown(); // 放行 leader
-
-        assertThat(done.await(5, TimeUnit.SECONDS))
-                .as("all threads should complete").isTrue();
-        ex.shutdown();
-
-        assertThat(loaderCount.get())
-                .as("loader invoked exactly once (single-flight)").isEqualTo(1);
-        assertThat(results).hasSize(n);
-        assertThat(results).allMatch(r -> "VALUE".equals(r));
     }
 
     @Test
-    @DisplayName("executeExclusive:并发写各自执行(不 join),每笔工作都不被丢弃")
     void executeExclusive_concurrentWrites_eachRuns() throws Exception {
         when(lockManager.tryAcquire(anyString(), anyLong()))
                 .thenReturn(Optional.of(mock(LockManager.LockHandle.class)));
-        SyncSupport support = new SyncSupport(List.of(lockManager), properties);
-
-        int n = 8;
-        ExecutorService ex = Executors.newFixedThreadPool(n);
-        CountDownLatch done = new CountDownLatch(n);
-        ConcurrentLinkedQueue<String> written = new ConcurrentLinkedQueue<>();
-
-        for (int i = 0; i < n; i++) {
-            final String value = "v" + i;
-            ex.submit(() -> {
-                try {
-                    written.add(support.executeExclusive("write-key", () -> value, 10));
-                } finally {
-                    done.countDown();
-                }
-            });
-        }
-
-        assertThat(done.await(5, TimeUnit.SECONDS)).as("all writers complete").isTrue();
-        ex.shutdown();
-
-        assertThat(written)
-                .as("独占执行:每个写线程都跑了自己的工作(single-flight 会只留一个)")
-                .hasSize(n);
+        assertIndependentWrites(new SyncSupport(List.of(lockManager), properties), false);
     }
 
     @Test
-    @DisplayName("executeExclusive:local-only 并发写按 key 串行,每笔工作都保留")
     void executeExclusive_localOnly_serializesConcurrentWrites() throws Exception {
         properties.getSyncLock().setLocalOnly(true);
-        SyncSupport support = new SyncSupport(List.of(), properties);
+        assertIndependentWrites(new SyncSupport(List.of(), properties), true);
+    }
 
-        int n = 4;
-        ExecutorService ex = Executors.newFixedThreadPool(n);
-        CountDownLatch done = new CountDownLatch(n);
-        CountDownLatch firstEntered = new CountDownLatch(1);
-        CountDownLatch releaseFirst = new CountDownLatch(1);
+    private void assertIndependentWrites(SyncSupport support, boolean localOnly) throws Exception {
+        int count = 8;
+        List<Thread> threads = new java.util.concurrent.CopyOnWriteArrayList<>();
+        ExecutorService workers = Executors.newFixedThreadPool(count, work -> {
+            Thread thread = new Thread(work);
+            threads.add(thread);
+            return thread;
+        });
+        CountDownLatch ready = new CountDownLatch(count);
+        CountDownLatch entered = new CountDownLatch(localOnly ? 1 : count);
+        CountDownLatch release = new CountDownLatch(1);
         ConcurrentLinkedQueue<String> written = new ConcurrentLinkedQueue<>();
+        java.util.concurrent.atomic.AtomicIntegerArray executions =
+                new java.util.concurrent.atomic.AtomicIntegerArray(count);
         AtomicInteger active = new AtomicInteger();
         AtomicInteger maxActive = new AtomicInteger();
-
-        for (int i = 0; i < n; i++) {
-            final String value = "local-v" + i;
-            ex.submit(() -> {
-                try {
-                    written.add(support.executeExclusive("local-write-key", () -> {
+        List<Future<String>> results = new ArrayList<>();
+        List<String> expected = new ArrayList<>();
+        try {
+            for (int i = 0; i < count; i++) {
+                int index = i;
+                String value = "value-" + i;
+                expected.add(value);
+                results.add(workers.submit(() -> {
+                    ready.countDown();
+                    return support.executeExclusive("write-key", () -> {
+                        executions.incrementAndGet(index);
+                        written.add(value);
                         int current = active.incrementAndGet();
-                        maxActive.updateAndGet(max -> Math.max(max, current));
-                        firstEntered.countDown();
+                        maxActive.accumulateAndGet(current, Math::max);
+                        entered.countDown();
                         try {
-                            if (current == 1) {
-                                await(releaseFirst);
-                            }
+                            await(release);
                             return value;
                         } finally {
                             active.decrementAndGet();
                         }
-                    }, 10));
-                } finally {
-                    done.countDown();
-                }
-            });
+                    }, 10);
+                }));
+            }
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            // Hold work until every caller is blocked inside exclusive execution.
+            for (Thread thread : threads) {
+                awaitJoinedSingleFlight(thread);
+            }
+            release.countDown();
+            for (int i = 0; i < count; i++) {
+                assertThat(results.get(i).get(5, TimeUnit.SECONDS)).isEqualTo(expected.get(i));
+                assertThat(executions.get(i)).as("work %s", i).isEqualTo(1);
+            }
+            assertThat(written).containsExactlyInAnyOrderElementsOf(expected);
+            if (localOnly) {
+                assertThat(maxActive).hasValue(1);
+            }
+        } finally {
+            release.countDown();
+            workers.shutdownNow();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
-
-        assertThat(firstEntered.await(5, TimeUnit.SECONDS)).isTrue();
-        releaseFirst.countDown();
-
-        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
-        ex.shutdown();
-        assertThat(written).hasSize(n);
-        assertThat(maxActive).as("local-only writes must be mutually exclusive").hasValue(1);
     }
 
     @Test
@@ -266,16 +269,17 @@ class SyncSupportSingleFlightTest {
                     .as("排队者必须按 syncTimeout 失败,绝不无限等待卡死的前驱")
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("Timed out after 1");
+            releaseFirst.countDown();
+
+            // 超时者必须放行后继:队列不能卡在已放弃的条目上
+            assertThat(support.executeExclusive("stalled-key", () -> "THIRD", 5))
+                    .as("超时后队列仍可用(超时路径已完成并移除自己的尾部条目)")
+                    .isEqualTo("THIRD");
         } finally {
             releaseFirst.countDown();
+            ex.shutdownNow();
+            assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
-
-        // 超时者必须放行后继:队列不能卡在已放弃的条目上
-        assertThat(support.executeExclusive("stalled-key", () -> "THIRD", 5))
-                .as("超时后队列仍可用(超时路径已完成并移除自己的尾部条目)")
-                .isEqualTo("THIRD");
-        ex.shutdown();
-        assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
     }
 
     @Test
@@ -349,6 +353,7 @@ class SyncSupportSingleFlightTest {
             releaseFirst.countDown();
             newcomerProceed.countDown();
             ex.shutdownNow();
+            assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
     }
 
@@ -380,35 +385,41 @@ class SyncSupportSingleFlightTest {
         CountDownLatch done = new CountDownLatch(n);
         CountDownLatch callersReady = new CountDownLatch(n);
 
-        for (int i = 0; i < n; i++) {
-            ex.submit(() -> {
-                try {
-                    callersReady.countDown();
-                    support.executeSync("failing-key", () -> {
-                        leaderStarted.countDown();
-                        await(leaderProceed);
-                        throw new IllegalStateException("DB DOWN");
-                    }, 10);
-                } catch (Throwable t) {
-                    errors.add(t);
-                } finally {
-                    done.countDown();
-                }
-            });
+        try {
+            for (int i = 0; i < n; i++) {
+                ex.submit(() -> {
+                    try {
+                        callersReady.countDown();
+                        support.executeSync("failing-key", () -> {
+                            leaderStarted.countDown();
+                            await(leaderProceed);
+                            throw new IllegalStateException("DB DOWN");
+                        }, 10);
+                    } catch (Throwable t) {
+                        errors.add(t);
+                    } finally {
+                        done.countDown();
+                    }
+                });
+            }
+
+            assertThat(leaderStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(callersReady.await(5, TimeUnit.SECONDS))
+                    .as("all callers should reach executeSync").isTrue();
+            leaderProceed.countDown();
+
+            assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+            ex.shutdown();
+
+            assertThat(errors).hasSize(n);
+            assertThat(errors).allSatisfy(t ->
+                    assertThat(t).isInstanceOf(IllegalStateException.class)
+                            .hasMessageContaining("DB DOWN"));
+        } finally {
+            leaderProceed.countDown();
+            ex.shutdownNow();
+            assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
-
-        assertThat(leaderStarted.await(5, TimeUnit.SECONDS)).isTrue();
-        assertThat(callersReady.await(5, TimeUnit.SECONDS))
-                .as("all callers should reach executeSync").isTrue();
-        leaderProceed.countDown();
-
-        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
-        ex.shutdown();
-
-        assertThat(errors).hasSize(n);
-        assertThat(errors).allSatisfy(t ->
-                assertThat(t).isInstanceOf(IllegalStateException.class)
-                        .hasMessageContaining("DB DOWN"));
     }
 
     @Test
@@ -443,24 +454,30 @@ class SyncSupportSingleFlightTest {
         CountDownLatch leaderProceed = new CountDownLatch(1);
         ExecutorService ex = Executors.newFixedThreadPool(2);
 
-        ex.submit(() -> {
-            support.executeSync("slow-key", () -> {
-                leaderStarted.countDown();
-                await(leaderProceed); // leader 阻塞 60s 窗口
-                return "SLOW";
-            }, 60);
-            return null;
-        });
+        try {
+            ex.submit(() -> {
+                support.executeSync("slow-key", () -> {
+                    leaderStarted.countDown();
+                    await(leaderProceed); // leader 阻塞 60s 窗口
+                    return "SLOW";
+                }, 60);
+                return null;
+            });
 
-        assertThat(leaderStarted.await(5, TimeUnit.SECONDS))
-                .as("leader should hold the in-flight slot").isTrue();
+            assertThat(leaderStarted.await(5, TimeUnit.SECONDS))
+                    .as("leader should hold the in-flight slot").isTrue();
 
-        assertThatThrownBy(() -> support.executeSync("slow-key", () -> "X", 1))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Timed out after 1");
+            assertThatThrownBy(() -> support.executeSync("slow-key", () -> "X", 1))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Timed out after 1");
 
-        leaderProceed.countDown(); // 放行 leader,允许其完成 + 清理 in-flight slot
-        ex.shutdown();
-        assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            leaderProceed.countDown(); // 放行 leader,允许其完成 + 清理 in-flight slot
+            ex.shutdown();
+            assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            leaderProceed.countDown();
+            ex.shutdownNow();
+            assertThat(ex.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
     }
 }

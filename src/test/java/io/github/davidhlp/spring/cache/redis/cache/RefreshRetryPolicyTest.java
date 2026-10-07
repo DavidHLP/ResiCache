@@ -69,4 +69,32 @@ class RefreshRetryPolicyTest {
 
         assertThat(attempts.get()).isEqualTo(1);
     }
+    @Test
+    void preInterruptedWorker_keepsFlagRetriesAndPreservesLastCause() throws Exception {
+        java.util.concurrent.ExecutorService worker = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            worker.submit(() -> {
+                Thread.currentThread().interrupt();
+                AtomicInteger attempts = new AtomicInteger();
+                RuntimeException[] causes = {new IllegalStateException("first"),
+                        new IllegalArgumentException("second"), new IllegalStateException("last")};
+                try {
+                    assertThatThrownBy(() -> policy.executeWithRetry("interrupted", () -> {
+                        assertThat(Thread.currentThread().isInterrupted()).isTrue();
+                        throw causes[attempts.getAndIncrement()];
+                    })).hasCause(causes[2]);
+                    assertThat(attempts).hasValue(3);
+                    assertThat(Thread.currentThread().isInterrupted()).isTrue();
+                } finally {
+                    Thread.interrupted();
+                }
+            }).get(5, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(worker.submit(() -> Thread.currentThread().isInterrupted())
+                    .get(5, java.util.concurrent.TimeUnit.SECONDS)).isFalse();
+        } finally {
+            worker.shutdownNow();
+            assertThat(worker.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
 }

@@ -7,8 +7,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledOnOs;
-import org.junit.jupiter.api.condition.OS;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import static org.awaitility.Awaitility.await;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -18,32 +19,37 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ThreadPoolEarlyExpirationExecutorTest {
 
     private ThreadPoolEarlyExpirationExecutor executor;
+    private ExecutorService workers;
     private ConcurrentHashMap<String, CompletableFuture<Void>> inFlight;
 
     @BeforeEach
     void setUp() {
         inFlight = new ConcurrentHashMap<>();
+        workers = Executors.newCachedThreadPool();
         executor = new ThreadPoolEarlyExpirationExecutor(
-                Executors.newCachedThreadPool(),
+                workers,
                 inFlight,
                 null
         );
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws InterruptedException {
         executor.shutdown();
+        assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
     }
 
     @Test
     void saturatedPoolRunsInlineAndRemovesCompletedEntry() throws Exception {
         ThreadPoolEarlyExpirationExecutor bounded = new ThreadPoolEarlyExpirationExecutor(1, 1, 1, null);
+        ExecutorService boundedPool = (ExecutorService) org.springframework.test.util.ReflectionTestUtils
+                .getField(bounded, "executorService");
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         Runnable blocker = () -> {
             started.countDown();
             try {
-                release.await();
+                assertThat(release.await(5, TimeUnit.SECONDS)).isTrue();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -60,6 +66,7 @@ class ThreadPoolEarlyExpirationExecutorTest {
         } finally {
             release.countDown();
             bounded.shutdown();
+            assertThat(boundedPool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
         assertThat(bounded.getActiveCount()).isZero();
     }
@@ -124,7 +131,7 @@ class ThreadPoolEarlyExpirationExecutorTest {
                 executor.submit(key, () -> {
                     startedLatch.countDown();
                     try {
-                        release.await();
+                        assertThat(release.await(5, TimeUnit.SECONDS)).isTrue();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     } finally {
@@ -182,26 +189,28 @@ class ThreadPoolEarlyExpirationExecutorTest {
         @DisplayName("maintains correct active count under load")
         void getActiveCount_concurrentLoad_correctCount() throws InterruptedException {
             int keyCount = 10;
-            CountDownLatch startLatch = new CountDownLatch(1);
-            AtomicInteger maxActive = new AtomicInteger(0);
-
-            for (int i = 0; i < keyCount; i++) {
-                String key = "load-key-" + i;
-                executor.submit(key, () -> {
-                    try {
-                        startLatch.await();
-                        maxActive.updateAndGet(prev -> Math.max(prev, executor.getActiveCount()));
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                });
+            CountDownLatch started = new CountDownLatch(keyCount);
+            CountDownLatch release = new CountDownLatch(1);
+            try {
+                for (int i = 0; i < keyCount; i++) {
+                    executor.submit("load-key-" + i, () -> {
+                        started.countDown();
+                        try {
+                            assertThat(release.await(5, TimeUnit.SECONDS)).isTrue();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new AssertionError(e);
+                        }
+                    });
+                }
+                assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(executor.getActiveCount()).isEqualTo(keyCount);
+                release.countDown();
+                await().atMost(5, TimeUnit.SECONDS).untilAsserted(
+                        () -> assertThat(executor.getActiveCount()).isZero());
+            } finally {
+                release.countDown();
             }
-
-            startLatch.countDown();
-            Thread.sleep(2000); // Wait for tasks to complete
-
-            assertThat(maxActive.get()).isGreaterThan(0);
         }
     }
 
@@ -221,29 +230,33 @@ class ThreadPoolEarlyExpirationExecutorTest {
         @Test
         @DisplayName("shutdown with running tasks terminates")
         void shutdown_withRunningTasks_terminates() throws InterruptedException {
-            CountDownLatch runningLatch = new CountDownLatch(1);
-
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
             executor.submit("running-key", () -> {
+                started.countDown();
                 try {
-                    runningLatch.await();
-                    Thread.sleep(5000);
+                    assertThat(release.await(5, TimeUnit.SECONDS)).isTrue();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    throw new AssertionError(e);
                 }
             });
-
-            runningLatch.countDown();
-            executor.shutdown();
-
-            // Should terminate within reasonable time
-            assertThat(executor.getActiveCount()).isEqualTo(0);
+            try {
+                assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+                release.countDown();
+                executor.shutdown();
+                assertThat(executor.getActiveCount()).isZero();
+            } finally {
+                release.countDown();
+            }
         }
 
         @Test
         @DisplayName("shutdown properly cleans up all resources")
         void shutdown_properlyCleansUpResources() throws Exception {
+            ExecutorService testPool = Executors.newCachedThreadPool();
             ThreadPoolEarlyExpirationExecutor testExecutor = new ThreadPoolEarlyExpirationExecutor(
-                    Executors.newCachedThreadPool(),
+                    testPool,
                     new ConcurrentHashMap<>(),
                     null
             );
@@ -258,6 +271,7 @@ class ThreadPoolEarlyExpirationExecutorTest {
                 assertThat(testExecutor.getActiveCount()).isEqualTo(0);
             } finally {
                 testExecutor.shutdown();
+                assertThat(testPool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
             }
         }
     }
@@ -267,9 +281,8 @@ class ThreadPoolEarlyExpirationExecutorTest {
     class RetryTests {
 
         @Test
-        @DisplayName("retries failed task up to max attempts")
-        @EnabledOnOs(OS.LINUX)
-        void submit_failingTask_retriesAndFails() throws InterruptedException {
+        @DisplayName("succeeds after retries")
+        void submit_failingTask_succeedsAfterRetries() throws InterruptedException {
             String key = "failing-key";
             AtomicInteger attemptCount = new AtomicInteger(0);
             CountDownLatch latch = new CountDownLatch(3);
@@ -282,10 +295,53 @@ class ThreadPoolEarlyExpirationExecutorTest {
                 }
             });
 
-            latch.await(15, TimeUnit.SECONDS);
+            assertThat(latch.await(15, TimeUnit.SECONDS)).isTrue();
+            await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> assertThat(inFlight).isEmpty());
 
             // Should have attempted 3 times (initial + 2 retries)
             assertThat(attemptCount.get()).isEqualTo(3);
         }
     }
+    @Test
+    void exhaustedRetries_completeExceptionallyAndCleanUpWithMetrics() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        ConcurrentHashMap<String, CompletableFuture<Void>> tasks = new ConcurrentHashMap<>();
+        ThreadPoolEarlyExpirationExecutor tested = new ThreadPoolEarlyExpirationExecutor(pool, tasks, registry);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger attempts = new AtomicInteger();
+        IllegalStateException last = new IllegalStateException("last failure");
+        try {
+            tested.submit("failure", () -> {
+                started.countDown();
+                try {
+                    assertThat(release.await(5, TimeUnit.SECONDS)).isTrue();
+                } catch (InterruptedException e) {
+                    throw new AssertionError(e);
+                }
+                attempts.incrementAndGet();
+                throw last;
+            });
+            assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+            CompletableFuture<Void> future = tasks.get("failure");
+            release.countDown();
+            assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .hasRootCause(last);
+            await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                assertThat(tasks).isEmpty();
+                assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(1);
+            });
+            assertThat(attempts).hasValue(3);
+            assertThat(registry.get("prerefresh.submitted").counter().count()).isEqualTo(1);
+            assertThat(registry.get("prerefresh.cancelled").counter().count()).isZero();
+        } finally {
+            release.countDown();
+            tested.shutdown();
+            assertThat(pool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            registry.close();
+        }
+    }
+
 }

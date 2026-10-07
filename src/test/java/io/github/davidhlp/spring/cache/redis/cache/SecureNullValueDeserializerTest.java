@@ -2,6 +2,11 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectInputStream;
+import java.io.Serializable;
+import java.io.IOException;
+import java.io.InvalidClassException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.support.NullValue;
@@ -35,8 +40,8 @@ class SecureNullValueDeserializerTest {
     }
 
     @Test
-    @DisplayName("rejects serialized classes outside the NullValue whitelist")
-    void rejectsNonNullValueClass() throws Exception {
+    @DisplayName("rejects a non-NullValue return type")
+    void rejectsNonNullValueReturnType() throws Exception {
         byte[] serializedString = serialize("not-null");
 
         assertThatThrownBy(() -> SecureNullValueDeserializer.deserializeNullValue(serializedString))
@@ -50,6 +55,31 @@ class SecureNullValueDeserializerTest {
         assertThatThrownBy(() -> SecureNullValueDeserializer.deserializeNullValue(new byte[]{1, 2, 3}))
                 .isInstanceOf(SecurityException.class)
                 .hasMessageContaining("only NullValue is permitted");
+    }
+
+    @Test
+    void rejectsClassBeforeReadObjectOrReadResolveCanRun() throws Exception {
+        byte[] payload = serialize(new ResolvesToNullValue());
+        ResolvesToNullValue.reads.set(0);
+        assertThatThrownBy(() -> SecureNullValueDeserializer.deserializeNullValue(payload))
+                .isInstanceOf(SecurityException.class)
+                .hasCauseInstanceOf(InvalidClassException.class);
+        assertThat(ResolvesToNullValue.reads).hasValue(0);
+    }
+
+    private static final class ResolvesToNullValue implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private static final AtomicInteger reads = new AtomicInteger();
+
+        private void readObject(ObjectInputStream input) throws IOException, ClassNotFoundException {
+            reads.incrementAndGet();
+            input.defaultReadObject();
+        }
+
+        private Object readResolve() {
+            reads.incrementAndGet();
+            return NullValue.INSTANCE;
+        }
     }
 
     private static byte[] serialize(Object value) throws Exception {

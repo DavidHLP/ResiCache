@@ -147,6 +147,8 @@ class ChainObserverTest {
             }
 
             assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
+            assertThat(org.springframework.test.util.ReflectionTestUtils.getField(observer, "timers"))
+                    .isEqualTo(java.util.Map.of());
         }
 
         /**
@@ -280,6 +282,8 @@ class ChainObserverTest {
             }
 
             assertThat(DisabledMetricsRegistry.INSTANCE.getMeters()).isEmpty();
+            assertThat(org.springframework.test.util.ReflectionTestUtils.getField(observer, "firedCounters"))
+                    .isEqualTo(java.util.Map.of());
         }
 
         @Test
