@@ -134,8 +134,9 @@ raw candidate is retained for 30 days. Preserve both externally if longer
 recovery is needed. If an upload response was lost before an ID was recorded,
 locate the uniquely named deployment in the Portal; do not blindly rerun upload.
 
-Main requires PRs and the GitHub Actions `ci-ok` check against an up-to-date
-branch, and disallows force pushes/deletion. The single-maintainer configuration
+After the shared workflow passes, configure main to require PRs and the GitHub
+Actions `ci-ok` check against an up-to-date branch, and disallow force pushes/deletion.
+The single-maintainer configuration
 does not require another person's approval. Secret scanning and push protection
 remain enabled; Dependabot alerts and security updates complement CI scans.
 Workflow files describe intended checks; remote branch/environment settings

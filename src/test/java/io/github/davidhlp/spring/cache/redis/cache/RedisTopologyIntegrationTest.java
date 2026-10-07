@@ -50,7 +50,7 @@ class RedisTopologyIntegrationTest {
 
     @Test
     void sentinelDiscoversMasterForSpringReadsAndRedissonLocks() throws Exception {
-        // Process readiness precedes Sentinel's asynchronous peer discovery.
+        // Process readiness precedes peer discovery and the replica's initial RDB sync.
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             for (int port : new int[] {26379, 26380, 26381}) {
                 var master = SENTINEL.execInContainer("redis-cli", "--raw", "-p", Integer.toString(port),
@@ -61,6 +61,11 @@ class RedisTopologyIntegrationTest {
                         "sentinel", "ckquorum", "cache");
                 assertThat(quorum.getStdout()).startsWith("OK");
             }
+            var replica = SENTINEL.execInContainer("redis-cli", "-p", "6380", "info", "replication");
+            assertThat(replica.getExitCode()).isZero();
+            assertThat(replica.getStdout()).contains("master_link_status:up", "master_sync_in_progress:0");
+            var master = SENTINEL.execInContainer("redis-cli", "-p", "6379", "info", "replication");
+            assertThat(master.getStdout()).contains("connected_slaves:1", "state=online");
         });
         String ip = SENTINEL.getContainerInfo().getNetworkSettings().getNetworks()
                 .values().iterator().next().getIpAddress();
