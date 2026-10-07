@@ -17,15 +17,12 @@ import java.util.concurrent.TimeUnit;
  * <p>We measure three scenarios:
  * <ul>
  *   <li><b>noSync</b>      – baseline: all threads call the loader directly with no coordination</li>
- *   <li><b>syncLocalOnly</b> – SyncLock in local-only (JVM {@code synchronized}) mode</li>
+ *   <li><b>syncLocalOnly</b> – SyncLock in explicit local-only coordination mode</li>
  *   <li><b>syncContended</b> – 32 threads hammering the same key (worst-case stampede)</li>
  * </ul>
  *
- * <p>SLO (from PERFORMANCE.md):
- * <ul>
- *   <li>syncLocalOnly  ≤ 2× noSync throughput overhead per operation</li>
- *   <li>syncContended  leader fires exactly once per unique key window</li>
- * </ul>
+ * <p>Historical measurements are recorded in PERFORMANCE.md. This suite has no
+ * enforced throughput SLO; correctness is verified by focused contract tests.
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)

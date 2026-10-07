@@ -85,8 +85,9 @@ derived acceleration layer. Exact operation semantics are in
 The internal envelope is not wire-compatible with Spring's generic JSON or JDK
 serializer. Existing applications must use a bounded shadow-read,
 dual-write, and cutover process before relying on ResiCache values. The
-migration tooling is operator-directed and is not run automatically at
-application startup.
+migration tooling is an operator-directed bounded batch, not an automatic
+application dual-write interceptor. It does not run at startup; phase effects
+and rollback constraints are in [`OPERATIONS.md`](OPERATIONS.md#serialization-rollout-and-rollback-boundary).
 
 ## Product rules
 
@@ -119,7 +120,9 @@ ResiCache does not replace:
 
 ## Approved but not implemented
 
-AOT/native-image certification remains deferred. Its entry conditions remain
-in the local task ledger; this product document makes no native support claim.
+AOT/native-image certification remains deferred. There is no native verification
+job or RuntimeHints inventory in the checked-out source. The local task ledger,
+when present, records deferred status; this product document makes no native
+support claim.
 Other open or deferred work is owned by the existing task ledger, not by a new
 roadmap document.

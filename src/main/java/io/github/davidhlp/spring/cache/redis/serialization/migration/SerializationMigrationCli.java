@@ -23,7 +23,7 @@ import org.springframework.context.annotation.Import;
  * <p>Example:
  * <pre>{@code
  * java -cp resicache.jar:app-libs/* \
- *   io.github...SerializationMigrationCli \
+ *   io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli \
  *   --spring.data.redis.host=localhost \
  *   --resi-cache.serializer.migration.phase=SHADOW_READ
  * }</pre>

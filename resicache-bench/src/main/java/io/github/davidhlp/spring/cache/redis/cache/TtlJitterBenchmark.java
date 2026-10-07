@@ -20,11 +20,8 @@ import java.util.concurrent.TimeUnit;
  *   <li><b>ttlBaseline</b>         – raw {@code calculateFinalTtl} with no jitter (reference)</li>
  * </ul>
  *
- * <p>SLO (from PERFORMANCE.md):
- * <ul>
- *   <li>ttlJitter_compute ≥ 10 M ops/s – must not meaningfully slow down cache writes</li>
- *   <li>jitter spread: within configured variance range per default config</li>
- * </ul>
+ * <p>Historical measurements are recorded in PERFORMANCE.md. This suite has no
+ * enforced throughput SLO; correctness is verified by focused contract tests.
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)

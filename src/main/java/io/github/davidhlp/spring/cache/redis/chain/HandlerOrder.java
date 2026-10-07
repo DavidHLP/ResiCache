@@ -6,7 +6,7 @@ package io.github.davidhlp.spring.cache.redis.chain;
  * Handler 执行顺序枚举
  *
  * 定义标准顺序，确保责任链按正确顺序执行。
- * 间隔 100，便于插入新的 Handler。
+ * 顺序槽保留插入空间；提前过期使用同步锁与 TTL 之间的 250 槽。
  *
  * <p>本枚举同时是每个 slot 的身份事实源：顺序值、配置禁用名(kebab-case)、观测标签。
  */

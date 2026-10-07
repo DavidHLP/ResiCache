@@ -7,7 +7,8 @@ which command proves which boundary.
 ## Environment
 
 - JDK 21, matching `pom.xml` and the Maven Enforcer range.
-- Maven 3.x or the bundled `./mvnw` wrapper.
+- Maven 3.x; the bundled `./mvnw` pins its distribution in
+  `.mvn/wrapper/maven-wrapper.properties`.
 - Docker for Redis/Testcontainers integration, Cluster, Sentinel and TLS tests.
 - OpenSSL and JDK keytool for temporary TLS certificates; Python 3.12+ and GPG
   for CI contract checks. Linux x86-64 is the CI runner platform.
@@ -30,19 +31,24 @@ by the change type.
 | `bash scripts/ci/check-docs-contracts.sh` | stale contract strings, removed Javadoc references, and required docs guards |
 | `bash scripts/ci/check-external-consumer.sh` | isolated packaged-JAR consumer, Boot discovery, Redis read/write, optional Redisson and observability paths |
 | `bash scripts/ci/check-workflows.sh` | actionlint, ShellCheck, SHA pins and CI/release contract regression tests |
-| `python3 scripts/ci/pipeline.py reports` | full test execution evidence; rejects skipped/missing integration tests |
+| `python3 scripts/ci/pipeline.py reports` | inspect reports immediately after a clean full test run; rejects skipped/missing integration tests |
+| `python3 scripts/ci/pipeline.py reports --unit` | inspect reports immediately after `./mvnw -Punit clean test -B`; rejects integration evidence on the unit path |
 | `./mvnw clean package -DskipTests -B` | packaged artifact without test execution |
-| `./mvnw javadoc:javadoc -B` | Javadoc source consistency when public API docs change |
+| `./mvnw javadoc:javadoc -B` | Javadoc generation when API comments change; the POM disables doclint, so manually review links and semantics |
+| `./mvnw -f resicache-bench/pom.xml clean package -DskipTests -B` | standalone JMH build after installing the matching core; benchmark commands are in [`PERFORMANCE.md`](../PERFORMANCE.md) |
 
 `verify` enforces at least 70% line and 40% branch coverage. The no-Docker
 profile does not establish Redis, Redis Cluster, or Testcontainers behavior.
+Local Maven tests disable Ryuk through the root POM; CI explicitly enables it
+with `-Dtestcontainers.ryuk.disabled=false`. Registry access and available
+container images are therefore part of the CI environment.
 Use a real Docker environment for those boundaries and report infrastructure
 failures separately from test failures.
 
 ## Test layers
 
-- **Unit tests** cover parsers, properties, chain decisions, serialization
-  rules, and public value contracts without Redis.
+- **Unit tests** use Boot-managed JUnit Jupiter and cover parsers, properties,
+  chain decisions, serialization rules, and public value contracts without Redis.
 - **Redis integration tests** use `AbstractRedisIntegrationTest` and
   Testcontainers with Redis 7-based fixtures.
 - **Redis Cluster tests** use the separate
@@ -95,6 +101,10 @@ share `_verify.yml`. Only a PR whose changed paths are all explicitly recognized
 documentation can skip lint, unit, full build, consumer, benchmark and dependency
 jobs. Wrapper configuration, CI scripts, unknown paths and classification errors
 never downgrade verification. Docs and workflow checks always run.
+The explicit docs-only paths are in
+`scripts/ci/pipeline.py`; Java comments and PR/issue templates are outside that
+allowlist. `check-workflows.sh` downloads checksum-pinned Linux actionlint and
+ShellCheck into `target/ci-tools` when absent; it needs network access then.
 
 Fast checks and full verification run concurrently. The full build uses Ryuk,
 executes every integration test, enforces 70% line / 40% branch coverage and

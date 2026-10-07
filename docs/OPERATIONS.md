@@ -24,13 +24,24 @@ lifecycle, secrets injection, and Redis availability.
 I/O. `resi-cache.redis.*` configures the Redisson deployment used for locks and
 synchronization; `resi-cache.redisson.*` controls its pool, timeout, and retry
 settings. Configure matching topology explicitly in both namespaces when
-`sync=true` is used.
+`sync=true` is used. Redisson's single-node mode falls back to Spring's host
+only for a blank library host, to Spring's password for a missing/empty library
+password, and to Spring's database when the library database is `0`. Its port,
+username and TLS flag use library properties; their Spring counterparts are not
+copied. Defaults already supply localhost and port 6379, so setting only
+`spring.data.redis.host` does not redirect the default Redisson connection.
+Cluster and Sentinel use the library node/ACL configuration directly.
+
+When Redisson is on the classpath, the library creates a client at startup
+unless one already exists, even if no annotation uses synchronization. Omitting
+Redisson is the minimal no-lock path; adding it requires a reachable deployment.
 
 Supported deployment modes are `single`, `cluster`, and `sentinel`, with
 binding-time validation for mode-specific fields and TLS requirements. The
 advanced `resi-cache.redis.redisson-config-path` value is a trusted operator
 input only: it is read as a local YAML path and must never come from an
-end-user request.
+end-user request. This override returns the file configuration directly; the
+normal library topology/pool settings are not then applied.
 
 Redisson is optional until an operation requests distributed synchronization.
 With no distributed `LockManager`, `sync=true` fails closed by default.
@@ -88,8 +99,30 @@ JSON or JDK serializers. A safe adoption flow is:
 4. retain a rollback path until the new representation is trusted.
 
 The migration CLI and properties are operator-directed surfaces. They are not
-run automatically at application startup. A serializer change without this
-workflow can make existing values unreadable; a cache flush is not the only
+run automatically at application startup. Run the full class name
+`io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli`
+on a classpath containing the core JAR and its runtime dependencies. The plain
+core JAR is not a self-contained executable. Configure
+`spring.data.redis.*`, the serializer allowlist, and a bounded
+`resi-cache.serializer.migration.pattern` before invoking it.
+
+| Phase | Effect |
+|---|---|
+| `SHADOW_READ` | Default; decodes and validates legacy values without writing. |
+| `DUAL_WRITE` | Writes current-envelope sidecars with the source TTL; leaves legacy source bytes in place. |
+| `CUTOVER` | Saves legacy backup sidecars, then compares/replaces unchanged source bytes with the current envelope, preserving TTL. |
+| `ROLLBACK` | Uses backups; refuses to overwrite source values changed after cutover. |
+
+The CLI is a bounded batch conversion, not an application write interceptor.
+Maintain concurrent application dual writes separately during the rollout.
+`max-keys` limits actionable keys per invocation, not all SCAN traffic;
+`batch-size` is a SCAN hint. Repeated batches skip completed entries.
+`dry-run=true` reports planned work without mutation. Rejected/failed keys
+make the CLI exit unsuccessfully. Backups share the source expiry, so rollback
+is bounded by backup retention and subsequent writes; it is not a durable
+backup service.
+
+A serializer change without this workflow can make existing values unreadable; a cache flush is not the only
 rollback strategy and is not required by the documented migration flow.
 
 ## Release and publication boundary

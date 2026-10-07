@@ -8,21 +8,18 @@ import java.util.concurrent.TimeUnit;
 /**
  * Benchmark: Bloom-filter gate (cache-penetration protection).
  *
- * <p>ResiCache wraps every cache-miss path with a Bloom filter check so that
- * keys that were never stored (e.g. random IDs from a DoS scan) are rejected
- * before hitting the DB. This benchmark measures:
+ * <p>Bloom protection is opt-in and requires data-source membership to be
+ * seeded or maintained before use. A missing bit can reject a load before
+ * it reaches the data source. This benchmark measures:
  *
  * <ul>
  *   <li><b>bloomMightContain_hit</b>  – fast path: key IS in the filter (true positive)</li>
- *   <li><b>bloomMightContain_miss</b> – key is NOT in filter (definitive negative); loader skipped</li>
+ *   <li><b>bloomMightContain_miss</b> – key is NOT in filter (definitive negative); no loader is measured</li>
  *   <li><b>bloomPut</b>               – insertion cost of a new key into the filter</li>
  * </ul>
  *
- * <p>SLO (from PERFORMANCE.md):
- * <ul>
- *   <li>bloomMightContain_hit  ≥ 5 M ops/s on a single thread (bit-array read only)</li>
- *   <li>bloomPut throughput    ≥ 1 M ops/s  (hash + bit-set)</li>
- * </ul>
+ * <p>Historical measurements are recorded in PERFORMANCE.md. This suite has no
+ * enforced throughput SLO; correctness is verified by focused contract tests.
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)

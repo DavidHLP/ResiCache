@@ -17,7 +17,7 @@ translated quick-start companion and does not override the English contract.
 | Check stable public surface | [`STABILITY.md`](../STABILITY.md) | public-surface allowlists and `PublicSurfaceContractTest` |
 | Check supported versions and runtime limits | [`COMPATIBILITY.md`](../COMPATIBILITY.md) | `pom.xml` and integration tests |
 | Review released or unreleased change history | [`CHANGELOG.md`](../CHANGELOG.md) | Git history and the linked contract source |
-| Review historical benchmark evidence | [`PERFORMANCE.md`](../PERFORMANCE.md) | JMH module, recorded environment, and non-SLO caveat |
+| Run current benchmarks or review historical evidence | [`PERFORMANCE.md`](../PERFORMANCE.md) | JMH sources, `resicache-bench/pom.xml`, `_bench.yml`, and non-SLO caveat |
 | Find current deferred work or blockers | `.agent/tasks/resicache-maturity.yaml` when present | current branch, HEAD, source, and tests |
 
 The task ledger is an ignored local status file, not a public contract. It may
@@ -51,6 +51,7 @@ reference and are independently verified.
 | Runtime configuration, migration, release, and incident boundaries | [`OPERATIONS.md`](OPERATIONS.md) | Library operations; no hosted service | source validators, workflows, security policy |
 | Semantic/API reference and failure behavior | [`REFERENCE.md`](REFERENCE.md) | Current public behavior | focused tests and source symbols |
 | Change history and release notes | [`CHANGELOG.md`](../CHANGELOG.md) | Versioned history | Git tags/commits and contract docs |
+| Publication status | [`COMPATIBILITY.md`](../COMPATIBILITY.md), [`OPERATIONS.md`](OPERATIONS.md) | Dated Central evidence; source-first until matching publication | Public Maven metadata/POMs and verified candidate checksums |
 | Security reporting and security-sensitive configuration | [`SECURITY.md`](../SECURITY.md) | Current policy | repository security settings and source behavior |
 | Legal terms | [`LICENSE`](../LICENSE) | Repository license | license text |
 

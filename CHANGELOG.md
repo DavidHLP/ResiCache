@@ -20,7 +20,19 @@ contract.
 > Java 21 artifact exists yet, so a blocking compatibility gate waits for a
 > same-line published artifact with matching tag provenance.
 
+The source-cleanup section labelled `0.0.2` below is repository history, not a
+release note for the historical Central artifact with the same version. Current
+source changes remain unreleased; publication is tracked in
+[`COMPATIBILITY.md`](COMPATIBILITY.md).
+
 ## [Unreleased] — current development
+
+### Documentation
+
+- Reconcile adoption, configuration fallback, explicit serializer allowlists,
+  synchronization timeout, batch migration/rollback, test tooling and public
+  surface descriptions against the current source and CI. Preserve historical
+  benchmark scores while removing unsupported performance-SLO labels.
 
 ### CI/CD
 
@@ -387,8 +399,9 @@ Current milestones:
   engine-side rejection of a malformed `HandlerResult` is retained because
   `STABILITY.md` §4 documents it.
 - **TTL precedence in one module (c8)** — `TtlPolicy` owns the ordered
-  resolution and both defaults; every path keeps its previous effective TTL and
-  no default changed. See [`COMPATIBILITY.md`](./COMPATIBILITY.md) and
+  resolution. The ownership extraction preserved behavior; the separate
+  annotation-default change above removed the implicit 60-second fallback. See
+  [`COMPATIBILITY.md`](./COMPATIBILITY.md) and
   [`docs/REFERENCE.md`](docs/REFERENCE.md).
 - **Synchronization lifecycle owned by its state (c9)** — the single-flight
   lifecycle (enter → complete → exit → cleanup, exactly once) now lives with the
@@ -414,7 +427,7 @@ Current milestones:
   bumped to `'21'` to match `pom.xml <java.version>21</java.version>`.
 - Whitelist rejection message now mentions the remediation property key.
 
-## [0.0.2] — current
+## [0.0.2] — historical source cleanup
 
 ### Removed — over-engineering cleanup (~2,989 lines)
 
