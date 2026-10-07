@@ -56,6 +56,8 @@ public class BootConsumer {
                         Class.forName("io.micrometer.core.instrument.MeterRegistry")).isEmpty()) {
                     throw new AssertionError("Optional observability did not assemble");
                 }
+            } else if (!app.getBeansOfType(Class.forName("io.micrometer.core.instrument.MeterRegistry")).isEmpty()) {
+                throw new AssertionError("Metrics registry should require an observability provider");
             }
             System.out.println("BOOT_CONSUMER_OK " + profile);
         }

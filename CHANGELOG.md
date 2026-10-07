@@ -32,6 +32,12 @@ contract.
   reports; prepare tag/POM/Changelog-validated Central publishing and recovery
   using the exact signed candidate bytes.
 
+### Fixed
+
+- Declare Micrometer Core as a runtime dependency so a minimal packaged Boot
+  consumer can start without Actuator. Metrics publishing remains opt-in;
+  Actuator and Redisson remain optional.
+
 The project is on a **single build line**: Spring Boot
 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50.0. Dual-branch
 (`master` / `boot4`) is abandoned; the current build line is `main` and Boot

@@ -46,7 +46,7 @@ for profile in minimal redisson observability; do
   if [[ "$classpath" =~ junit|mockito|testcontainers|lombok ]]; then
     echo 'Consumer classpath contains test/provided dependencies' >&2; exit 1
   fi
-  if [[ "$profile" == minimal && "$classpath" =~ redisson|actuator|micrometer-core ]]; then
+  if [[ "$profile" == minimal && "$classpath" =~ redisson|actuator ]]; then
     echo 'Minimal consumer contains optional dependencies' >&2; exit 1
   fi
   "$JAVA_HOME/bin/java" -cp "$task_dir/target/classes:$classpath" com.example.consumer.ExternalConsumerDemo
