@@ -4,6 +4,7 @@ import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
 import io.github.davidhlp.spring.cache.redis.chain.model.TtlDecision;
 import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.DoubleSupplier;
 
 /**
  * TTL 优先级的唯一实现 —— 把两个真实输入解析为 {@link TtlDecision}。
@@ -13,7 +14,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li>注解:方法级 {@link CachePolicyView#ttl()} 秒数 &gt; 0 时使用注解秒数,
  *       并按 {@code randomTtl}/{@code variance} 抖动。注解属性未设置时其值为 {@code 0},
  *       不构成声明 —— 注解是唯一能压过配置默认值的声明面;</li>
- *   <li>参数:{@link Duration} 非空、非零、非负时使用其秒数。写路径的这个 Duration
+ *   <li>参数:{@link Duration} 非空、非零、非负时向上取整到秒(饱和到 Long.MAX_VALUE)。写路径的这个 Duration
  *       由 Spring Data Redis 依 cache 级配置算出并传入({@code resi-cache.default-ttl},
  *       默认 30 分钟;{@code caches.*.ttl} 可覆盖),因此"配置的默认 TTL"是唯一的
  *       隐式默认值,只在方法级 TTL 未声明时才生效;</li>
@@ -71,7 +72,7 @@ final class TtlPolicy {
         }
         if (applicable(parameterTtl)) {
             return new Resolution(
-                    TtlDecision.applied(parameterTtl.getSeconds()), Source.PARAMETER, false);
+                    TtlDecision.applied(ceilSeconds(parameterTtl)), Source.PARAMETER, false);
         }
         return new Resolution(TtlDecision.skipped(), Source.NONE, false);
     }
@@ -81,8 +82,24 @@ final class TtlPolicy {
         return parameterTtl != null && !parameterTtl.isZero() && !parameterTtl.isNegative();
     }
 
+    /** Positive fractional seconds round up; the maximum duration saturates. */
+    private static long ceilSeconds(Duration ttl) {
+        return ttl.getNano() == 0 ? ttl.getSeconds() : saturatedAdd(ttl.getSeconds(), 1);
+    }
+
+    private static long saturatedAdd(long base, long offset) {
+        return offset > 0 && base > Long.MAX_VALUE - offset ? Long.MAX_VALUE : base + offset;
+    }
+
     /** 计算最终 TTL;randomTtl=true 时按 variance 抖动以防雪崩(仅注解路径调用)。 */
     static long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance) {
+        return calculateFinalTtl(baseTtl, randomTtl, variance,
+                () -> ThreadLocalRandom.current().nextGaussian());
+    }
+
+    /** Deterministic internal seam; the supplier is only read when jitter is enabled. */
+    static long calculateFinalTtl(Long baseTtl, boolean randomTtl, float variance,
+                                  DoubleSupplier gaussian) {
         if (baseTtl == null || baseTtl <= 0) {
             return -1;
         }
@@ -91,11 +108,11 @@ final class TtlPolicy {
         }
 
         float boundedVariance = Math.min(1.0f, Math.max(0.0f, variance));
-        double randomFactor = ThreadLocalRandom.current().nextGaussian();
+        double randomFactor = gaussian.getAsDouble();
         randomFactor = Math.max(-3.0, Math.min(3.0, randomFactor));
 
-        long offset = (long) (baseTtl * boundedVariance * randomFactor / 3.0);
-        long result = baseTtl + offset;
-        return Math.max(1, Math.min(result, baseTtl * 2));
+        long offset = (long) (baseTtl * (double) boundedVariance * randomFactor / 3.0);
+        long result = saturatedAdd(baseTtl, offset);
+        return Math.max(1, Math.min(result, saturatedAdd(baseTtl, baseTtl)));
     }
 }

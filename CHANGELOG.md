@@ -29,6 +29,15 @@ The project is on a **single build line**: Spring Boot
 
 Current milestones:
 
+- **⚠️ TTL precision and overflow fix** — positive fractional Duration TTLs now
+  round up to whole seconds instead of truncating (`500ms` → `1s`, `1500ms` →
+  `2s`). Rounding and jitter arithmetic saturate at `Long.MAX_VALUE`; large
+  TTLs no longer wrap into an incorrect one-second expiry. Annotation
+  precedence and null/zero/negative permanent-cache semantics are preserved.
+  Deterministic regression tests strengthen serialization whitelisting,
+  independent writes, disabled metrics, Bloom collisions, refresh lifecycle,
+  retries, context restoration, and local expiry. Fixes #39.
+
 - **Native annotation correctness and internal cleanup** — adapted Spring PUT
   and EVICT now use Spring's concrete operation classes and update/delete the
   cache in FULL and SELECTIVE mixed modes. A host Jackson 2 mapper takes

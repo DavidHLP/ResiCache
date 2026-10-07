@@ -82,7 +82,7 @@ class HierarchicalBloomIFilterTest {
         }
 
         @Test
-        @DisplayName("checks remote filter when local filter misses")
+        @DisplayName("local miss checks remote and warms local on remote hit")
         void mightContain_localMiss_checksRemote() {
             String cacheName = "test-cache";
             String key = "test-key";
@@ -93,6 +93,7 @@ class HierarchicalBloomIFilterTest {
 
             assertThat(result).isTrue();
             verify(remoteFilter).mightContain(cacheName, key);
+            verify(localFilter).add(cacheName, key);
         }
 
         @Test
@@ -106,34 +107,10 @@ class HierarchicalBloomIFilterTest {
             boolean result = hierarchicalFilter.mightContain(cacheName, key);
 
             assertThat(result).isFalse();
-        }
-
-        @Test
-        @DisplayName("warms local filter when remote filter hits after local miss")
-        void mightContain_remoteHitAfterLocalMiss_warmsLocal() {
-            String cacheName = "test-cache";
-            String key = "test-key";
-            when(localFilter.mightContain(cacheName, key)).thenReturn(false);
-            when(remoteFilter.mightContain(cacheName, key)).thenReturn(true);
-
-            hierarchicalFilter.mightContain(cacheName, key);
-
-            // Local filter should be warmed with the key from remote
-            verify(localFilter).add(cacheName, key);
-        }
-
-        @Test
-        @DisplayName("does not warm local filter when remote also misses")
-        void mightContain_remoteMiss_doesNotWarmLocal() {
-            String cacheName = "test-cache";
-            String key = "test-key";
-            when(localFilter.mightContain(cacheName, key)).thenReturn(false);
-            when(remoteFilter.mightContain(cacheName, key)).thenReturn(false);
-
-            hierarchicalFilter.mightContain(cacheName, key);
-
             verify(localFilter, never()).add(anyString(), anyString());
         }
+
+
     }
 
     @Nested
@@ -164,57 +141,19 @@ class HierarchicalBloomIFilterTest {
         }
     }
 
-    @Nested
-    @DisplayName("False Positive Scenario")
-    class FalsePositiveScenarioTests {
-
-        @Test
-        @DisplayName("local filter false positive causes remote check")
-        void mightContain_localFalsePositive_checksRemote() {
-            String cacheName = "test-cache";
-            String key = "test-key";
-            // Local says might contain (false positive), but remote knows for sure
-            when(localFilter.mightContain(cacheName, key)).thenReturn(true);
-
-            boolean result = hierarchicalFilter.mightContain(cacheName, key);
-
-            // Should return true from local, never checking remote
-            assertThat(result).isTrue();
-            verify(remoteFilter, never()).mightContain(anyString(), anyString());
-        }
-
-        @Test
-        @DisplayName("local miss but remote hit confirms key exists (false positive corrected)")
-        void mightContain_localMissRemoteHit_confirmsExistence() {
-            String cacheName = "test-cache";
-            String key = "test-key";
-            // Local missed (might have been evicted), remote has it
-            when(localFilter.mightContain(cacheName, key)).thenReturn(false);
-            when(remoteFilter.mightContain(cacheName, key)).thenReturn(true);
-
-            boolean result = hierarchicalFilter.mightContain(cacheName, key);
-
-            assertThat(result).isTrue();
-            // Should warm local for next time
-            verify(localFilter).add(cacheName, key);
-        }
+    @Test
+    void nullCacheName_isPassedToBothFilters() {
+        assertThat(hierarchicalFilter.mightContain(null, "key")).isFalse();
+        verify(localFilter).mightContain(null, "key");
+        verify(remoteFilter).mightContain(null, "key");
+        verify(localFilter, never()).add(null, "key");
     }
 
-    @Nested
-    @DisplayName("Edge Cases")
-    class EdgeCaseTests {
-
-        @Test
-        @DisplayName("handles null values gracefully")
-        void mightContain_nullHandling_works() {
-            String cacheName = "test-cache";
-            String key = "test-key";
-            when(localFilter.mightContain(cacheName, key)).thenReturn(false);
-            when(remoteFilter.mightContain(cacheName, key)).thenReturn(false);
-
-            boolean result = hierarchicalFilter.mightContain(cacheName, key);
-
-            assertThat(result).isFalse();
-        }
+    @Test
+    void nullKey_isPassedToBothFilters() {
+        assertThat(hierarchicalFilter.mightContain("cache", null)).isFalse();
+        verify(localFilter).mightContain("cache", null);
+        verify(remoteFilter).mightContain("cache", null);
+        verify(localFilter, never()).add("cache", null);
     }
 }

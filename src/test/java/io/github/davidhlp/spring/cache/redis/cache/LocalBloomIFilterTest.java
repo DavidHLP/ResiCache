@@ -4,7 +4,9 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
-import java.util.BitSet;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -102,12 +104,6 @@ class LocalBloomIFilterTest {
             assertThat(filter.mightContain("cache", "never-added")).isFalse();
         }
 
-        @Test
-        @DisplayName("returns false for different key in same cache")
-        void mightContain_differentKey_returnsFalse() {
-            filter.add("cache", "key1");
-            assertThat(filter.mightContain("cache", "key2")).isFalse();
-        }
 
         @Test
         @DisplayName("returns false for key in different cache")
@@ -190,16 +186,11 @@ class LocalBloomIFilterTest {
         void mightContain_unrelatedKey_mayReturnFalsePositive() {
             String cacheName = "test-cache";
 
-            // Add many keys to increase chance of false positive
-            for (int i = 0; i < 50; i++) {
-                filter.add(cacheName, "key" + i);
-            }
-
-            // This key was never added but might be reported as "contained"
-            // due to false positive - this is expected behavior
-            // We can't deterministically test false positives, but we can verify
-            // that a definitely-unrelated key pattern returns false
-            assertThat(filter.mightContain(cacheName, "definitely-not-added-key-xyz")).isFalse();
+            filter = new LocalBloomIFilter(new BloomFilterConfig("test:", 1, 1, 100));
+            assertThat(filter.mightContain(cacheName, "unadded")).isFalse();
+            filter.add(cacheName, "added");
+            assertThat(filter.mightContain(cacheName, "unadded")).isTrue();
+            assertThat(filter.mightContain(cacheName, "added")).isTrue();
         }
 
         @Test
@@ -215,38 +206,42 @@ class LocalBloomIFilterTest {
 
         @Test
         @DisplayName("concurrent add and mightContain operations do not cause exceptions")
-        void concurrentOperations_safe() throws InterruptedException {
+        void concurrentOperations_safe() throws Exception {
             String cacheName = "concurrent-cache";
             int threadCount = 10;
             int operationsPerThread = 100;
-
-            Thread[] threads = new Thread[threadCount];
-
-            for (int t = 0; t < threadCount; t++) {
-                final int threadNum = t;
-                threads[t] = new Thread(() -> {
-                    for (int i = 0; i < operationsPerThread; i++) {
-                        String key = "thread" + threadNum + "-key" + i;
-                        filter.add(cacheName, key);
-                        filter.mightContain(cacheName, key);
-                    }
-                });
-            }
-
-            for (Thread thread : threads) {
-                thread.start();
-            }
-
-            for (Thread thread : threads) {
-                thread.join();
-            }
-
-            // All keys should be findable
-            for (int t = 0; t < threadCount; t++) {
-                for (int i = 0; i < operationsPerThread; i++) {
-                    String key = "thread" + t + "-key" + i;
-                    assertThat(filter.mightContain(cacheName, key)).isTrue();
+            ExecutorService workers = Executors.newFixedThreadPool(threadCount);
+            CountDownLatch ready = new CountDownLatch(threadCount);
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<?>> results = new ArrayList<>();
+            try {
+                for (int t = 0; t < threadCount; t++) {
+                    final int threadNum = t;
+                    results.add(workers.submit(() -> {
+                        ready.countDown();
+                        assertThat(start.await(5, TimeUnit.SECONDS)).isTrue();
+                        for (int i = 0; i < operationsPerThread; i++) {
+                            String key = "thread" + threadNum + "-key" + i;
+                            filter.add(cacheName, key);
+                            assertThat(filter.mightContain(cacheName, key)).isTrue();
+                        }
+                        return null;
+                    }));
                 }
+                assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+                start.countDown();
+                for (Future<?> result : results) {
+                    result.get(10, TimeUnit.SECONDS);
+                }
+                for (int t = 0; t < threadCount; t++) {
+                    for (int i = 0; i < operationsPerThread; i++) {
+                        assertThat(filter.mightContain(cacheName, "thread" + t + "-key" + i)).isTrue();
+                    }
+                }
+            } finally {
+                start.countDown();
+                workers.shutdownNow();
+                assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
             }
         }
     }

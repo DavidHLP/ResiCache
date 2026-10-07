@@ -135,12 +135,20 @@ final class CachedValue {
      */
     @JsonIgnore
     public boolean checkExpired() {
-        return Expiry.isExpired(expired, ttl, startNanoTime, createdTime);
+        return checkExpired(System.nanoTime(), System.currentTimeMillis());
     }
 
     @JsonIgnore
     public long getRemainingTtl() {
-        return Expiry.remainingSeconds(ttl, startNanoTime, createdTime);
+        return getRemainingTtl(System.nanoTime(), System.currentTimeMillis());
+    }
+
+    boolean checkExpired(long nowNanos, long nowMillis) {
+        return Expiry.isExpired(expired, ttl, startNanoTime, createdTime, nowNanos, nowMillis);
+    }
+
+    long getRemainingTtl(long nowNanos, long nowMillis) {
+        return Expiry.remainingSeconds(ttl, startNanoTime, createdTime, nowNanos, nowMillis);
     }
 
     @JsonIgnore
@@ -161,24 +169,24 @@ final class CachedValue {
 
         /** 是否已过期：显式标记优先，其次按双时钟计算已过时间是否达到 ttl */
         static boolean isExpired(boolean expired, long ttlSeconds,
-                                 long startNanoTime, long createdTimeMillis) {
+                                 long startNanoTime, long createdTimeMillis, long nowNanos, long nowMillis) {
             if (expired) {
                 return true;
             }
             if (ttlSeconds <= 0) {
                 return false;
             }
-            return elapsedMillis(startNanoTime, createdTimeMillis)
+            return elapsedMillis(startNanoTime, createdTimeMillis, nowNanos, nowMillis)
                     >= java.util.concurrent.TimeUnit.SECONDS.toMillis(ttlSeconds);
         }
 
         /** 剩余 TTL（秒）；ttl<=0 返回 -1 表示永不过期 */
-        static long remainingSeconds(long ttlSeconds, long startNanoTime, long createdTimeMillis) {
+        static long remainingSeconds(long ttlSeconds, long startNanoTime, long createdTimeMillis, long nowNanos, long nowMillis) {
             if (ttlSeconds <= 0) {
                 return -1;
             }
             long remainingMs = java.util.concurrent.TimeUnit.SECONDS.toMillis(ttlSeconds)
-                    - elapsedMillis(startNanoTime, createdTimeMillis);
+                    - elapsedMillis(startNanoTime, createdTimeMillis, nowNanos, nowMillis);
             return Math.max(0, remainingMs / 1000);
         }
 
@@ -188,11 +196,11 @@ final class CachedValue {
         }
 
         /** 双时钟统一：单调时钟优先，否则降级 wall-clock */
-        private static long elapsedMillis(long startNanoTime, long createdTimeMillis) {
+        private static long elapsedMillis(long startNanoTime, long createdTimeMillis, long nowNanos, long nowMillis) {
             if (startNanoTime > 0) {
-                return (System.nanoTime() - startNanoTime) / 1_000_000;
+                return (nowNanos - startNanoTime) / 1_000_000;
             }
-            return System.currentTimeMillis() - createdTimeMillis;
+            return nowMillis - createdTimeMillis;
         }
     }
 }

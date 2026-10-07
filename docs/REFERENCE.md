@@ -93,6 +93,11 @@ Effective TTL resolves once, in package-private `TtlPolicy` (`cache/`; see
    `persistent()`, i.e. `Duration.ZERO`, and `entryTtl` rejects `null` — a
    cache configured without expiry therefore produces a zero parameter.
 
+Positive Duration parameters round up to whole seconds (`1ns` and `500ms`
+become `1s`; `1500ms` becomes `2s`). Rounding, jitter addition, and the
+twice-base jitter upper bound saturate at `Long.MAX_VALUE` seconds; jitter
+never reduces a positive TTL below one second.
+
 The `ttl` attribute no longer carries an implicit `60`-second default. An
 annotated method that does not set `ttl` now expires its entries after the
 configured default rather than after `60s`; the change and the migration

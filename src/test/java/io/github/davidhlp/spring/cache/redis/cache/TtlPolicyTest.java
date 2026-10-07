@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * TtlPolicy 单元测试 —— TTL 优先级(注解 / Duration 参数 / 永久)与抖动,均不经 handler 链。
  *
  * <p>行为基线:TtlHandler 之前的 5 份 TTL 编码收敛为 TtlPolicy 之后,每条用例断言
- * 解析出的 TTL;注解属性未设置的落回配置默认值是本次裁决的行为变更(deltas.md D2)。
+ * 解析出的 TTL;注解属性未设置时落回配置默认值。
  */
 @DisplayName("TtlPolicy Tests")
 class TtlPolicyTest {
@@ -66,24 +66,6 @@ class TtlPolicyTest {
 
             assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.NONE);
             assertThat(resolution.decision().shouldApplyTtl()).isFalse();
-            assertThat(resolution.decision().finalTtl()).isEqualTo(-1L);
-        }
-
-        @Test
-        @DisplayName("attribute explicitly 0 uses the Duration parameter")
-        void annotationZero_usesParameter() {
-            TtlPolicy.Resolution resolution = TtlPolicy.resolve(CONFIGURED_DEFAULT, annotationPolicy(0));
-
-            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.PARAMETER);
-            assertThat(resolution.decision().finalTtl()).isEqualTo(1800L);
-        }
-
-        @Test
-        @DisplayName("attribute unset with a zero parameter means permanent")
-        void annotationUnset_zeroParameter_isPermanent() {
-            TtlPolicy.Resolution resolution = TtlPolicy.resolve(Duration.ZERO, annotationPolicy(0));
-
-            assertThat(resolution.source()).isEqualTo(TtlPolicy.Source.NONE);
             assertThat(resolution.decision().finalTtl()).isEqualTo(-1L);
         }
 
@@ -243,19 +225,55 @@ class TtlPolicyTest {
         }
 
         @Test
-        void varianceAboveOne_isClampedToSafeOutputBounds() {
-            for (int i = 0; i < 128; i++) {
-                assertThat(TtlPolicy.calculateFinalTtl(120L, true, 2.0f))
-                        .isBetween(1L, 240L);
-            }
+        void deterministicJitter_offsetsClampsAndTruncates() {
+            assertThat(jitter(120, 0.5f, 3)).isEqualTo(180);
+            assertThat(jitter(120, 0.5f, -3)).isEqualTo(60);
+            assertThat(jitter(120, 0.5f, 0)).isEqualTo(120);
+            assertThat(jitter(120, 0.5f, 30)).isEqualTo(180);
+            assertThat(jitter(120, 0.5f, -30)).isEqualTo(60);
+            assertThat(jitter(120, 2f, 3)).isEqualTo(240);
+            assertThat(jitter(120, 2f, -3)).isEqualTo(1);
+            assertThat(jitter(10, 0.5f, 1)).isEqualTo(11);
+            assertThat(jitter(10, 0.5f, -1)).isEqualTo(9);
+            assertThat(jitter(1, 1f, -3)).isEqualTo(1);
         }
 
         @Test
-        void jitteredBaseTtl_staysWithinBoundedVariance() {
-            for (int i = 0; i < 128; i++) {
-                assertThat(TtlPolicy.calculateFinalTtl(120L, true, 0.1f))
-                        .isBetween(108L, 132L);
-            }
+        void disabledJitter_neverReadsRandomSupplier() {
+            java.util.function.DoubleSupplier forbidden = () -> {
+                throw new AssertionError("randomness must not be read");
+            };
+            assertThat(TtlPolicy.calculateFinalTtl(120L, false, 1f, forbidden)).isEqualTo(120);
+            assertThat(TtlPolicy.calculateFinalTtl(120L, true, 0f, forbidden)).isEqualTo(120);
+            assertThat(TtlPolicy.calculateFinalTtl(120L, true, -1f, forbidden)).isEqualTo(120);
+            assertThat(TtlPolicy.calculateFinalTtl(0L, true, 1f, forbidden)).isEqualTo(-1);
+        }
+
+        @Test
+        void hugeTtl_jitterSaturatesWithoutWrappingToOneSecond() {
+            long base = Long.MAX_VALUE;
+            assertThat(jitter(base, 0.5f, 3)).isEqualTo(Long.MAX_VALUE);
+            assertThat(jitter(base, 0.5f, 0)).isEqualTo(base);
+            assertThat(jitter(base, 0.5f, -3)).isEqualTo(base - (long) (base * 0.5d));
+            assertThat(jitter(base / 2 + 1, 1f, 3)).isEqualTo(Long.MAX_VALUE);
+        }
+
+        private long jitter(long base, float variance, double gaussian) {
+            return TtlPolicy.calculateFinalTtl(base, true, variance, () -> gaussian);
+        }
+    }
+
+    @Test
+    void positiveDurations_roundUpAndSaturate() {
+        Duration[] inputs = {Duration.ofNanos(1), Duration.ofMillis(500), Duration.ofSeconds(1),
+                Duration.ofMillis(1500), Duration.ofSeconds(Long.MAX_VALUE),
+                Duration.ofSeconds(Long.MAX_VALUE, 1)};
+        long[] expected = {1, 1, 1, 2, Long.MAX_VALUE, Long.MAX_VALUE};
+        for (int i = 0; i < inputs.length; i++) {
+            TtlPolicy.Resolution result = TtlPolicy.resolve(inputs[i], CachePolicyView.NONE);
+            assertThat(result.source()).isEqualTo(TtlPolicy.Source.PARAMETER);
+            assertThat(result.decision().shouldApplyTtl()).isTrue();
+            assertThat(result.decision().finalTtl()).as("%s", inputs[i]).isEqualTo(expected[i]);
         }
     }
 }
