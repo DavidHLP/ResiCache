@@ -1,0 +1,130 @@
+name: Reusable Verification
+on:
+  workflow_call:
+    inputs:
+      allow-docs-only:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - id: classify
+        env:
+          ALLOW_DOCS: ${{ inputs.allow-docs-only }}
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$ALLOW_DOCS" == true && "$EVENT" == pull_request ]]; then
+            python3 scripts/ci/pipeline.py classify "$BASE" "$HEAD" >> "$GITHUB_OUTPUT"
+          else
+            echo 'docs_only=false' >> "$GITHUB_OUTPUT"
+          fi
+  workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - run: bash scripts/ci/check-workflows.sh
+  docs:
+    uses: ./.github/workflows/_docs.yml
+  lint:
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'false'
+    uses: ./.github/workflows/_lint.yml
+  unit:
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-jdk-21
+      - run: ./mvnw -Punit clean test -B
+        env:
+          DOCKER_HOST: unix:///nonexistent.sock
+      - run: python3 scripts/ci/pipeline.py reports --unit
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: unit-test-results
+          path: target/surefire-reports/
+          retention-days: 7
+  build:
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'false'
+    uses: ./.github/workflows/_build.yml
+  consumer:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-jdk-21
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: core-candidate
+          path: candidate
+      - run: bash scripts/ci/check-external-consumer.sh candidate
+  bench:
+    needs: build
+    uses: ./.github/workflows/_bench.yml
+  security:
+    needs: [changes, build]
+    if: needs.changes.outputs.docs_only == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-jdk-21
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: core-candidate
+          path: candidate
+      - name: Dependency Review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+      - name: Resolved core and benchmark dependency evidence
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: python3 scripts/ci/dependencies.py --base "$BASE" --event "$EVENT" --candidate candidate --output target/dependencies
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: dependency-evidence
+          path: target/dependencies/
+          retention-days: 14
+  verification-ok:
+    name: Verification gate
+    needs: [changes, workflow, docs, lint, unit, build, consumer, bench, security]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+          EXPECTED_JOBS: changes workflow docs lint unit build consumer bench security
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          if [[ "$DOCS_ONLY" == true ]]; then
+            export ALLOWED_SKIPS='lint unit build consumer bench security'
+          elif [[ "$DOCS_ONLY" != false ]]; then
+            echo 'Missing change classification' >&2; exit 1
+          fi
+          bash scripts/ci/require-all-green.sh

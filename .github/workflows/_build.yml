@@ -1,60 +1,36 @@
-name: "Reusable · Build & Test"
-
+name: Reusable Build
 on:
   workflow_call:
-
 permissions:
   contents: read
-
 jobs:
   build-test:
-    name: Build & Verify (Java 21)
+    name: Build and Verify (Java 21)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK 21
-        uses: ./.github/actions/setup-jdk-21
-      - name: Validate integration-test naming
-        run: bash ./scripts/ci/check-test-names.sh
-
-      - name: Verify Core (Unit & Integration Tests, JaCoCo Gate)
-        run: ./mvnw clean verify -B
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-jdk-21
+      - name: Require working Docker
+        run: docker info
+      - run: bash scripts/ci/check-test-names.sh
+      - name: Full tests, Javadoc and coverage
+        run: ./mvnw clean verify -Dtestcontainers.ryuk.disabled=false -B
         env:
           MAVEN_OPTS: '-Xmx1024m -XX:+UseParallelGC'
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v7
+      - run: python3 scripts/ci/pipeline.py reports
+      - run: python3 scripts/ci/pipeline.py candidate target/ci-candidate
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: surefire-test-results
-          path: target/surefire-reports/
-          retention-days: 7
-
-      - name: Upload JaCoCo Coverage Report
+          name: core-candidate
+          path: target/ci-candidate/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
-        uses: actions/upload-artifact@v7
         with:
-          name: jacoco-coverage-report
-          path: target/site/jacoco/
-          retention-days: 7
-
-  unit-test:
-    name: Unit Tests (no Docker)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK 21
-        uses: ./.github/actions/setup-jdk-21
-
-      - name: Run unit tests without Docker
-        run: ./mvnw -Punit test -B
-        env:
-          DOCKER_HOST: unix:///nonexistent.sock
+          name: full-test-results
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/
+          retention-days: 14

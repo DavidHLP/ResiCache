@@ -94,17 +94,57 @@ rollback strategy and is not required by the documented migration flow.
 
 ## Release and publication boundary
 
-The root POM is versioned independently from the benchmark POM. A `vX.Y.Z` tag
-enters the release workflow, which validates SemVer, runs lint/docs/build gates,
-updates the POM version in the workflow workspace, deploys with repository
-credentials, and creates a GitHub release. Release credentials are configured
-out of band; contributors must not add secrets to `release.yml`.
+The root POM and benchmark artifact are independently versioned; the benchmark's
+`resicache.version` tracks the core. Update the core version, benchmark reference
+and versioned Changelog entry through a PR before pushing `vX.Y.Z[-prerelease]`.
+Tag and POM must match, the tagged commit must belong to main history, and Maven
+Central coordinates must be unused. Numeric version/prerelease identifiers cannot
+have leading zeroes; build metadata (`+...`) is not part of this project's tag
+format. Any prerelease suffix produces a prerelease GitHub Release. The current
+`0.0.2` coordinates already identify the old Boot 3 / Java 17 artifact and cannot
+be reused for this build line.
 
-The current Boot 4 / Java 21 line is source-first and has no matching Maven
-Central artifact in the repository's compatibility evidence. A local
-`./mvnw install` is a consumer-development step, not a publication or release
-claim. Same-line publication/signing and adopter evidence remain deferred in
-the local task ledger.
+The release workflow runs the shared full verification, packaged consumers and
+benchmark smoke, then signs the exact verified candidate bytes in an isolated
+GPG home. It uploads a Maven-layout bundle through the Central Portal Publisher
+API with automatic publication and polls for at most 30 minutes. Only PUBLISHED
+permits GitHub Release creation; validation, timeout or unknown states fail.
+Public repository bytes must also match the candidate checksums before Release
+creation. The Release includes artifacts, signatures, checksums, the commit/run manifest
+and Central publication record. An upload timeout is not automatically retried:
+the server may already have accepted it.
+
+The `maven-central` environment is restricted to version tags. Configure
+`CENTRAL_USERNAME` / `CENTRAL_PASSWORD` using a Portal user token,
+`GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` as secrets and `GPG_FINGERPRINT` as an
+environment variable. Credentials and signing-key material never enter candidate
+or publication artifacts. Old OSSRH credentials must not be assumed valid.
+Local Maven publication uses the explicit `release` profile: signing binds to
+verify, and the Central plugin automatically publishes and waits for completion.
+Ordinary builds do not load release/signing plugins.
+
+To recover a failed publication/Release run, dispatch `release.yml` **on the
+original tag ref**, with `candidate-run-id` pointing to the original tag run
+and its saved `deployment-id`. The original Verification gate must have passed;
+the candidate commit, version, run and publication record must match. Recovery
+never uploads again: it polls the original deployment and creates/completes the
+GitHub Release only after PUBLISHED. Download the `release-publication` artifact
+for `publication.json`; it is retained even on failure for 90 days, while the
+raw candidate is retained for 30 days. Preserve both externally if longer
+recovery is needed. If an upload response was lost before an ID was recorded,
+locate the uniquely named deployment in the Portal; do not blindly rerun upload.
+
+Main requires PRs and the GitHub Actions `ci-ok` check against an up-to-date
+branch, and disallows force pushes/deletion. The single-maintainer configuration
+does not require another person's approval. Secret scanning and push protection
+remain enabled; Dependabot alerts and security updates complement CI scans.
+Workflow files describe intended checks; remote branch/environment settings
+must also be verified when configuring the repository.
+
+The Boot 4 / Java 21 line remains source-first until a matching Central artifact
+is actually published and verified. A local install, candidate bundle or green
+CI run is not a publication claim. Public publication is triggered separately
+by a maintainer's new version tag after configuring namespace/signing access.
 
 ## Backup, restore, and hosted-service limits
 

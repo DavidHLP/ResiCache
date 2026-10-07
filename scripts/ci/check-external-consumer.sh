@@ -1,141 +1,54 @@
 #!/usr/bin/env bash
-# RM-010 external consumer gate — prove the public contract from the PACKAGED JAR.
-#
-# 1. ./mvnw -DskipTests package -B (rebuilds target/ResiCache-<version>.jar)
-# 2. Compiles a minimal consumer in an ISOLATED temp directory using ONLY the
-#    packaged JAR + declared compile-scope dependencies (no target/classes,
-#    no test-classes, no source paths, no same-package access).
-# 3. Runs the consumer's pure-value protocol demo (no Spring context, no Redis —
-#    compile-plus-value-path proof only; real Redis behavior is NOT claimed here).
+# Resolve the packaged POM as an ordinary consumer; no project/test classpath.
 set -euo pipefail
-JH="${RESICACHE_JDK21:-$HOME/.local/share/mise/installs/java/temurin-21.0.12+101.0.LTS}"
-export JAVA_HOME="$JH"
-MVNW="./mvnw"
-
-echo "== 1) packaging =="
-"$MVNW" -q -DskipTests package -B
-JAR=$(ls target/ResiCache-*.jar | grep -v -- '-sources' | grep -v -- '-javadoc' | head -1)
-echo "JAR: $JAR"
-echo "JAR sha256: $(sha256sum "$JAR")"
-
-echo "== 2) declared compile classpath (dependency:build-classpath) =="
-CP_FILE=$(mktemp)
-"$MVNW" -q dependency:build-classpath -Dmdep.outputFile="$CP_FILE" -B
-DECLARED_CP=$(cat "$CP_FILE")
-
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/src/com/example/consumer"
-
-cat > "$TMP/src/com/example/consumer/ExternalConsumerDemo.java" <<'EOF'
-package com.example.consumer;
-
-import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
-import io.github.davidhlp.spring.cache.redis.chain.CacheHandler;
-import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
-import io.github.davidhlp.spring.cache.redis.chain.ChainContinuation;
-import io.github.davidhlp.spring.cache.redis.chain.CacheResult;
-import io.github.davidhlp.spring.cache.redis.chain.FlowControl;
-import io.github.davidhlp.spring.cache.redis.chain.HandlerOrder;
-import io.github.davidhlp.spring.cache.redis.chain.HandlerPriority;
-import io.github.davidhlp.spring.cache.redis.chain.HandlerResult;
-import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
-import io.github.davidhlp.spring.cache.redis.chain.model.CachePolicyView;
-import io.github.davidhlp.spring.cache.redis.chain.observer.ChainObserver;
-
-/**
- * External consumer sample (RM-010) — annotation surface + one supported
- * extension seam, using ONLY classified public contract types.
- */
-public class ExternalConsumerDemo {
-
-    @RedisCacheable(value = "demo", key = "#id", ttl = 60)
-    public String load(String id) {
-        return "value-" + id;
-    }
-
-    /** Supported extension: a custom CacheHandler. */
-    @HandlerPriority(HandlerOrder.TTL)
-    static class DemoHandler implements CacheHandler {
-        @Override
-        public HandlerResult handle(CacheContext context) {
-            return HandlerResult.continueWith(CacheResult.miss());
-        }
-    }
-
-    /**
-     * Supported extension: nested advancement. The engine hands this handler a
-     * ChainContinuation bound to its position, so it can run the remainder of the
-     * chain inside its own critical section (this is what sync=true does inside
-     * the distributed lock) and then end the chain.
-     */
-    static class SyncLikeHandler implements CacheHandler {
-
-        @Override
-        public HandlerResult handle(CacheContext context) {
-            throw new AssertionError("engine must call the 2-arg form");
-        }
-
-        @Override
-        public HandlerResult handle(CacheContext context, ChainContinuation next) {
-            return HandlerResult.terminate(next.advance());
-        }
-    }
-
-    /** Supported extension: a custom ChainObserver with scope token. */
-    static class DemoObserver implements ChainObserver {
-        @Override
-        public Object onChainStart(CacheContext context) {
-            return "demo-token";
-        }
-
-        @Override
-        public void onChainEnd(CacheContext context, Object scopeToken, CacheResult result) {
-            // token is the same reference returned by this observer's onChainStart
-        }
-    }
-
-    public static void main(String[] args) {
-        // Value-path protocol demo (no Spring, no Redis):
-        CacheResult hit = CacheResult.success("bytes".getBytes());
-        if (!hit.isSuccess() || hit.outcome() != CacheResult.Outcome.SUCCESS) {
-            throw new AssertionError("success contract broken");
-        }
-        CacheResult failure = CacheResult.failure(
-                CacheOperation.PUT, CacheResult.FailureKind.REDIS, new IllegalStateException("x"));
-        if (failure.isSuccess() || failure.operation() != CacheOperation.PUT) {
-            throw new AssertionError("failure contract broken");
-        }
-        HandlerResult r = HandlerResult.terminate(hit);
-        if (r.decision() != FlowControl.TERMINATE || !r.shouldTerminate()) {
-            throw new AssertionError("flow control contract broken");
-        }
-        DemoHandler handler = new DemoHandler();
-        DemoObserver observer = new DemoObserver();
-        if (observer.onChainStart(null) != "demo-token") {
-            throw new AssertionError("observer token contract broken");
-        }
-        if (handler.handle(null).decision() != FlowControl.CONTINUE) {
-            throw new AssertionError("handler contract broken");
-        }
-        ChainContinuation next = () -> CacheResult.success();
-        if (new SyncLikeHandler().handle(null, next).decision() != FlowControl.TERMINATE) {
-            throw new AssertionError("nested advancement contract broken");
-        }
-        if (CachePolicyView.NONE.useBloomFilter()) {
-            throw new AssertionError("policy view default contract broken");
-        }
-        System.out.println("EXTERNAL_CONSUMER_OK");
-    }
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$root"
+if [[ -n "${RESICACHE_JDK21:-}" ]]; then
+  export JAVA_HOME="$RESICACHE_JDK21"
+fi
+if [[ ! -d "${1:-target/ci-candidate}" ]]; then
+  ./mvnw clean package -DskipTests -B
+  python3 scripts/ci/pipeline.py candidate target/ci-candidate
+fi
+candidate="$(realpath "${1:-target/ci-candidate}")"
+python3 scripts/ci/pipeline.py verify-candidate "$candidate"
+boot_version="$(python3 -c 'import xml.etree.ElementTree as E; print(E.parse("pom.xml").findtext("{*}parent/{*}version"))')"
+redisson_version="$(python3 -c 'import xml.etree.ElementTree as E; print(E.parse("pom.xml").findtext("{*}properties/{*}redisson.version"))')"
+version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$candidate/manifest.json")"
+task_dir="$(mktemp -d)"
+container_id=""
+cleanup() {
+  if [[ -n "$container_id" ]]; then docker rm -f "$container_id" >/dev/null; fi
+  rm -rf "$task_dir"
 }
-EOF
-
-
-echo "== 3) compiling consumer against packaged JAR only =="
-mkdir -p "$TMP/classes"
-"$JH/bin/javac" -cp "$JAR:$DECLARED_CP" -d "$TMP/classes" "$TMP/src/com/example/consumer/ExternalConsumerDemo.java"
-echo "consumer imports (compile resolved against JAR + declared deps only): CacheHandler, ChainContinuation, ChainObserver, CacheResult(+Outcome/FailureKind), HandlerResult, FlowControl, HandlerOrder, HandlerPriority, CacheContext, CachePolicyView, @RedisCacheable"
-
-echo "== 4) running consumer =="
-"$JH/bin/java" -cp "$TMP/classes:$JAR:$DECLARED_CP" com.example.consumer.ExternalConsumerDemo
-echo "RM-010 PASS: external consumer compiled from packaged JAR and ran"
+trap cleanup EXIT
+cp -R scripts/ci/consumer/. "$task_dir/"
+python3 - "$task_dir/pom.xml" "$boot_version" <<'PYGEN'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace('@BOOT_VERSION@', sys.argv[2]))
+PYGEN
+./mvnw org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file \
+  -Dfile="$candidate/ResiCache-$version.jar" -DpomFile="$candidate/ResiCache-$version.pom" -B
+if [[ "${CONSUMER_REDIS_PORT:-}" == "" ]]; then
+  docker info >/dev/null
+  container_id="$(docker run -d --rm -p 127.0.0.1::6379 redis:7-alpine)"
+  redis_port="$(docker port "$container_id" 6379/tcp | sed 's/.*://')"
+else
+  redis_port="$CONSUMER_REDIS_PORT"
+fi
+for profile in minimal redisson observability; do
+  ./mvnw -f "$task_dir/pom.xml" -P"$profile" -Dresicache.version="$version" -Dredisson.version="$redisson_version" \
+    clean package dependency:build-classpath -Dmdep.includeScope=runtime \
+    -Dmdep.outputFile="$task_dir/classpath" -B
+  classpath="$(cat "$task_dir/classpath")"
+  if [[ "$classpath" =~ junit|mockito|testcontainers|lombok ]]; then
+    echo 'Consumer classpath contains test/provided dependencies' >&2; exit 1
+  fi
+  if [[ "$profile" == minimal && "$classpath" =~ redisson|actuator|micrometer-core ]]; then
+    echo 'Minimal consumer contains optional dependencies' >&2; exit 1
+  fi
+  "$JAVA_HOME/bin/java" -cp "$task_dir/target/classes:$classpath" com.example.consumer.ExternalConsumerDemo
+  "$JAVA_HOME/bin/java" -cp "$task_dir/target/classes:$classpath" com.example.consumer.BootConsumer "$profile" "$redis_port"
+done

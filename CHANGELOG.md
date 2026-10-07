@@ -22,6 +22,16 @@ contract.
 
 ## [Unreleased] — current development
 
+### CI/CD
+
+- Share verification across PR/main/merge-group/manual/release workflows; fail
+  closed on malformed job results or missing/skipped integration evidence.
+- Reuse verified artifacts for packaged Boot consumers and benchmark smoke;
+  add real Sentinel and TLS client smoke tests without changing runtime APIs.
+- Add pinned workflow tooling, dependency differential checks and weekly security
+  reports; prepare tag/POM/Changelog-validated Central publishing and recovery
+  using the exact signed candidate bytes.
+
 The project is on a **single build line**: Spring Boot
 4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50.0. Dual-branch
 (`master` / `boot4`) is abandoned; the current build line is `main` and Boot

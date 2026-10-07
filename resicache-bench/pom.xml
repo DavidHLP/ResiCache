@@ -23,6 +23,7 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <resicache.version>0.0.2</resicache.version>
         <jmh.version>1.37</jmh.version>
         <spring-boot.version>4.0.0</spring-boot.version>
         <redisson.version>3.50.0</redisson.version>
@@ -37,7 +38,7 @@
         <dependency>
             <groupId>io.github.davidhlp</groupId>
             <artifactId>ResiCache</artifactId>
-            <version>0.0.2</version>
+            <version>${resicache.version}</version>
         </dependency>
 
         <!-- ── JMH runtime ── -->

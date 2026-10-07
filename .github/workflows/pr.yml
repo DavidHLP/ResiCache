@@ -1,125 +1,30 @@
 name: PR Pipeline
-
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [main, master]
-
-concurrency:
-  group: pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
 permissions:
   contents: read
-
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
-  # =========================================================================
-  # Change Detection
-  # =========================================================================
-  changes:
-    name: "Detect Changes"
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      product: ${{ steps.filter.outputs.product }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Evaluate Changed Files
-        id: filter
-        run: |
-          target="origin/${{ github.base_ref }}"
-          echo "Comparing HEAD against $target"
-          changed=$(git diff --name-only "$target"...HEAD || true)
-          echo "Changed files:"
-          echo "$changed"
-
-          if echo "$changed" | grep -qE '^(src/|resicache-bench/|pom\.xml|\.github/|mvnw)'; then
-            echo "Product code or build configuration changed."
-            echo "product=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Only non-product files (docs/markdown) changed."
-            echo "product=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  # =========================================================================
-  # Stage 1: Fast Feedback (Lint, Docs, Quality)
-  # =========================================================================
-  lint:
-    name: "1.1 Lint"
-    uses: ./.github/workflows/_lint.yml
-
-  docs:
-    name: "1.2 Docs"
-    uses: ./.github/workflows/_docs.yml
-
-  quality:
-    name: "1.3 Quality"
-    uses: ./.github/workflows/_quality.yml
+  verify:
+    name: Verification
+    uses: ./.github/workflows/_verify.yml
     with:
-      qodana-enabled: ${{ vars.QODANA_ENABLED == 'true' }}
-    secrets:
-      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-
-  # =========================================================================
-  # Stage 2: Core Build & Integration Tests
-  # =========================================================================
-  build:
-    name: "2.1 Build"
-    needs: [lint, docs]
-    uses: ./.github/workflows/_build.yml
-
-  # =========================================================================
-  # Stage 3: Benchmark & Packaging
-  # =========================================================================
-  bench:
-    name: "3.1 Bench"
-    needs: [build]
-    uses: ./.github/workflows/_bench.yml
-
-  package:
-    name: "3.2 Package"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [changes, build]
-    if: needs.changes.outputs.product == 'true'
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK 21
-        uses: ./.github/actions/setup-jdk-21
-
-      - name: Package JAR
-        run: ./mvnw clean package -DskipTests -B
-
-      - name: Upload ResiCache Artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr-resicache-jar
-          path: target/ResiCache-*.jar
-          retention-days: 5
-
-  # =========================================================================
-  # Stage 4: Canonical Status Check Gate (Single Branch Protection Anchor)
-  # =========================================================================
+      allow-docs-only: true
   ci-ok:
-    name: "ci-ok"
+    name: ci-ok
+    needs: verify
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes, lint, docs, quality, build, bench, package]
-    if: always()
-
     steps:
-      - name: Checkout Scripts
-        uses: actions/checkout@v5
-
-      - name: Validate All Pipeline Results
-        env:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - env:
           RESULTS: ${{ toJSON(needs) }}
-        run: bash ./scripts/ci/require-all-green.sh
+          EXPECTED_JOBS: verify
+        run: bash scripts/ci/require-all-green.sh

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>@BOOT_VERSION@</version>
+    <relativePath/>
+  </parent>
+  <groupId>com.example</groupId>
+  <artifactId>resicache-consumer</artifactId>
+  <version>1.0</version>
+  <properties><java.version>21</java.version></properties>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.davidhlp</groupId><artifactId>ResiCache</artifactId>
+      <version>${resicache.version}</version>
+    </dependency>
+  </dependencies>
+  <profiles>
+    <profile><id>minimal</id></profile>
+    <profile>
+      <id>redisson</id>
+      <dependencies><dependency>
+        <groupId>org.redisson</groupId><artifactId>redisson</artifactId><version>${redisson.version}</version>
+      </dependency></dependencies>
+    </profile>
+    <profile>
+      <id>observability</id>
+      <dependencies><dependency>
+        <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId>
+      </dependency></dependencies>
+    </profile>
+  </profiles>
+</project>

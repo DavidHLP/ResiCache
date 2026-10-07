@@ -30,6 +30,7 @@ At minimum, run the checks relevant to the change:
 ./mvnw checkstyle:check -B
 bash scripts/ci/check-test-names.sh
 bash scripts/ci/check-docs-contracts.sh
+bash scripts/ci/check-workflows.sh
 ```
 
 The unit profile is a no-Docker path and excludes `**/*IntegrationTest*.java`;
