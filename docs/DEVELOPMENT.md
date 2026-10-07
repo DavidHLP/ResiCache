@@ -8,7 +8,9 @@ which command proves which boundary.
 
 - JDK 21, matching `pom.xml` and the Maven Enforcer range.
 - Maven 3.x or the bundled `./mvnw` wrapper.
-- Docker for Redis/Testcontainers integration and cluster tests.
+- Docker for Redis/Testcontainers integration, Cluster, Sentinel and TLS tests.
+- OpenSSL and JDK keytool for temporary TLS certificates; Python 3.12+ and GPG
+  for CI contract checks. Linux x86-64 is the CI runner platform.
 - A working local Maven cache; no committed credentials are required.
 
 The root build is the core library. `resicache-bench/` is a separate JMH module
@@ -26,7 +28,9 @@ by the change type.
 | `./mvnw checkstyle:check -B` | explicit Checkstyle gate; it is separate from `verify` |
 | `bash scripts/ci/check-test-names.sh` | all executable container tests use `*IntegrationTest.java` |
 | `bash scripts/ci/check-docs-contracts.sh` | stale contract strings, removed Javadoc references, and required docs guards |
-| `bash scripts/ci/check-external-consumer.sh` | packaged-JAR public contract; no Spring context or Redis claim |
+| `bash scripts/ci/check-external-consumer.sh` | isolated packaged-JAR consumer, Boot discovery, Redis read/write, optional Redisson and observability paths |
+| `bash scripts/ci/check-workflows.sh` | actionlint, ShellCheck, SHA pins and CI/release contract regression tests |
+| `python3 scripts/ci/pipeline.py reports` | full test execution evidence; rejects skipped/missing integration tests |
 | `./mvnw clean package -DskipTests -B` | packaged artifact without test execution |
 | `./mvnw javadoc:javadoc -B` | Javadoc source consistency when public API docs change |
 
@@ -47,9 +51,17 @@ failures separately from test failures.
 - Classes containing container markers must use the `*IntegrationTest.java`
   suffix, with only the explicit helper allowlist exempted by the naming script.
 - **Public-surface tests** compare the compiled package against the allowlists.
-- **External-consumer tests** compile against the packaged JAR and declared
-  compile dependencies only. They prove importability and value-path protocol,
-  not a real Redis deployment.
+- **External-consumer tests** resolve the packaged POM in a separate Maven
+  project, excluding project test/provided dependencies and optional dependencies
+  unless explicitly selected. They run the public value protocol plus a real
+  Boot application against Redis in minimal, Redisson and observability modes.
+  Use `bash scripts/ci/check-external-consumer.sh <candidate-directory>` to reuse
+  an existing verified candidate; without a candidate, the script packages it.
+  `JAVA_HOME` supplies JDK 21 (`RESICACHE_JDK21` is an optional local override).
+  `CONSUMER_REDIS_PORT` can point to an existing localhost Redis instead of Docker.
+- **Topology smoke tests** prove Sentinel master discovery and data/lock access,
+  and TLS trusted/untrusted certificate behavior in both clients. They do not
+  establish Sentinel failover availability or latency SLOs.
 
 Tests mirror the source package under `src/test/java`. Integration fixtures and
 application test resources are part of the test contract; do not change a test
@@ -78,10 +90,28 @@ follow [`CONTRIBUTING.md`](../CONTRIBUTING.md)'s PR checklist.
 
 ## CI shape
 
-Pushes to `main`/`master` and pull requests run lint, docs consistency, quality,
-core build, benchmark, and packaging jobs. The benchmark job builds the JMH
-fat JAR and runs a bounded v2 storage round-trip smoke test; it does not enforce
-throughput or latency SLOs. The docs job is a required input to
-the build job. Product packaging is conditional in the PR pipeline, but the
-core build and docs gates still run for documentation changes. Release tags
-use the separate release workflow described in [`OPERATIONS.md`](OPERATIONS.md).
+PR, main push, merge-group, manual verification, weekly verification and release
+share `_verify.yml`. Only a PR whose changed paths are all explicitly recognized
+documentation can skip lint, unit, full build, consumer, benchmark and dependency
+jobs. Wrapper configuration, CI scripts, unknown paths and classification errors
+never downgrade verification. Docs and workflow checks always run.
+
+Fast checks and full verification run concurrently. The full build uses Ryuk,
+executes every integration test, enforces 70% line / 40% branch coverage and
+creates one `core-candidate` artifact (JAR, sources, Javadoc, POM, checksums and
+commit/run manifest). Consumers and benchmarks download this artifact instead of
+rebuilding the core. The JMH storage round-trip is a bounded protocol smoke,
+not a performance SLO. `ci-ok` is the stable PR/main protection check; it fails
+on missing, malformed, failed, cancelled or unexpectedly skipped jobs.
+
+Dependency Review rejects newly introduced High/Critical vulnerabilities on
+PRs. Maven-resolved core and benchmark dependency trees are also scanned against
+OSV and compared with the PR merge base, so transitive-dependency evidence does
+not depend on privileged snapshot submission from forks. New advisories with
+unknown severity require review. Resolver/scanner failures fail the check;
+existing advisories are reported without silently treating them as fixed.
+Weekly verification, CodeQL and optional Qodana keep existing risk visible.
+Dependabot opens bounded weekly Maven/Actions update PRs; Actions are SHA-pinned.
+Reports and candidate artifacts identify their commit and run; reports are not
+compatibility guarantees. Release credentials are used only after verification,
+as described in [`OPERATIONS.md`](OPERATIONS.md).

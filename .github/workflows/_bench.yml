@@ -1,43 +1,38 @@
-name: "Reusable · Bench"
-
+name: Reusable Bench
 on:
   workflow_call:
-
 permissions:
   contents: read
-
 jobs:
   bench-module:
-    name: JMH Bench Module
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up JDK 21
-        uses: ./.github/actions/setup-jdk-21
-
-      - name: Install Core to Local Repo
-        run: ./mvnw install -DskipTests -B
-
-      - name: Build resicache-bench Fat-JAR
-        run: mvn -f resicache-bench/pom.xml clean package -DskipTests -B
-
-      - name: Smoke-test v2 serializer and storage adaptation
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-jdk-21
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: core-candidate
+          path: candidate
+      - name: Install verified core
+        run: |
+          python3 scripts/ci/pipeline.py verify-candidate candidate
+          version=$(python3 -c 'import json; print(json.load(open("candidate/manifest.json"))["version"])')
+          ./mvnw org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file -B \
+            -Dfile="candidate/ResiCache-$version.jar" -DpomFile="candidate/ResiCache-$version.pom"
+      - run: ./mvnw -f resicache-bench/pom.xml clean package -DskipTests -B
+      - name: Storage protocol smoke (no performance SLO)
         run: >-
           java -jar resicache-bench/target/resicache-bench.jar
           'CacheSerializationBenchmark.storageRoundTrip'
           -p payloadBytes=64 -wi 0 -i 1 -r 100ms -f 1 -foe true
           -jvmArgs '-Xms128m -Xmx256m'
           -rf json -rff resicache-bench/target/jmh-smoke.json
-
-      - name: Upload Benchmark Artifact
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: resicache-bench-fatjar
+          name: benchmark-smoke
           path: |
             resicache-bench/target/resicache-bench.jar
             resicache-bench/target/jmh-smoke.json
+          if-no-files-found: error
           retention-days: 7

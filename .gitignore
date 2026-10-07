@@ -58,6 +58,8 @@ target/
 build/
 dependency-reduced-pom.xml
 *.class
+__pycache__/
+*.pyc
 
 ### Maven wrapper jar(二进制, 用 .mvn/wrapper 配置即可) ###
 .mvn/wrapper/maven-wrapper.jar

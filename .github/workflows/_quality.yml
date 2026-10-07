@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  # Dependency scans and Qodana are advisory until their result aggregation is
-  # wired into the canonical blocking gate. They never represent release
+  # Scheduled dependency diagnostics and Qodana are advisory and stay outside
+  # the canonical blocking gate. They never represent release
   # compatibility or contract closure.
   dependency-analysis:
     name: "Advisory · Dependency Analysis"
@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up JDK 21
         uses: ./.github/actions/setup-jdk-21
@@ -56,11 +56,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Qodana Scan
         if: ${{ inputs.qodana-enabled && env.QODANA_TOKEN != '' }}
-        uses: JetBrains/qodana-action@v2026.2.1
+        uses: JetBrains/qodana-action@10be11607eb323a180e2b76b26c9c5cdceac3e77 # v2026.2.1
         with:
           cache-dir: .qodana/cache
           use-caches: true
@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload Qodana Report
         if: ${{ always() && inputs.qodana-enabled && env.QODANA_TOKEN != '' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: qodana-report
           path: ./qodana/report/

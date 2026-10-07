@@ -48,14 +48,17 @@ baseline.
   is maintained.
 - **Pre-1.0 caveat**: matrix coverage is best-effort until 1.0.
 
-## Optional dependencies
+## Runtime and optional dependencies
 
 | Dependency | Required? | Notes |
 |---|---|---|
 | **Redisson** | Optional | Needed for distributed-lock (`sync=true`). Without it, a
   sync operation fails fast unless `resi-cache.sync-lock.local-only=true` is
   explicitly configured. |
-| **Micrometer / Actuator** | Optional | Cache metrics require
+| **Micrometer Core** | Required | Runtime handler and metrics seams reference its
+  types even when metrics publishing is disabled. Its version is managed by the
+  Spring Boot dependency management in `pom.xml`; it does not create a registry. |
+| **Actuator / metrics registry provider** | Optional | Cache metrics require
   `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`;
   otherwise the resolved metrics seam is a no-op adapter.
   `RedisCacheHealthIndicator` requires Actuator and the `HealthIndicator`

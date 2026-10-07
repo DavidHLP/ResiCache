@@ -8,9 +8,15 @@
 
 # Critical resilience machinery — ordering, control flow, protection logic
 /src/main/java/io/github/davidhlp/spring/cache/redis/chain/       @davidhlp
-/src/main/java/io/github/davidhlp/spring/cache/redis/protection/  @davidhlp
+/src/main/java/io/github/davidhlp/spring/cache/redis/cache/       @davidhlp
 
 # Auto-configuration wiring + security-sensitive serialization
 /src/main/java/io/github/davidhlp/spring/cache/redis/config/          @davidhlp
 /src/main/java/io/github/davidhlp/spring/cache/redis/serialization/   @davidhlp
 /src/main/resources/META-INF/spring/                                  @davidhlp
+
+# CI, release and build contracts
+/.github/         @davidhlp
+/scripts/ci/      @davidhlp
+/pom.xml          @davidhlp
+/.mvn/            @davidhlp

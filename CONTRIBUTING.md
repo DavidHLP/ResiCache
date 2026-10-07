@@ -30,6 +30,7 @@ At minimum, run the checks relevant to the change:
 ./mvnw checkstyle:check -B
 bash scripts/ci/check-test-names.sh
 bash scripts/ci/check-docs-contracts.sh
+bash scripts/ci/check-workflows.sh
 ```
 
 The unit profile is a no-Docker path and excludes `**/*IntegrationTest*.java`;
@@ -100,13 +101,13 @@ SLA and no pinned production-adopter guarantee.
 
 ## Releases and CI infrastructure
 
-CI runs on pushes to `main` or `master` and on pull requests through
+CI runs on pushes to `main`, manual dispatch and pull requests/merge groups through
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
 [`.github/workflows/pr.yml`](.github/workflows/pr.yml). The composite
 [setup-jdk-21 action](.github/actions/setup-jdk-21/action.yml) centralizes JDK
 and Maven cache setup; `pom.xml` remains the Java-version source of truth.
 
-Release-time `OSSRH_*` and `GPG_*` secrets are configured at repository or
-environment level out of band. Do not edit `release.yml` to add secrets; open
-an issue first. Release behavior and the current publication boundary are in
+Release-time `CENTRAL_*` and `GPG_*` secrets are configured in the
+`maven-central` environment out of band; `GPG_FINGERPRINT` is an environment
+variable. Never commit credentials. Release behavior and the current publication boundary are in
 [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
