@@ -94,9 +94,16 @@ Effective TTL resolves once, in package-private `TtlPolicy` (`cache/`; see
    cache configured without expiry therefore produces a zero parameter.
 
 Positive Duration parameters round up to whole seconds (`1ns` and `500ms`
-become `1s`; `1500ms` becomes `2s`). Rounding, jitter addition, and the
-twice-base jitter upper bound saturate at `Long.MAX_VALUE` seconds; jitter
-never reduces a positive TTL below one second.
+become `1s`; `1500ms` becomes `2s`). The final TTL from annotation seconds,
+Duration parameters, or jitter saturates at `Long.MAX_VALUE / 2000` seconds
+(`4,611,686,018,427,387s`); jitter never reduces a positive TTL below one second.
+Jitter arithmetic uses overflow-safe addition before applying this final cap.
+The cap reserves half the signed millisecond range for Redis's epoch clock:
+Spring's Duration-to-millisecond conversion and Redis's relative-to-absolute
+expiry addition remain representable while the Redis clock is nonnegative and
+at most `Long.MAX_VALUE / 2` milliseconds since the epoch (about 146 million
+years). This is a conservative supported limit, not Redis's clock-dependent
+maximum. Stored `CachedValue.ttl` and the Redis write use the same capped value.
 
 The `ttl` attribute no longer carries an implicit `60`-second default. An
 annotated method that does not set `ttl` now expires its entries after the

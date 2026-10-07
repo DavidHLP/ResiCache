@@ -31,8 +31,11 @@ Current milestones:
 
 - **⚠️ TTL precision and overflow fix** — positive fractional Duration TTLs now
   round up to whole seconds instead of truncating (`500ms` → `1s`, `1500ms` →
-  `2s`). Rounding and jitter arithmetic saturate at `Long.MAX_VALUE`; large
-  TTLs no longer wrap into an incorrect one-second expiry. Annotation
+  `2s`). Final annotation, parameter and jitter TTLs saturate at
+  `Long.MAX_VALUE / 2000` seconds, reserving signed millisecond headroom for
+  Redis's epoch clock as documented in the reference. Jitter arithmetic is
+  overflow-safe; large TTLs no longer wrap into a one-second expiry or fail
+  Spring's Duration-to-millisecond conversion. Annotation
   precedence and null/zero/negative permanent-cache semantics are preserved.
   Deterministic regression tests strengthen serialization whitelisting,
   independent writes, disabled metrics, Bloom collisions, refresh lifecycle,

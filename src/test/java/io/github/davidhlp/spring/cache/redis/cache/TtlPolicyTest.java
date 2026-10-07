@@ -252,10 +252,13 @@ class TtlPolicyTest {
         @Test
         void hugeTtl_jitterSaturatesWithoutWrappingToOneSecond() {
             long base = Long.MAX_VALUE;
-            assertThat(jitter(base, 0.5f, 3)).isEqualTo(Long.MAX_VALUE);
-            assertThat(jitter(base, 0.5f, 0)).isEqualTo(base);
-            assertThat(jitter(base, 0.5f, -3)).isEqualTo(base - (long) (base * 0.5d));
-            assertThat(jitter(base / 2 + 1, 1f, 3)).isEqualTo(Long.MAX_VALUE);
+            assertThat(jitter(base, 0.5f, 3)).isEqualTo(TtlPolicy.MAX_TTL_SECONDS);
+            assertThat(jitter(base, 0.5f, 0)).isEqualTo(TtlPolicy.MAX_TTL_SECONDS);
+            assertThat(jitter(base, 0.5f, -3)).isEqualTo(TtlPolicy.MAX_TTL_SECONDS);
+            assertThat(jitter(base / 2 + 1, 1f, 3)).isEqualTo(TtlPolicy.MAX_TTL_SECONDS);
+            assertThat(jitter(TtlPolicy.MAX_TTL_SECONDS, 0.5f, -3))
+                    .isEqualTo(TtlPolicy.MAX_TTL_SECONDS - (long) (TtlPolicy.MAX_TTL_SECONDS * 0.5d));
+            assertThat(jitter(TtlPolicy.MAX_TTL_SECONDS, 0.5f, 3)).isEqualTo(TtlPolicy.MAX_TTL_SECONDS);
         }
 
         private long jitter(long base, float variance, double gaussian) {
@@ -264,11 +267,28 @@ class TtlPolicyTest {
     }
 
     @Test
+    void backendLimit_appliesToAnnotationParameterAndFractionalRounding() {
+        long cap = TtlPolicy.MAX_TTL_SECONDS;
+        assertThat(cap).isEqualTo(4_611_686_018_427_387L);
+        for (long seconds : new long[]{cap - 1, cap, cap + 1, Long.MAX_VALUE / 1000,
+                Long.MAX_VALUE / 1000 + 1, Long.MAX_VALUE}) {
+            assertThat(TtlPolicy.resolve(Duration.ofSeconds(seconds), CachePolicyView.NONE)
+                    .decision().finalTtl()).isEqualTo(Math.min(seconds, cap));
+            assertThat(TtlPolicy.resolve(null, annotationPolicy(seconds)).decision().finalTtl())
+                    .isEqualTo(Math.min(seconds, cap));
+        }
+        assertThat(TtlPolicy.resolve(Duration.ofSeconds(cap - 1, 1), CachePolicyView.NONE)
+                .decision().finalTtl()).isEqualTo(cap);
+        assertThat(TtlPolicy.resolve(Duration.ofSeconds(cap, 1), CachePolicyView.NONE)
+                .decision().finalTtl()).isEqualTo(cap);
+    }
+
+    @Test
     void positiveDurations_roundUpAndSaturate() {
         Duration[] inputs = {Duration.ofNanos(1), Duration.ofMillis(500), Duration.ofSeconds(1),
                 Duration.ofMillis(1500), Duration.ofSeconds(Long.MAX_VALUE),
                 Duration.ofSeconds(Long.MAX_VALUE, 1)};
-        long[] expected = {1, 1, 1, 2, Long.MAX_VALUE, Long.MAX_VALUE};
+        long[] expected = {1, 1, 1, 2, TtlPolicy.MAX_TTL_SECONDS, TtlPolicy.MAX_TTL_SECONDS};
         for (int i = 0; i < inputs.length; i++) {
             TtlPolicy.Resolution result = TtlPolicy.resolve(inputs[i], CachePolicyView.NONE);
             assertThat(result.source()).isEqualTo(TtlPolicy.Source.PARAMETER);

@@ -14,7 +14,7 @@ import java.util.function.DoubleSupplier;
  *   <li>注解:方法级 {@link CachePolicyView#ttl()} 秒数 &gt; 0 时使用注解秒数,
  *       并按 {@code randomTtl}/{@code variance} 抖动。注解属性未设置时其值为 {@code 0},
  *       不构成声明 —— 注解是唯一能压过配置默认值的声明面;</li>
- *   <li>参数:{@link Duration} 非空、非零、非负时向上取整到秒(饱和到 Long.MAX_VALUE)。写路径的这个 Duration
+ *   <li>参数:{@link Duration} 非空、非零、非负时向上取整到秒(最终饱和到 MAX_TTL_SECONDS)。写路径的这个 Duration
  *       由 Spring Data Redis 依 cache 级配置算出并传入({@code resi-cache.default-ttl},
  *       默认 30 分钟;{@code caches.*.ttl} 可覆盖),因此"配置的默认 TTL"是唯一的
  *       隐式默认值,只在方法级 TTL 未声明时才生效;</li>
@@ -29,6 +29,14 @@ import java.util.function.DoubleSupplier;
  * (默认 30 分钟)。配置默认值是唯一的隐式默认值;注解是唯一能覆盖它的声明。
  */
 final class TtlPolicy {
+
+    /**
+     * Backend-safe effective TTL. Spring converts Duration to signed milliseconds;
+     * Redis then adds epoch milliseconds to form an absolute expiry. Reserve half
+     * that range for the Redis clock (epoch milliseconds must be nonnegative and
+     * <= Long.MAX_VALUE / 2). Apply the cap after jitter rather than reducing its base.
+     */
+    static final long MAX_TTL_SECONDS = Long.MAX_VALUE / 2000;
 
     /** TTL 来源 —— 与写链的三条 debug 日志一一对应。 */
     enum Source {
@@ -84,7 +92,8 @@ final class TtlPolicy {
 
     /** Positive fractional seconds round up; the maximum duration saturates. */
     private static long ceilSeconds(Duration ttl) {
-        return ttl.getNano() == 0 ? ttl.getSeconds() : saturatedAdd(ttl.getSeconds(), 1);
+        return Math.min(MAX_TTL_SECONDS,
+                ttl.getNano() == 0 ? ttl.getSeconds() : saturatedAdd(ttl.getSeconds(), 1));
     }
 
     private static long saturatedAdd(long base, long offset) {
@@ -104,7 +113,7 @@ final class TtlPolicy {
             return -1;
         }
         if (!randomTtl || variance <= 0) {
-            return baseTtl;
+            return Math.min(baseTtl, MAX_TTL_SECONDS);
         }
 
         float boundedVariance = Math.min(1.0f, Math.max(0.0f, variance));
@@ -113,6 +122,7 @@ final class TtlPolicy {
 
         long offset = (long) (baseTtl * (double) boundedVariance * randomFactor / 3.0);
         long result = saturatedAdd(baseTtl, offset);
-        return Math.max(1, Math.min(result, saturatedAdd(baseTtl, baseTtl)));
+        return Math.min(MAX_TTL_SECONDS,
+                Math.max(1, Math.min(result, saturatedAdd(baseTtl, baseTtl))));
     }
 }
