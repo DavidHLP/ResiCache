@@ -119,7 +119,7 @@ def report_tests(report_dir, test_root, unit):
     else:
         for path in test_root.rglob("*IntegrationTest.java"):
             source = path.read_text()
-            if re.search(r"\babstract\s+class\b", source):
+            if re.search(r"^\s*(?:(?:public|protected|private)\s+)?abstract\s+class\s+", source, re.M):
                 continue
             package = re.search(r"\bpackage\s+([\w.]+)\s*;", source)[1]
             require(package + "." + path.stem in actual, f"Integration test did not execute: {path}")

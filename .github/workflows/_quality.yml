@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  # Dependency scans and Qodana are advisory until their result aggregation is
-  # wired into the canonical blocking gate. They never represent release
+  # Scheduled dependency diagnostics and Qodana are advisory and stay outside
+  # the canonical blocking gate. They never represent release
   # compatibility or contract closure.
   dependency-analysis:
     name: "Advisory · Dependency Analysis"

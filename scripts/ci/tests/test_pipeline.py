@@ -96,7 +96,8 @@ class PipelineTests(unittest.TestCase):
         with workspace():
             Path('reports').mkdir()
             Path('src').mkdir()
-            Path('src/RedisIntegrationTest.java').write_text('package sample; class RedisIntegrationTest {}')
+            Path('src/RedisIntegrationTest.java').write_text('package sample;\n// Uses an abstract class fixture.\nclass RedisIntegrationTest {}')
+            Path('src/AbstractIntegrationTest.java').write_text('package sample;\npublic abstract class AbstractIntegrationTest {}')
             report = Path('reports/TEST-sample.xml')
             for case in ['', '<testcase classname="sample.OtherTest"/>', '<testcase classname="sample.RedisIntegrationTest"><skipped/></testcase>', '<testcase classname="sample.RedisIntegrationTest"><error/></testcase>']:
                 name = 'sample.OtherTest' if 'sample.OtherTest' in case else 'sample.RedisIntegrationTest'

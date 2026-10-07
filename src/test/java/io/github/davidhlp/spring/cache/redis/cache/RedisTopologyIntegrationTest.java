@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /** Real Sentinel discovery and certificate verification; these are not HA/SLO claims. */
 @Testcontainers(disabledWithoutDocker = false)
@@ -49,6 +50,18 @@ class RedisTopologyIntegrationTest {
 
     @Test
     void sentinelDiscoversMasterForSpringReadsAndRedissonLocks() throws Exception {
+        // Process readiness precedes Sentinel's asynchronous peer discovery.
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            for (int port : new int[] {26379, 26380, 26381}) {
+                var master = SENTINEL.execInContainer("redis-cli", "--raw", "-p", Integer.toString(port),
+                        "sentinel", "master", "cache");
+                assertThat(master.getExitCode()).isZero();
+                assertThat(master.getStdout()).contains("num-other-sentinels\n2\n", "num-slaves\n1\n");
+                var quorum = SENTINEL.execInContainer("redis-cli", "-p", Integer.toString(port),
+                        "sentinel", "ckquorum", "cache");
+                assertThat(quorum.getStdout()).startsWith("OK");
+            }
+        });
         String ip = SENTINEL.getContainerInfo().getNetworkSettings().getNetworks()
                 .values().iterator().next().getIpAddress();
         var discovered = SENTINEL.execInContainer("redis-cli", "-p", "26379", "sentinel", "get-master-addr-by-name", "cache");
