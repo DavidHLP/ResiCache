@@ -85,7 +85,7 @@ derived acceleration layer. Exact operation semantics are in
 The internal envelope is not wire-compatible with Spring's generic JSON or JDK
 serializer. Existing applications must use a bounded shadow-read,
 dual-write, and cutover process before relying on ResiCache values. The
-migration tooling is an operator-directed bounded batch, not an automatic
+migration tooling is operator-directed, with no hard scan/attempt cap, rather than an automatic
 application dual-write interceptor. It does not run at startup; phase effects
 and rollback constraints are in [`OPERATIONS.md`](OPERATIONS.md#serialization-rollout-and-rollback-boundary).
 

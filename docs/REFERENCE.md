@@ -168,7 +168,7 @@ With `serializer.fail-on-unknown-type=false`, ordinary JSON decoding failures
 return a miss; whitelist violations remain fail-fast regardless of this setting.
 WARN reports only exception types, with detailed exceptions at DEBUG.
 
-Use the bounded shadow-read → dual-write → cutover migration described in
+Use the shadow-read → dual-write → cutover migration and workload limits described in
 [`COMPATIBILITY.md`](../COMPATIBILITY.md) and [`OPERATIONS.md`](OPERATIONS.md).
 Do not claim that an in-place serializer swap, a cache flush, or a historical
 Maven Central artifact proves compatibility with the current line.

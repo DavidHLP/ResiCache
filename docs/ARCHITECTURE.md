@@ -37,7 +37,7 @@ boundary: its context names the internal migration beans by class through
 `SerializationMigrationOperatorConfiguration` and excludes
 `RedisCacheAutoConfiguration` by class, so it never assembles the cache/AOP
 runtime and needs no enablement gate. Its dependencies include a Spring Redis
-connection and a Jackson 2 mapper; phase operations are bounded batch work, as
+connection and a Jackson 2 mapper; phase operations have selection limits rather than hard scan/attempt caps, as
 described in [`OPERATIONS.md`](OPERATIONS.md#serialization-rollout-and-rollback-boundary).
 
 ## Module ownership

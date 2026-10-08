@@ -133,10 +133,21 @@ decoding or serializer round-tripping alone is insufficient.
 | `CUTOVER` | Saves legacy backup sidecars, then compares/replaces unchanged source bytes with the current envelope, preserving TTL. |
 | `ROLLBACK` | Uses backups; refuses to overwrite source values changed after cutover. |
 
-The CLI is a bounded batch conversion, not an application write interceptor.
+The CLI is an operator-directed conversion, not an application write interceptor.
 Maintain concurrent application dual writes separately during the rollout.
-`max-keys` limits actionable keys per invocation, not all SCAN traffic;
-`batch-size` is a SCAN hint. Successful non-dry-run write phases can skip
+`max-keys` limits the engine's `selected` count, not scanned keys or all
+attempts. In forward phases, selection occurs only after legacy decoding and
+serialization succeed; corrupt envelopes and decode/serialization failures
+increment `failed` without consuming that limit. Failures after selection do
+consume it. A run can therefore GET, decode and report every malformed
+matching key even with a small `max-keys`. Valid current envelopes and already
+completed entries also do not consume the limit. `batch-size` is only a SCAN
+hint. There is no separate hard scan or attempt cap in the CLI.
+Do not use `max-keys` alone as a production workload budget: restrict the
+matched key population independently and apply an external execution deadline
+when required. A match pattern does not bound Redis SCAN work, and externally
+interrupted runs must be treated as incomplete.
+ Successful non-dry-run write phases can skip
 completed entries while their stored state remains valid. `SHADOW_READ` and
 `dry-run=true` persist neither completion state nor a SCAN cursor; repeating
 an invocation with the same pattern and `max-keys` can select the same eligible
