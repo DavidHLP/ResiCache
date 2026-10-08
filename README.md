@@ -136,7 +136,7 @@ value packages explicitly; the library does not derive them automatically:
 resi-cache:
   serializer:
     allowed-package-prefixes:
-      - io.github.davidhlp
+      - io.github.davidhlp.*
       - com.example.dto.*
 ```
 

@@ -125,7 +125,7 @@ public class Application {
 resi-cache:
   serializer:
     allowed-package-prefixes:
-      - io.github.davidhlp
+      - io.github.davidhlp.*
       - com.example.dto.*
 ```
 

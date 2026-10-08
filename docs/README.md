@@ -48,10 +48,10 @@ reference and are independently verified.
 | API stability promises | [`STABILITY.md`](../STABILITY.md) | 0.x caller-observable surface | allowlist, contract tests, CHANGELOG markers |
 | Version compatibility and known runtime limits | [`COMPATIBILITY.md`](../COMPATIBILITY.md) | Boot 4 / Java 21 sole line | `pom.xml`, CI, Redis integration tests |
 | Development commands and quality gates | [`DEVELOPMENT.md`](DEVELOPMENT.md), `pom.xml`, `scripts/ci/` | Current contributor workflow | the named command or CI job |
-| Runtime configuration, migration, release, and incident boundaries | [`OPERATIONS.md`](OPERATIONS.md) | Library operations; no hosted service | source validators, workflows, security policy |
+| Runtime configuration, migration, release/publication procedures, and incident boundaries | [`OPERATIONS.md`](OPERATIONS.md) | Library operations; no hosted service | source validators, workflows, security policy |
 | Semantic/API reference and failure behavior | [`REFERENCE.md`](REFERENCE.md) | Current public behavior | focused tests and source symbols |
 | Change history and release notes | [`CHANGELOG.md`](../CHANGELOG.md) | Versioned history | Git tags/commits and contract docs |
-| Publication status | [`COMPATIBILITY.md`](../COMPATIBILITY.md), [`OPERATIONS.md`](OPERATIONS.md) | Dated Central evidence; source-first until matching publication | Public Maven metadata/POMs and verified candidate checksums |
+| Publication status | [`COMPATIBILITY.md`](../COMPATIBILITY.md) | Dated Central evidence; source-first until matching publication | Public Maven metadata/POMs and verified candidate checksums |
 | Security reporting and security-sensitive configuration | [`SECURITY.md`](../SECURITY.md) | Current policy | repository security settings and source behavior |
 | Legal terms | [`LICENSE`](../LICENSE) | Repository license | license text |
 

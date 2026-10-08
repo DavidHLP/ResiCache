@@ -43,7 +43,7 @@ advisory (with credit, if desired) will follow once the report is confirmed.
   deserialization to `resi-cache.serializer.allowed-package-prefixes`
   (default: `io.github.davidhlp`). You **must** add your own package prefixes
   for custom cached types; they are not derived automatically. Use dot-boundary
-  entries such as `com.example.dto.*` and retain the internal namespace when
+  entries such as `com.example.dto.*` and `io.github.davidhlp.*` when
   replacing the list. Whitelist violations remain fail-fast even with
   `fail-on-unknown-type=false`. See
   [configuration and serialization reference](docs/REFERENCE.md#serialization-and-compatibility).

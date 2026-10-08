@@ -201,10 +201,11 @@ remain enabled; Dependabot alerts and security updates complement CI scans.
 Workflow files describe intended checks; remote branch/environment settings
 must also be verified when configuring the repository.
 
-The Boot 4 / Java 21 line remains source-first until a matching Central artifact
-is actually published and verified. A local install, candidate bundle or green
-CI run is not a publication claim. Public publication is triggered separately
-by a maintainer's new version tag after configuring namespace/signing access.
+Current publication status and its verification evidence are owned by
+[`COMPATIBILITY.md`](../COMPATIBILITY.md). A local install, candidate bundle or
+green CI run is not a publication claim. Public publication is triggered
+separately by a maintainer's new version tag after configuring
+namespace/signing access.
 
 ## Backup, restore, and hosted-service limits
 

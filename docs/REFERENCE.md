@@ -149,7 +149,7 @@ ResiCache stores an internal `{version, payload}` envelope through
 `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. The whitelist default
 and `.*` dot-boundary behavior are defined by `WhitelistPolicy` and the
 serializer properties. Literal prefixes use `startsWith`; prefer an explicit
-package boundary such as `com.example.dto.*`. Retain `io.github.davidhlp` for
+package boundary such as `com.example.dto.*`. Retain `io.github.davidhlp.*` for
 internal cached-value metadata when supplying a replacement list. Application
 packages are not derived automatically. An empty list can reach the startup
 guard's warning at `ApplicationReadyEvent`. A `null` list instead fails
