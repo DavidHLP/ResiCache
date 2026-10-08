@@ -106,17 +106,25 @@ core JAR is not a self-contained executable. Configure
 `spring.data.redis.*`, the serializer allowlist, and a bounded
 `resi-cache.serializer.migration.pattern` before invoking it.
 
-For legacy custom POJOs, use a strict allowlist limited to trusted value
-packages and the required internal namespace. `VersionEnvelope.payload` embeds
-the top-level DTO's type through field-level `@JsonTypeInfo`, independently of
-`resi-cache.serializer.polymorphic-typing-enabled`; keep that global switch at
-its default `false` for this migration path. Global default typing is not a
-prerequisite for preserving the envelope payload's concrete type.
-Before `CUTOVER`, deserialize representative new-envelope sidecars with the
-application's reader configuration and verify concrete types, nested values,
-and typed cache-hit behavior. If the required value structure cannot safely
-round-trip, regenerate those values through the application instead of
-converting them with the migration CLI.
+The CLI converts serializer bytes; it does not construct ResiCache's runtime
+cache structure. Normal writes store a `CachedValue` wrapper containing the
+chain value and expiry/refresh metadata, while `ActualCacheHandler` treats
+values without that wrapper as cache misses. A directly serialized legacy
+POJO or String can retain its concrete type after conversion and still be
+unusable as a ResiCache cache entry.
+
+For ResiCache keys, use the CLI only when the decoded legacy value already
+has the complete compatible `CachedValue` structure, including its nested
+value/envelope representation and metadata. Regenerate bare DTO/String values
+or incompatible wrappers through normal application cache writes instead of
+using `CUTOVER` to convert them. Use a strict allowlist limited to trusted
+value packages and the required internal namespace. Field-level type metadata
+does not require global default typing, and enabling that switch does not
+supply the missing runtime wrapper.
+Before `CUTOVER`, verify representative converted sidecars against the
+application's actual cache read path, including wrapper structure, metadata,
+nested values, concrete types and typed cache-hit behavior. Successful CLI
+decoding or serializer round-tripping alone is insufficient.
 
 | Phase | Effect |
 |---|---|
