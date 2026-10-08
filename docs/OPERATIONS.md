@@ -106,16 +106,17 @@ core JAR is not a self-contained executable. Configure
 `spring.data.redis.*`, the serializer allowlist, and a bounded
 `resi-cache.serializer.migration.pattern` before invoking it.
 
-For legacy custom POJOs whose concrete types must survive migration, explicitly
-set `resi-cache.serializer.polymorphic-typing-enabled=true` in both the CLI
-and the consuming application, with a strict allowlist limited to trusted value
-packages and the required internal namespace. The default `false` can serialize
-a decoded legacy DTO without type metadata; later reads may return a
-`LinkedHashMap` instead of that DTO and fail a typed cache call. Before `CUTOVER`,
-deserialize representative new-envelope sidecars with the application's reader
-configuration and verify their concrete types and typed cache-hit behavior.
-If type preservation cannot be safely verified, regenerate those custom values
-through the application instead of converting them with the migration CLI.
+For legacy custom POJOs, use a strict allowlist limited to trusted value
+packages and the required internal namespace. `VersionEnvelope.payload` embeds
+the top-level DTO's type through field-level `@JsonTypeInfo`, independently of
+`resi-cache.serializer.polymorphic-typing-enabled`; keep that global switch at
+its default `false` for this migration path. Global default typing is not a
+prerequisite for preserving the envelope payload's concrete type.
+Before `CUTOVER`, deserialize representative new-envelope sidecars with the
+application's reader configuration and verify concrete types, nested values,
+and typed cache-hit behavior. If the required value structure cannot safely
+round-trip, regenerate those values through the application instead of
+converting them with the migration CLI.
 
 | Phase | Effect |
 |---|---|
