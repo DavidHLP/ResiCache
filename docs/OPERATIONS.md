@@ -106,6 +106,24 @@ core JAR is not a self-contained executable. Configure
 `spring.data.redis.*`, the serializer allowlist, and a bounded
 `resi-cache.serializer.migration.pattern` before invoking it.
 
+Require `resi-cache.serializer.fail-on-unknown-type=true` in the migration
+CLI configuration. With `false`, unsupported envelope versions or ordinary
+payload-binding failures can deserialize to `null`; the engine still counts
+them as `envelopes` instead of `failed`, and the CLI can exit successfully.
+Do not approve a keyspace based on such a permissive run; rerun validation
+with fail-fast mode and verify the application's actual reads.
+
+Before any write phase, reserve collision-free `shadow-suffix` and
+`backup-suffix` namespaces under `resi-cache.serializer.migration`. Preflight
+the complete intended source set: no application source key may end in either
+suffix, and each derived `<source><suffix>` destination must be absent or
+verified as a sidecar belonging to this migration. Stop on unrelated or
+unverifiable destinations. The CLI does not enforce this reservation:
+`writeSidecar` overwrites differing destination bytes with UPSERT, and forward
+scans silently skip keys ending in either suffix. A dry run is not a collision
+check. Prevent application writers from creating keys in the reserved
+namespaces throughout migration and cleanup.
+
 The CLI converts serializer bytes; it does not construct ResiCache's runtime
 cache structure. Normal writes store a `CachedValue` wrapper containing the
 chain value and expiry/refresh metadata, while `ActualCacheHandler` treats
@@ -131,7 +149,7 @@ decoding or serializer round-tripping alone is insufficient.
 | `SHADOW_READ` | Default; decodes and validates legacy values without writing. |
 | `DUAL_WRITE` | Writes current-envelope sidecars with the source TTL; leaves legacy source bytes in place. |
 | `CUTOVER` | Saves legacy backup sidecars, then compares/replaces unchanged source bytes with the current envelope, preserving TTL. |
-| `ROLLBACK` | Uses backups; refuses to overwrite source values changed after cutover. |
+| `ROLLBACK` | Uses backups; rejects differing existing source bytes but recreates missing sources from legacy backups. |
 
 The CLI is an operator-directed conversion, not an application write interceptor.
 Maintain concurrent application dual writes separately during the rollout.
@@ -147,17 +165,43 @@ Do not use `max-keys` alone as a production workload budget: restrict the
 matched key population independently and apply an external execution deadline
 when required. A match pattern does not bound Redis SCAN work, and externally
 interrupted runs must be treated as incomplete.
- Successful non-dry-run write phases can skip
+
+Successful non-dry-run write phases can skip
 completed entries while their stored state remains valid. `SHADOW_READ` and
 `dry-run=true` persist neither completion state nor a SCAN cursor; repeating
 an invocation with the same pattern and `max-keys` can select the same eligible
 legacy keys again. To validate the whole keyspace, use disjoint bounded
 patterns or a `max-keys` large enough to cover all eligible keys. Reaching the
 limit does not establish that the remaining keys were validated.
-`dry-run=true` reports planned work without mutation. Rejected/failed keys
-make the CLI exit unsuccessfully. Backups share the source expiry, so rollback
-is bounded by backup retention and subsequent writes; it is not a durable
-backup service.
+`dry-run=true` prevents mutation. Forward-phase reports expose decoded legacy
+counts, but rollback dry runs do not expose the private selected/planned
+counter: `written` remains zero, and `scanned` includes pending restorations
+and already-restored/no-op backups. They cannot establish how many keys would
+be restored. Independently compare the scoped backups and source state before
+authorizing rollback. Reported rejected/failed keys make the CLI exit
+unsuccessfully; this requires the fail-fast validation configuration above.
+
+Rollback does not protect deletions: if a source is missing while its backup
+remains, it uses SET_IF_ABSENT to recreate the legacy value, which may resurrect
+a deliberately evicted, stale entry. Quiesce application writes and evictions
+for the affected keys before rollback, and keep them paused until it completes.
+Quiescence alone cannot identify earlier intentional deletions: reconcile
+those against the backup inventory and exclude their backups from rollback
+before running it. Existing changed source bytes are rejected; absence is not
+treated as evidence of an intentional deletion.
+
+Sidecars inherit the source TTL at creation. A persistent source produces
+persistent shadows/backups; neither cutover nor rollback deletes them, and the
+CLI has no cleanup phase. Budget for their storage until explicitly removed.
+After validated cutover and the agreed rollback window, or after a completed
+rollback whose result has been verified, stop migration invocations and retire
+application dual writes to these sidecars. Inventory the reserved namespaces,
+review the exact sidecar keys belonging to this migration, then manually
+remove only that approved set in controlled batches. Preserve backups while
+rollback is still required; do not use a broad suffix-only deletion that could
+include unrelated keys. Backups for expiring sources may expire before
+rollback; backups for persistent sources have no automatic retention bound.
+Sidecars are not a durable backup service.
 
 A serializer change without this workflow can make existing values unreadable; a cache flush is not the only
 rollback strategy and is not required by the documented migration flow.
