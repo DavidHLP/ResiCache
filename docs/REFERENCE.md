@@ -151,8 +151,11 @@ and `.*` dot-boundary behavior are defined by `WhitelistPolicy` and the
 serializer properties. Literal prefixes use `startsWith`; prefer an explicit
 package boundary such as `com.example.dto.*`. Retain `io.github.davidhlp` for
 internal cached-value metadata when supplying a replacement list. Application
-packages are not derived automatically; the startup guard only warns for a
-null/empty list. Polymorphic typing is off by default. The serializer uses
+packages are not derived automatically. An empty list can reach the startup
+guard's warning at `ApplicationReadyEvent`. A `null` list instead fails
+serializer construction (`WhitelistPolicy` calls `List.copyOf(null)`),
+preventing the default runtime from starting before that event.
+Polymorphic typing is off by default. The serializer uses
 Jackson 2 (`com.fasterxml.jackson`); a host Jackson 3 mapper (`tools.jackson`)
 does not replace its Jackson 2 fallback.
 

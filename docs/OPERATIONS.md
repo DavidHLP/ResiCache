@@ -116,7 +116,13 @@ core JAR is not a self-contained executable. Configure
 The CLI is a bounded batch conversion, not an application write interceptor.
 Maintain concurrent application dual writes separately during the rollout.
 `max-keys` limits actionable keys per invocation, not all SCAN traffic;
-`batch-size` is a SCAN hint. Repeated batches skip completed entries.
+`batch-size` is a SCAN hint. Successful non-dry-run write phases can skip
+completed entries while their stored state remains valid. `SHADOW_READ` and
+`dry-run=true` persist neither completion state nor a SCAN cursor; repeating
+an invocation with the same pattern and `max-keys` can select the same eligible
+legacy keys again. To validate the whole keyspace, use disjoint bounded
+patterns or a `max-keys` large enough to cover all eligible keys. Reaching the
+limit does not establish that the remaining keys were validated.
 `dry-run=true` reports planned work without mutation. Rejected/failed keys
 make the CLI exit unsuccessfully. Backups share the source expiry, so rollback
 is bounded by backup retention and subsequent writes; it is not a durable

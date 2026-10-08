@@ -111,8 +111,10 @@ custom implementation must satisfy.
    chain completes. Exceptions thrown there are caught and logged by the
    engine; they never alter the main-chain result.
 4. **Ordering**: `@HandlerPriority(HandlerOrder.X)` is the single source of
-   truth. The slots include 200 (sync), 250 (early expiration), and 300 (TTL);
-   unannotated handlers sort last.
+   truth. Use `HandlerOrder.SYNC_LOCK`, `HandlerOrder.EARLY_EXPIRATION`, and
+   `HandlerOrder.TTL`; their ordering values are defined only in
+   [`HandlerOrder.java`](src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java).
+   Unannotated handlers sort last.
 5. **Thread safety**: one handler instance is shared across concurrent
    executions; keep per-call state out of fields (use `CacheContext`).
 6. **Nested advancement (optional)**: the engine calls
