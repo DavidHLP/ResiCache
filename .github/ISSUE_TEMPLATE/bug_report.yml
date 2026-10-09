@@ -42,6 +42,8 @@ body:
         A clear description of the unexpected behavior. Include the relevant
         `@RedisCacheable` / `@RedisCacheEvict` annotation and your `resi-cache.*`
         configuration.
+        Redact passwords, credentials, raw cache keys/values and personal data
+        from configuration and examples before posting publicly.
       placeholder: "When I call ... I expected ... but got ..."
     validations:
       required: true
@@ -49,7 +51,7 @@ body:
     id: repro
     attributes:
       label: Minimal reproduction
-      description: The smallest code/config that reproduces the issue. A failing test is ideal.
+      description: The smallest code/config that reproduces the issue. A failing test is ideal. Remove credentials, raw cache keys/values and personal data.
       render: java
     validations:
       required: false
@@ -62,6 +64,8 @@ body:
         capture the `[chain] handler=... decision=... key=... requestId=...`
         trace, which correlates every handler in one cache operation by
         `requestId`.
+        DEBUG output can contain sensitive keys or values. Redact those,
+        credentials and personal data; share only the relevant excerpt.
       render: shell
     validations:
       required: false
