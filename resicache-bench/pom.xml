@@ -26,7 +26,7 @@
         <resicache.version>0.0.2</resicache.version>
         <jmh.version>1.37</jmh.version>
         <spring-boot.version>4.0.0</spring-boot.version>
-        <redisson.version>3.50.0</redisson.version>
+        <redisson.version>4.8.0</redisson.version>
         <caffeine.version>3.1.8</caffeine.version>
         <lombok.version>1.18.34</lombok.version>
         <uberjar.name>resicache-bench</uberjar.name>
