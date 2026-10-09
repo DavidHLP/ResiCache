@@ -31,7 +31,8 @@ class ConsumerBoundaryTests(unittest.TestCase):
     def jdk(self, name, version='21', compiler=True):
         home = self.root / name
         self.executable(home / 'bin/java',
-                        '#!/bin/sh\necho "    java.specification.version = ' + version + '" >&2\n')
+                        '#!/bin/sh\necho "    java.specification.version = ' + version + '" >&2\n'
+                        'echo "    java.home = ' + str(home) + '" >&2\n')
         if compiler:
             self.executable(home / 'bin/javac', '#!/bin/sh\nexit 0\n')
         return home
@@ -75,6 +76,18 @@ class ConsumerBoundaryTests(unittest.TestCase):
         self.env['JAVA_HOME'] = str(self.jdk('jdk21'))
         self.env['RESICACHE_JDK21'] = str(self.jdk('override17', '17'))
         self.assertNotEqual(0, self.run_consumer().returncode)
+        self.assertFalse((self.root / 'maven-called').exists())
+
+    def test_path_shim_uses_reported_java_home(self):
+        candidate = self.root / 'candidate'
+        candidate.mkdir()
+        home = self.jdk('actual jdk')
+        shim = self.root / 'mise/shims/java'
+        self.executable(shim, '#!/bin/sh\nexec "$FIXTURE_JDK/bin/java" "$@"\n')
+        self.env['FIXTURE_JDK'] = str(home)
+        self.env['PATH'] = str(shim.parent) + os.pathsep + self.env['PATH']
+        self.assertEqual(73, self.run_consumer(str(candidate)).returncode)
+        self.assertEqual(str(home), (self.root / 'selected-jdk').read_text())
         self.assertFalse((self.root / 'maven-called').exists())
 
 

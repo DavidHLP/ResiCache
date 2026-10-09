@@ -17,7 +17,15 @@ if [[ -z "$jdk_home" ]]; then
     echo 'JDK 21 is required: set RESICACHE_JDK21 or JAVA_HOME, or put it on PATH.' >&2
     exit 1
   fi
-  jdk_home="$(dirname "$(dirname "$(realpath "$java_path")")")"
+  if ! java_settings="$("$java_path" -XshowSettings:properties -version 2>&1)"; then
+    echo "Cannot run Java from PATH: $java_path." >&2
+    exit 1
+  fi
+  jdk_home="$(awk '/^[[:space:]]*java.home[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print}' <<< "$java_settings")"
+  if [[ -z "$jdk_home" ]]; then
+    echo "Cannot determine java.home from PATH: $java_path." >&2
+    exit 1
+  fi
 fi
 if [[ ! -x "$jdk_home/bin/java" || ! -x "$jdk_home/bin/javac" ]]; then
   echo "JDK 21 java and javac are required in $jdk_home/bin." >&2
