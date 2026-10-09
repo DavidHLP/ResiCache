@@ -6,18 +6,21 @@ ResiCache ships on a **single build line**:
   Redisson 3.50**.
 
 CI is configured to run `clean verify -B` on Java 21. Local verification also
-requires JDK 21 and Docker for Testcontainers; this session is not a release
-baseline.
+requires JDK 21 and Docker for Testcontainers. A configured CI matrix is not
+a claim that every patch of a component has been tested.
 
 > **Historical context**: Previously the repository carried a `boot3` line
 > (Boot 3.4.13 / Java 17 / Redisson 3.27). The migration to Boot 4 merged
 > into the main line; the dual-branch strategy is **abandoned**. Boot 3.x
 > compatibility is not maintained. See `CHANGELOG.md` for migration context.
 >
-> Verified 2026-09-05: every Maven Central version (0.0.1–0.0.5, 0.0.7,
-> 3.2.4) is the earlier Boot 3.2.4 / Java 17 line; no Boot 4 artifact is
-> published yet. A bounded public adopter search on the same date found no
-> external consumers of any line (private adopters remain unprovable).
+> Publication checked 2026-10-07 against [Central metadata](https://repo.maven.apache.org/maven2/io/github/davidhlp/ResiCache/maven-metadata.xml)
+> and each published POM: versions 0.0.1–0.0.5, 0.0.7 and 3.2.4 all belong
+> to the earlier Boot 3.2.4 / Java 17 / Redisson 3.17.6 line. There is no
+> matching Boot 4 artifact. The checkout's `0.0.2` build version must not be
+> confused with the historical [Central 0.0.2 POM](https://repo.maven.apache.org/maven2/io/github/davidhlp/ResiCache/0.0.2/ResiCache-0.0.2.pom).
+> A bounded public adopter search on 2026-09-05 found no external consumers;
+> that historical search does not establish current adoption or private usage.
 
 ## Supported versions
 
@@ -26,7 +29,7 @@ baseline.
 | Component | Version | Tested |
 |-----------|---------|--------|
 | Java | 21 | CI |
-| Spring Boot | 4.0.0 | 4.0.x (CI) |
+| Spring Boot | 4.0.0 | 4.0.0 (CI); no multi-patch matrix |
 | Spring Framework | 7.x | (via Boot) |
 | Spring Cache | 7.x | (via Boot) |
 | Spring Data Redis | 4.0.x | (via Boot) |
@@ -52,29 +55,19 @@ baseline.
 
 | Dependency | Required? | Notes |
 |---|---|---|
-| **Redisson** | Optional | Needed for distributed-lock (`sync=true`). Without it, a
-  sync operation fails fast unless `resi-cache.sync-lock.local-only=true` is
-  explicitly configured. |
-| **Micrometer Core** | Required | Runtime handler and metrics seams reference its
-  types even when metrics publishing is disabled. Its version is managed by the
-  Spring Boot dependency management in `pom.xml`; it does not create a registry. |
-| **Actuator / metrics registry provider** | Optional | Cache metrics require
-  `resi-cache.metrics.enabled=true` (default OFF) and a `MeterRegistry`;
-  otherwise the resolved metrics seam is a no-op adapter.
-  `RedisCacheHealthIndicator` requires Actuator and the `HealthIndicator`
-  class; it is not gated on the metrics property, so an application with
-  Actuator and Redis assembles it and each `/actuator/health` probe issues a
-  synchronous Redis `connection.ping()` round trip (see the probe-cost note in
-  [`docs/OPERATIONS.md`](docs/OPERATIONS.md)). |
-| **Caffeine** | Bundled | Used internally for the local hash cache and
-  bloom-filter bitset; not exposed as a multi-level cache. |
+| **Redisson** | Optional | Add the core dependency explicitly for the built-in distributed lock, or supply a `LockManager`. Without a backend, `sync=true` fails closed unless `resi-cache.sync-lock.local-only=true`. |
+| **Micrometer Core** | Required | Runtime SPI and handler types reference it even when publishing is disabled. The Boot-managed dependency does not create an application registry. |
+| **Actuator / registry provider** | Optional | Publishing requires `resi-cache.metrics.enabled=true` and a `MeterRegistry`. The Actuator health indicator is independent of that switch and performs a synchronous Redis PING per invocation; see [`docs/OPERATIONS.md`](docs/OPERATIONS.md#observability-and-diagnosis). |
+| **Caffeine** | Bundled | Internal hash-position cache and local Bloom support; no multi-level cache API. |
 
 ## Serialization compatibility
 
 ⚠️ ResiCache serializes values in an internal `{version, payload}` envelope via
 `SecureJackson` for safe deserialization. This is **not** wire-compatible with
-Spring's `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. Existing caches must be **migrated** when adopting ResiCache, otherwise the
-entire cache misses on cutover. Adopt a bounded **shadow-read → dual-write →
+Spring's `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. Existing
+caches must be **migrated** when adopting ResiCache; otherwise values may miss
+or fail decoding, depending on the configured failure policy. Adopt a bounded
+**shadow-read → dual-write →
 cutover** migration workflow: run ResiCache alongside the existing cache,
 shadow-read through the new serializer while dual-writing, then cut over once
 hit rates stabilize. This preserves TTL, supports resumable rollback, and does
@@ -83,8 +76,8 @@ not require a cache flush.
 ## Known limitations
 
 - **Reactive types**: `Mono<T>` / `Flux<T>` return types are **not supported**.
-  ResiCache's interceptor is blocking; such methods log an explicit "caching
-  will not take effect" warning and bypass ResiCache.
+  The blocking interceptor logs a warning and bypasses its cache advice for
+  these declared return types. Other host advisors retain their own behavior.
 - **Async methods**: `@Async` cached methods are not supported for sync-lock and
   Bloom-filter enhancements.
 
@@ -114,18 +107,13 @@ not require a cache flush.
   `RedisProCacheWriter` for GET/GET-hit/GET-miss/PUT/DELETE, including exact
   `clear` deletion counts and PUT_IF_ABSENT insertion. `withStatisticsCollector`
   fully rebinds statistics; lock-wait duration remains unreported (zero).
-- **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; this behavior is unchanged from `main`.
+- **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; use method-level declarations when a protection policy is required.
 - **`value` and `cacheNames` resolution**: the three annotations are not
   `@AliasFor`-linked, so one declaration may set both attributes. There is one
   resolution for both faces (`RedisCacheAttributesProjector.resolveCacheNames`)
   and **`value` wins**; `cacheNames` is the fallback and only applies when
   `value` is empty. A declaration that sets both targets the `value` cache.
-  This is the operation face's `main` behaviour, so the cache in use is
-  unchanged. The policy face changes for that same both-set declaration: on
-  `main` the operation targeted `value` while the policy snapshot was
-  registered under `cacheNames`, so the declared policy silently did not apply
-  to the cache that was used. Both faces now resolve to `value`, and the policy
-  applies to the cache in use.
+  Both the Spring operation and policy snapshot resolve to that same cache.
 - **TTL default precedence**: one module owns the resolution (`TtlPolicy`; the
   ordered rule is specified in [`docs/REFERENCE.md`](docs/REFERENCE.md)). A
   method-level `ttl` greater than zero is the only declaration that overrides
@@ -144,8 +132,8 @@ not require a cache flush.
   seconds, so an annotated method without an explicit `ttl` expired its
   entries after `60s` even when `resi-cache.default-ttl` was configured. The
   annotation-side implicit `60` is removed: such a method now uses the
-  configured default (`30m` unless overridden), and `60` is no longer
-  reachable from the resolution path. Methods that set `ttl` explicitly are
+  configured default (`30m` unless overridden), with no implicit `60s` fallback
+  in the resolution path. Methods that set `ttl` explicitly are
   unaffected. Deployments relying on the old `60s` expiry for methods that
   omit `ttl` must either set `ttl` explicitly or set `resi-cache.default-ttl`.
   A cache configured with no expiry (a caller-supplied

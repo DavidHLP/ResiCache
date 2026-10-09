@@ -64,8 +64,8 @@ class CacheHandlerChainFactory {
      * {@code ActualCacheHandler} 写入无 TTL 永久缓存(数据陈旧 + 内存泄漏)。
      *
      * <p>每条 toggle 两要素:{@code order} 字段(既是短路枚举,又是 disableName 的派生源 ——
-     * 配置项 {@code resi-cache.protection.<disableName>.enabled} 与
-     * {@code HandlerOrder#getDisableName()} 同源,不再各自维护字面量)、
+     * 绑定属性使用 {@code resi-cache.protection.<disableName>-enabled}
+     * (如 {@code bloom-filter-enabled}),与 {@code HandlerOrder#getDisableName()} 对应)、
      * {@code getter} 字段(per-mechanism 覆盖读取,null = 继承 enabled)。
      * {@code ProtectionToggleGuardTest} 用反射按 disableName 反查 property 并断言 getter
      * 读的正是该 property,故新增机制漏配属性时直接红。
@@ -165,7 +165,7 @@ class CacheHandlerChainFactory {
             // 2) 构建链
             CacheHandlerChain chain = new CacheHandlerChain(engine);
 
-            // guide §223b:为每个 enabled AbstractCacheHandler 注入 registry
+            // 为每个 enabled AbstractCacheHandler 注入已解析的 registry
             MeterRegistry registry = resolvedMetrics.meterRegistry();
 
             // 3) 收集禁用集合 — 用户自定义 disabled + 总开关 + per-mechanism 覆盖

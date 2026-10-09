@@ -63,7 +63,17 @@ Use the coordinates and version from the checkout's root `pom.xml` in the
 consumer application. Do not treat the historical Maven Central `0.0.2`
 artifact as the current Boot 4 line.
 
-Configure the two Redis clients explicitly when using synchronization:
+The core dependency is `io.github.davidhlp:ResiCache` at the checkout's version.
+Redisson and Actuator are optional dependencies and are not brought into a
+consumer transitively. Add `org.redisson:redisson` at the root POM's version
+for the built-in distributed lock, or provide a `LockManager` bean. Add
+`spring-boot-starter-actuator` only when health/Actuator integration is needed;
+Micrometer Core is already a runtime dependency, but metrics still need an
+application registry and `resi-cache.metrics.enabled=true`.
+
+Start a Redis server before running the application (the example below uses
+localhost port 6379). Configure the two Redis clients explicitly when using
+synchronization:
 
 ```yaml
 spring:
@@ -81,8 +91,9 @@ resi-cache:
 
 The Spring Data Redis namespace supplies cache I/O. The `resi-cache.redis.*`
 namespace supplies the Redisson deployment used by distributed locking; the
-namespaces are not implicitly copied into one another. The application remains
-responsible for enabling Spring Cache:
+topology is configured separately. Single-node Redisson has limited fallback
+rules; see [`docs/OPERATIONS.md`](docs/OPERATIONS.md#redis-topology-and-configuration).
+The application remains responsible for enabling Spring Cache:
 
 ```java
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
@@ -117,8 +128,21 @@ copied into a small Boot application without inventing a repository type.
 
 `sync=true` fails closed if no distributed lock is available unless the
 application explicitly opts into `resi-cache.sync-lock.local-only=true` for a
-single-JVM deployment. Configure a serializer allowlist for application value
-packages before reading custom cached types.
+single-JVM deployment. The String example needs no business-type allowlist.
+For custom cached types, keep the internal namespace and add the application's
+value packages explicitly; the library does not derive them automatically:
+
+```yaml
+resi-cache:
+  serializer:
+    allowed-package-prefixes:
+      - io.github.davidhlp.*
+      - com.example.dto.*
+```
+
+Replace `com.example.dto.*` with the package containing your cached values.
+Allowlisting a type does not enable polymorphic typing or coerce a returned
+value; see [`docs/REFERENCE.md`](docs/REFERENCE.md#serialization-and-compatibility).
 
 ## Where to go next
 

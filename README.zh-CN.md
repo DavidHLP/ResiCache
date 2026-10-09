@@ -57,7 +57,14 @@ cd ResiCache
 消费者应用使用当前检出目录根 `pom.xml` 中的坐标和版本。不要把 Maven
 Central 上历史的 `0.0.2` 产物当作当前 Boot 4 构建线。
 
-使用同步能力时，显式配置两个 Redis 命名空间：
+核心依赖为 `io.github.davidhlp:ResiCache`，版本取自当前检出的根 `pom.xml`。
+Redisson 与 Actuator 是可选依赖，不会传递到消费者应用。使用内置分布式锁时，
+显式添加根 POM 所用版本的 `org.redisson:redisson`，或提供 `LockManager` bean。
+需要健康检查时再添加 `spring-boot-starter-actuator`。Micrometer Core 已是运行时
+依赖，但发布指标仍需要应用的 registry 和 `resi-cache.metrics.enabled=true`。
+
+运行应用前先启动 Redis（下例使用本机 6379 端口）。使用同步能力时，显式配置
+两个 Redis 命名空间：
 
 ```yaml
 spring:
@@ -74,8 +81,9 @@ resi-cache:
 ```
 
 Spring Data Redis 命名空间提供缓存 I/O；`resi-cache.redis.*` 提供分布式锁
-使用的 Redisson 部署，两个命名空间不会自动互相复制。是否启用 Spring Cache
-仍由应用负责：
+使用的 Redisson 部署，拓扑需要分别配置。单节点 Redisson 有有限的配置回退，
+详见 [`docs/OPERATIONS.md`](docs/OPERATIONS.md#redis-topology-and-configuration)。
+是否启用 Spring Cache 仍由应用负责：
 
 ```java
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
@@ -109,8 +117,21 @@ public class Application {
 `User` 或 `userRepository` 类型。
 
 如果没有分布式锁，`sync=true` 默认失败关闭；只有单 JVM 场景明确接受降级时，
-才设置 `resi-cache.sync-lock.local-only=true`。读取自定义缓存类型前，先为
-业务包配置序列化白名单。
+才设置 `resi-cache.sync-lock.local-only=true`。上面的 String 示例无需业务类型
+白名单；缓存自定义类型时，保留内部命名空间并显式加入业务值所在的包，库不会
+自动推导业务包：
+
+```yaml
+resi-cache:
+  serializer:
+    allowed-package-prefixes:
+      - io.github.davidhlp.*
+      - com.example.dto.*
+```
+
+将 `com.example.dto.*` 替换为缓存值所在的包。白名单不会自动启用多态类型信息，
+也不会强制转换返回值；详见
+[`docs/REFERENCE.md`](docs/REFERENCE.md#serialization-and-compatibility)。
 
 ## 按问题阅读
 

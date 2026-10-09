@@ -23,7 +23,7 @@ a documented migration path (⚠️ BREAKING entry in
 | **Wire format** | `{version, payload}` envelope used by `SecureJacksonRedisSerializer` | Envelope is the serialization contract — kept, not loosened. |
 | **Extension SPI** | `CacheHandler`, `ChainObserver`, `BloomIFilter`, `LockManager`, `LockManager.LockHandle`, `HandlerPriority` | Implementations must satisfy the documented failure, lifecycle, and thread-safety contracts. |
 | **SPI transitive contract types** | `CacheContext`, `CachePolicyView`, `HandlerResult`, `CacheResult`, `CacheOperation`, `FlowControl`, `ChainContinuation`, `HandlerOrder`, and decision records used by handler signatures | These signature/value types and the `HandlerOrder` numeric ordering contract are part of the supported SPI surface; unrelated fields and implementation classes remain unstable. |
-| **Native writer statistics** | Spring Data Redis GET/GET hit/GET miss/PUT/DELETE counters are emitted at the writer boundary; CLEAN carries its exact deleted-key count through stable `CacheResult` | `withStatisticsCollector` rebinds all statistics; lock-wait duration remains unreported (`getLockWaitDuration()` is zero) until an internal observation path can be added without expanding `CacheContext` |
+| **Native writer statistics** | Spring Data Redis GET/GET hit/GET miss/PUT/DELETE counters are emitted at the writer boundary; CLEAN carries its exact deleted-key count through stable `CacheResult` | `withStatisticsCollector` rebinds all statistics; lock-wait duration remains unreported (`getLockWaitDuration()` is zero) on the current implementation |
 
 ### Compatibility-only annotation attributes
 
@@ -53,12 +53,12 @@ line.
 
 | Area | What may change | Example |
 |------|-----------------|---------|
-| **Internal implementation** | Source-level details inside `chain/`, `protection/`, `cache/` | Handler ordering is fixed by `HandlerOrder` enum (gap = 100), but inner algorithm of a specific handler is not contractual |
+| **Internal implementation** | Source-level details inside `chain/`, `protection/`, `cache/` | Handler ordering is fixed by `HandlerOrder` enum (including the early-expiration slot between sync and TTL), but inner algorithm of a specific handler is not contractual |
 | **Default values of properties** | Defaults may be tuned between minor versions | `resi-cache.default-ttl` default may shift toward a better baseline |
 | **Unstable package layout** | Contents of internal sub-packages and unstable implementation types under `io.github.davidhlp.spring.cache.redis.*` | Stable annotations, configuration keys, wire format, and SPI signature types listed in §1 are excluded. |
 | **Observability metric names and tags** | Pre-1.0 metric namespace is NOT contractual | A `bloomsift.*` → `resicache.handler.*` rename is allowed pre-1.0 (with ⚠️ BREAKING CHANGELOG) |
-| **Diagnostic warnings and logs** | Message text, log levels for startup probes | "whitelist auto-derived from host app root package" WARN may rephrase |
-| **Behavior defaults** (e.g. protection preset) | When explicitly opted into a new default via ⚠️ BREAKING CHANGELOG entry | `resi-cache.protection.preset=NONE` (v0.0.2) → `=STANDARD` (v0.0.3) is allowed if flagged breaking |
+| **Diagnostic warnings and logs** | Message text, log levels for startup probes | Empty serializer-allowlist WARN may rephrase; application packages are configured explicitly |
+| **Behavior defaults** (e.g. protection preset) | When explicitly opted into a new default via ⚠️ BREAKING CHANGELOG entry | Changing a protection default requires a breaking marker; available switches are defined by `RedisProCacheProperties` |
 | **Internal implementation types** | `MethodMetadataResolver`, `MethodSnapshot`, `ScopedActivation`, `RefreshCancellation`, `LoaderOrchestrator`, `LoadOutcome`, and `ThreadPoolEarlyExpirationExecutor` | Package-private collaborators under the internal `cache` module; not importable extension contracts. |
 
 If you depend on items in this section, pin to an exact patch version
@@ -68,10 +68,10 @@ If you depend on items in this section, pin to an exact patch version
 
 | Type | Replacement | Deprecation/removal | Impact |
 |---|---|---|---|
-| `MethodMetadataResolver` / `MethodSnapshot` | internal resolver lifecycle via auto-configuration | internalized in the Phase 4 cache module | source/binary break for custom resolver implementations |
-| `LoaderOrchestrator` / `LoadOutcome` (and the former `DefaultLoadFn`) | `RedisProCache.get(key, loader)` | internalized in the Phase 4 cache module | callers must use the cache API, not loader callbacks |
+| `MethodMetadataResolver` / `MethodSnapshot` | internal resolver lifecycle via auto-configuration | internalized under `cache/` | source/binary break for custom resolver implementations |
+| `LoaderOrchestrator` / `LoadOutcome` (and the former `DefaultLoadFn`) | `RedisProCache.get(key, loader)` | internalized under `cache/` | callers must use the cache API, not loader callbacks |
 | `CacheContext` / `HandlerResult` / decision records | documented SPI value surface for handler signatures; implementation-only members may evolve | no removal while `CacheHandler`/`ChainObserver` remain supported | extensions use documented fields and flow values |
-| `ThreadPoolEarlyExpirationExecutor` | documented stable SPI only; concrete executor remains internal | internalized in the Phase 4 cache module | custom code uses stable interfaces, not implementation classes |
+| `ThreadPoolEarlyExpirationExecutor` | documented stable SPI only; concrete executor remains internal | internalized under `cache/` | custom code uses stable interfaces, not implementation classes |
 
 Removal is not activated solely from local source evidence. A published
 artifact, adopter usage, or external implementation supersedes this default
@@ -111,7 +111,10 @@ custom implementation must satisfy.
    chain completes. Exceptions thrown there are caught and logged by the
    engine; they never alter the main-chain result.
 4. **Ordering**: `@HandlerPriority(HandlerOrder.X)` is the single source of
-   truth (gap = 100). Unannotated handlers sort last.
+   truth. Use `HandlerOrder.SYNC_LOCK`, `HandlerOrder.EARLY_EXPIRATION`, and
+   `HandlerOrder.TTL`; their ordering values are defined only in
+   [`HandlerOrder.java`](src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java).
+   Unannotated handlers sort last.
 5. **Thread safety**: one handler instance is shared across concurrent
    executions; keep per-call state out of fields (use `CacheContext`).
 6. **Nested advancement (optional)**: the engine calls
@@ -187,8 +190,8 @@ The machine gate (`public-surface-nested.txt` +
 | `CacheResult.Outcome` / `FailureKind` | user | stable value semantics |
 | `CacheContext.InputView` | user | read-only input view for handlers/tests |
 | `CachePolicyView.Source` | implementation | adapter interface implemented by internal operation models; public only so internals can implement it — do not use from host code |
-| `RedisProCacheProperties.*` (9 nested classes) | user | configuration binding surface |
-| `CachingEnablementValidation.CachingEnabledValidator` | operator | health/startup probe |
+| `RedisProCacheProperties.*` (eight nested classes and `NativeAnnotationMode`) | user | configuration binding surface |
+| `CachingEnablementValidation.CachingEnabledValidator` | operator | startup diagnostic; detects interceptor/manager beans, not the presence of an annotation |
 | `RedisDeploymentValidator$RedisDeploymentChecks` | implementation | internal validation payload |
 | `LockManager.LockHandle` | extension | stable lock handle (§1) |
 | `SerializationException.EnvelopeCodec` | operator | envelope helpers for migration tooling |
@@ -205,9 +208,12 @@ describe *what 1.0 will mean* and are aspirational until the `1.0.0` tag is cut:
 
 1. **Public surface stability** — §1 + §3 have held across at least one
    release cycle without breaking changes.
-2. **Production-grade ops surface** — Maven Central publish under
-   `io.github.davidhlp`, CycloneDX SBOM per release, OWASP dependency-check
-   gate at HIGH/CRITICAL.
+2. **Production-grade ops surface** — same-line Maven Central publication under
+   `io.github.davidhlp`, CycloneDX SBOM per release, and the proposed OWASP
+   dependency-check gate at HIGH/CRITICAL. Current CI uses Dependency Review
+   plus Maven-resolved OSV comparisons; it does not provide the named OWASP
+   gate or an SBOM. See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#ci-shape)
+   for the implemented checks.
 3. **Adoption signal** — at least one production adopter listed in
    `ADOPTERS.md` (created when the first adopter lands).
 4. **Bus factor** — a named successor or a documented succession plan

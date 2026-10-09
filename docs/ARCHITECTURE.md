@@ -16,7 +16,7 @@ Host application
         ▼
 RedisCacheAutoConfiguration
   ├─ binds RedisProCacheProperties
-  ├─ scans only the package-private cache runtime
+  ├─ scans only the internal cache runtime
   └─ assembles the proxy, cache manager, writer, chain, serializer, and observers
         │
         ├─ Spring Data Redis cache I/O
@@ -36,7 +36,9 @@ The operator CLI (`SerializationMigrationCli`) is the second assembly
 boundary: its context names the internal migration beans by class through
 `SerializationMigrationOperatorConfiguration` and excludes
 `RedisCacheAutoConfiguration` by class, so it never assembles the cache/AOP
-runtime and needs no enablement gate.
+runtime and needs no enablement gate. Its dependencies include a Spring Redis
+connection and a Jackson 2 mapper; phase operations have selection limits rather than hard scan/attempt caps, as
+described in [`OPERATIONS.md`](OPERATIONS.md#serialization-rollout-and-rollback-boundary).
 
 ## Module ownership
 
@@ -175,7 +177,7 @@ documents. Update the owning current-state document when a behavior changes.
 | Protection switches resolve once and global-off wins | no runtime chain rebuild or hot-update contract exists | `CacheHandlerChainFactoryTest` |
 | Bloom CLEAN keeps membership bits | membership is not current cache-entry state; stale bits are safe false-positives | `COMPATIBILITY.md`; Bloom tests |
 | Reactive caching is unsupported | the interceptor is blocking and no compatible adopter/CI matrix exists | `COMPATIBILITY.md` |
-| Native-image support is deferred | RuntimeHints/reflection inventory and native toolchain evidence are absent | task ledger |
+| Native-image support is deferred | RuntimeHints/reflection inventory and native verification job are absent | current source and CI; optional task ledger for status |
 | Public surface is allowlist-driven during 0.x | Java visibility alone would overstate compatibility | `STABILITY.md`; allowlist gate |
 
 ## Verification anchors
