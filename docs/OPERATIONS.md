@@ -99,112 +99,111 @@ JSON or JDK serializers. A safe adoption flow is:
 4. retain a rollback path until the new representation is trusted.
 
 The migration CLI and properties are operator-directed surfaces. They are not
-run automatically at application startup. Run the full class name
-`io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli`
-on a classpath containing the core JAR and its runtime dependencies. The plain
-core JAR is not a self-contained executable. Configure
-`spring.data.redis.*`, the serializer allowlist, and a bounded
-`resi-cache.serializer.migration.pattern` before invoking it.
+run automatically at application startup. `DUAL_WRITE` is a one-time batch
+conversion to shadow sidecars, not interception of subsequent application
+writes. Provide actual application dual writes separately, or quiesce writers
+and evictions for the affected keys through validation and cutover. CAS rejects
+source changes during cutover; it does not establish a continuous-write protocol.
 
-Require `resi-cache.serializer.fail-on-unknown-type=true` in the migration
-CLI configuration. With `false`, unsupported envelope versions or ordinary
-payload-binding failures can deserialize to `null`; the engine still counts
-them as `envelopes` instead of `failed`, and the CLI can exit successfully.
-Do not approve a keyspace based on such a permissive run; rerun validation
-with fail-fast mode and verify the application's actual reads.
+### Prepare and invoke the operator
 
-Before any write phase, reserve collision-free `shadow-suffix` and
-`backup-suffix` namespaces under `resi-cache.serializer.migration`. Preflight
-the complete intended source set: no application source key may end in either
-suffix, and each derived `<source><suffix>` destination must be absent or
-verified as a sidecar belonging to this migration. Stop on unrelated or
-unverifiable destinations. The CLI does not enforce this reservation:
-`writeSidecar` overwrites differing destination bytes with UPSERT, and forward
-scans silently skip keys ending in either suffix. A dry run is not a collision
-check. Prevent application writers from creating keys in the reserved
-namespaces throughout migration and cleanup.
+Use JDK 21 and the checked-out core JAR with its production runtime dependencies.
+The plain library JAR has no executable launcher; do not use `java -jar`.
+From the repository root, reuse the existing independent consumer POM template:
 
-The CLI converts serializer bytes; it does not construct ResiCache's runtime
-cache structure. Normal writes store a `CachedValue` wrapper containing the
-chain value and expiry/refresh metadata, while `ActualCacheHandler` treats
-values without that wrapper as cache misses. A directly serialized legacy
-POJO or String can retain its concrete type after conversion and still be
-unusable as a ResiCache cache entry.
+```bash
+(
+set -euo pipefail
+./mvnw install -DskipTests -B
+operator_dir="$(mktemp -d)"
+trap 'rm -rf "$operator_dir"' EXIT
+boot_version="$(./mvnw help:evaluate -Dexpression=project.parent.version -q -DforceStdout)"
+core_version="$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)"
+sed "s/@BOOT_VERSION@/$boot_version/g" scripts/ci/consumer/pom.xml > "$operator_dir/pom.xml"
+./mvnw -f "$operator_dir/pom.xml" -Pminimal -Dresicache.version="$core_version" \
+  dependency:build-classpath -Dmdep.includeScope=runtime \
+  -Dmdep.outputFile="$operator_dir/classpath" -B
+java -cp "$(cat "$operator_dir/classpath")${APP_VALUE_CLASSPATH:+:$APP_VALUE_CLASSPATH}" \
+  io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli \
+  --spring.config.additional-location=file:/secure/resicache-migration.properties \
+  --resi-cache.serializer.migration.pattern='myapp:orders:*' \
+  --resi-cache.serializer.migration.phase=SHADOW_READ \
+  --resi-cache.serializer.migration.dry-run=true
+)
+```
 
-For ResiCache keys, use the CLI only when the decoded legacy value already
-has the complete compatible `CachedValue` structure, including its nested
-value/envelope representation and metadata. Regenerate bare DTO/String values
-or incompatible wrappers through normal application cache writes instead of
-using `CUTOVER` to convert them. Use a strict allowlist limited to trusted
-value packages and the required internal namespace. Field-level type metadata
-does not require global default typing, and enabling that switch does not
-supply the missing runtime wrapper.
-Before `CUTOVER`, verify representative converted sidecars against the
-application's actual cache read path, including wrapper structure, metadata,
-nested values, concrete types and typed cache-hit behavior. Successful CLI
-decoding or serializer round-tripping alone is insufficient.
+Run these build commands in the project development environment; run the Java
+invocation only in the approved operator environment. Replace the example
+pattern and trusted configuration path. Set `APP_VALUE_CLASSPATH` to the JARs
+containing the actual application value classes and their dependencies when
+needed; the minimal consumer profile supplies library dependencies, not host
+classes. Do not put a host Boot executable JAR's nested libraries directly on
+this classpath. The subshell stops on failure and cleans up its temporary files.
 
-| Phase | Effect |
-|---|---|
-| `SHADOW_READ` | Default; decodes and validates legacy values without writing. |
-| `DUAL_WRITE` | Writes current-envelope sidecars with the source TTL; leaves legacy source bytes in place. |
-| `CUTOVER` | Saves legacy backup sidecars, then compares/replaces unchanged source bytes with the current envelope, preserving TTL. |
-| `ROLLBACK` | Uses backups; rejects differing existing source bytes but recreates missing sources from legacy backups. |
+In the protected configuration file or the deployment's existing secrets
+injection, configure `spring.data.redis.*` for the intended Redis deployment,
+`resi-cache.serializer.allowed-package-prefixes` for only the trusted value
+packages (and required internal types), and the actual legacy format through
+`resi-cache.serializer.migration.legacy-serializer`. Keep passwords and payloads
+out of command arguments and public logs. Set
+`resi-cache.serializer.fail-on-unknown-type=true`: permissive decoding can return
+null for invalid current envelopes, which the engine can count as `envelopes`
+rather than `failed`. Successful CLI validation alone does not establish a
+usable cache hit: test representative converted values through the application's
+actual read path, including the compatible `CachedValue` wrapper, nested values
+and expiry metadata. Bare legacy DTO/String values are not automatically given
+that runtime structure; regenerate incompatible entries through application
+cache writes instead of cutting them over. For ResiCache keys, use the CLI only
+when the decoded legacy value already has the complete compatible `CachedValue`
+structure, including its nested value/envelope representation and metadata.
+Verify concrete types and typed cache-hit behavior; serializer round-tripping
+alone is insufficient. Field-level type metadata does not require global
+default typing, and enabling that switch does not supply the missing wrapper.
 
-The CLI is an operator-directed conversion, not an application write interceptor.
-Maintain concurrent application dual writes separately during the rollout.
-`max-keys` limits the engine's `selected` count, not scanned keys or all
-attempts. In forward phases, selection occurs only after legacy decoding and
-serialization succeed; corrupt envelopes and decode/serialization failures
-increment `failed` without consuming that limit. Failures after selection do
-consume it. A run can therefore GET, decode and report every malformed
-matching key even with a small `max-keys`. Valid current envelopes and already
-completed entries also do not consume the limit. `batch-size` is only a SCAN
-hint. There is no separate hard scan or attempt cap in the CLI.
-Do not use `max-keys` alone as a production workload budget: restrict the
-matched key population independently and apply an external execution deadline
-when required. A match pattern does not bound Redis SCAN work, and externally
-interrupted runs must be treated as incomplete.
+### Write preflight and recovery
 
-Successful non-dry-run write phases can skip
-completed entries while their stored state remains valid. `SHADOW_READ` and
-`dry-run=true` persist neither completion state nor a SCAN cursor; repeating
-an invocation with the same pattern and `max-keys` can select the same eligible
-legacy keys again. To validate the whole keyspace, use disjoint bounded
-patterns or a `max-keys` large enough to cover all eligible keys. Reaching the
-limit does not establish that the remaining keys were validated.
-`dry-run=true` prevents mutation. Forward-phase reports expose decoded legacy
-counts, but rollback dry runs do not expose the private selected/planned
-counter: `written` remains zero, and `scanned` includes pending restorations
-and already-restored/no-op backups. They cannot establish how many keys would
-be restored. Independently compare the scoped backups and source state before
-authorizing rollback. Reported rejected/failed keys make the CLI exit
-unsuccessfully; this requires the fail-fast validation configuration above.
+Before any write phase, inventory the complete intended source set and reserve
+collision-free `shadow-suffix` and `backup-suffix` namespaces. No source key may
+end in either suffix; every derived destination must be absent or verified as
+belonging to this migration. Stop on unrelated or unverifiable destinations.
+The CLI skips source keys ending in these suffixes and uses UPSERT to overwrite
+differing sidecar bytes; a dry run does not detect namespace conflicts. Prevent
+other writers from creating reserved keys throughout the migration.
 
-Rollback does not protect deletions: if a source is missing while its backup
-remains, it uses SET_IF_ABSENT to recreate the legacy value, which may resurrect
-a deliberately evicted, stale entry. Quiesce application writes and evictions
-for the affected keys before rollback, and keep them paused until it completes.
-Quiescence alone cannot identify earlier intentional deletions: reconcile
-those against the backup inventory and exclude their backups from rollback
-before running it. Existing changed source bytes are rejected; absence is not
-treated as evidence of an intentional deletion.
+Always specify pattern, phase and dry-run explicitly. The default phase is
+read-only `SHADOW_READ`, but `dry-run` itself defaults to false. After a successful
+preflight, run `DUAL_WRITE` with dry-run false to produce representative sidecars,
+verify actual application reads, then authorize `CUTOVER` separately. Reuse the
+same source pattern and suffix settings for `ROLLBACK`; the engine appends the
+backup suffix itself. Phase and budget semantics are in
+[`REFERENCE.md`](REFERENCE.md#migration-phase-and-budget-semantics).
 
-Sidecars inherit the source TTL at creation. A persistent source produces
-persistent shadows/backups; neither cutover nor rollback deletes them, and the
-CLI has no cleanup phase. Budget for their storage until explicitly removed.
-After validated cutover and the agreed rollback window, or after a completed
-rollback whose result has been verified, stop migration invocations and retire
-application dual writes to these sidecars. Inventory the reserved namespaces,
-review the exact sidecar keys belonging to this migration, then manually
-remove only that approved set in controlled batches. Preserve backups while
-rollback is still required; do not use a broad suffix-only deletion that could
-include unrelated keys. Backups for expiring sources may expire before
-rollback; backups for persistent sources have no automatic retention bound.
-Sidecars are not a durable backup service.
+Inspect the final summary (`scanned`, `envelopes`, `decodedLegacy`, `written`,
+`skippedSidecars`, `failed`) and process exit status. Rejected/failed keys make
+the CLI exit nonzero, but earlier writes can already have succeeded. Resolve
+the cause and reconcile source/sidecar state before retrying; an interrupted
+run is incomplete. There is no persisted SCAN cursor or durable checkpoint,
+and repeating a dry run or SHADOW_READ can validate the same subset again.
+`max-keys` is not a scan, attempt or elapsed-time budget. Even a narrow MATCH
+pattern does not bound Redis SCAN work; independently scope the key population
+and apply an external execution deadline when required.
 
-A serializer change without this workflow can make existing values unreadable; a cache flush is not the only
-rollback strategy and is not required by the documented migration flow.
+Rollback rejects changed existing source bytes, but recreates missing sources
+from backups with SET_IF_ABSENT. This can resurrect intentionally evicted stale
+values. Quiesce writes and evictions, reconcile prior deletions against the
+backup inventory, and exclude their backups before authorizing rollback.
+Backups may already have expired; rollback is not guaranteed for every key.
+
+Sidecars copy the source's remaining TTL at creation; persistent sources produce
+persistent sidecars. Neither cutover nor rollback removes them and there is no
+cleanup phase. Retain backups for the agreed rollback window; after validating
+the result and retiring migration/dual-write activity, review and manually
+remove only the inventoried sidecars belonging to this migration in controlled
+batches. Sidecars are not a durable backup service.
+
+A serializer change without this workflow can make existing values unreadable;
+a cache flush is not the only rollback strategy and is not required by the
+documented migration flow.
 
 ## Release and publication boundary
 

@@ -36,6 +36,11 @@ source changes remain unreleased; publication is tracked in
 
 ### CI/CD
 
+- Validate the packaged-consumer JDK before building, resolve PATH Java shims,
+  and reject missing explicitly supplied candidates. Consolidate documentation
+  checks in one guard with canonical-owner and POM-derived version assertions.
+- Document migration CLI preparation, sidecar namespace and recovery limits;
+  clarify root-file tracking and redact configuration/debug input in bug reports.
 - Share verification across PR/main/merge-group/manual/release workflows; fail
   closed on malformed job results or missing/skipped integration evidence.
 - Reuse verified artifacts for packaged Boot consumers and benchmark smoke;

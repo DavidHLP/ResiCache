@@ -78,6 +78,12 @@ truly necessary, document its reader, distinct responsibility, and lifecycle in
 the documentation map. Preserve changelog history, performance evidence, and
 unresolved task entries.
 
+The root `.gitignore` uses an allowlist: new top-level files or directories are
+silently ignored unless explicitly included. When adding a permanent root
+entry, update its allowlist rule and check `git status --short` and
+`git check-ignore -v <path>` before staging. Keep temporary reports and generated
+outputs ignored; do not force-add them to bypass this boundary.
+
 ## Pull requests
 
 Use the repository PR template. Summarize the behavior and evidence, identify

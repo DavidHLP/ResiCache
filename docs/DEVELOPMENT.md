@@ -62,8 +62,11 @@ failures separately from test failures.
   unless explicitly selected. They run the public value protocol plus a real
   Boot application against Redis in minimal, Redisson and observability modes.
   Use `bash scripts/ci/check-external-consumer.sh <candidate-directory>` to reuse
-  an existing verified candidate; without a candidate, the script packages it.
-  `JAVA_HOME` supplies JDK 21 (`RESICACHE_JDK21` is an optional local override).
+  an existing verified candidate; an explicitly missing directory fails rather
+  than rebuilding. Without an argument, the script reuses `target/ci-candidate`
+  or packages it if absent. JDK selection uses `RESICACHE_JDK21`, then
+  `JAVA_HOME`, then the Java installation on `PATH`; it requires JDK 21 before
+  packaging or installing anything.
   `CONSUMER_REDIS_PORT` can point to an existing localhost Redis instead of Docker.
 - **Topology smoke tests** prove Sentinel master discovery and data/lock access,
   and TLS trusted/untrusted certificate behavior in both clients. They do not

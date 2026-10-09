@@ -173,6 +173,38 @@ Use the shadow-read → dual-write → cutover migration and workload limits des
 Do not claim that an in-place serializer swap, a cache flush, or a historical
 Maven Central artifact proves compatibility with the current line.
 
+### Migration phase and budget semantics
+
+`SerializationMigrationCli` is an independent operator entry point. Exact
+settings live in `SerializationMigrationProperties`; the runnable preparation,
+namespace preflight and recovery procedure belong to
+[`OPERATIONS.md`](OPERATIONS.md#prepare-and-invoke-the-operator).
+
+| Phase | Current effect |
+|---|---|
+| `SHADOW_READ` | Default; decodes legacy values and checks current envelopes without writing. |
+| `DUAL_WRITE` | Writes current-envelope shadow sidecars once; leaves source bytes in place and does not capture future application writes. |
+| `CUTOVER` | Writes legacy backup sidecars, then compares/replaces unchanged source bytes with the current envelope using KEEPTTL. |
+| `ROLLBACK` | Scans the source pattern plus backup suffix; restores the expected converted source or recreates a missing source from its backup. Changed existing bytes are rejected. |
+
+`dry-run=true` prevents writes; its default is false. `max-keys` limits the
+private selected count, not SCAN results or all attempts. In forward phases,
+selection follows successful legacy decoding/serialization; current envelopes,
+sidecars, completed DUAL_WRITE sidecars and failures before selection do not
+consume the limit. Failures after selection do. Rollback selects before legacy
+decoding, so its decode failures consume the limit. `batch-size` is a SCAN hint,
+not a hard cap. `scanned` excludes forward sidecars and is not the selected
+count; `written` counts successful writes and can include both backup and source
+writes for one CUTOVER key. Rollback dry runs expose no planned-restoration
+count: zero written does not mean no restorations are pending.
+
+Runs have no durable cursor/checkpoint. Completed write-phase state can permit
+skipping some keys on a later invocation; dry runs and SHADOW_READ persist no
+completion state and may select the same keys again. Reaching max-keys or a
+successful exit does not prove the entire matching keyspace was validated.
+Per-key failures are counted and scanning continues, then the CLI exits nonzero;
+successful earlier writes are not rolled back automatically.
+
 ## Errors and diagnostics
 
 Binding validation reports concrete property paths. Missing distributed lock
