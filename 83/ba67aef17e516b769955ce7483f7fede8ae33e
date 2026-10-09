@@ -1,0 +1,22 @@
+scripts/ci/tests/test_consumer.py
+  s_03185ac65e3068::t_67d49206da007a 34-35,81-90
+  s_03185ac65e3068::t_d72a95c9db2bc2 91-92
+scripts/ci/check-external-consumer.sh
+  s_03185ac65e3068::t_67d49206da007a 20-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "83ba67aef17e516b769955ce7483f7fede8ae33e",
+  "prompts": {},
+  "sessions": {
+    "s_03185ac65e3068": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11f62-7c6e-7b41-b687-0e82092ba287",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
