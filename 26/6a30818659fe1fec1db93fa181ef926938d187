@@ -1,0 +1,26 @@
+docs/OPERATIONS.md
+  s_03185ac65e3068::t_284483a6c4f151 104-105,108,121,130
+  s_03185ac65e3068::t_395deec1cde9fe 91-103,106-107,109-120,122-129,131-190
+CONTRIBUTING.md
+  s_03185ac65e3068::t_395deec1cde9fe 81-86
+.github/ISSUE_TEMPLATE/bug_report.yml
+  s_03185ac65e3068::t_395deec1cde9fe 45-46,54,67-68
+docs/REFERENCE.md
+  s_03185ac65e3068::t_395deec1cde9fe 150-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "266a30818659fe1fec1db93fa181ef926938d187",
+  "prompts": {},
+  "sessions": {
+    "s_03185ac65e3068": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11f62-7c6e-7b41-b687-0e82092ba287",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
