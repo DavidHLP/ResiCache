@@ -56,6 +56,10 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <redisson.version>3.50.0</redisson.version>
         <lombok.version>1.18.34</lombok.version>
+        <!-- Keep user JVM arguments separate from JaCoCo's late-bound agent. -->
+        <argLine/>
+        <jacocoArgLine/>
+        <test.jvm.args>@{jacocoArgLine} ${argLine} -javaagent:"${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar"</test.jvm.args>
         <!--
             Ryuk (Testcontainers' resource-reaper) disabled by default. The real
             blocker is image availability, not docker0: in registry-restricted
@@ -288,6 +292,9 @@
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
+                        <configuration>
+                            <propertyName>jacocoArgLine</propertyName>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>report</id>
@@ -328,6 +335,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <argLine>${test.jvm.args}</argLine>
                     <environmentVariables>
                         <TESTCONTAINERS_RYUK_DISABLED>${testcontainers.ryuk.disabled}</TESTCONTAINERS_RYUK_DISABLED>
                     </environmentVariables>
@@ -390,6 +398,7 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration combine.self="override">
+                            <argLine>${test.jvm.args}</argLine>
                             <!-- 嵌套测试类是独立 .class 文件(Outer$Nested),名字含
                                  IntegrationTest 但不以后缀结尾,须用中缀模式排除,
                                  否则嵌套类单独通过默认 *Tests.java 包含规则被选中。 -->

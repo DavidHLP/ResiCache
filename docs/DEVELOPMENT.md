@@ -14,6 +14,11 @@ which command proves which boundary.
   for CI contract checks. Linux x86-64 is the CI runner platform.
 - A working local Maven cache; no committed credentials are required.
 
+Surefire starts the Boot-managed Mockito agent explicitly, rather than relying
+on dynamic self-attachment. The full and unit paths share this configuration
+and preserve user `-DargLine` JVM arguments alongside JaCoCo's separate,
+late-bound agent arguments.
+
 The root build is the core library. `resicache-bench/` is a separate JMH module
 with its own POM and is not a release-compatibility proof for the core library.
 
