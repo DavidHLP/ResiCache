@@ -34,7 +34,6 @@ class TestJvmConfigurationTests(unittest.TestCase):
 
     def test_coverage_thresholds_remain_unchanged(self):
         jacoco = self.plugin(self.pom, "jacoco-maven-plugin")
-        self.assertEqual("0.8.11", jacoco.findtext("m:version", namespaces=self.ns))
         executions = {e.findtext("m:id", namespaces=self.ns): e
                       for e in jacoco.findall("m:executions/m:execution", self.ns)}
         for name in ("prepare-agent", "report", "check"):
@@ -53,6 +52,46 @@ class TestJvmConfigurationTests(unittest.TestCase):
             item.findtext("m:minimum", namespaces=self.ns) for item in limits})
         self.assertTrue(all(item.findtext("m:value", namespaces=self.ns) == "COVEREDRATIO"
                             for item in limits))
+
+    def test_coverage_guard_allows_plugin_updates_but_rejects_weaker_limits(self):
+        jacoco = self.plugin(self.pom, "jacoco-maven-plugin")
+        jacoco.find("m:version", self.ns).text = "0.8.15"
+        self.test_coverage_thresholds_remain_unchanged()
+        limits = jacoco.findall(
+            "m:executions/m:execution/m:configuration/m:rules/m:rule/m:limits/m:limit",
+            self.ns)
+        for counter in ("LINE", "BRANCH"):
+            # The existing guard aggregates limits by counter. Mutate every
+            # occurrence together so an additional rule cannot shadow the
+            # mutation. This test does not broaden that guard's semantics.
+            minima = [limit.find("m:minimum", self.ns) for limit in limits
+                      if limit.findtext("m:counter", namespaces=self.ns) == counter]
+            original = [minimum.text for minimum in minima]
+            with self.subTest(counter=counter):
+                try:
+                    for minimum in minima:
+                        minimum.text = "0.00"
+                    with self.assertRaises(AssertionError):
+                        self.test_coverage_thresholds_remain_unchanged()
+                finally:
+                    for minimum, value in zip(minima, original):
+                        minimum.text = value
+
+    def test_plugin_update_regression_allows_additional_class_line_rule(self):
+        jacoco = self.plugin(self.pom, "jacoco-maven-plugin")
+        check = next(e for e in jacoco.findall("m:executions/m:execution", self.ns)
+                     if e.findtext("m:id", namespaces=self.ns) == "check")
+        rules = check.find("m:configuration/m:rules", self.ns)
+        rules.append(ET.fromstring('''
+            <rule xmlns="http://maven.apache.org/POM/4.0.0">
+                <element>CLASS</element>
+                <limits><limit>
+                    <counter>LINE</counter><value>COVEREDRATIO</value><minimum>0.70</minimum>
+                </limit></limits>
+            </rule>'''))
+        self.test_coverage_thresholds_remain_unchanged()
+        self.test_coverage_guard_allows_plugin_updates_but_rejects_weaker_limits()
+        self.test_coverage_thresholds_remain_unchanged()
 
     def test_full_and_unit_test_boundaries_remain_distinct(self):
         full = self.plugin(self.pom, "maven-surefire-plugin").find("m:configuration", self.ns)
