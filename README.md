@@ -40,7 +40,7 @@ The supported repository line is:
 - Spring Boot 4.0.0 / Spring Framework 7 / Spring Data Redis 4.0.x
 - Java 21
 - Redis 7.x
-- Redisson 3.50.0 when distributed synchronization is needed
+- Redisson 4.8.0 when distributed synchronization is needed
 - Caffeine 3.1.8 for internal support
 
 Boot 3.x is not a maintained compatibility line. The complete matrix,

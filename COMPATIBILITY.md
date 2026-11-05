@@ -3,7 +3,7 @@
 ResiCache ships on a **single build line**:
 
 - **`main` branch — Spring Boot 4.0 / SDR 4.0 / Spring 7 / Java 21 /
-  Redisson 3.50**.
+  Redisson 4.8**.
 
 CI is configured to run `clean verify -B` on Java 21. Local verification also
 requires JDK 21 and Docker for Testcontainers. A configured CI matrix is not
@@ -34,14 +34,14 @@ a claim that every patch of a component has been tested.
 | Spring Cache | 7.x | (via Boot) |
 | Spring Data Redis | 4.0.x | (via Boot) |
 | Redis Server | 7.x | 7.x |
-| Redisson | 3.50.0 | 3.50.0 |
+| Redisson | 4.8.0 | Full integration and packaged-consumer CI |
 | Caffeine | 3.1.8 | 3.1.8 |
 | Testcontainers | 1.20.6 (test scope) | CI/integration tests |
 
 ## Spring Boot version policy
 
 - **`main` line (sole line)**: `spring-boot-starter-parent 4.0.0` + SDR 4.0
-  + Spring 7 + Java 21 + Redisson 3.50. Build/verify with
+  + Spring 7 + Java 21 + Redisson 4.8. Build/verify with
   `./mvnw clean verify -B` on JDK 21.
 - **Boot 4 modularization note**: Boot 4 relocated packages
   (`o.s.b.autoconfigure.data.redis.*` → `o.s.b.data.redis.autoconfigure.*` and

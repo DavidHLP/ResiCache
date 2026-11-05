@@ -56,7 +56,7 @@ source changes remain unreleased; publication is tracked in
   Actuator and Redisson remain optional.
 
 The project is on a **single build line**: Spring Boot
-4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 3.50.0. Dual-branch
+4.0 / SDR 4.0 / Spring 7 / Java 21 / Redisson 4.8.0. Dual-branch
 (`master` / `boot4`) is abandoned; the current build line is `main` and Boot
 4 is configured directly in `pom.xml`. See [`COMPATIBILITY.md`](./COMPATIBILITY.md).
 

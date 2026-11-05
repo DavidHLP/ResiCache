@@ -36,7 +36,7 @@
 - Spring Boot 4.0.0 / Spring Framework 7 / Spring Data Redis 4.0.x
 - Java 21
 - Redis 7.x
-- 需要分布式同步时使用 Redisson 3.50.0
+- 需要分布式同步时使用 Redisson 4.8.0
 - Caffeine 3.1.8（内部支持）
 
 Boot 3.x 不是当前维护的兼容线。完整版本矩阵、序列化迁移边界、失败语义和
