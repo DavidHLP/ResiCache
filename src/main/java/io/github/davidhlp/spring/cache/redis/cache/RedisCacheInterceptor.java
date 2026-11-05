@@ -17,7 +17,7 @@ import org.springframework.lang.Nullable;
  * ResiCache 缓存拦截器 —— 单一 advice seam。
  *
  * <p>继承 Spring {@link CacheInterceptor} 以满足 {@code BeanFactoryCacheOperationSourceAdvisor}
- * 对 advice 的硬约束(Spring AOP 6.x 对 {@code CacheInterceptor} 子类有特殊处理:独立
+ * 对 advice 的硬约束(Spring Cache 对 {@code CacheInterceptor} 子类有特殊处理:独立
  * {@code implements MethodInterceptor} 时 {@code @RedisCacheable} 装配会失效)。本类是 advisor
  * 直接持有的 advice —— 装配职责与拦截职责收口到同一处。
  *

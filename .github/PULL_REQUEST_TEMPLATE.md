@@ -13,6 +13,7 @@
 - [ ] `./mvnw checkstyle:check -B` passes when Java source changed.
 - [ ] New behavior has tests; bug fixes have a regression test.
 - [ ] Redis integration tests use `AbstractRedisIntegrationTest`; Cluster tests use `AbstractRedisClusterIntegrationTest` (Testcontainers — Docker must be running).
+- [ ] `bash scripts/ci/check-workflows.sh` passes when workflows or CI scripts changed.
 - [ ] `bash scripts/ci/check-test-names.sh` passes; integration classes do not use `*IT.java`.
 - [ ] `bash scripts/ci/check-docs-contracts.sh` passes when docs, source references, or public contracts changed.
 - [ ] Documentation changes update the canonical owner in [`docs/README.md`](../docs/README.md); no task/date/session document was added as current-state policy.
