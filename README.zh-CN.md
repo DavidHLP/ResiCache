@@ -37,7 +37,7 @@
 - Java 21
 - Redis 7.x
 - 需要分布式同步时使用 Redisson 3.50.0
-- Caffeine 3.1.8（内部支持）
+- Caffeine 3.3.0（内部支持）
 
 Boot 3.x 不是当前维护的兼容线。完整版本矩阵、序列化迁移边界、失败语义和
 已知限制见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
