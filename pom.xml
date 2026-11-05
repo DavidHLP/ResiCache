@@ -55,7 +55,7 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <redisson.version>3.50.0</redisson.version>
-        <lombok.version>1.18.34</lombok.version>
+        <lombok.version>1.18.48</lombok.version>
         <!--
             Ryuk (Testcontainers' resource-reaper) disabled by default. The real
             blocker is image availability, not docker0: in registry-restricted
@@ -281,7 +281,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.11</version>
+                <version>0.8.15</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
