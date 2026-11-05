@@ -144,8 +144,8 @@ class ActualCacheHandler extends AbstractCacheHandler {
                   context.getCacheName(), context.getRedisKey(), cachedValue.getRemainingTtl());
 
         // 读路径默认不触发写操作，避免写放大。
-        // 如需 TTI（读取刷新 TTL），应使用 Spring Data Redis 的 RedisCacheConfiguration.enableTimeToIdle()，
-        // 由 Redis 6.2+ 的 GETEX 命令实现，无需重写 value。
+        // 本 writer 的 cacheTti 参数也不触发 GETEX；启用 Spring 配置中的 TTI
+        // 不会改变此处的普通 TTL 读语义，见 COMPATIBILITY.md。
         byte[] result = encodeForReturn(cachedValue.getValue(), context);
 
         return CacheResult.success(result);
@@ -157,7 +157,7 @@ class ActualCacheHandler extends AbstractCacheHandler {
      * <p>null 决策本身属于 {@link CacheValueCodec}(它产出占位字节),但 {@code cacheName} /
      * {@code key} 上下文只存在于调用点,故 codec 保持无上下文,日志留在两个持上下文的调用点上;
      * 判定条件用 codec 的 {@link CacheValueCodec#isNullDecision} 而非复制一份,两者不会漂移。
-     * 该行是 main 上 {@code NullValueEncoder} 的原样恢复(同一措辞与级别)。
+     * DEBUG 行保留既有措辞与级别，当前编码由 CacheValueCodec 统一负责。
      */
     private byte[] encodeForReturn(Object value, CacheContext context) {
         if (CacheValueCodec.isNullDecision(value)) {

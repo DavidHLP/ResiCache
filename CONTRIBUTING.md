@@ -78,11 +78,19 @@ truly necessary, document its reader, distinct responsibility, and lifecycle in
 the documentation map. Preserve changelog history, performance evidence, and
 unresolved task entries.
 
+The root `.gitignore` uses an allowlist: new top-level files or directories are
+silently ignored unless explicitly included. When adding a permanent root
+entry, update its allowlist rule and check `git status --short` and
+`git check-ignore -v <path>` before staging. Keep temporary reports and generated
+outputs ignored; do not force-add them to bypass this boundary.
+
 ## Pull requests
 
 Use the repository PR template. Summarize the behavior and evidence, identify
 compatibility impact, and state what was not run. Documentation-only changes
-still need link/reference review and the docs contract check.
+still need link/reference review and the docs contract check. The shared CI
+classifies only its explicit documentation path allowlist as docs-only; changes
+to Java comments, templates, workflows, or scripts still run full verification.
 
 Be respectful and constructive. This is a best-effort project; assume good
 intent and keep discussions focused on the code and its evidence.
@@ -90,9 +98,10 @@ intent and keep discussions focused on the code and its evidence.
 ## Maintainers and bus factor
 
 ResiCache is currently a **single-maintainer project** — all merges, releases,
-and architectural decisions flow through `DavidHLP` (the only committer with
-`CODEOWNERS` write access on `main`; `master` is retained only where legacy
-workflow references still exist).
+and architectural decisions flow through `DavidHLP`, the owner named in
+[`.github/CODEOWNERS`](.github/CODEOWNERS).
+`main` is the sole maintained branch. CODEOWNERS records review ownership;
+repository permissions and branch protection are managed separately on GitHub.
 
 **Bus factor: 1** is the current state, not an aspirational promise. Before a
 `1.0.0` tag, this section must document either a named successor or a
