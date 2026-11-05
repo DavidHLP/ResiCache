@@ -41,7 +41,7 @@ The supported repository line is:
 - Java 21
 - Redis 7.x
 - Redisson 3.50.0 when distributed synchronization is needed
-- Caffeine 3.1.8 for internal support
+- Caffeine 3.3.0 for internal support
 
 Boot 3.x is not a maintained compatibility line. The complete matrix,
 serialization migration boundary, failure semantics, and known limitations are
