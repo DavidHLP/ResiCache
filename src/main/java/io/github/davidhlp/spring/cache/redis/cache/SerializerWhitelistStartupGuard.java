@@ -23,9 +23,8 @@ import org.springframework.stereotype.Component;
  * 用户补回;谓词 {@link #shouldWarn()} package-private 便于单元测试。不动 default
  * value(默认 {@code [io.github.davidhlp]}),不改 property key,非 breaking 改动。
  *
- * <p>与 GUIDE §4 中"whitelist auto-derive"项配套:该完整项需 host app root package
- * BeanFactory 自推导 + 启动 WARN,标 ⚠️ BREAKING;本类是其中 WARN 的 scaffolding,
- * 单独可发,留待 auto-derive 落地时复用。
+ * <p>本守卫只检查列表是否为空，不推导业务包，也不修改白名单。
+ * 应用需显式配置业务类型所在的包，并保留框架内部值所需的命名空间。
  */
 @Slf4j
 @Component

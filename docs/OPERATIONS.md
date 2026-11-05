@@ -24,13 +24,24 @@ lifecycle, secrets injection, and Redis availability.
 I/O. `resi-cache.redis.*` configures the Redisson deployment used for locks and
 synchronization; `resi-cache.redisson.*` controls its pool, timeout, and retry
 settings. Configure matching topology explicitly in both namespaces when
-`sync=true` is used.
+`sync=true` is used. Redisson's single-node mode falls back to Spring's host
+only for a blank library host, to Spring's password for a missing/empty library
+password, and to Spring's database when the library database is `0`. Its port,
+username and TLS flag use library properties; their Spring counterparts are not
+copied. Defaults already supply localhost and port 6379, so setting only
+`spring.data.redis.host` does not redirect the default Redisson connection.
+Cluster and Sentinel use the library node/ACL configuration directly.
+
+When Redisson is on the classpath, the library creates a client at startup
+unless one already exists, even if no annotation uses synchronization. Omitting
+Redisson is the minimal no-lock path; adding it requires a reachable deployment.
 
 Supported deployment modes are `single`, `cluster`, and `sentinel`, with
 binding-time validation for mode-specific fields and TLS requirements. The
 advanced `resi-cache.redis.redisson-config-path` value is a trusted operator
 input only: it is read as a local YAML path and must never come from an
-end-user request.
+end-user request. This override returns the file configuration directly; the
+normal library topology/pool settings are not then applied.
 
 Redisson is optional until an operation requests distributed synchronization.
 With no distributed `LockManager`, `sync=true` fails closed by default.
@@ -88,9 +99,111 @@ JSON or JDK serializers. A safe adoption flow is:
 4. retain a rollback path until the new representation is trusted.
 
 The migration CLI and properties are operator-directed surfaces. They are not
-run automatically at application startup. A serializer change without this
-workflow can make existing values unreadable; a cache flush is not the only
-rollback strategy and is not required by the documented migration flow.
+run automatically at application startup. `DUAL_WRITE` is a one-time batch
+conversion to shadow sidecars, not interception of subsequent application
+writes. Provide actual application dual writes separately, or quiesce writers
+and evictions for the affected keys through validation and cutover. CAS rejects
+source changes during cutover; it does not establish a continuous-write protocol.
+
+### Prepare and invoke the operator
+
+Use JDK 21 and the checked-out core JAR with its production runtime dependencies.
+The plain library JAR has no executable launcher; do not use `java -jar`.
+From the repository root, reuse the existing independent consumer POM template:
+
+```bash
+(
+set -euo pipefail
+./mvnw install -DskipTests -B
+operator_dir="$(mktemp -d)"
+trap 'rm -rf "$operator_dir"' EXIT
+boot_version="$(./mvnw help:evaluate -Dexpression=project.parent.version -q -DforceStdout)"
+core_version="$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)"
+sed "s/@BOOT_VERSION@/$boot_version/g" scripts/ci/consumer/pom.xml > "$operator_dir/pom.xml"
+./mvnw -f "$operator_dir/pom.xml" -Pminimal -Dresicache.version="$core_version" \
+  dependency:build-classpath -Dmdep.includeScope=runtime \
+  -Dmdep.outputFile="$operator_dir/classpath" -B
+java -cp "$(cat "$operator_dir/classpath")${APP_VALUE_CLASSPATH:+:$APP_VALUE_CLASSPATH}" \
+  io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationCli \
+  --spring.config.additional-location=file:/secure/resicache-migration.properties \
+  --resi-cache.serializer.migration.pattern='myapp:orders:*' \
+  --resi-cache.serializer.migration.phase=SHADOW_READ \
+  --resi-cache.serializer.migration.dry-run=true
+)
+```
+
+Run these build commands in the project development environment; run the Java
+invocation only in the approved operator environment. Replace the example
+pattern and trusted configuration path. Set `APP_VALUE_CLASSPATH` to the JARs
+containing the actual application value classes and their dependencies when
+needed; the minimal consumer profile supplies library dependencies, not host
+classes. Do not put a host Boot executable JAR's nested libraries directly on
+this classpath. The subshell stops on failure and cleans up its temporary files.
+
+In the protected configuration file or the deployment's existing secrets
+injection, configure `spring.data.redis.*` for the intended Redis deployment,
+`resi-cache.serializer.allowed-package-prefixes` for only the trusted value
+packages (and required internal types), and the actual legacy format through
+`resi-cache.serializer.migration.legacy-serializer`. Keep passwords and payloads
+out of command arguments and public logs. Set
+`resi-cache.serializer.fail-on-unknown-type=true`: permissive decoding can return
+null for invalid current envelopes, which the engine can count as `envelopes`
+rather than `failed`. Successful CLI validation alone does not establish a
+usable cache hit: test representative converted values through the application's
+actual read path, including the compatible `CachedValue` wrapper, nested values
+and expiry metadata. Bare legacy DTO/String values are not automatically given
+that runtime structure; regenerate incompatible entries through application
+cache writes instead of cutting them over. For ResiCache keys, use the CLI only
+when the decoded legacy value already has the complete compatible `CachedValue`
+structure, including its nested value/envelope representation and metadata.
+Verify concrete types and typed cache-hit behavior; serializer round-tripping
+alone is insufficient. Field-level type metadata does not require global
+default typing, and enabling that switch does not supply the missing wrapper.
+
+### Write preflight and recovery
+
+Before any write phase, inventory the complete intended source set and reserve
+collision-free `shadow-suffix` and `backup-suffix` namespaces. No source key may
+end in either suffix; every derived destination must be absent or verified as
+belonging to this migration. Stop on unrelated or unverifiable destinations.
+The CLI skips source keys ending in these suffixes and uses UPSERT to overwrite
+differing sidecar bytes; a dry run does not detect namespace conflicts. Prevent
+other writers from creating reserved keys throughout the migration.
+
+Always specify pattern, phase and dry-run explicitly. The default phase is
+read-only `SHADOW_READ`, but `dry-run` itself defaults to false. After a successful
+preflight, run `DUAL_WRITE` with dry-run false to produce representative sidecars,
+verify actual application reads, then authorize `CUTOVER` separately. Reuse the
+same source pattern and suffix settings for `ROLLBACK`; the engine appends the
+backup suffix itself. Phase and budget semantics are in
+[`REFERENCE.md`](REFERENCE.md#migration-phase-and-budget-semantics).
+
+Inspect the final summary (`scanned`, `envelopes`, `decodedLegacy`, `written`,
+`skippedSidecars`, `failed`) and process exit status. Rejected/failed keys make
+the CLI exit nonzero, but earlier writes can already have succeeded. Resolve
+the cause and reconcile source/sidecar state before retrying; an interrupted
+run is incomplete. There is no persisted SCAN cursor or durable checkpoint,
+and repeating a dry run or SHADOW_READ can validate the same subset again.
+`max-keys` is not a scan, attempt or elapsed-time budget. Even a narrow MATCH
+pattern does not bound Redis SCAN work; independently scope the key population
+and apply an external execution deadline when required.
+
+Rollback rejects changed existing source bytes, but recreates missing sources
+from backups with SET_IF_ABSENT. This can resurrect intentionally evicted stale
+values. Quiesce writes and evictions, reconcile prior deletions against the
+backup inventory, and exclude their backups before authorizing rollback.
+Backups may already have expired; rollback is not guaranteed for every key.
+
+Sidecars copy the source's remaining TTL at creation; persistent sources produce
+persistent sidecars. Neither cutover nor rollback removes them and there is no
+cleanup phase. Retain backups for the agreed rollback window; after validating
+the result and retiring migration/dual-write activity, review and manually
+remove only the inventoried sidecars belonging to this migration in controlled
+batches. Sidecars are not a durable backup service.
+
+A serializer change without this workflow can make existing values unreadable;
+a cache flush is not the only rollback strategy and is not required by the
+documented migration flow.
 
 ## Release and publication boundary
 
@@ -142,10 +255,11 @@ remain enabled; Dependabot alerts and security updates complement CI scans.
 Workflow files describe intended checks; remote branch/environment settings
 must also be verified when configuring the repository.
 
-The Boot 4 / Java 21 line remains source-first until a matching Central artifact
-is actually published and verified. A local install, candidate bundle or green
-CI run is not a publication claim. Public publication is triggered separately
-by a maintainer's new version tag after configuring namespace/signing access.
+Current publication status and its verification evidence are owned by
+[`COMPATIBILITY.md`](../COMPATIBILITY.md). A local install, candidate bundle or
+green CI run is not a publication claim. Public publication is triggered
+separately by a maintainer's new version tag after configuring
+namespace/signing access.
 
 ## Backup, restore, and hosted-service limits
 
