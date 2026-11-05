@@ -24,13 +24,24 @@ lifecycle, secrets injection, and Redis availability.
 I/O. `resi-cache.redis.*` configures the Redisson deployment used for locks and
 synchronization; `resi-cache.redisson.*` controls its pool, timeout, and retry
 settings. Configure matching topology explicitly in both namespaces when
-`sync=true` is used.
+`sync=true` is used. Redisson's single-node mode falls back to Spring's host
+only for a blank library host, to Spring's password for a missing/empty library
+password, and to Spring's database when the library database is `0`. Its port,
+username and TLS flag use library properties; their Spring counterparts are not
+copied. Defaults already supply localhost and port 6379, so setting only
+`spring.data.redis.host` does not redirect the default Redisson connection.
+Cluster and Sentinel use the library node/ACL configuration directly.
+
+When Redisson is on the classpath, the library creates a client at startup
+unless one already exists, even if no annotation uses synchronization. Omitting
+Redisson is the minimal no-lock path; adding it requires a reachable deployment.
 
 Supported deployment modes are `single`, `cluster`, and `sentinel`, with
 binding-time validation for mode-specific fields and TLS requirements. The
 advanced `resi-cache.redis.redisson-config-path` value is a trusted operator
 input only: it is read as a local YAML path and must never come from an
-end-user request.
+end-user request. This override returns the file configuration directly; the
+normal library topology/pool settings are not then applied.
 
 Redisson is optional until an operation requests distributed synchronization.
 With no distributed `LockManager`, `sync=true` fails closed by default.
@@ -142,7 +153,12 @@ usable cache hit: test representative converted values through the application's
 actual read path, including the compatible `CachedValue` wrapper, nested values
 and expiry metadata. Bare legacy DTO/String values are not automatically given
 that runtime structure; regenerate incompatible entries through application
-cache writes instead of cutting them over.
+cache writes instead of cutting them over. For ResiCache keys, use the CLI only
+when the decoded legacy value already has the complete compatible `CachedValue`
+structure, including its nested value/envelope representation and metadata.
+Verify concrete types and typed cache-hit behavior; serializer round-tripping
+alone is insufficient. Field-level type metadata does not require global
+default typing, and enabling that switch does not supply the missing wrapper.
 
 ### Write preflight and recovery
 
@@ -239,10 +255,11 @@ remain enabled; Dependabot alerts and security updates complement CI scans.
 Workflow files describe intended checks; remote branch/environment settings
 must also be verified when configuring the repository.
 
-The Boot 4 / Java 21 line remains source-first until a matching Central artifact
-is actually published and verified. A local install, candidate bundle or green
-CI run is not a publication claim. Public publication is triggered separately
-by a maintainer's new version tag after configuring namespace/signing access.
+Current publication status and its verification evidence are owned by
+[`COMPATIBILITY.md`](../COMPATIBILITY.md). A local install, candidate bundle or
+green CI run is not a publication claim. Public publication is triggered
+separately by a maintainer's new version tag after configuring
+namespace/signing access.
 
 ## Backup, restore, and hosted-service limits
 
