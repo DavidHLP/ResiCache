@@ -9,14 +9,7 @@ docs=(
   docs/README.md docs/PRODUCT.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
   docs/OPERATIONS.md docs/REFERENCE.md
 )
-required_docs=(
-  README.md README.zh-CN.md AGENTS.md
-  STABILITY.md COMPATIBILITY.md CHANGELOG.md CONTRIBUTING.md SECURITY.md PERFORMANCE.md
-  docs/README.md docs/PRODUCT.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
-  docs/OPERATIONS.md docs/REFERENCE.md
-)
-
-for doc in "${required_docs[@]}"; do
+for doc in "${docs[@]}"; do
   if [[ ! -f "$doc" ]]; then
     printf 'Missing canonical documentation entry point: %s\n' "$doc" >&2
     exit 1
@@ -26,32 +19,47 @@ done
 for forbidden in \
   'pr-checks.yml' \
   'maven-failsafe-plugin' \
-  'Testcontainers | 1.20.4' \
   '| Java | 21+ |' \
   '| JDK | 21+ |' \
   '@ComponentScan' \
   'Java 21+' \
   'JDK 21+'; do
-  if grep -nF -- "$forbidden" "${docs[@]}"; then
-    printf 'Forbidden stale documentation value: %s\n' "$forbidden" >&2
+  for doc in "${docs[@]}"; do
+    # History may quote superseded guidance without making it current policy.
+    case "$doc" in CHANGELOG.md|PERFORMANCE.md) continue ;; esac
+    if grep -nF -- "$forbidden" "$doc"; then
+      printf 'Forbidden stale documentation value: %s\n' "$forbidden" >&2
+      exit 1
+    fi
+  done
+done
+
+while IFS='|' read -r owner required; do
+  if ! grep -qF -- "$required" "$owner"; then
+    printf 'Missing required contract documentation value in %s: %s\n' "$owner" "$required" >&2
+    exit 1
+  fi
+done <<'CONTRACTS'
+COMPATIBILITY.md|PUT, PUT_IF_ABSENT, and CLEAN
+COMPATIBILITY.md|Reactive
+docs/REFERENCE.md|resi-cache.bloom
+CONTRACTS
+
+# README/source checks have one owner so the local guard matches CI.
+for symbol in CircuitBreakerCacheWrapper RateLimiterCacheWrapper \
+  SpelConditionEvaluator CacheEvictedEvent CacheMetricsRecorder \
+  BloomFilterProvider LockProvider RedissonLockProvider; do
+  if grep -nF -- "\`$symbol\`" README.md README.zh-CN.md; then
+    printf 'Removed symbol referenced in README: %s\n' "$symbol" >&2
     exit 1
   fi
 done
 
-for required in \
-  'PUT, PUT_IF_ABSENT, and CLEAN' \
-  'Reactive' \
-  'Testcontainers | 1.20.6' \
-  'resi-cache.bloom'; do
-  found=0
-  for doc in "${docs[@]}"; do
-    if grep -qF -- "$required" "$doc"; then
-      found=1
-      break
-    fi
-  done
-  if [[ "$found" -ne 1 ]]; then
-    printf 'Missing required contract documentation value: %s\n' "$required" >&2
+for class in RedisCacheAutoConfiguration RedisProCacheProperties RedisProCache \
+  RedisProCacheManager CacheHandlerChainFactory RedisCacheInterceptor \
+  RedisCacheOperationSource RedissonConfiguration; do
+  if [[ -z "$(find src/main/java -name "${class}.java" -print -quit)" ]]; then
+    printf 'Key class referenced in documentation missing from source: %s\n' "$class" >&2
     exit 1
   fi
 done
@@ -91,6 +99,11 @@ pom_testcontainers_version="$(
 )"
 if [[ -z "$pom_testcontainers_version" ]]; then
   printf 'Could not read Testcontainers BOM version from pom.xml\n' >&2
+  exit 1
+fi
+
+if ! grep -qF -- "| Testcontainers | $pom_testcontainers_version (test scope) |" COMPATIBILITY.md; then
+  printf 'Testcontainers compatibility table must match POM version: %s\n' "$pom_testcontainers_version" >&2
   exit 1
 fi
 
