@@ -83,7 +83,7 @@ documentation and source.
 | Distributed lock | optional Redisson 3.50.0 | `pom.xml` |
 | Local support | Caffeine 3.1.8 | `pom.xml` |
 | Build | Maven 3.x / `./mvnw` | root POM and wrapper |
-| Tests | JUnit 5, Testcontainers, AssertJ, Awaitility | `pom.xml` and `src/test/` |
+| Tests | JUnit Jupiter (Boot-managed), Testcontainers, AssertJ, Awaitility | `pom.xml` and `src/test/` |
 
 Do not copy dependency versions into a second contract. The current source
 tree and module ownership are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -105,6 +105,7 @@ runtime module.
 - Separate style gate: `./mvnw checkstyle:check -B`.
 - Packaged public-consumer gate: `bash scripts/ci/check-external-consumer.sh`.
 - Documentation/source guard: `bash scripts/ci/check-docs-contracts.sh`.
+- Workflow/script guard: `bash scripts/ci/check-workflows.sh`.
 
 Full command semantics, test layers, CI, and contribution checks live in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) and
