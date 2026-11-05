@@ -35,7 +35,7 @@ a claim that every patch of a component has been tested.
 | Spring Data Redis | 4.0.x | (via Boot) |
 | Redis Server | 7.x | 7.x |
 | Redisson | 3.50.0 | 3.50.0 |
-| Caffeine | 3.1.8 | 3.1.8 |
+| Caffeine | 3.3.0 | Full integration and packaged-consumer CI |
 | Testcontainers | 1.20.6 (test scope) | CI/integration tests |
 
 ## Spring Boot version policy

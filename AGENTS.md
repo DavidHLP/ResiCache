@@ -81,7 +81,7 @@ documentation and source.
 | Framework | Spring Boot 4.0.0 / Spring 7 | `pom.xml` |
 | Cache | Spring Cache + Spring Data Redis 4.0.x | `pom.xml` |
 | Distributed lock | optional Redisson 3.50.0 | `pom.xml` |
-| Local support | Caffeine 3.1.8 | `pom.xml` |
+| Local support | Caffeine 3.3.0 | `pom.xml` |
 | Build | Maven 3.x / `./mvnw` | root POM and wrapper |
 | Tests | JUnit Jupiter (Boot-managed), Testcontainers, AssertJ, Awaitility | `pom.xml` and `src/test/` |
 
