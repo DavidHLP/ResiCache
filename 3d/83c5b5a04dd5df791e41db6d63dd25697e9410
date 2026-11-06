@@ -1,0 +1,115 @@
+.gitattributes
+  s_f873eae7d67c42::t_cea85e60e81651 1-2
+.github/ISSUE_TEMPLATE/bug_report.yml
+  s_f873eae7d67c42::t_015f379271a4c4 45-46,54,67-68
+.github/PULL_REQUEST_TEMPLATE.md
+  s_f873eae7d67c42::t_11c1f8d9723d67 16
+.github/workflows/_bench.yml
+  s_f873eae7d67c42::t_e1c2abbaee7edf 11
+.github/workflows/_build.yml
+  s_f873eae7d67c42::t_cae71a57cce8d0 12
+.github/workflows/_docs.yml
+  s_f873eae7d67c42::t_94853000bca503 17
+.github/workflows/_lint.yml
+  s_f873eae7d67c42::t_351c13cc49dad7 17
+.github/workflows/_quality.yml
+  s_f873eae7d67c42::t_8f4ae8c27e86da 34,59,63
+.github/workflows/_verify.yml
+  s_f873eae7d67c42::t_39dd251421612d 17,36,50,71,87,120
+.github/workflows/ci.yml
+  s_f873eae7d67c42::t_4e2677b55c9edf 24
+.github/workflows/maintenance.yml
+  s_f873eae7d67c42::t_45290a38a9af0c 20,22,27
+.github/workflows/pr.yml
+  s_f873eae7d67c42::t_59eaefa2a73292 26
+.github/workflows/release.yml
+  s_f873eae7d67c42::t_8f2a787714e3f5 27,66,140
+AGENTS.md
+  s_f873eae7d67c42::t_7b71df11473f97 84,86,108
+CHANGELOG.md
+  s_f873eae7d67c42::t_f0dc63329c8b29 23-27,42-48,51-55,419-421,447
+COMPATIBILITY.md
+  s_f873eae7d67c42::t_adeee73a0366f2 9-10,17-23,32,38,58-77,83-86,95-96,132,151-152
+CONTRIBUTING.md
+  s_f873eae7d67c42::t_3924f7507c1c7b 81-86,91-93,101-104
+PERFORMANCE.md
+  s_f873eae7d67c42::t_097293052941e6 3-5,45,48,50-51,59-85,92-94,104-105,110,115-117,122,138-140,143-144
+README.md
+  s_f873eae7d67c42::t_581f14653c14e4 44,66-76,94-96,131-145
+README.zh-CN.md
+  s_f873eae7d67c42::t_355fc41c796869 40,60-67,84-86,120-134
+SECURITY.md
+  s_f873eae7d67c42::t_c64d5dc8b82e1d 5-9,13-14,45-48,58-62
+STABILITY.md
+  s_f873eae7d67c42::t_33d1e1ab088ae4 26,56,60-61,71-72,74,114-117,193-194,211-216
+docs/ARCHITECTURE.md
+  s_f873eae7d67c42::t_8f79c2b3f86984 19,39-41,180
+docs/DEVELOPMENT.md
+  s_f873eae7d67c42::t_e70b33480d24f6 10-11,34-35,37-38,42-44,50-51,65-69,107-110
+docs/OPERATIONS.md
+  s_f873eae7d67c42::t_e19bb9300a6fa0 27-37,43-44,51-124,176-280,332-336
+docs/PRODUCT.md
+  s_f873eae7d67c42::t_d063a9b56fe01b 88-90,124-127
+docs/README.md
+  s_f873eae7d67c42::t_ef92be1af81d9f 20,51,54
+docs/REFERENCE.md
+  s_f873eae7d67c42::t_0aae36a4c71bb4 31-32,34-36,55-57,80-89,116-117,151-160,171,176-207,214
+pom.xml
+  s_f873eae7d67c42::t_c256e16900485d 58,175,284,341
+resicache-bench/pom.xml
+  s_f873eae7d67c42::t_bf9363d38ca494 29-31
+resicache-bench/src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomFilterBenchmark.java
+  s_f873eae7d67c42::t_f036787bd7492c 11-13,17,21-22
+resicache-bench/src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockBenchmark.java
+  s_f873eae7d67c42::t_734537dbd23b71 20,24-25
+resicache-bench/src/main/java/io/github/davidhlp/spring/cache/redis/cache/TtlJitterBenchmark.java
+  s_f873eae7d67c42::t_1e8aa1a42ad1bd 23-24
+scripts/ci/check-docs-contracts.sh
+  s_f873eae7d67c42::t_3f0b0da048bfe9 12,27-53,58-62,105-109
+scripts/ci/check-external-consumer.sh
+  s_f873eae7d67c42::t_f89eaf3406d0e6 6-8,10-43
+scripts/ci/tests/test_cluster_startup.py
+  s_f873eae7d67c42::t_66412125b934ea 1-114
+scripts/ci/tests/test_consumer.py
+  s_f873eae7d67c42::t_cfd7d21ba1b664 1-95
+scripts/ci/tests/test_docs_contracts.py
+  s_f873eae7d67c42::t_d813d505b4b262 1-78
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ActualCacheHandler.java
+  s_f873eae7d67c42::t_aab9abccb9e527 147-148,160
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/CacheHandlerChainFactory.java
+  s_f873eae7d67c42::t_96f15b97d5629b 67-68,168
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheInterceptor.java
+  s_f873eae7d67c42::t_75da8be128bb2e 20
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializerWhitelistStartupGuard.java
+  s_f873eae7d67c42::t_9dcd7068e38e06 26-27
+src/main/java/io/github/davidhlp/spring/cache/redis/chain/HandlerOrder.java
+  s_f873eae7d67c42::t_939adfcc989dd3 9
+src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java
+  s_f873eae7d67c42::t_42c261debf6c39 167
+src/main/java/io/github/davidhlp/spring/cache/redis/serialization/migration/SerializationMigrationCli.java
+  s_f873eae7d67c42::t_f9cbfe5850eaef 26
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AbstractRedisClusterIntegrationTest.java
+  s_f873eae7d67c42::t_b8fb9120a95312 6,39-40,114-122,125-133
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedissonCodecCompatibilityTest.java
+  s_f873eae7d67c42::t_681caca4993d56 1-65
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedissonYamlCompatibilityTest.java
+  s_f873eae7d67c42::t_5fddf11decc73b 1-111
+src/test/resources/redisson-compatibility/README.md
+  s_f873eae7d67c42::t_941644ff54d206 1-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d83c5b5a04dd5df791e41db6d63dd25697e9410",
+  "prompts": {},
+  "sessions": {
+    "s_f873eae7d67c42": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b02d-f195-7520-bffd-3e094fc5fa51",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
