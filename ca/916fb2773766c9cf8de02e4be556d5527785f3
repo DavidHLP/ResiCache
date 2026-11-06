@@ -1,0 +1,59 @@
+PERFORMANCE.md
+  s_f873eae7d67c42::t_c377a23b8cf3d0 116-128
+  s_f873eae7d67c42::t_05ba06c81dd2a0 129-131
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/FailureLogKeyPrivacyTest.java
+  s_f873eae7d67c42::t_af4208cdcee984 106,124,185
+COMPATIBILITY.md
+  s_f873eae7d67c42::t_0ca198239cba6e 165-166
+  s_f873eae7d67c42::t_12c8c405c4985e 117,167-168
+docs/PRODUCT.md
+  s_f873eae7d67c42::t_0ca198239cba6e 99-101
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/BloomSupportTest.java
+  s_f873eae7d67c42::t_72685a043cc4be 94,97,99-112,116
+  s_f873eae7d67c42::t_3e2ff24db0e723 68,78,87,95-96,98,113-115,117
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManagerIntegrationTest.java
+  s_f873eae7d67c42::t_af4208cdcee984 161,261-270,276,278,283-287,289,291,298,345,362,383
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManager.java
+  s_f873eae7d67c42::t_af4208cdcee984 53-54,61,157-158
+docs/REFERENCE.md
+  s_f873eae7d67c42::t_0ca198239cba6e 167-173
+  s_f873eae7d67c42::t_7a064c030fcc88 174-176
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupportTest.java
+  s_f873eae7d67c42::t_2a1a94b8185e89 168
+src/test/resources/allowlist/public-surface.txt
+  s_f873eae7d67c42::t_72685a043cc4be 28
+CHANGELOG.md
+  s_f873eae7d67c42::t_33eb59a371b634 23-34
+STABILITY.md
+  s_f873eae7d67c42::t_b9c478372dae42 244-252
+docs/OPERATIONS.md
+  s_f873eae7d67c42::t_fca149eaee732f 165-172
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  s_f873eae7d67c42::t_1c5d64c9900c32 56-59,67,85,92,98,114,126,128,159,175,177
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/BloomSupport.java
+  s_f873eae7d67c42::t_bef9d5b6649efb 75-82
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedisCacheOperationSource.java
+  s_f873eae7d67c42::t_246fa9cedecd43 22-23,70-91
+src/main/java/io/github/davidhlp/spring/cache/redis/protection/bloom/filter/BloomIFilter.java
+  s_f873eae7d67c42::t_376a312c53ad86 18-32
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationClassLevelPolicyTest.java
+  s_f873eae7d67c42::t_4b43f4a4563fe6 19,26-27,36,39,41,49-62,70-74
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/CacheLatencySmokeBenchmarkIntegrationTest.java
+  s_f873eae7d67c42::t_053f21ef8eaa72 159-186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ca916fb2773766c9cf8de02e4be556d5527785f3",
+  "prompts": {},
+  "sessions": {
+    "s_f873eae7d67c42": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b02d-f195-7520-bffd-3e094fc5fa51",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
