@@ -48,6 +48,80 @@ With no distributed `LockManager`, `sync=true` fails closed by default.
 `resi-cache.sync-lock.local-only=true` is an explicit single-JVM degradation
 and must not be treated as multi-instance protection.
 
+## Redisson major-version migration
+
+The core stays on Redisson 3.50 while its existing configuration contract is
+required. Do not treat the benchmark module's separate dependency version as
+approval to upgrade the core. ResiCache stores cache values through Spring
+Data Redis and its own serializer; its Redisson client is used for locks.
+Host applications may also use that client for values, maps, or other objects,
+so establish actual usage before deciding whether a codec migration is needed.
+
+Perform this inventory on operator-controlled copies, without starting the
+application against production Redis:
+
+1. Record the exact old application artifact, dependency tree, YAML file,
+   environment/property inputs, codec and custom extension class versions.
+   Protect secrets and do not attach raw configs or cache values to an issue.
+2. Locate legacy `retryInterval`, mapper tags in `org.redisson.api`, removed
+   codecs (`SnappyCodec`, `FstCodec`, `FuryCodec`, `MarshallingCodec`), and
+   custom classes implementing the former mapper interfaces. A text search is
+   an inventory aid, not a complete YAML parser or compatibility check.
+3. Exercise the actual application configuration and representative old bytes
+   in an isolated copy with the complete application classpath. Parsing a
+   trusted custom YAML tag may instantiate its class; run this in a sandbox,
+   not a production process. Test resolved variables, literal strings, all
+   deployment modes, custom classes and both rolling-upgrade directions.
+
+For built-in mapper and retry settings only, prepare a **separate** candidate
+configuration and review the semantic changes explicitly:
+
+- Replace a server's `retryInterval: 2468` with a `retryDelay` tagged
+  `!<org.redisson.config.ConstantDelay>` and `delay: "PT2.468S"`. Preserve
+  the actual delay, not merely the field's presence. Apply under the relevant
+  single, cluster, sentinel, master/slave, or replicated server section.
+- Built-in `DefaultNameMapper`, `HostNatMapper`, and `HostPortNatMapper` move
+  from `org.redisson.api` to `org.redisson.config`. Preserve their mapping
+  properties and verify actual mapped host, port and name values.
+- Do not perform a whole-file string replacement: class-looking text may be
+  a password or other literal. Do not assume these changes port custom classes
+  compiled against the removed interfaces; recompile and test those separately.
+- Never silently replace `SnappyCodec` with `SnappyCodecV2`. Their byte framing
+  differs. Other removed codecs also require an explicit compatibility design,
+  old-byte validation, and maintenance/security review of any replacement.
+
+For a deployment that actually stores Redisson-coded values, choose and review
+an application-specific migration before writing anything: the old reader
+reads old data, a validated new writer writes a separate namespace, and the old
+namespace remains intact for rollback. Preserve remaining TTL and collection
+semantics, handle concurrent writes and deletions, verify contents, and only
+then cut over. A one-time copy is not continuous dual-write. Locks must continue
+using the same names across live old/new instances; changing their namespace
+would split synchronization. Do not copy active lock state as ordinary values.
+If rollback must read new writes, test the reverse compatibility or maintain a
+reviewed dual-write protocol throughout the rollback window. No cache flush,
+in-place codec rewrite, or automatic migration is provided here.
+
+The `SerializationMigrationCli` below migrates ResiCache/Spring serializer
+envelopes, **not arbitrary Redisson codec payloads**. Do not use it to convert
+Snappy data without a separate implementation and validation.
+
+Run the same deterministic compatibility gates with both dependency versions:
+
+```bash
+./mvnw -Punit -Dredisson.version=3.50.0 \
+  -Dtest=RedissonYamlCompatibilityTest,RedissonCodecCompatibilityTest clean test -B
+./mvnw -Punit -Dredisson.version=4.8.0 \
+  -Dtest=RedissonYamlCompatibilityTest,RedissonCodecCompatibilityTest clean test -B
+```
+
+These tests use synthetic fixtures and never connect to Redis. The 4.8 command
+currently fails by design because the old contract is not preserved; it is a
+reproduction of the blocker, not an optional gate to waive. Even a future pass
+must be followed by the full integration and packaged-consumer checks plus
+actual application migration/rollback validation. Retain the old artifact and
+unchanged configuration until that process is complete.
+
 ## Observability and diagnosis
 
 Cache metrics are opt-in: they require both `resi-cache.metrics.enabled=true`
