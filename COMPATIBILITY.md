@@ -60,6 +60,22 @@ a claim that every patch of a component has been tested.
 | **Actuator / registry provider** | Optional | Publishing requires `resi-cache.metrics.enabled=true` and a `MeterRegistry`. The Actuator health indicator is independent of that switch and performs a synchronous Redis PING per invocation; see [`docs/OPERATIONS.md`](docs/OPERATIONS.md#observability-and-diagnosis). |
 | **Caffeine** | Bundled | Internal hash-position cache and local Bloom support; no multi-level cache API. |
 
+## Redisson dependency upgrades
+
+The core dependency remains on the version in `pom.xml`. A successful build
+with a different Redisson version does not establish compatibility with the
+operator YAML override or data written through a shared `RedissonClient`.
+Redisson 4 removes legacy mapper names, the YAML `retryInterval` property,
+and several codecs. In particular, `SnappyCodecV2` cannot read the checked
+Redisson 3.50 `SnappyCodec` fixtures; renaming that tag is not a migration.
+
+`RedissonYamlCompatibilityTest` and `RedissonCodecCompatibilityTest` are
+ordinary unit gates for the existing contract. They must not be skipped,
+rewritten to accept an exception, or regenerated on the candidate version to
+make a dependency bump pass. The fixed byte samples cover strings only, not
+arbitrary application objects. See the [operator migration boundary](
+docs/OPERATIONS.md#redisson-major-version-migration) before an upgrade.
+
 ## Serialization compatibility
 
 ⚠️ ResiCache serializes values in an internal `{version, payload}` envelope via

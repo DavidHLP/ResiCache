@@ -1,0 +1,2 @@
+# Preserve legacy codec wire bytes; do not normalize line endings.
+/src/test/resources/redisson-compatibility/*.bin binary
