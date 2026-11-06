@@ -1,0 +1,21 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManager.java
+  s_f873eae7d67c42::t_a733b40a9a7500 150
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManagerIntegrationTest.java
+  s_f873eae7d67c42::t_fa3deff0b3ec31 339-360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "40ba199204d6d80ad1491ca23bd769208958b9d2",
+  "prompts": {},
+  "sessions": {
+    "s_f873eae7d67c42": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b02d-f195-7520-bffd-3e094fc5fa51",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
