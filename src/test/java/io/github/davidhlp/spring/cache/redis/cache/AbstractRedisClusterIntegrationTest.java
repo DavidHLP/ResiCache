@@ -3,6 +3,7 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import java.time.Duration;
 import java.util.Collections;
 import org.junit.jupiter.api.AfterAll;
 import org.springframework.test.annotation.DirtiesContext;
@@ -35,7 +36,8 @@ public abstract class AbstractRedisClusterIntegrationTest {
     protected static final GenericContainer<?> REDIS_CLUSTER =
             new GenericContainer<>(DockerImageName.parse(REDIS_IMAGE))
                     .withCommand("sh", "-c", clusterStartupCommand())
-                    .waitingFor(Wait.forLogMessage(".*CLUSTER_READY.*", 1));
+                    .waitingFor(Wait.forLogMessage(".*CLUSTER_READY.*", 1)
+                            .withStartupTimeout(Duration.ofSeconds(120)));
 
     @DynamicPropertySource
     static void redisClusterProperties(DynamicPropertyRegistry registry) {
@@ -109,11 +111,26 @@ public abstract class AbstractRedisClusterIntegrationTest {
                 + "$PORT $PORT $IP $PORT $((PORT+10000)) $PORT > /data/$PORT/redis.conf; "
                 + "redis-server /data/$PORT/redis.conf --daemonize yes; "
                 + "done; "
-                + "until redis-cli -p 7000 ping >/dev/null 2>&1; do sleep 0.1; done; "
+                // Daemonization returns before every node necessarily accepts connections.
+                + "for PORT in 7000 7001 7002; do "
+                + "ATTEMPTS=0; "
+                + "until redis-cli -h $IP -p $PORT ping 2>/dev/null | grep -qx PONG; do "
+                + "ATTEMPTS=$((ATTEMPTS+1)); "
+                + "if [ $ATTEMPTS -ge 100 ]; then "
+                + "echo \"Redis node $PORT did not become ready\" >&2; "
+                + "cat /data/$PORT/redis.log >&2; exit 1; fi; "
+                + "sleep 0.1; done; done; "
                 + "redis-cli --cluster create $IP:7000 $IP:7001 $IP:7002 "
                 + "--cluster-replicas 0 --cluster-yes; "
-                + "until redis-cli -p 7000 cluster info | grep -q 'cluster_state:ok'; "
-                + "do sleep 0.1; done; "
+                + "for PORT in 7000 7001 7002; do "
+                + "ATTEMPTS=0; "
+                + "until redis-cli -h $IP -p $PORT cluster info 2>/dev/null "
+                + "| grep -q '^cluster_state:ok'; do "
+                + "ATTEMPTS=$((ATTEMPTS+1)); "
+                + "if [ $ATTEMPTS -ge 100 ]; then "
+                + "echo \"Redis node $PORT did not reach cluster_state:ok\" >&2; "
+                + "cat /data/$PORT/redis.log >&2; exit 1; fi; "
+                + "sleep 0.1; done; done; "
                 + "echo CLUSTER_READY; tail -f /dev/null";
     }
 }
