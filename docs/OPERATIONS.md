@@ -350,3 +350,11 @@ serializer allowlists, Redisson file paths, credentials, and deployment
 configuration in trusted application/operator channels. The library's secure
 serialization defaults and known constraints are part of the runtime contract;
 changing them requires source, test, and compatibility review.
+
+### Distributed lock lifetime
+
+The built-in Redisson lock uses watchdog renewal rather than a fixed lease
+calculated from the acquisition timeout. A slow loader retains its lock while
+the client can renew it; acquisition timeout only bounds waiting to acquire.
+Client death or loss of renewal still allows the lock to expire. This is cache
+load coordination, not fencing for authoritative data writes.

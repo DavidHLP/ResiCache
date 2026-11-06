@@ -165,13 +165,7 @@ class SyncSupportTest {
     // future hardening (e.g. fail-fast on negative / non-positive values) is
     // a conscious decision rather than a silent behavior change.
     //
-    // Caveat (intentionally documented, NOT asserted here): the underlying
-    // DistributedLockManager derives leaseTimeSeconds via
-    //     max(MIN_LEASE_TIME_SECONDS=10, timeoutSeconds * LEASE_TIMEOUT_MULTIPLIER=3)
-    // Long.MAX_VALUE * 3 overflows to a negative long, so max(10, negative) = 10.
-    // That is a separate concern (it lives in DistributedLockManager, not
-    // SyncSupport) and is out of scope for this commit. The tests below only
-    // prove SyncSupport's pass-through contract.
+    // The built-in manager uses watchdog renewal; waiting time does not set the lease.
     // ---------------------------------------------------------------------
 
     @Test

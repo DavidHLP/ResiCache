@@ -53,6 +53,10 @@ class AnnotationParser {
      * <p>每个注解投影一次，两副面孔共享同一份 {@link RedisCacheAttributes}。
      */
     ParsedAnnotations parse(final Object target) {
+        return parse(target, target instanceof Method method ? method : null);
+    }
+
+    ParsedAnnotations parse(final Object target, final Method policyMethod) {
         final List<CacheOperation> operations = new ArrayList<>();
         final List<CacheOperation> policyOperations = new ArrayList<>();
         log.trace("Parsing cache annotations for target: {}", target);
@@ -60,7 +64,7 @@ class AnnotationParser {
         final RedisCacheable cacheable =
                 AnnotationTargets.findMerged(target, RedisCacheable.class);
         if (cacheable != null) {
-            addCacheable(operations, policyOperations, cacheable, target);
+            addCacheable(operations, policyOperations, cacheable, target, policyMethod);
         } else {
             final Cacheable springCacheable =
                     AnnotationTargets.findMerged(target, Cacheable.class);
@@ -78,20 +82,20 @@ class AnnotationParser {
         final RedisCachePut cachePut =
                 AnnotationTargets.findMerged(target, RedisCachePut.class);
         if (cachePut != null) {
-            addPut(operations, policyOperations, cachePut, target);
+            addPut(operations, policyOperations, cachePut, target, policyMethod);
         }
 
         final RedisCaching caching =
                 AnnotationTargets.findMerged(target, RedisCaching.class);
         if (caching != null) {
             for (final RedisCacheable annotation : caching.redisCacheable()) {
-                addCacheable(operations, policyOperations, annotation, target);
+                addCacheable(operations, policyOperations, annotation, target, policyMethod);
             }
             for (final RedisCacheEvict annotation : caching.redisCacheEvict()) {
                 addEvict(operations, annotation, target);
             }
             for (final RedisCachePut annotation : caching.redisCachePut()) {
-                addPut(operations, policyOperations, annotation, target);
+                addPut(operations, policyOperations, annotation, target, policyMethod);
             }
         }
 
@@ -107,7 +111,7 @@ class AnnotationParser {
             final List<CacheOperation> operations,
             final List<CacheOperation> policyOperations,
             final RedisCacheable annotation,
-            final Object target) {
+            final Object target, final Method policyMethod) {
         log.trace("Parsing @RedisCacheable annotation for target: {}", target);
         final RedisCacheAttributes attributes = projector.from(annotation);
 
@@ -119,9 +123,9 @@ class AnnotationParser {
         log.debug("Built CacheableOperation: {}", operation);
         operations.add(operation);
 
-        if (target instanceof Method method) {
+        if (policyMethod != null) {
             policyOperations.add(RedisCacheableOperation.fromAttributes(
-                    method, annotation.key(), attributes));
+                    policyMethod, annotation.key(), attributes));
         }
     }
 
@@ -152,7 +156,7 @@ class AnnotationParser {
             final List<CacheOperation> operations,
             final List<CacheOperation> policyOperations,
             final RedisCachePut annotation,
-            final Object target) {
+            final Object target, final Method policyMethod) {
         log.trace("Parsing @RedisCachePut annotation for target: {}", target);
         final RedisCacheAttributes attributes = projector.from(annotation);
 
@@ -168,9 +172,9 @@ class AnnotationParser {
         log.debug("Built CachePutOperation: {}", operation);
         operations.add(operation);
 
-        if (target instanceof Method method) {
+        if (policyMethod != null) {
             policyOperations.add(RedisCachePutOperation.fromAttributes(
-                    method, annotation.key(), attributes));
+                    policyMethod, annotation.key(), attributes));
         }
     }
 

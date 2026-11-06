@@ -16,15 +16,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * annotation policy snapshot.
  *
  * <p>The class target is visible to Spring's operation source, while a method parse snapshot
- * intentionally does not register class-level policy operations.
+ * registers the selected class-level policy for the invoked method.
  */
 @DisplayName("Class-level annotation policy characterization")
 class AnnotationClassLevelPolicyTest {
 
     private static final class ExposedOperationSource extends RedisCacheOperationSource {
 
-        ExposedOperationSource() {
-            super(io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.NativeAnnotationMode.SELECTIVE);
+        ExposedOperationSource(RedisCacheRegister register) {
+            super(io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties.NativeAnnotationMode.SELECTIVE, register);
         }
 
         List<CacheOperation> classOperations(Class<?> target) {
@@ -33,13 +33,12 @@ class AnnotationClassLevelPolicyTest {
     }
 
     @Test
-    @DisplayName("class annotation is Spring-visible but not method policy snapshot")
+    @DisplayName("class annotation is shared by Spring and method policy snapshot")
     void classAnnotationIsSpringVisibleButNotMethodPolicySnapshot() throws Exception {
         RedisCacheRegister register = new RedisCacheRegister();
-        ExposedOperationSource source = new ExposedOperationSource();
+        ExposedOperationSource source = new ExposedOperationSource(register);
         Method method = ClassAnnotatedService.class.getMethod("find", String.class);
-        AnnotationParser.ParsedAnnotations parsed = new AnnotationParser().parse(method);
-        register.registerSnapshot(method, ClassAnnotatedService.class, parsed);
+        source.getCacheOperations(method, ClassAnnotatedService.class);
 
         List<CacheOperation> classOperations = source.classOperations(ClassAnnotatedService.class);
         List<CacheOperation> policyOperations =
@@ -47,7 +46,20 @@ class AnnotationClassLevelPolicyTest {
 
         assertThat(classOperations).extracting(Object::getClass)
                 .containsExactly(CacheableOperation.class, CachePutOperation.class);
-        assertThat(policyOperations).isEmpty();
+        assertThat(policyOperations).hasSize(2);
+        assertThat(((RedisCacheableOperation) policyOperations.get(0)).getTtl()).isEqualTo(99);
+        assertThat(((RedisCachePutOperation) policyOperations.get(1)).getTtl()).isEqualTo(33);
+    }
+
+    @Test
+    void methodDeclarationOverridesClassPolicy() throws Exception {
+        RedisCacheRegister register = new RedisCacheRegister();
+        ExposedOperationSource source = new ExposedOperationSource(register);
+        Method method = ClassAnnotatedService.class.getMethod("override", String.class);
+        source.getCacheOperations(method, ClassAnnotatedService.class);
+        List<CacheOperation> policies = register.getSnapshot(method, ClassAnnotatedService.class).policyOperations();
+        assertThat(policies).hasSize(1);
+        assertThat(((RedisCacheableOperation) policies.get(0)).getTtl()).isEqualTo(7);
     }
 
     @RedisCacheable(cacheNames = "class-cache", key = "#id", ttl = 99,
@@ -55,6 +67,11 @@ class AnnotationClassLevelPolicyTest {
     @RedisCachePut(cacheNames = "class-put", key = "#id", ttl = 33,
             useBloomFilter = true, sync = true, cacheNullValues = true)
     static class ClassAnnotatedService {
+        @RedisCacheable(cacheNames = "override-cache", ttl = 7)
+        public String override(String id) {
+            return id;
+        }
+
         public String find(String id) {
             return id;
         }

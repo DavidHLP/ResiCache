@@ -97,8 +97,9 @@ and rollback constraints are in [`OPERATIONS.md`](OPERATIONS.md#serialization-ro
   `local-only=true` is an explicit single-JVM degradation, not a cluster
   guarantee.
 - Bloom state is populated by successful writes by default; the library does
-  not rebuild it from the data source. A missing bit can short-circuit a load,
-  so existing keys require a seed/maintenance strategy before enabling Bloom.
+  not rebuild it from the data source. Built-in filters do not certify complete membership, so their negative results
+  permit lookup. Only a custom filter explicitly reporting complete membership
+  may reject a load; it owns seeding and coordination with all data-source writers.
 - `protection.enabled=false` disables the four protection handlers but keeps
   the TTL handler. Per-mechanism values cannot re-enable protection after the
   global switch is off.

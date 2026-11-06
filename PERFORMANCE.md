@@ -142,3 +142,19 @@ Measures the additive overhead per installed handler in the execution chain.
 
 *In this historical run, additional pass-through dispatch nodes added roughly
 2.4–3.8 ns each. These figures do not include real protection work or Redis I/O.*
+
+## Real Redis annotation-path diagnostic
+
+`CacheLatencySmokeBenchmarkIntegrationTest.compareAnnotationPathsWithRealRedisAndVerifyNoReloads`
+compares native annotation and sync+Bloom annotation hits through Spring AOP and
+real Testcontainers Redis. Each path warms 50 calls and measures 1,000 calls;
+returned values and zero loader calls during measurement are asserted.
+A local JDK 21.0.13 / Docker 29.9.2 run measured native p50/p99
+212.39/777.57 us and sync+Bloom 616.40/1714.32 us. These single-run diagnostic
+numbers include loopback Redis and serialization, use an in-process loader
+instead of a real database, and do not establish an SLO or a production benefit.
+The native annotation path still uses ResiCache's configured cache manager;
+this is not a comparison against an independent Spring Redis implementation.
+Real database contention, remote network latency, Redis CPU/memory, and sustained
+multi-instance throughput remain unmeasured. Built-in Bloom negatives now allow
+lookup; an authoritative custom membership filter is required for rejection.

@@ -72,6 +72,14 @@ class BloomSupport {
      * @return true 表示布隆确定该 key 不存在(可短路);false 表示可能存在(继续)
      */
     public boolean definiteMiss(String cacheName, String actualKey) {
+        try {
+            if (!bloomIFilter.isMembershipComplete(cacheName)) {
+                return false;
+            }
+        } catch (Exception ex) {
+            FailureReport.error(log, "Bloom completeness check failed, allowing lookup", cacheName, null, ex);
+            return false;
+        }
         if (mightContain(cacheName, actualKey)) {
             return false;
         }

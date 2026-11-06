@@ -103,7 +103,7 @@ class FailureLogKeyPrivacyTest {
     void distributedLockManager_acquireTimeout_omitsRawKey() throws InterruptedException {
         RedisProCacheProperties properties = new RedisProCacheProperties();
         RLock notAcquired = mock(RLock.class);
-        when(notAcquired.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(false);
+        when(notAcquired.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(false);
 
         try (Capture capture = new Capture(DistributedLockManager.class)) {
             assertThat(managerWithLock(properties, notAcquired).tryAcquire(SECRET_KEY, 1)).isEmpty();
@@ -121,7 +121,7 @@ class FailureLogKeyPrivacyTest {
     void distributedLockManager_interrupted_omitsRawKey() throws InterruptedException {
         RedisProCacheProperties properties = new RedisProCacheProperties();
         RLock interrupted = mock(RLock.class);
-        when(interrupted.tryLock(anyLong(), anyLong(), any(TimeUnit.class)))
+        when(interrupted.tryLock(anyLong(), any(TimeUnit.class)))
                 .thenThrow(new InterruptedException("interrupted while holding " + SECRET_KEY));
         DistributedLockManager manager = managerWithLock(properties, interrupted);
 
@@ -182,8 +182,7 @@ class FailureLogKeyPrivacyTest {
 
     private RLock heldLock() throws InterruptedException {
         RLock lock = mock(RLock.class);
-        when(lock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        when(lock.isHeldByCurrentThread()).thenReturn(true);
+        when(lock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
         return lock;
     }
 
