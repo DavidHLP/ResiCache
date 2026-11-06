@@ -27,12 +27,6 @@ import org.redisson.api.RedissonClient;
 @RequiredArgsConstructor
 class DistributedLockManager implements LockManager {
 
-    /** 锁持有超时倍数，leaseTime = timeoutSeconds * LEASE_TIMEOUT_MULTIPLIER */
-    private static final long LEASE_TIMEOUT_MULTIPLIER = 3;
-
-    /** 最小锁持有时间（秒），确保即使 timeoutSeconds 很小也有足够的 lease time */
-    private static final long MIN_LEASE_TIME_SECONDS = 10;
-
     /** 锁释放重试最大次数 */
     private static final int MAX_UNLOCK_RETRIES = 3;
 
@@ -55,22 +49,16 @@ class DistributedLockManager implements LockManager {
         String lockKey = buildLockKey(key);
         RLock lock = redissonClient.getLock(lockKey);
 
-        // 计算合理的 lease time，确保即使持有者崩溃也能自动释放
-        long leaseTimeSeconds = Math.max(
-                MIN_LEASE_TIME_SECONDS,
-                timeoutSeconds * LEASE_TIMEOUT_MULTIPLIER
-        );
-
         try {
-            boolean acquired = lock.tryLock(timeoutSeconds, leaseTimeSeconds, TimeUnit.SECONDS);
+            // An explicit lease disables renewal; loader duration is independent of acquisition timeout.
+            boolean acquired = lock.tryLock(timeoutSeconds, TimeUnit.SECONDS);
             if (!acquired) {
                 FailureReport.warn(log, "Failed to acquire distributed lock within " + timeoutSeconds + "s",
                         null, key);
                 return Optional.empty();
             }
 
-            log.debug("Acquired distributed lock for key: {}, lockKey: {}, leaseTime: {}s",
-                    key, lockKey, leaseTimeSeconds);
+            log.debug("Acquired distributed lock: keyFingerprint={}", FailureReport.fingerprint(key));
             return Optional.of(new RedissonLockHandle(lock, key));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -166,7 +154,8 @@ class DistributedLockManager implements LockManager {
             for (int attempt = 1; attempt <= MAX_UNLOCK_RETRIES; attempt++) {
                 try {
                     lock.unlock();
-                    log.debug("Released distributed lock for key: {} on attempt {}", key, attempt);
+                    log.debug("Released distributed lock: keyFingerprint={}, attempt={}",
+                            FailureReport.fingerprint(key), attempt);
                     return;
                 } catch (Exception e) {
                     if (attempt == MAX_UNLOCK_RETRIES) {

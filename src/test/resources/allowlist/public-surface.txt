@@ -25,6 +25,7 @@ chain.observer.ChainObserver
 config.CachingEnablementValidation
 config.RedisCacheAutoConfiguration
 config.RedisProCacheProperties
+# BloomIFilter includes default isMembershipComplete(String): false unless authoritative.
 protection.bloom.filter.BloomIFilter
 protection.breakdown.LockManager
 protection.refresh.EarlyExpirationMode

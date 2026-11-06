@@ -65,6 +65,7 @@ class BloomSupportTest {
     @Test
     @DisplayName("definite miss negates a negative filter result")
     void definiteMiss_filterRejects_returnsTrue() {
+        when(bloomFilter.isMembershipComplete(CACHE)).thenReturn(true);
         when(bloomFilter.mightContain(CACHE, "key")).thenReturn(false);
 
         assertThat(bloomSupport.definiteMiss(CACHE, "key")).isTrue();
@@ -74,6 +75,7 @@ class BloomSupportTest {
     @Test
     @DisplayName("definite miss allows keys the filter may contain")
     void definiteMiss_filterAllows_returnsFalse() {
+        when(bloomFilter.isMembershipComplete(CACHE)).thenReturn(true);
         when(bloomFilter.mightContain(CACHE, "key")).thenReturn(true);
 
         assertThat(bloomSupport.definiteMiss(CACHE, "key")).isFalse();
@@ -82,9 +84,34 @@ class BloomSupportTest {
     @Test
     @DisplayName("definite miss fails open when the underlying filter fails")
     void definiteMiss_filterThrows_returnsFalse() {
+        when(bloomFilter.isMembershipComplete(CACHE)).thenReturn(true);
         when(bloomFilter.mightContain(CACHE, "key"))
                 .thenThrow(new RuntimeException("Filter error"));
 
+        assertThat(bloomSupport.definiteMiss(CACHE, "key")).isFalse();
+    }
+
+    @Test
+    void incompleteMembershipNeverRejectsAnUnobservedKey() {
+        assertThat(bloomSupport.definiteMiss(CACHE, "existing-but-unobserved")).isFalse();
+    }
+
+    @Test
+    void failedRemoteBackfillCannotRejectDataOnAnotherColdInstance() {
+        BloomFilterConfig config = new BloomFilterConfig("bloom:", 1024, 3, 100);
+        doThrow(new IllegalStateException("remote write failed"))
+                .when(bloomFilter).add(CACHE, "existing");
+        BloomSupport writer = new BloomSupport(new HierarchicalBloomIFilter(
+                new LocalBloomIFilter(config), bloomFilter));
+        writer.add(CACHE, "existing");
+        BloomSupport reader = new BloomSupport(new HierarchicalBloomIFilter(
+                new LocalBloomIFilter(config), bloomFilter));
+        assertThat(reader.definiteMiss(CACHE, "existing")).isFalse();
+    }
+
+    @Test
+    void completenessFailureAllowsLookup() {
+        when(bloomFilter.isMembershipComplete(CACHE)).thenThrow(new IllegalStateException("unavailable"));
         assertThat(bloomSupport.definiteMiss(CACHE, "key")).isFalse();
     }
 

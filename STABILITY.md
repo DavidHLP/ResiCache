@@ -241,3 +241,12 @@ notes is published in `COMPATIBILITY.md`.
 > Current architecture ownership and design constraints live in
 > [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md); Git history records
 > ordinary implementation history and commit-level details.
+
+### Bloom membership authority
+
+`BloomIFilter.isMembershipComplete(cacheName)` defaults to false. Only a custom
+implementation maintaining complete, coordinated data-source membership may
+return true. Incomplete or uncertain membership never short-circuits lookup.
+Built-in cache-write-populated filters remain incomplete, including after seeding
+observed cache entries; deployments requiring rejection must supply an authoritative
+implementation. This intentionally changes previous negative-lookup behavior.

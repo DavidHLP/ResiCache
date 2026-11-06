@@ -19,8 +19,8 @@ import org.springframework.util.StringUtils;
  * Redis缓存操作源.
  *
  * <p>Spring AOP 注解解析的入口 bean。继承 {@link AnnotationCacheOperationSource}
- * 以满足 {@code CacheAspectSupport} 的硬依赖(本仓不 override 父类的
- * {@code getCacheOperations}),内部以组合方式委托三个无 Spring 继承负担的纯 POJO
+ * 以满足 {@code CacheAspectSupport} 的硬依赖,在父类解析后补齐类级策略快照,
+ * 内部以组合方式委托三个无 Spring 继承负担的纯 POJO
  * 协作器完成实际工作:
  * <ul>
  *   <li>{@link AnnotationParser} —— ResiCache 注解解析与策略快照生成(职责1)</li>
@@ -66,6 +66,28 @@ class RedisCacheOperationSource extends AnnotationCacheOperationSource {
         this.redisCacheRegister = redisCacheRegister;
     }
 
+
+    @Override
+    @Nullable
+    public Collection<CacheOperation> getCacheOperations(Method method, Class<?> targetClass) {
+        Collection<CacheOperation> operations = super.getCacheOperations(method, targetClass);
+        if (operations != null && redisCacheRegister != null
+                && redisCacheRegister.getSnapshot(method, targetClass) == null) {
+            Method specific = org.springframework.aop.support.AopUtils.getMostSpecificMethod(method, targetClass);
+            // Match Spring's selected declaration so method overrides keep their precedence.
+            for (Object target : List.of(specific, specific.getDeclaringClass(), method, method.getDeclaringClass())) {
+                AnnotationParser.ParsedAnnotations parsed = annotationParser.parse(target, specific);
+                List<CacheOperation> candidate = new ArrayList<>(parsed.operations());
+                springAnnotationAdapter.addSpringNativeOperations(target, candidate);
+                if (candidate.equals(List.copyOf(operations))) {
+                    redisCacheRegister.registerSnapshot(method, targetClass,
+                            new AnnotationParser.ParsedAnnotations(List.copyOf(operations), parsed.policyOperations()));
+                    break;
+                }
+            }
+        }
+        return operations;
+    }
 
     @Override
     @Nullable

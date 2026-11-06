@@ -156,6 +156,34 @@ class CacheLatencySmokeBenchmarkIntegrationTest extends AbstractRedisIntegration
                 .isLessThan(MAX_MEAN_NANOS);
     }
 
+    @Test
+    void compareAnnotationPathsWithRealRedisAndVerifyNoReloads() {
+        for (boolean protectedPath : new boolean[] {false, true}) {
+            long key = protectedPath ? 900002L : 900001L;
+            java.util.function.Supplier<String> lookup = protectedPath
+                    ? () -> cacheService.getByIdWithSyncAndBloom(key)
+                    : () -> cacheService.getByIdWithPureSpring(key);
+            String expected = lookup.get();
+            assertThat(expected).isNotNull();
+            for (int i = 0; i < WARMUP_ITERATIONS; i++) {
+                assertThat(lookup.get()).isEqualTo(expected);
+            }
+            cacheService.reset();
+            long[] latencies = new long[MEASURE_ITERATIONS];
+            for (int i = 0; i < latencies.length; i++) {
+                long start = System.nanoTime();
+                String value = lookup.get();
+                latencies[i] = System.nanoTime() - start;
+                assertThat(value).isEqualTo(expected);
+            }
+            assertThat(cacheService.getCallCount()).as("warm hits must not reload").isZero();
+            System.out.printf("[real Redis annotation %s] mean=%.2f us, p50=%.2f us, p99=%.2f us, loads=%d, n=%d%n",
+                    protectedPath ? "sync+bloom" : "native", mean(latencies) / 1000.0,
+                    percentile(latencies, 50) / 1000.0, percentile(latencies, 99) / 1000.0,
+                    cacheService.getCallCount(), latencies.length);
+        }
+    }
+
     private static long mean(long[] values) {
         long sum = 0;
         for (long v : values) sum += v;

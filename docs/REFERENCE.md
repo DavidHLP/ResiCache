@@ -164,3 +164,13 @@ API.
   Redis/Redisson boundaries, serialization migration, and known limitations.
 - [`CHANGELOG.md`](../CHANGELOG.md): versioned changes and breaking markers.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): current ownership and design constraints.
+
+### Authoritative Bloom negatives
+
+`useBloomFilter=true` alone does not authorize rejecting data-source lookups.
+Built-in filters learn from cache writes and cannot prove complete membership.
+A custom `BloomIFilter` may override `isMembershipComplete(cacheName)` only when
+it maintains the entire data-source membership across instances and writers;
+return false during seeding, rebuilds, failed writes, or uncertain state. The
+engine fails open when the check throws. Existing implementations inherit false.
+Null caching and sync loading remain available for reducing repeated misses.

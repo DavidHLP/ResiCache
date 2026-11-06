@@ -114,7 +114,7 @@ not require a cache flush.
   `RedisProCacheWriter` for GET/GET-hit/GET-miss/PUT/DELETE, including exact
   `clear` deletion counts and PUT_IF_ABSENT insertion. `withStatisticsCollector`
   fully rebinds statistics; lock-wait duration remains unreported (zero).
-- **Class-level cache annotations**: Spring operation resolution sees class-level ResiCache annotations, but the annotation chain does not apply their policy fields to methods without method-level annotations; this behavior is unchanged from `main`.
+- **Class-level cache annotations**: Class-level ResiCache policies apply to methods using the corresponding class-level Spring operation. Method-level declarations retain Spring's override precedence.
 - **`value` and `cacheNames` resolution**: the three annotations are not
   `@AliasFor`-linked, so one declaration may set both attributes. There is one
   resolution for both faces (`RedisCacheAttributesProjector.resolveCacheNames`)
@@ -162,9 +162,10 @@ not require a cache flush.
   has no unrelated absolute 60-second bypass.
 - **Bloom CLEAN semantics**: Bloom tracks possible data-source membership,
   not current cache entries. CLEAN preserves existing bits and never uses a
-  rebuilding marker or TTL window; false-positives are safe, but a missing bit
-  may short-circuit Redis lookup and loader execution. Seed or maintain Bloom
-  membership before enabling it for an existing data set.
+  rebuilding marker or TTL window; false-positives are safe. Negative results
+  only short-circuit Redis lookup and loader execution when a custom filter
+  reports `isMembershipComplete(cacheName)=true`. Built-in filters default to
+  incomplete membership and allow lookup, including on cold starts or write loss.
 - **User `CacheManager` opt-out**: defining your own `CacheManager` bean backs
   off the library's `RedisProCacheManager` and, with it, the ResiCache
   annotation proxy (`redisCacheAdvisor`/`redisCacheInterceptor`); your Spring

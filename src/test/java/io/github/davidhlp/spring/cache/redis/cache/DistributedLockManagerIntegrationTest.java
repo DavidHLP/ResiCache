@@ -158,7 +158,7 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
             String key = "interrupted-key";
             RLock mockedLock = mock(RLock.class);
             DistributedLockManager faultManager = faultInjectedManager(key, mockedLock);
-            when(mockedLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class)))
+            when(mockedLock.tryLock(anyLong(), any(TimeUnit.class)))
                     .thenThrow(new InterruptedException("Thread interrupted"));
 
             try {
@@ -258,34 +258,44 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
         }
     }
 
+    @Test
+    void slowWorkRetainsMutualExclusionBeyondFormerMinimumLease() throws Exception {
+        String key = "slow-work-renewal";
+        try (LockManager.LockHandle handle = lockManager.tryAcquire(key, 1).orElseThrow()) {
+            Thread.sleep(11_000);
+            assertThat(tryAcquireOnAnotherThread(key, 0)).isFalse();
+        }
+        assertThat(tryAcquireOnAnotherThread(key, 0)).isTrue();
+    }
+
     @Nested
     @DisplayName("leaseTime calculation tests")
     class LeaseTimeCalculationTests {
 
         @Test
-        @DisplayName("uses the minimum ten-second lease for a one-second timeout")
+        @DisplayName("uses the watchdog lease independently of acquisition timeout")
         void leaseTime_smallTimeout_usesMinLeaseTime() throws InterruptedException {
-            assertLeaseTime(1, 10);
+            assertLeaseTime(1, 30);
         }
 
         @ParameterizedTest
         @CsvSource({
-                "1, 10",
-                "2, 10",
-                "3, 10",
-                "4, 12",
-                "5, 15",
+                "1, 30",
+                "2, 30",
+                "3, 30",
+                "4, 30",
+                "5, 30",
                 "10, 30",
-                "20, 60"
+                "20, 30"
         })
-        @DisplayName("uses max(minimum lease, timeout multiplied by three)")
+        @DisplayName("uses the watchdog lease for every acquisition timeout")
         void leaseTime_variousTimeouts_calculatesCorrectly(
                 long timeoutSeconds, long expectedLeaseSeconds) throws InterruptedException {
             assertLeaseTime(timeoutSeconds, expectedLeaseSeconds);
         }
 
         @Test
-        @DisplayName("uses timeout multiplied by three above the minimum lease")
+        @DisplayName("uses the watchdog lease for longer acquisition waits")
         void leaseTime_largeTimeout_usesMultiplier() throws InterruptedException {
             assertLeaseTime(10, 30);
         }
@@ -332,7 +342,7 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
             String key = "unlock-failure-key";
             RLock mockedLock = mock(RLock.class);
             DistributedLockManager faultManager = faultInjectedManager(key, mockedLock);
-            when(mockedLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+            when(mockedLock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
             when(mockedLock.isHeldByCurrentThread()).thenReturn(true);
             doThrow(new RuntimeException("Unlock failed")).when(mockedLock).unlock();
 
@@ -349,7 +359,7 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
             String key = "unlock-retry-key";
             RLock mockedLock = mock(RLock.class);
             DistributedLockManager faultManager = faultInjectedManager(key, mockedLock);
-            when(mockedLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+            when(mockedLock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
             when(mockedLock.isHeldByCurrentThread()).thenReturn(true);
             doThrow(new RuntimeException("Unlock failed"))
                     .doThrow(new RuntimeException("Unlock failed again"))
@@ -370,7 +380,7 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
             String key = "unlock-give-up-key";
             RLock mockedLock = mock(RLock.class);
             DistributedLockManager faultManager = faultInjectedManager(key, mockedLock);
-            when(mockedLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+            when(mockedLock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
             when(mockedLock.isHeldByCurrentThread()).thenReturn(true);
             doThrow(new RuntimeException("Unlock failed")).when(mockedLock).unlock();
 

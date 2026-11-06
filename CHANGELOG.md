@@ -20,6 +20,18 @@ contract.
 > Java 21 artifact exists yet, so a blocking compatibility gate waits for a
 > same-line published artifact with matching tag provenance.
 
+## [Unreleased safety fixes]
+
+- BREAKING: Bloom negative results only reject lookups when the implementation
+  explicitly reports complete data-source membership through
+  `BloomIFilter.isMembershipComplete`. The default is false; built-in filters
+  permit lookup so cold starts and failed membership writes cannot hide data.
+- Class-level ResiCache annotation policies now follow Spring operation selection,
+  including method declaration precedence.
+- Distributed locks use Redisson watchdog renewal instead of a fixed lease
+  derived from acquisition timeout. Slow loaders retain coordination while
+  renewal is healthy; this does not provide fencing during network partitions.
+
 ## [Unreleased] — current development
 
 ### CI/CD
