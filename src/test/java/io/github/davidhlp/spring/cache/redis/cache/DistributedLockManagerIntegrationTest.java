@@ -337,13 +337,34 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
         }
 
         @Test
+        void closeBypassesFailingOwnershipQueryAndReleasesRealLock() throws Exception {
+            String key = "ownership-query-failure";
+            RLock realLock = redissonClient.getLock(lockManager.buildLockKey(key));
+            RLock spiedLock = org.mockito.Mockito.spy(realLock);
+            org.mockito.Mockito.lenient().doThrow(new IllegalStateException("Redis query unavailable"))
+                    .when(spiedLock).isHeldByCurrentThread();
+            DistributedLockManager manager = faultInjectedManager(key, spiedLock);
+            LockManager.LockHandle handle = manager.tryAcquire(key, 1).orElseThrow();
+            try {
+                handle.close();
+                verify(spiedLock, org.mockito.Mockito.never()).isHeldByCurrentThread();
+                verify(spiedLock).unlock();
+                assertThat(realLock.isLocked()).isFalse();
+                assertThat(tryAcquireOnAnotherThread(key, 0)).isTrue();
+            } finally {
+                if (realLock.isHeldByCurrentThread()) {
+                    realLock.unlock();
+                }
+            }
+        }
+
+        @Test
         @DisplayName("close handles unlock exceptions with three attempts")
         void close_unlockThrowsException_handledGracefully() throws InterruptedException {
             String key = "unlock-failure-key";
             RLock mockedLock = mock(RLock.class);
             DistributedLockManager faultManager = faultInjectedManager(key, mockedLock);
             when(mockedLock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
-            when(mockedLock.isHeldByCurrentThread()).thenReturn(true);
             doThrow(new RuntimeException("Unlock failed")).when(mockedLock).unlock();
 
             Optional<LockManager.LockHandle> result = faultManager.tryAcquire(key, 5);
@@ -360,7 +381,6 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
             RLock mockedLock = mock(RLock.class);
             DistributedLockManager faultManager = faultInjectedManager(key, mockedLock);
             when(mockedLock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
-            when(mockedLock.isHeldByCurrentThread()).thenReturn(true);
             doThrow(new RuntimeException("Unlock failed"))
                     .doThrow(new RuntimeException("Unlock failed again"))
                     .doNothing()
@@ -381,7 +401,6 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
             RLock mockedLock = mock(RLock.class);
             DistributedLockManager faultManager = faultInjectedManager(key, mockedLock);
             when(mockedLock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
-            when(mockedLock.isHeldByCurrentThread()).thenReturn(true);
             doThrow(new RuntimeException("Unlock failed")).when(mockedLock).unlock();
 
             Optional<LockManager.LockHandle> result = faultManager.tryAcquire(key, 5);

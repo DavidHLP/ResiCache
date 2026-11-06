@@ -147,10 +147,7 @@ class DistributedLockManager implements LockManager {
                 return;
             }
 
-            if (!lock.isHeldByCurrentThread()) {
-                return;
-            }
-
+            // A failing ownership query must not bypass unlock's ownership check and renewal cleanup.
             for (int attempt = 1; attempt <= MAX_UNLOCK_RETRIES; attempt++) {
                 try {
                     lock.unlock();

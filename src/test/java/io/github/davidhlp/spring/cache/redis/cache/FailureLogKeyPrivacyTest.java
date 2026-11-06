@@ -183,7 +183,6 @@ class FailureLogKeyPrivacyTest {
     private RLock heldLock() throws InterruptedException {
         RLock lock = mock(RLock.class);
         when(lock.tryLock(anyLong(), any(TimeUnit.class))).thenReturn(true);
-        when(lock.isHeldByCurrentThread()).thenReturn(true);
         return lock;
     }
 
