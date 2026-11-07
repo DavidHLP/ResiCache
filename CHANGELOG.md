@@ -63,6 +63,11 @@ source changes remain unreleased; publication is tracked in
 
 ### Fixed
 
+- Preserve serialization migration backups across concurrent cutovers: create
+  backups only when absent, refuse conflicting bytes, and reuse identical
+  backups without extending their TTL. Same-snapshot migrators can complete
+  idempotently; rollback continues to refuse changed values and intentionally
+  restore missing sources within the retained backup window.
 - Declare Micrometer Core as a runtime dependency so a minimal packaged Boot
   consumer can start without Actuator. Metrics publishing remains opt-in;
   Actuator and Redisson remain optional.

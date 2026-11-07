@@ -86,8 +86,12 @@ or fail decoding, depending on the configured failure policy. Adopt a bounded
 **shadow-read → dual-write →
 cutover** migration workflow: run ResiCache alongside the existing cache,
 shadow-read through the new serializer while dual-writing, then cut over once
-hit rates stabilize. This preserves TTL, supports resumable rollback, and does
-not require a cache flush.
+hit rates stabilize. This preserves TTL, supports resumable rollback while
+backups remain available, and does not require a cache flush. Cutover refuses
+conflicting backups; same-byte retries do not extend backup TTL. Rollback can
+restore missing keys, including intentional deletions and expired values, so
+coordinate writes and evictions throughout the recovery window. See the
+[write preflight and recovery conditions](docs/OPERATIONS.md#write-preflight-and-recovery).
 
 ## Known limitations
 
