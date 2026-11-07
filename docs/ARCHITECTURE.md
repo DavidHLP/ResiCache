@@ -125,7 +125,10 @@ in charge. Explicit annotation fields retain precedence.
 - `RedisProCache` / `RedisProCacheWriter` own cache-manager and writer behavior;
   `CacheResult` carries typed operation outcomes internally.
 - `LoaderOrchestrator` owns the shared read → load → write-back protocol. A
-  successful loaded value is returned even when write-back fails.
+  successful loaded value is returned after an ordinary runtime write-back
+  failure. `IllegalArgumentException` (configuration/call errors), `Error` and
+  other non-runtime failures still produce a failed load; this is not a
+  catch-all availability guarantee.
 - `EarlyRefresh` owns refresh evaluation and the snapshot-CAS task. It reads
   original serialized bytes, deserializes through the configured serializer and
   compares exact Java `long` payload versions. A single-key Lua script compares
