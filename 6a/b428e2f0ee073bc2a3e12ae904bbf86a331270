@@ -1,0 +1,29 @@
+docs/OPERATIONS.md
+  s_118dc581590e87::t_22bcddeee2d6ca 259-266,426,428-429
+PERFORMANCE.md
+  s_118dc581590e87::t_22bcddeee2d6ca 41-56
+docs/REFERENCE.md
+  s_118dc581590e87::t_22bcddeee2d6ca 147
+docs/PRODUCT.md
+  s_118dc581590e87::t_22bcddeee2d6ca 76-82
+docs/ARCHITECTURE.md
+  s_118dc581590e87::t_199ba6d5785f50 208
+docs/DEVELOPMENT.md
+  s_118dc581590e87::t_22bcddeee2d6ca 79-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ab428e2f0ee073bc2a3e12ae904bbf86a331270",
+  "prompts": {},
+  "sessions": {
+    "s_118dc581590e87": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b69a-39c8-79f3-878d-02e3928552cf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
