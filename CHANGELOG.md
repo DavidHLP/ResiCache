@@ -63,6 +63,25 @@ source changes remain unreleased; publication is tracked in
 
 ### Fixed
 
+- Compare exact refresh payload versions and original serialized snapshots, with
+  atomic live-PTTL checks that preserve shorter expiry. Reject overloaded optional
+  work without caller I/O; expose finite outcome events and best-effort future
+  cancellation semantics. Isolate asynchronous writer I/O on Java 21 virtual
+  threads while carrying method policy and MDC; no admission control is added.
+- Validate required TLS against effective parsed Redisson topology endpoints,
+  preserving trusted YAML extensions and host-owned Lettuce configuration. Secure YAML
+  overrides pass binding with `tls-enabled=false`; plaintext overrides fail closed.
+  Warn about blank serializer allowlist prefixes without changing matching.
+- Permit explicit owner-thread lock-close retries after bounded failure or
+  interruption while retaining direct unlock and ownership-query failure
+  regression coverage. Retry must precede same-key reacquisition; no fencing or
+  arbitrary-partition recovery guarantee is introduced.
+
+- Preserve serialization migration backups across concurrent cutovers: create
+  backups only when absent, refuse conflicting bytes, and reuse identical
+  backups without extending their TTL. Same-snapshot migrators can complete
+  idempotently; rollback continues to refuse changed values and intentionally
+  restore missing sources within the retained backup window.
 - Declare Micrometer Core as a runtime dependency so a minimal packaged Boot
   consumer can start without Actuator. Metrics publishing remains opt-in;
   Actuator and Redisson remain optional.

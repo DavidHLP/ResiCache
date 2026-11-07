@@ -40,8 +40,20 @@ Supported deployment modes are `single`, `cluster`, and `sentinel`, with
 binding-time validation for mode-specific fields and TLS requirements. The
 advanced `resi-cache.redis.redisson-config-path` value is a trusted operator
 input only: it is read as a local YAML path and must never come from an
-end-user request. This override returns the file configuration directly; the
-normal library topology/pool settings are not then applied.
+end-user request. This override supplies the parsed file configuration; the
+normal library topology/pool settings are not then applied. Trusted Redisson YAML tags and codec
+extensions remain supported; endpoint checks do not make YAML safe for untrusted
+input.
+
+For library-created Redisson clients, `tls-required=true` checks every configured
+endpoint in the effective parsed single, cluster, sentinel, replicated or
+master/slave topology for `rediss://` before client creation. This checks the
+parsed Config rather than YAML text or a serialization roundtrip. Host-supplied
+Redisson clients and Spring Data/Lettuce TLS remain host-owned; configure Lettuce
+TLS independently. With a YAML override, binding defers the generated
+`tls-enabled` requirement to this parsed endpoint check; secure YAML can use
+`tls-enabled=false`, while plaintext YAML is rejected when TLS is required.
+Without an override, required TLS still requires `tls-enabled=true`.
 
 Redisson is optional until an operation requests distributed synchronization.
 With no distributed `LockManager`, `sync=true` fails closed by default.
@@ -179,6 +191,15 @@ writes. Provide actual application dual writes separately, or quiesce writers
 and evictions for the affected keys through validation and cutover. CAS rejects
 source changes during cutover; it does not establish a continuous-write protocol.
 
+Rollback also needs a coordinated window: stop writes and evictions for the
+affected keys while validating and restoring them. A missing source is restored
+from its retained backup; the operator cannot distinguish natural expiration
+from an intentional application deletion. Confirm that restoring missing keys
+matches the recovery goal before running `ROLLBACK`. Keep the backup namespace
+reserved for the migration window and retain it until recovery is no longer
+needed. `maxKeys` limits actionable keys, not total SCAN/GET work; use a narrow
+pattern and monitor progress when most keys are already complete or invalid.
+
 ### Prepare and invoke the operator
 
 Use JDK 21 and the checked-out core JAR with its production runtime dependencies.
@@ -240,9 +261,24 @@ Before any write phase, inventory the complete intended source set and reserve
 collision-free `shadow-suffix` and `backup-suffix` namespaces. No source key may
 end in either suffix; every derived destination must be absent or verified as
 belonging to this migration. Stop on unrelated or unverifiable destinations.
-The CLI skips source keys ending in these suffixes and uses UPSERT to overwrite
-differing sidecar bytes; a dry run does not detect namespace conflicts. Prevent
-other writers from creating reserved keys throughout the migration.
+The CLI skips source keys ending in these suffixes. `DUAL_WRITE` uses UPSERT to
+overwrite differing shadow bytes. `CUTOVER` creates backups with SET_IF_ABSENT;
+an existing or race-winning backup is reusable only when its bytes match the
+captured legacy value. A conflicting backup refuses that key's cutover without
+changing the source or backup. Never automatically delete or overwrite such a
+backup: it may belong to an already successful cutover. A dry run does not
+detect namespace conflicts. Prevent other writers from creating reserved keys
+throughout the migration.
+
+Same-byte retries reuse the established backup without extending its TTL or
+recovery window. If another migrator has already installed the exact expected
+envelope, source replacement is a successful no-op. A backup established before
+a failed source CAS remains available for operator inspection; do not remove it
+opportunistically. Backup creation and source CAS are separate operations, not
+a transaction or fencing protocol. Source and backup may occupy different Redis
+Cluster slots; external backup mutation, deletion or expiry is not atomic with
+source CAS. Coordinate application writes, evictions, cutover and rollback for
+the entire recovery window.
 
 Always specify pattern, phase and dry-run explicitly. The default phase is
 read-only `SHADOW_READ`, but `dry-run` itself defaults to false. After a successful
@@ -262,11 +298,17 @@ and repeating a dry run or SHADOW_READ can validate the same subset again.
 pattern does not bound Redis SCAN work; independently scope the key population
 and apply an external execution deadline when required.
 
-Rollback rejects changed existing source bytes, but recreates missing sources
-from backups with SET_IF_ABSENT. This can resurrect intentionally evicted stale
-values. Quiesce writes and evictions, reconcile prior deletions against the
-backup inventory, and exclude their backups before authorizing rollback.
-Backups may already have expired; rollback is not guaranteed for every key.
+Rollback leaves an already restored legacy value unchanged. Otherwise, it
+replaces a non-null source only if its bytes exactly match the envelope derived
+from the retained backup; newer legacy or envelope values are refused. It
+recreates a missing source with SET_IF_ABSENT using the backup's remaining TTL.
+This intentionally covers both DEL and natural expiry, which the operator
+cannot distinguish from accidental loss, and can resurrect intentionally
+evicted stale values. Quiesce writes and evictions, reconcile prior deletions
+against the backup inventory, and exclude their backups before authorizing
+rollback. Do not run rollback when restoring missing keys is unacceptable.
+Backups may already have expired; there is no recovery promise after backup
+expiry and rollback is not guaranteed for every key.
 
 Sidecars copy the source's remaining TTL at creation; persistent sources produce
 persistent sidecars. Neither cutover nor rollback removes them and there is no
@@ -358,3 +400,13 @@ calculated from the acquisition timeout. A slow loader retains its lock while
 the client can renew it; acquisition timeout only bounds waiting to acquire.
 Client death or loss of renewal still allows the lock to expire. This is cache
 load coordination, not fencing for authoritative data writes.
+
+Only the acquiring thread can close a built-in lock handle. Close calls unlock
+directly, without an ownership pre-query that could bypass release/renewal cleanup.
+After bounded unlock failure or interrupted retry sleep, the owner may explicitly
+retry close; interruption remains set. Retry must occur before that thread
+reacquires the same key: Redisson client/thread ownership cannot distinguish a
+later reentrant acquisition. Successful unlock or reported ownership loss makes
+the handle terminal. There is no background retry, force-unlock, fixed lease or
+fencing. Controlled tests inject failures before command dispatch; they do not
+establish recovery across arbitrary partitions, lost responses or later reentry.

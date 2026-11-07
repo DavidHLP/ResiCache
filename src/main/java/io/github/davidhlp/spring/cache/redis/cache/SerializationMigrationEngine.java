@@ -137,15 +137,38 @@ class SerializationMigrationEngine
 
     private void cutover(RedisConnection connection, byte[] key, byte[] legacyBytes,
                          byte[] envelopeBytes, MutableReport report) {
-        writeSidecar(connection, key, migration.getBackupSuffix(), legacyBytes, report);
         if (migration.isDryRun()) {
             return;
         }
+        establishBackup(connection, key, legacyBytes, report);
         if (!compareAndReplace(connection, key, legacyBytes, envelopeBytes)) {
+            if (Arrays.equals(connection.stringCommands().get(key), envelopeBytes)) {
+                return;
+            }
             throw new IllegalStateException("Source value changed concurrently during cutover");
         }
         report.written++;
         record("written");
+    }
+
+    private void establishBackup(RedisConnection connection, byte[] sourceKey,
+                                 byte[] legacyBytes, MutableReport report) {
+        byte[] backupKey = appendSuffix(sourceKey, migration.getBackupSuffix());
+        byte[] existing = connection.stringCommands().get(backupKey);
+        if (existing == null) {
+            // Source and backup may occupy different Cluster slots; only backup creation is atomic.
+            Boolean stored = connection.stringCommands().set(
+                    backupKey, legacyBytes, expirationOf(connection, sourceKey), SetOption.SET_IF_ABSENT);
+            if (Boolean.TRUE.equals(stored)) {
+                report.written++;
+                record("written");
+                return;
+            }
+            existing = connection.stringCommands().get(backupKey);
+        }
+        if (!Arrays.equals(existing, legacyBytes)) {
+            throw new IllegalStateException("Conflicting migration backup; cutover refused");
+        }
     }
 
     private void rollback(RedisConnection connection, MutableReport report) {

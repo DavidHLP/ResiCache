@@ -115,14 +115,30 @@ current documented behavior in `COMPATIBILITY.md`.
   `CacheResult` carries typed operation outcomes internally.
 - `LoaderOrchestrator` owns the shared read → load → write-back protocol. A
   successful loaded value is returned even when write-back fails.
-- `EarlyRefresh` owns refresh evaluation and the version-CAS task. Task I/O
-  failures propagate to the internal executor's existing bounded retry path;
-  exhausted failures are reported and isolated there, including when a full
-  queue runs the task on the submitting thread. `prerefresh.completed` counts
-  task termination, including failure, rather than successful CAS operations.
-  The executor attaches completion callbacks only after publishing the future,
-  avoiding recursive map updates when execution completes inline. Completion and
-  cancellation remove entries directly; no periodic cleanup thread is needed.
+- `EarlyRefresh` owns refresh evaluation and the snapshot-CAS task. It reads
+  original serialized bytes, deserializes through the configured serializer and
+  compares exact Java `long` payload versions. A single-key Lua script compares
+  those bytes and reads live PTTL atomically before applying the five-second
+  grace TTL. An existing TTL at or below that grace is never lengthened; a
+  persistent entry can receive the grace TTL. Lua does not decode JSON numbers.
+  Snapshot reads and CAS arguments transfer the full payload, so traffic and
+  temporary memory scale with serialized value size.
+- The refresh executor rejects optional work on saturation or shutdown without
+  caller-thread Redis I/O or retry sleeps; ordinary cache TTL remains effective.
+  Accepted task I/O failures use bounded retries and isolated diagnostics.
+  Cancellation is best-effort: a running runnable/I/O may finish and overlap
+  another accepted task. Byte CAS protects a replacement made after the snapshot
+  was read. `prerefresh.completed` counts future terminal states (including
+  cancellation/failure), and `prerefresh.active` counts indexed futures, not
+  physical I/O. Completion callbacks attach after publication and remove only
+  their own future; no periodic cleanup thread is needed. Finite decision and
+  executor events are described in [`REFERENCE.md`](REFERENCE.md#early-refresh-outcomes).
+- Writer asynchronous store/retrieve isolate blocking I/O on one Java 21 virtual
+  thread per operation. The resolver carries method-policy and MDC snapshots.
+  The supported evidence path is a synchronous `@RedisCacheable` method calling
+  asynchronous writer store/retrieve, with worker-observed policy/MDC. This does
+  not extend support to reactive or `@Async` cached methods. Virtual threads do
+  not provide admission control; the host owns concurrency and resource budgets.
 - `ResiCacheFeatures` validates required collaborators when the value is
   constructed and normalizes absent metrics to the shared disabled registry.
   Cache creation consumes that validated value; standalone loader construction

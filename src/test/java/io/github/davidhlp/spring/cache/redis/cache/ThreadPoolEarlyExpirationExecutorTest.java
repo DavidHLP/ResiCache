@@ -40,8 +40,9 @@ class ThreadPoolEarlyExpirationExecutorTest {
     }
 
     @Test
-    void saturatedPoolRunsInlineAndRemovesCompletedEntry() throws Exception {
-        ThreadPoolEarlyExpirationExecutor bounded = new ThreadPoolEarlyExpirationExecutor(1, 1, 1, null);
+    void saturatedPoolRejectsOptionalWorkAndRemovesCompletedEntry() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ThreadPoolEarlyExpirationExecutor bounded = new ThreadPoolEarlyExpirationExecutor(1, 1, 1, registry);
         ExecutorService boundedPool = (ExecutorService) org.springframework.test.util.ReflectionTestUtils
                 .getField(bounded, "executorService");
         CountDownLatch started = new CountDownLatch(1);
@@ -58,10 +59,10 @@ class ThreadPoolEarlyExpirationExecutorTest {
             bounded.submit("running", blocker);
             assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
             bounded.submit("queued", blocker);
-            Thread caller = Thread.currentThread();
-            java.util.concurrent.atomic.AtomicReference<Thread> executedBy = new java.util.concurrent.atomic.AtomicReference<>();
+                java.util.concurrent.atomic.AtomicReference<Thread> executedBy = new java.util.concurrent.atomic.AtomicReference<>();
             bounded.submit("inline", () -> executedBy.set(Thread.currentThread()));
-            assertThat(executedBy.get()).isSameAs(caller);
+            assertThat(executedBy.get()).isNull();
+            assertThat(registry.get("prerefresh.outcome").tag("outcome", "rejected").counter().count()).isEqualTo(1);
             assertThat(bounded.getActiveCount()).isEqualTo(2);
         } finally {
             release.countDown();
@@ -69,6 +70,29 @@ class ThreadPoolEarlyExpirationExecutorTest {
             assertThat(boundedPool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         }
         assertThat(bounded.getActiveCount()).isZero();
+    }
+
+    @Test
+    void shutdownRejectsOptionalWorkWithoutLeakingEntries() {
+        executor.shutdown();
+        AtomicInteger calls = new AtomicInteger();
+        executor.submit("after-shutdown", calls::incrementAndGet);
+        assertThat(calls).hasValue(0);
+        assertThat(executor.getActiveCount()).isZero();
+    }
+
+    @Test
+    void cancellationDoesNotCountAnAlreadyCompletedFuture() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        try {
+            ThreadPoolEarlyExpirationExecutor tested = new ThreadPoolEarlyExpirationExecutor(workers, inFlight, registry);
+            inFlight.put("completed", CompletableFuture.completedFuture(null));
+            tested.cancel("completed");
+            assertThat(registry.get("prerefresh.cancelled").counter().count()).isZero();
+            assertThat(registry.get("prerefresh.outcome").tag("outcome", "cancelled").counter().count()).isZero();
+        } finally {
+            registry.close();
+        }
     }
 
     @Nested

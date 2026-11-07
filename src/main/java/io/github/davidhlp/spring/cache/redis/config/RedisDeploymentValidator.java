@@ -20,7 +20,7 @@ import java.lang.annotation.Target;
  * <ul>
  *   <li>{@code mode=cluster} → {@code clusterNodes} 非空</li>
  *   <li>{@code mode=sentinel} → {@code sentinelMaster} 与 {@code sentinelNodes} 非空</li>
- *   <li>{@code tlsRequired=true} → {@code tlsEnabled} 必须为 {@code true}</li>
+ *   <li>{@code tlsRequired=true} requires generated TLS unless a parsed YAML override is used</li>
  *   <li>未知 mode 值 → 拒绝(绑定到 {@code mode} node)</li>
  * </ul>
  */
@@ -89,7 +89,8 @@ import java.lang.annotation.Target;
                 }
             }
 
-            if (value.isTlsRequired() && !value.isTlsEnabled()) {
+            if (value.isTlsRequired() && !value.isTlsEnabled()
+                    && (value.getRedissonConfigPath() == null || value.getRedissonConfigPath().isBlank())) {
                 context.buildConstraintViolationWithTemplate(
                                 "tlsRequired=true requires tlsEnabled=true")
                         .addPropertyNode("tlsEnabled")

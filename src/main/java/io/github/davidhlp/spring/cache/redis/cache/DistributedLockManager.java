@@ -130,6 +130,7 @@ class DistributedLockManager implements LockManager {
 
         private final RLock lock;
         private final String key;
+        private final Thread owner = Thread.currentThread();
         private final AtomicBoolean closed = new AtomicBoolean(false);
 
         private RedissonLockHandle(final RLock lock, final String key) {
@@ -138,12 +139,15 @@ class DistributedLockManager implements LockManager {
         }
 
         /**
-         * 释放分布式锁
-         * 只有持有锁的线程才能释放锁，且每个锁只能被释放一次
+         * Releases from the acquiring thread with bounded retries.
+         *
+         * <p>After exhaustion or interruption the owner may retry close before acquiring
+         * this key again. No background recovery or fencing is provided. Successful
+         * release and loss of Redis ownership make this handle terminal.
          */
         @Override
         public void close() {
-            if (!closed.compareAndSet(false, true)) {
+            if (Thread.currentThread() != owner || !closed.compareAndSet(false, true)) {
                 return;
             }
 
@@ -154,8 +158,12 @@ class DistributedLockManager implements LockManager {
                     log.debug("Released distributed lock: keyFingerprint={}, attempt={}",
                             FailureReport.fingerprint(key), attempt);
                     return;
+                } catch (IllegalMonitorStateException e) {
+                    // Ownership has ended; never release a replacement owner's lock.
+                    return;
                 } catch (Exception e) {
                     if (attempt == MAX_UNLOCK_RETRIES) {
+                        closed.set(false);
                         FailureReport.error(log,
                                 "Failed to release distributed lock after " + MAX_UNLOCK_RETRIES + " attempts",
                                 null, key, e);
@@ -168,6 +176,7 @@ class DistributedLockManager implements LockManager {
                     try {
                         Thread.sleep(UNLOCK_RETRY_INTERVAL_MS);
                     } catch (InterruptedException ie) {
+                        closed.set(false);
                         Thread.currentThread().interrupt();
                         FailureReport.error(log, "Interrupted while retrying lock release", null, key, ie);
                         return;

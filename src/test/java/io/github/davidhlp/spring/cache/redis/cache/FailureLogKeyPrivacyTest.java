@@ -265,11 +265,35 @@ class FailureLogKeyPrivacyTest {
     }
 
     @Test
+    void refreshExecutorNormalDebugLogsOmitRawKeys() {
+        ExecutorService worker = mock(ExecutorService.class);
+        ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<Void>> inFlight = new ConcurrentHashMap<>();
+        ThreadPoolEarlyExpirationExecutor executor = new ThreadPoolEarlyExpirationExecutor(worker, inFlight, null);
+        try (Capture capture = new Capture(ThreadPoolEarlyExpirationExecutor.class);
+                Capture retry = new Capture(RefreshRetryPolicy.class)) {
+            executor.submit(SECRET_KEY, () -> { });
+            executor.submit(SECRET_KEY, () -> { });
+            executor.cancel(SECRET_KEY);
+            doAnswer(invocation -> {
+                invocation.<Runnable>getArgument(0).run();
+                return null;
+            }).when(worker).execute(any(Runnable.class));
+            executor.submit(SECRET_KEY, () -> { });
+            assertThat(capture.allText()).contains(FailureReport.fingerprint(SECRET_KEY)).doesNotContain(SECRET_KEY);
+            assertThat(retry.allText()).contains(FailureReport.fingerprint(SECRET_KEY)).doesNotContain(SECRET_KEY);
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
     @DisplayName("EarlyRefresh:执行器隔离最终失败，ERROR 只带 keyFingerprint")
     @SuppressWarnings("unchecked")
     void earlyRefresh_asyncRefreshFailure_omitsRawKey() {
         ValueOperations<String, Object> valueOperations = mock(ValueOperations.class);
-        when(valueOperations.get(any()))
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        when(redis.getStringSerializer()).thenReturn(org.springframework.data.redis.serializer.RedisSerializer.string());
+        when(redis.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
                 .thenThrow(new IllegalStateException("redis down for key " + SECRET_KEY));
         ExecutorService worker = mock(ExecutorService.class);
         doAnswer(invocation -> {
@@ -279,7 +303,7 @@ class FailureLogKeyPrivacyTest {
         ThreadPoolEarlyExpirationExecutor executor = new ThreadPoolEarlyExpirationExecutor(
                 worker, new ConcurrentHashMap<>(), null);
         EarlyRefresh earlyRefresh = new EarlyRefresh(
-                Clock.systemUTC(), executor, mock(RedisTemplate.class), valueOperations);
+                Clock.systemUTC(), executor, redis, valueOperations);
 
         try (Capture capture = new Capture(ThreadPoolEarlyExpirationExecutor.class)) {
             executor.submit(SECRET_KEY, () -> earlyRefresh.performAsyncRefresh(SECRET_KEY, null));
@@ -447,6 +471,11 @@ class FailureLogKeyPrivacyTest {
             appender.start();
             logger.setLevel(Level.DEBUG);
             logger.addAppender(appender);
+        }
+
+        String allText() {
+            return appender.list.stream().map(ILoggingEvent::getFormattedMessage)
+                    .collect(java.util.stream.Collectors.joining("\n"));
         }
 
         String warnErrorText() {

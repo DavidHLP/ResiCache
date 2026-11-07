@@ -52,7 +52,7 @@ class TlsConfigurationValidator {
             throw new IllegalStateException(
                     "[ResiCache] resi-cache.redis.tls-required=true but tls-enabled=false. "
                     + "Refusing to start with plaintext Redis transport. "
-                    + "Either set resi-cache.redis.tls-enabled=true or relax tls-required to false.");
+                    + "Lettuce TLS remains host-configured. Either set resi-cache.redis.tls-enabled=true or relax tls-required to false.");
         }
         if (shouldWarn()) {
             log.warn("====================================================================\n"
@@ -71,11 +71,19 @@ class TlsConfigurationValidator {
     /**
      * 是否应该 fail-fast 阻断启动。
      *
-     * <p>条件:用户显式声明 {@code tls-required=true} 但 {@code tls-enabled=false}。
+     * <p>Without YAML, requires the generated Redisson transport flag. YAML is validated
+     * against parsed endpoints during client creation; neither check configures Lettuce.
      */
     boolean shouldFail() {
         return properties.getRedis().isTlsRequired()
+                && !hasYamlOverride()
                 && !properties.getRedis().isTlsEnabled();
+    }
+
+    // Parsed YAML transport is checked by RedissonConfiguration before client creation.
+    private boolean hasYamlOverride() {
+        String path = properties.getRedis().getRedissonConfigPath();
+        return path != null && !path.isBlank();
     }
 
     /**
@@ -85,7 +93,7 @@ class TlsConfigurationValidator {
      */
     boolean shouldWarn() {
         var redis = properties.getRedis();
-        if (redis.isTlsEnabled() || redis.isTlsRequired()) {
+        if (hasYamlOverride() || redis.isTlsEnabled() || redis.isTlsRequired()) {
             return false;
         }
         boolean hasPassword = redis.getPassword() != null && !redis.getPassword().isEmpty();

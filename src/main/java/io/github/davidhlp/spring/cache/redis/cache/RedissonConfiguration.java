@@ -4,6 +4,8 @@ import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -11,6 +13,9 @@ import org.redisson.config.BaseConfig;
 import org.redisson.config.BaseMasterSlaveServersConfig;
 import org.redisson.config.ClusterServersConfig;
 import org.redisson.config.Config;
+import org.redisson.config.ConfigSupport;
+import org.redisson.config.MasterSlaveServersConfig;
+import org.redisson.config.ReplicatedServersConfig;
 import org.redisson.config.SentinelServersConfig;
 import org.redisson.config.SingleServerConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -75,7 +80,9 @@ class RedissonConfiguration {
             // 且依 SECURITY.md 该路径必须来自可信配置源)。
             log.info("Loading Redisson configuration from: {}", redis.getRedissonConfigPath());
             try {
-                return Config.fromYAML(new File(redis.getRedissonConfigPath()));
+                Config config = Config.fromYAML(new File(redis.getRedissonConfigPath()));
+                validateTransport(config, redis.isTlsRequired());
+                return config;
             } catch (IOException e) {
                 throw new IllegalStateException(
                         "Failed to load Redisson config (see startup log for the configured path)", e);
@@ -91,8 +98,35 @@ class RedissonConfiguration {
             default -> configureSingle(config, redis, redisProperties, properties, scheme);
         }
 
+        validateTransport(config, redis.isTlsRequired());
         log.debug("Created RedissonClient with mode: {}", redis.getMode());
         return config;
+    }
+
+    /** Validates parsed endpoints without reserializing trusted codec or resolver extensions. */
+    private static void validateTransport(Config config, boolean tlsRequired) {
+        if (!tlsRequired) {
+            return;
+        }
+        BaseConfig<?> servers = ConfigSupport.getConfig(config);
+        List<String> addresses = new ArrayList<>();
+        if (servers instanceof SingleServerConfig single) {
+            addresses.add(single.getAddress());
+        } else if (servers instanceof ClusterServersConfig cluster) {
+            addresses.addAll(cluster.getNodeAddresses());
+        } else if (servers instanceof SentinelServersConfig sentinel) {
+            addresses.addAll(sentinel.getSentinelAddresses());
+        } else if (servers instanceof ReplicatedServersConfig replicated) {
+            addresses.addAll(replicated.getNodeAddresses());
+        } else if (servers instanceof MasterSlaveServersConfig masterSlave) {
+            addresses.add(masterSlave.getMasterAddress());
+            addresses.addAll(masterSlave.getSlaveAddresses());
+        }
+        if (addresses.isEmpty() || addresses.stream().anyMatch(
+                address -> address == null || !address.startsWith("rediss://"))) {
+            throw new IllegalStateException("[ResiCache] tls-required=true requires rediss:// "
+                    + "for every effective Redisson endpoint. Lettuce TLS remains host-configured.");
+        }
     }
 
     private void configureCluster(

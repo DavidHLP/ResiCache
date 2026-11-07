@@ -25,46 +25,66 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 不动 default value(默认仍是 {@code [io.github.davidhlp]}),所以非 breaking。
  */
 @DisplayName("SerializerWhitelistStartupGuard Tests")
+@org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
 class SerializerWhitelistStartupGuardTest {
 
     @Nested
-    @DisplayName("shouldWarn 谓词")
-    class ShouldWarnPredicate {
+    @DisplayName("Startup event diagnostics")
+    class StartupEventDiagnostics {
 
         @Test
         @DisplayName("allowedPackagePrefixes 为 null → 应 warn")
-        void nullListShouldWarn() {
+        void nullListShouldWarn(org.springframework.boot.test.system.CapturedOutput output) {
             var props = new RedisProCacheProperties();
             props.getSerializer().setAllowedPackagePrefixes(null);
             var guard = new SerializerWhitelistStartupGuard(props);
-            assertThat(guard.shouldWarn()).isTrue();
+            guard.onApplicationReady();
+            assertThat(output.getOut()).contains("[ResiCache]");
         }
 
         @Test
         @DisplayName("allowedPackagePrefixes 为空列表 → 应 warn")
-        void emptyListShouldWarn() {
+        void emptyListShouldWarn(org.springframework.boot.test.system.CapturedOutput output) {
             var props = new RedisProCacheProperties();
             props.getSerializer().setAllowedPackagePrefixes(new ArrayList<>());
             var guard = new SerializerWhitelistStartupGuard(props);
-            assertThat(guard.shouldWarn()).isTrue();
+            guard.onApplicationReady();
+            assertThat(output.getOut()).contains("[ResiCache]");
         }
 
         @Test
         @DisplayName("allowedPackagePrefixes 含至少一项 → 不应 warn")
-        void populatedListShouldNotWarn() {
+        void populatedListShouldNotWarn(org.springframework.boot.test.system.CapturedOutput output) {
             var props = new RedisProCacheProperties();
             props.getSerializer().setAllowedPackagePrefixes(List.of("io.example.app"));
             var guard = new SerializerWhitelistStartupGuard(props);
-            assertThat(guard.shouldWarn()).isFalse();
+            guard.onApplicationReady();
+            assertThat(output.getOut()).doesNotContain("[ResiCache]");
         }
 
         @Test
         @DisplayName("allowedPackagePrefixes 为默认 [io.github.davidhlp] → 不应 warn")
-        void defaultListShouldNotWarn() {
+        void defaultListShouldNotWarn(org.springframework.boot.test.system.CapturedOutput output) {
             var props = new RedisProCacheProperties();
             // 直接 new() 不改 setter,走默认 ArrayList<>("io.github.davidhlp")
             var guard = new SerializerWhitelistStartupGuard(props);
-            assertThat(guard.shouldWarn()).isFalse();
+            guard.onApplicationReady();
+            assertThat(output.getOut()).doesNotContain("[ResiCache]");
         }
     }
+    @Test
+    void blankPrefixesWarnWithoutChangingLiteralMatching(org.springframework.boot.test.system.CapturedOutput output) {
+        var props = new RedisProCacheProperties();
+        for (String prefix : List.of("", " ", "\t")) {
+            props.getSerializer().setAllowedPackagePrefixes(List.of(prefix));
+            var guard = new SerializerWhitelistStartupGuard(props);
+            guard.onApplicationReady();
+            assertThat(output.getOut()).contains("contains a blank prefix");
+            assertThat(new WhitelistPolicy(List.of(prefix)).isClassNameAllowed("example.Type"))
+                    .isEqualTo(prefix.isEmpty());
+        }
+        assertThat(new WhitelistPolicy(List.of("com.example")).isClassNameAllowed("com.exampleOther.Type"))
+                .isTrue();
+    }
+
 }
