@@ -13,6 +13,8 @@ import org.springframework.lang.NonNull;
  * Completed and cancelled futures remove themselves from the in-flight index;
  * no periodic scheduler is needed. Cancellation is best-effort and does not
  * promise interruption of the runnable. Shutdown waits for accepted work.
+ * Submission publication and cancellation share a monitor so forced shutdown
+ * cannot miss an accepted future that has not yet entered the index.
  */
 @Slf4j
 class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
@@ -106,7 +108,7 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
      * @param key  与提前过期任务关联的键
      * @param task 要执行的提前过期任务
      */
-    public void submit(String key, Runnable task) {
+    public synchronized void submit(String key, Runnable task) {
         if (key == null || task == null) {
             return;
         }
@@ -151,7 +153,7 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
      * @param key 要取消的提前过期任务的键
      */
     @Override
-    public void cancel(String key) {
+    public synchronized void cancel(String key) {
         if (key == null) {
             return;
         }
@@ -191,8 +193,10 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
     public void shutdown() {
         log.info("Shutting down early-expiration executor thread pool...");
         shutdownGracefully(executorService, 10, "Pre-refresh executor");
-        // Drop completed entries after pool shutdown as a final cleanup pass.
-        inFlight.entrySet().removeIf(e -> e.getValue() == null || e.getValue().isDone());
+        synchronized (this) {
+            // Wait for accepted submissions to publish before the final cleanup.
+            inFlight.entrySet().removeIf(e -> e.getValue().isDone());
+        }
     }
 
     /**
@@ -207,16 +211,22 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         executor.shutdown();
         try {
             if (!executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+                shutdownNow(executor);
                 log.warn("{} did not terminate gracefully, forced shutdown", name);
             } else {
                 log.info("{} shut down successfully", name);
             }
         } catch (InterruptedException e) {
-            executor.shutdownNow();
+            shutdownNow(executor);
             Thread.currentThread().interrupt();
             log.error("{} shutdown interrupted", name, e);
         }
+    }
+
+    private synchronized void shutdownNow(ExecutorService executor) {
+        executor.shutdownNow();
+        // Drained AsyncRun entries never run: settle their futures as well as running ones.
+        inFlight.keySet().forEach(this::cancel);
     }
 
     /**

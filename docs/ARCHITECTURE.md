@@ -131,8 +131,11 @@ current documented behavior in `COMPATIBILITY.md`.
   was read. `prerefresh.completed` counts future terminal states (including
   cancellation/failure), and `prerefresh.active` counts indexed futures, not
   physical I/O. Completion callbacks attach after publication and remove only
-  their own future; no periodic cleanup thread is needed. Finite decision and
-  executor events are described in [`REFERENCE.md`](REFERENCE.md#early-refresh-outcomes).
+  their own future; no periodic cleanup thread is needed. Graceful shutdown drains
+  accepted work; timeout or interruption cancels all remaining indexed futures,
+  including queued work removed by forced shutdown. Submission publication and
+  cancellation share a monitor; termination waits and worker I/O stay outside it.
+  Finite decision and executor events are described in [`REFERENCE.md`](REFERENCE.md#early-refresh-outcomes).
 - Writer asynchronous store/retrieve isolate blocking I/O on one Java 21 virtual
   thread per operation. The resolver carries method-policy and MDC snapshots.
   The supported evidence path is a synchronous `@RedisCacheable` method calling

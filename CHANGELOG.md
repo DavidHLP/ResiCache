@@ -39,6 +39,12 @@ source changes remain unreleased; publication is tracked in
 
 ## [Unreleased] — current development
 
+### Fixed
+
+- Settle all accepted pre-refresh futures on forced or interrupted shutdown,
+  including queued work and submissions still being published. Graceful shutdown
+  drains accepted work; cancellation remains best-effort for running I/O.
+
 ### Documentation
 
 - Reconcile adoption, configuration fallback, explicit serializer allowlists,

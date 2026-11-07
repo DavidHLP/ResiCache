@@ -166,7 +166,11 @@ submissions do not increment it. `prerefresh.completed` counts future terminal
 states, including failure/cancellation, rather than completed Redis I/O or CAS
 success. `prerefresh.cancelled` counts successful future cancellation, not proof
 that a runnable stopped. `prerefresh.active` is the indexed-future count; cancelled
-work may still perform I/O after removal. See
+work may still perform I/O after removal. Graceful shutdown drains accepted work;
+after the ten-second wait times out or is interrupted, forced shutdown cancels
+remaining accepted futures and removes their registrations, including queued
+tasks that never ran. An interrupted shutdown restores the caller's interrupt
+flag. These terminal futures do not prove that running I/O stopped. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md#data-and-failure-ownership) for atomic TTL,
 snapshot cost, rejection fallback and worker context boundaries.
 
