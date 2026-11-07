@@ -1,0 +1,36 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/ThreadPoolEarlyExpirationExecutorTest.java
+  s_2c8c164f0fe8ef::t_3059bd0d27994e 43-45,62,64-65,75-96
+  s_2c8c164f0fe8ef::t_a7ddb42679a81f 97
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RefreshExecutorLifecycleTest.java
+  s_2c8c164f0fe8ef::t_ede267cce5723a 120,144-164,166-272
+  s_2c8c164f0fe8ef::t_b1192214cedc80 121-143
+  s_2c8c164f0fe8ef::t_81e250fc529313 165
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RefreshTaskMetrics.java
+  s_2c8c164f0fe8ef::t_3059bd0d27994e 11-13,17-19,37,43-48,68-70
+  s_2c8c164f0fe8ef::t_21e30614e8e13d 71-73
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ThreadPoolEarlyExpirationExecutor.java
+  s_2c8c164f0fe8ef::t_95cb246ab5c3ba 16-17
+  s_2c8c164f0fe8ef::t_3059bd0d27994e 101,120-131,135,139,146,163-166,168-169,175-176
+  s_2c8c164f0fe8ef::t_e0023ae356afbe 111,156,196-199,214,220,226-229
+  s_2c8c164f0fe8ef::t_c7e429a6f26853 177-178
+  s_2c8c164f0fe8ef::t_c09ce28c910b51 230-231
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RefreshTaskMetricsTest.java
+  s_2c8c164f0fe8ef::t_3059bd0d27994e 30-48,60-62,119-121,134
+  s_2c8c164f0fe8ef::t_b2b5fa02f92476 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c1f050d782ab6283e548293f1fbc846f57fa7e28",
+  "prompts": {},
+  "sessions": {
+    "s_2c8c164f0fe8ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b63d-583e-7a21-9af7-3c2fe9790d3c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
