@@ -39,12 +39,17 @@ class SerializerWhitelistStartupGuard {
     /**
      * 应用启动就绪后检查白名单是否被清空.
      *
-     * <p>判空标准:list 为 null 或为空列表。含空字符串 {@code ""} 不算空
-     * (pre-existing {@code startsWith("")} = true 行为,不是 footgun)。
+     * <p>Empty lists and blank literal prefixes are diagnosed without changing matching.
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
-        if (shouldWarn()) {
+        List<String> prefixes = properties.getSerializer().getAllowedPackagePrefixes();
+        if (prefixes != null && prefixes.stream().anyMatch(String::isBlank)) {
+            log.warn("[ResiCache] allowed-package-prefixes contains a blank prefix. "
+                    + "An empty literal prefix permits every class; whitespace is matched literally. "
+                    + "Configure explicit trusted packages. Matching semantics are unchanged.");
+        }
+        if (prefixes == null || prefixes.isEmpty()) {
             log.warn(
                 "[ResiCache] resi-cache.serializer.allowed-package-prefixes is empty "
                     + "(null or []). Custom type deserialization will fail with "
@@ -56,13 +61,13 @@ class SerializerWhitelistStartupGuard {
     }
 
     /**
-     * 谓词:白名单是否处于"应发 WARN"状态(null 或空列表).
+     * Reports empty lists or blank prefixes requiring a startup diagnostic.
      *
      * <p>package-private 供单元测试,不暴露为 public API。
      */
     boolean shouldWarn() {
         List<String> prefixes =
             properties.getSerializer().getAllowedPackagePrefixes();
-        return prefixes == null || prefixes.isEmpty();
+        return prefixes == null || prefixes.isEmpty() || prefixes.stream().anyMatch(String::isBlank);
     }
 }

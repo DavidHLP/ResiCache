@@ -299,4 +299,50 @@ class RedissonConfigurationTest {
         }
     }
 
+    @Test
+    void requiredTlsValidatesEveryParsedTopologyEndpoint(@TempDir File tempDir) throws Exception {
+        List<String> topologies = List.of(
+                "singleServerConfig:\n  address: '%sone:6379'\n",
+                "clusterServersConfig:\n  nodeAddresses: ['%sone:6379', 'rediss://two:6379']\n",
+                "sentinelServersConfig:\n  masterName: main\n  sentinelAddresses: ['%sone:26379']\n",
+                "replicatedServersConfig:\n  nodeAddresses: ['rediss://two:6379', '%sone:6379']\n",
+                "masterSlaveServersConfig:\n  masterAddress: 'rediss://two:6379'\n  slaveAddresses: ['%sone:6379']\n",
+                "masterSlaveServersConfig:\n  masterAddress: '%sone:6379'\n  slaveAddresses: ['rediss://two:6379']\n");
+        File yaml = new File(tempDir, "transport.yml");
+        properties.getRedis().setRedissonConfigPath(yaml.getAbsolutePath());
+        properties.getRedis().setTlsRequired(true);
+        for (String topology : topologies) {
+            java.nio.file.Files.writeString(yaml.toPath(), topology.formatted("redis://"));
+            properties.getRedis().setTlsEnabled(true);
+            assertThatThrownBy(() -> configuration.buildConfig(redisProperties, properties))
+                    .isInstanceOf(IllegalStateException.class).hasMessageContaining("effective Redisson endpoint");
+            java.nio.file.Files.writeString(yaml.toPath(), topology.formatted("rediss://")
+                    + "codec: !<org.redisson.client.codec.StringCodec> {}\n");
+            properties.getRedis().setTlsEnabled(false);
+            Config parsed = configuration.buildConfig(redisProperties, properties);
+            assertThat(parsed.getCodec()).isInstanceOf(org.redisson.client.codec.StringCodec.class);
+            assertThat(new TlsConfigurationValidator(properties).shouldFail()).isFalse();
+        }
+    }
+
+    @Test
+    void requiredTlsUsesGeneratedSecureTransport() {
+        properties.getRedis().setTlsRequired(true);
+        properties.getRedis().setTlsEnabled(true);
+        assertThat(configuration.buildConfig(redisProperties, properties).useSingleServer().getAddress())
+                .startsWith("rediss://");
+        properties.getRedis().setTlsEnabled(false);
+        assertThatThrownBy(() -> configuration.buildConfig(redisProperties, properties))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("tls-required=true");
+    }
+
+    @Test
+    void yamlPlaintextRemainsAllowedUnlessTlsRequired(@TempDir File tempDir) throws Exception {
+        File yaml = new File(tempDir, "plaintext.yml");
+        java.nio.file.Files.writeString(yaml.toPath(), "singleServerConfig:\n  address: redis://localhost:6379\n");
+        properties.getRedis().setRedissonConfigPath(yaml.getAbsolutePath());
+        assertThat(configuration.buildConfig(redisProperties, properties).useSingleServer().getAddress())
+                .isEqualTo("redis://localhost:6379");
+    }
+
 }

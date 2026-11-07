@@ -133,6 +133,16 @@ class SerializerWhitelistStartupGuardIntegrationTest {
             });
     }
 
+    @Test
+    void blankPrefixEmitsAccurateDiagnostic() {
+        var props = new RedisProCacheProperties();
+        props.getSerializer().setAllowedPackagePrefixes(List.of(""));
+        new SerializerWhitelistStartupGuard(props).onApplicationReady();
+        assertThat(guardWarns()).singleElement().satisfies(event -> assertThat(event.getFormattedMessage())
+                .contains("permits every class").contains("Matching semantics are unchanged")
+                .doesNotContain("is empty"));
+    }
+
     private List<ILoggingEvent> guardWarns() {
         return listAppender.list.stream()
             .filter(e -> e.getLevel() == Level.WARN

@@ -67,4 +67,19 @@ class SerializerWhitelistStartupGuardTest {
             assertThat(guard.shouldWarn()).isFalse();
         }
     }
+    @Test
+    void blankPrefixesWarnWithoutChangingLiteralMatching() {
+        var props = new RedisProCacheProperties();
+        for (String prefix : List.of("", " ", "\t")) {
+            props.getSerializer().setAllowedPackagePrefixes(List.of(prefix));
+            var guard = new SerializerWhitelistStartupGuard(props);
+            assertThat(guard.shouldWarn()).isTrue();
+            guard.onApplicationReady();
+            assertThat(new WhitelistPolicy(List.of(prefix)).isClassNameAllowed("example.Type"))
+                    .isEqualTo(prefix.isEmpty());
+        }
+        assertThat(new WhitelistPolicy(List.of("com.example")).isClassNameAllowed("com.exampleOther.Type"))
+                .isTrue();
+    }
+
 }

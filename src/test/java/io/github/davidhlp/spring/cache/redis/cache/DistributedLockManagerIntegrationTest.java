@@ -9,6 +9,8 @@ import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.protection.breakdown.LockManager;
 import io.lettuce.core.cluster.SlotHash;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -31,6 +33,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -408,6 +413,103 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
             result.get().close();
 
             verify(mockedLock, times(3)).unlock();
+        }
+    }
+
+    @Test
+    void realReleaseRetriesTransientFailuresWithoutOwnershipQuery() throws Exception {
+        String key = "transient-release";
+        RLock real = redissonClient.getLock(lockManager.buildLockKey(key));
+        RLock injected = spy(real);
+        AtomicInteger calls = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (calls.incrementAndGet() < 3) {
+                throw new IllegalStateException("Injected transport failure before command");
+            }
+            real.unlock();
+            return null;
+        }).when(injected).unlock();
+        LockManager.LockHandle handle = faultInjectedManager(key, injected).tryAcquire(key, 0).orElseThrow();
+        try {
+            assertThat(tryAcquireOnAnotherThread(key, 0)).isFalse();
+            handle.close();
+            assertThat(calls.get()).isEqualTo(3);
+            assertThat(tryAcquireOnAnotherThread(key, 0)).isTrue();
+            handle.close();
+            assertThat(calls.get()).isEqualTo(3);
+            verify(injected, never()).isHeldByCurrentThread();
+        } finally {
+            handle.close();
+        }
+    }
+
+    @Test
+    void realReleaseAfterExhaustionOrInterruptionCanBeRetriedByOwner() throws Exception {
+        for (boolean interrupt : new boolean[] {false, true}) {
+            String key = "retry-release-" + interrupt;
+            RLock real = redissonClient.getLock(lockManager.buildLockKey(key));
+            RLock injected = spy(real);
+            AtomicInteger failures = new AtomicInteger(interrupt ? 1 : 3);
+            doAnswer(invocation -> {
+                if (failures.getAndDecrement() > 0) {
+                    if (interrupt) {
+                        Thread.currentThread().interrupt();
+                    }
+                    throw new IllegalStateException("Injected transport failure before command");
+                }
+                real.unlock();
+                return null;
+            }).when(injected).unlock();
+            LockManager.LockHandle handle = faultInjectedManager(key, injected).tryAcquire(key, 0).orElseThrow();
+            try {
+                handle.close();
+                assertThat(Thread.currentThread().isInterrupted()).isEqualTo(interrupt);
+                Thread.interrupted();
+                assertThat(tryAcquireOnAnotherThread(key, 0)).isFalse();
+                ExecutorService other = Executors.newSingleThreadExecutor();
+                try {
+                    other.submit(handle::close).get(2, TimeUnit.SECONDS);
+                } finally {
+                    other.shutdownNow();
+                }
+                assertThat(tryAcquireOnAnotherThread(key, 0)).isFalse();
+                handle.close();
+                assertThat(tryAcquireOnAnotherThread(key, 0)).isTrue();
+            } finally {
+                Thread.interrupted();
+                handle.close();
+            }
+        }
+    }
+
+    @Test
+    void staleHandleCannotReleaseReplacementOwner() throws Exception {
+        String key = "replacement-owner";
+        LockManager.LockHandle stale = lockManager.tryAcquire(key, 0).orElseThrow();
+        // Simulate ownership ending before the handle learns that release completed.
+        redissonClient.getLock(lockManager.buildLockKey(key)).unlock();
+        CountDownLatch acquired = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService other = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> task = other.submit(() -> {
+                try (LockManager.LockHandle handle = lockManager.tryAcquire(key, 0).orElseThrow()) {
+                    acquired.countDown();
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+            });
+            assertThat(acquired.await(5, TimeUnit.SECONDS)).isTrue();
+            stale.close();
+            assertThat(lockManager.tryAcquire(key, 0)).isEmpty();
+            release.countDown();
+            task.get(5, TimeUnit.SECONDS);
+            assertThat(tryAcquireOnAnotherThread(key, 0)).isTrue();
+        } finally {
+            release.countDown();
+            other.shutdownNow();
         }
     }
 
