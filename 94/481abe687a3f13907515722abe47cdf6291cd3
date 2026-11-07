@@ -1,0 +1,19 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SerializerWhitelistStartupGuardTest.java
+  s_889432a42b294a::t_1eb412eccd0e64 28,32-33,37,41-42,47,51-52,57,61-62,67,71-72,76,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "94481abe687a3f13907515722abe47cdf6291cd3",
+  "prompts": {},
+  "sessions": {
+    "s_889432a42b294a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b57a-750f-78a2-bf69-bff80fcaec8f",
+        "model": "unknown"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
