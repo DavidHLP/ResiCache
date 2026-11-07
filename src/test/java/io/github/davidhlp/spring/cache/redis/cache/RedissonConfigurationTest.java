@@ -27,6 +27,35 @@ class RedissonConfigurationTest {
     private DataRedisProperties redisProperties;
     private RedisProCacheProperties properties;
 
+    @org.springframework.context.annotation.Configuration(proxyBeanMethods = false)
+    @org.springframework.boot.context.properties.EnableConfigurationProperties(RedisProCacheProperties.class)
+    static class BoundConfig {
+        @org.springframework.context.annotation.Bean
+        Config parsedConfig(RedisProCacheProperties boundProperties) {
+            return new RedissonConfiguration().buildConfig(new DataRedisProperties(), boundProperties);
+        }
+    }
+
+    @Test
+    void requiredTlsYamlUsesParsedTransportAfterRealBinding(@TempDir File tempDir) throws Exception {
+        File yaml = new File(tempDir, "bound.yml");
+        var runner = new org.springframework.boot.test.context.runner.ApplicationContextRunner()
+                .withUserConfiguration(BoundConfig.class)
+                .withPropertyValues("resi-cache.redis.tls-required=true",
+                        "resi-cache.redis.tls-enabled=false",
+                        "resi-cache.redis.redisson-config-path=" + yaml.getAbsolutePath());
+        java.nio.file.Files.writeString(yaml.toPath(), "singleServerConfig:\n  address: rediss://localhost:6379\n");
+        runner.run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(Config.class).useSingleServer().getAddress())
+                    .isEqualTo("rediss://localhost:6379");
+        });
+        java.nio.file.Files.writeString(yaml.toPath(), "singleServerConfig:\n  address: redis://localhost:6379\n");
+        runner.run(context -> assertThat(context).hasFailed());
+        runner.withPropertyValues("resi-cache.redis.redisson-config-path= ")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
     @BeforeEach
     void setUp() {
         configuration = new RedissonConfiguration();

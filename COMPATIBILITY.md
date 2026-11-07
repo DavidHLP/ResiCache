@@ -177,8 +177,8 @@ coordinate writes and evictions throughout the recovery window. See the
   evidence covers synchronous AOP plus direct asynchronous writer calls, without
   extending reactive or `@Async` support.
 - **TLS and release recovery**: effective parsed Redisson endpoints are checked
-  when TLS is required; trusted YAML extensions remain supported. The secure-YAML
-  / disabled-generated-TLS binding combination still has a known validation gap.
+  when TLS is required; trusted YAML extensions remain supported. Secure YAML
+  overrides are accepted independently of the generated `tls-enabled` flag.
   Lettuce remains host-configured. Explicit owner-thread close retries must precede
   same-key reacquisition and provide no fencing or arbitrary-partition recovery
   guarantee; see [operations](docs/OPERATIONS.md#redis-topology-and-configuration)

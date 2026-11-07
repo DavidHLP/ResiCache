@@ -180,7 +180,7 @@ public class RedisProCacheProperties {
      * Redis deployment configuration.
      *
      * <p>跨字段关系(mode 决定 host/port vs clusterNodes vs sentinelNodes;tlsRequired
-     * 依赖 tlsEnabled)由 {@link RedisDeploymentValidator} 类级校验,违规绑定到具体字段。
+     * 在无 YAML 覆盖时依赖 tlsEnabled)由 {@link RedisDeploymentValidator} 类级校验,违规绑定到具体字段。
      */
     @Getter
     @Setter
@@ -204,9 +204,9 @@ public class RedisProCacheProperties {
         /** 是否启用 TLS */
         private boolean tlsEnabled = false;
         /**
-         * 强制 TLS —— 当为 {@code true} 时,启动期会校验
-         * {@link #tlsEnabled} 必须为 {@code true},否则抛 {@link IllegalStateException}
-         * fail-fast。生产推荐设为 {@code true}。
+         * Require TLS at startup. Generated configuration requires {@link #tlsEnabled};
+         * a Redisson YAML override is checked against its parsed endpoint addresses instead.
+         * Host-provided Redisson clients and Lettuce transport remain host-owned.
          */
         private boolean tlsRequired = false;
         /** 集群节点地址列表 */

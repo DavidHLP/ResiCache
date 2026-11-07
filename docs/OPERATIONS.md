@@ -50,11 +50,10 @@ endpoint in the effective parsed single, cluster, sentinel, replicated or
 master/slave topology for `rediss://` before client creation. This checks the
 parsed Config rather than YAML text or a serialization roundtrip. Host-supplied
 Redisson clients and Spring Data/Lettuce TLS remain host-owned; configure Lettuce
-TLS independently. There is a known binding-layer gap: Bean Validation still
-rejects `tls-required=true` with `tls-enabled=false` even when the YAML endpoints
-are secure. Parsed-config tests establish endpoint validation, not acceptance of
-that combination through full application binding. Until that gap is resolved,
-set `tls-enabled=true` as well; the parsed YAML endpoints are still checked.
+TLS independently. With a YAML override, binding defers the generated
+`tls-enabled` requirement to this parsed endpoint check; secure YAML can use
+`tls-enabled=false`, while plaintext YAML is rejected when TLS is required.
+Without an override, required TLS still requires `tls-enabled=true`.
 
 Redisson is optional until an operation requests distributed synchronization.
 With no distributed `LockManager`, `sync=true` fails closed by default.
