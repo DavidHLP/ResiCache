@@ -1,0 +1,29 @@
+CHANGELOG.md
+  s_70db4ce0c5c6df::t_616bf8074d6a8d 66-79
+docs/REFERENCE.md
+  s_70db4ce0c5c6df::t_616bf8074d6a8d 145-172,180-182
+  s_70db4ce0c5c6df::t_4f0ff70b16f3eb 183-184
+docs/ARCHITECTURE.md
+  s_70db4ce0c5c6df::t_616bf8074d6a8d 118-141
+COMPATIBILITY.md
+  s_70db4ce0c5c6df::t_616bf8074d6a8d 168-185
+docs/OPERATIONS.md
+  s_70db4ce0c5c6df::t_4f0ff70b16f3eb 43-44
+  s_70db4ce0c5c6df::t_616bf8074d6a8d 45-57,404-413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "863efd68209ca69c8aae2ade341bb878cf6ef14f",
+  "prompts": {},
+  "sessions": {
+    "s_70db4ce0c5c6df": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b60c-fdc9-74a0-a6b9-0bafaa143340",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
