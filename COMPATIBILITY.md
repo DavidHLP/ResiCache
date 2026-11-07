@@ -165,9 +165,24 @@ coordinate writes and evictions throughout the recovery window. See the
   intentionally reset on deserialization; older payloads without these fields
   remain readable through the wall-clock fallback.
 - **Early-expiration decision boundary**: TTL shortening compares the cached
-  value's exact `payload.version`; the envelope `version` is format metadata,
-  not the CAS token. Policy evaluation uses the configured TTL/threshold and
-  has no unrelated absolute 60-second bypass.
+  value's exact Java `long` `payload.version`, then CASes original serialized
+  bytes with an atomic live-PTTL check. The envelope `version` is format metadata,
+  not the comparison token. An existing TTL at or below five seconds is preserved;
+  persistent values may receive the grace TTL. Full-snapshot traffic scales with
+  payload size. Policy evaluation has no unrelated absolute 60-second bypass.
+  Optional executor rejection leaves ordinary TTL in effect. Cancellation remains
+  best-effort; completed/active metrics describe futures rather than physical I/O
+  (see [outcome semantics](docs/REFERENCE.md#early-refresh-outcomes)). Writer
+  virtual threads isolate blocking I/O without admission control. Worker policy/MDC
+  evidence covers synchronous AOP plus direct asynchronous writer calls, without
+  extending reactive or `@Async` support.
+- **TLS and release recovery**: effective parsed Redisson endpoints are checked
+  when TLS is required; trusted YAML extensions remain supported. The secure-YAML
+  / disabled-generated-TLS binding combination still has a known validation gap.
+  Lettuce remains host-configured. Explicit owner-thread close retries must precede
+  same-key reacquisition and provide no fencing or arbitrary-partition recovery
+  guarantee; see [operations](docs/OPERATIONS.md#redis-topology-and-configuration)
+  and [lock lifetime](docs/OPERATIONS.md#distributed-lock-lifetime).
 - **Bloom CLEAN semantics**: Bloom tracks possible data-source membership,
   not current cache entries. CLEAN preserves existing bits and never uses a
   rebuilding marker or TTL window; false-positives are safe. Negative results

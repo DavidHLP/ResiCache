@@ -40,8 +40,21 @@ Supported deployment modes are `single`, `cluster`, and `sentinel`, with
 binding-time validation for mode-specific fields and TLS requirements. The
 advanced `resi-cache.redis.redisson-config-path` value is a trusted operator
 input only: it is read as a local YAML path and must never come from an
-end-user request. This override returns the file configuration directly; the
-normal library topology/pool settings are not then applied.
+end-user request. This override supplies the parsed file configuration; the
+normal library topology/pool settings are not then applied. Trusted Redisson YAML tags and codec
+extensions remain supported; endpoint checks do not make YAML safe for untrusted
+input.
+
+For library-created Redisson clients, `tls-required=true` checks every configured
+endpoint in the effective parsed single, cluster, sentinel, replicated or
+master/slave topology for `rediss://` before client creation. This checks the
+parsed Config rather than YAML text or a serialization roundtrip. Host-supplied
+Redisson clients and Spring Data/Lettuce TLS remain host-owned; configure Lettuce
+TLS independently. There is a known binding-layer gap: Bean Validation still
+rejects `tls-required=true` with `tls-enabled=false` even when the YAML endpoints
+are secure. Parsed-config tests establish endpoint validation, not acceptance of
+that combination through full application binding. Until that gap is resolved,
+set `tls-enabled=true` as well; the parsed YAML endpoints are still checked.
 
 Redisson is optional until an operation requests distributed synchronization.
 With no distributed `LockManager`, `sync=true` fails closed by default.
@@ -388,3 +401,13 @@ calculated from the acquisition timeout. A slow loader retains its lock while
 the client can renew it; acquisition timeout only bounds waiting to acquire.
 Client death or loss of renewal still allows the lock to expire. This is cache
 load coordination, not fencing for authoritative data writes.
+
+Only the acquiring thread can close a built-in lock handle. Close calls unlock
+directly, without an ownership pre-query that could bypass release/renewal cleanup.
+After bounded unlock failure or interrupted retry sleep, the owner may explicitly
+retry close; interruption remains set. Retry must occur before that thread
+reacquires the same key: Redisson client/thread ownership cannot distinguish a
+later reentrant acquisition. Successful unlock or reported ownership loss makes
+the handle terminal. There is no background retry, force-unlock, fixed lease or
+fencing. Controlled tests inject failures before command dispatch; they do not
+establish recovery across arbitrary partitions, lost responses or later reentry.

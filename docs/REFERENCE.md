@@ -142,6 +142,34 @@ options are recorded in [`COMPATIBILITY.md`](../COMPATIBILITY.md).
 This table summarizes current source behavior and focused tests; update it when
 the operation contract changes.
 
+## Early-refresh outcomes
+
+`prerefresh.outcome` uses only the finite `outcome` tag below, without key or
+cache tags. These are events, not mutually exclusive task results: cancellation
+and a later CAS decision can both be emitted for one running task; retries can
+also produce multiple events. Null/disabled registries allocate and record no
+refresh counters.
+
+| Outcome | Meaning |
+|---|---|
+| `missing` | Snapshot or CAS found no value (also the null-result fallback). |
+| `version_changed` | Deserialized value is unsupported or its exact payload version differs. |
+| `below_grace` | Snapshot metadata reports positive remaining lifetime below five seconds. |
+| `shortened` | Byte CAS applied the grace TTL, including to a persistent entry. |
+| `snapshot_changed` | Live bytes differ from the original snapshot. |
+| `ttl_unchanged` | Atomic live PTTL is already at or below five seconds. |
+| `rejected` | Optional submission was rejected by the executor. |
+| `cancelled` | Cancellation of the indexed future succeeded. |
+
+`prerefresh.submitted` counts accepted scheduled tasks; deduplicated or rejected
+submissions do not increment it. `prerefresh.completed` counts future terminal
+states, including failure/cancellation, rather than completed Redis I/O or CAS
+success. `prerefresh.cancelled` counts successful future cancellation, not proof
+that a runnable stopped. `prerefresh.active` is the indexed-future count; cancelled
+work may still perform I/O after removal. See
+[`ARCHITECTURE.md`](ARCHITECTURE.md#data-and-failure-ownership) for atomic TTL,
+snapshot cost, rejection fallback and worker context boundaries.
+
 ## Serialization and compatibility
 
 ResiCache stores an internal `{version, payload}` envelope through
@@ -149,8 +177,11 @@ ResiCache stores an internal `{version, payload}` envelope through
 `GenericJackson2JsonRedisSerializer` or `JdkSerializer`. The whitelist default
 and `.*` dot-boundary behavior are defined by `WhitelistPolicy` and the
 serializer properties. Literal prefixes use `startsWith`; prefer an explicit
-package boundary such as `com.example.dto.*`. Retain `io.github.davidhlp.*` for
-internal cached-value metadata when supplying a replacement list. Application
+package boundary such as `com.example.dto.*`. A literal `com.example` also
+matches `com.exampleOther`. Blank prefixes produce a startup warning: the empty
+literal prefix permits every class, while whitespace remains literal. The guard
+does not trim entries or change wildcard/literal matching. Retain
+`io.github.davidhlp.*` for internal cached-value metadata when supplying a replacement list. Application
 packages are not derived automatically. An empty list can reach the startup
 guard's warning at `ApplicationReadyEvent`. A `null` list instead fails
 serializer construction (`WhitelistPolicy` calls `List.copyOf(null)`),
