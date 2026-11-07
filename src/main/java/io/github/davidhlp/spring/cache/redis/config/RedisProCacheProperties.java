@@ -179,8 +179,9 @@ public class RedisProCacheProperties {
     /**
      * Redis deployment configuration.
      *
-     * <p>跨字段关系(mode 决定 host/port vs clusterNodes vs sentinelNodes;tlsRequired
-     * 在无 YAML 覆盖时依赖 tlsEnabled)由 {@link RedisDeploymentValidator} 类级校验,违规绑定到具体字段。
+     * <p>{@link RedisDeploymentValidator} validates mode-specific host, cluster and sentinel
+     * fields, and requires generated TLS when no YAML override is supplied.
+     * Violations are attached to the affected property.
      */
     @Getter
     @Setter
