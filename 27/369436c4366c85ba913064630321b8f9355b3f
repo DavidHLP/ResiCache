@@ -1,0 +1,19 @@
+docs/OPERATIONS.md
+  s_889432a42b294a::t_2a42a28d5180e1 255-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "27369436c4366c85ba913064630321b8f9355b3f",
+  "prompts": {},
+  "sessions": {
+    "s_889432a42b294a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b57a-750f-78a2-bf69-bff80fcaec8f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
