@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_5a31717b71a208::t_8362f0039f4a71 66-70
+COMPATIBILITY.md
+  s_5a31717b71a208::t_8362f0039f4a71 89-94
+docs/OPERATIONS.md
+  s_5a31717b71a208::t_8362f0039f4a71 252-269,289-299
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8aa4376312f1294873e6f8f1512ad9ff607e92a",
+  "prompts": {},
+  "sessions": {
+    "s_5a31717b71a208": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b607-fbd1-7231-9af9-afbeb456923f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
