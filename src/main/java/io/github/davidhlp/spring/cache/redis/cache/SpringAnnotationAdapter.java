@@ -6,8 +6,10 @@ import io.github.davidhlp.spring.cache.redis.annotation.RedisCacheable;
 import io.github.davidhlp.spring.cache.redis.annotation.RedisCaching;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Method;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheConfig;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
@@ -15,6 +17,7 @@ import org.springframework.cache.interceptor.CachePutOperation;
 import org.springframework.cache.interceptor.CacheEvictOperation;
 import org.springframework.cache.interceptor.CacheOperation;
 import org.springframework.cache.interceptor.CacheableOperation;
+import org.springframework.util.StringUtils;
 
 /**
  * Spring 原生注解兼容适配器(职责2).
@@ -116,7 +119,7 @@ final class SpringAnnotationAdapter {
     private void convertSpringCacheable(Object target, String name, List<CacheOperation> ops) {
         Cacheable ann = AnnotationTargets.findMerged(target, Cacheable.class);
         if (ann != null) {
-            ops.add(buildRedisCacheableOperation(ann, name));
+            ops.add(buildRedisCacheableOperation(ann, name, target));
             log.debug("Converted Spring @Cacheable on target: {}", name);
         }
     }
@@ -130,7 +133,7 @@ final class SpringAnnotationAdapter {
     private void convertSpringCachePut(Object target, String name, List<CacheOperation> ops) {
         CachePut ann = AnnotationTargets.findMerged(target, CachePut.class);
         if (ann != null) {
-            ops.add(buildCachePutOperation(ann, name));
+            ops.add(buildCachePutOperation(ann, name, target));
             log.debug("Converted Spring @CachePut on target: {}", name);
         }
     }
@@ -144,13 +147,13 @@ final class SpringAnnotationAdapter {
     private void convertSpringCacheEvict(Object target, String name, List<CacheOperation> ops) {
         CacheEvict ann = AnnotationTargets.findMerged(target, CacheEvict.class);
         if (ann != null) {
-            ops.add(buildCacheEvictOperation(ann, name));
+            ops.add(buildCacheEvictOperation(ann, name, target));
             log.debug("Converted Spring @CacheEvict on target: {}", name);
         }
     }
 
     private CacheableOperation buildRedisCacheableOperation(
-            Cacheable ann, String name) {
+            Cacheable ann, String name, Object target) {
         CacheableOperation.Builder builder = new CacheableOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
@@ -172,11 +175,12 @@ final class SpringAnnotationAdapter {
                                 Cacheable::cacheResolver, CacheableOperation.Builder::setCacheResolver)
                 ),
                 List.of((b, a) -> b.setSync(a.sync())));
+        applyDefaults(builder, target);
         return builder.build();
     }
 
     private CachePutOperation buildCachePutOperation(
-            CachePut ann, String name) {
+            CachePut ann, String name, Object target) {
         CachePutOperation.Builder builder = new CachePutOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
@@ -198,11 +202,12 @@ final class SpringAnnotationAdapter {
                                 CachePut::cacheResolver, CachePutOperation.Builder::setCacheResolver)
                 ),
                 List.of());
+        applyDefaults(builder, target);
         return builder.build();
     }
 
     private CacheEvictOperation buildCacheEvictOperation(
-            CacheEvict ann, String name) {
+            CacheEvict ann, String name, Object target) {
         CacheEvictOperation.Builder builder = new CacheEvictOperation.Builder();
         builder.setName(name);
         builder.setCacheNames(ann.value().length > 0 ? ann.value() : ann.cacheNames());
@@ -225,6 +230,31 @@ final class SpringAnnotationAdapter {
                 List.of(
                         (b, a) -> b.setCacheWide(a.allEntries()),
                         (b, a) -> b.setBeforeInvocation(a.beforeInvocation())));
+        applyDefaults(builder, target);
         return builder.build();
     }
+
+    /** Keep AOP operations and native policies on the same CacheConfig defaults. */
+    static void applyDefaults(CacheOperation.Builder builder, Object target) {
+        Object owner = target instanceof Method method ? method.getDeclaringClass() : target;
+        CacheConfig config = AnnotationTargets.findMerged(owner, CacheConfig.class);
+        if (config == null) {
+            return;
+        }
+        if (builder.getCacheNames().isEmpty()) {
+            builder.setCacheNames(config.cacheNames());
+        }
+        if (!StringUtils.hasText(builder.getKey()) && !StringUtils.hasText(builder.getKeyGenerator())
+                && StringUtils.hasText(config.keyGenerator())) {
+            builder.setKeyGenerator(config.keyGenerator());
+        }
+        if (!StringUtils.hasText(builder.getCacheManager()) && !StringUtils.hasText(builder.getCacheResolver())) {
+            if (StringUtils.hasText(config.cacheResolver())) {
+                builder.setCacheResolver(config.cacheResolver());
+            } else if (StringUtils.hasText(config.cacheManager())) {
+                builder.setCacheManager(config.cacheManager());
+            }
+        }
+    }
+
 }

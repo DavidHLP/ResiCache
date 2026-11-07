@@ -513,6 +513,102 @@ class DistributedLockManagerIntegrationTest extends AbstractRedisIntegrationTest
         }
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {0, 2, 3, 6})
+    void builtInStackRecoversReleaseOnOwnerWithinSixAttempts(int failures) throws Exception {
+        String key = "stack-release-" + failures;
+        RLock real = redissonClient.getLock(lockManager.buildLockKey(key));
+        RLock injected = spy(real);
+        AtomicInteger calls = new AtomicInteger();
+        Thread owner = Thread.currentThread();
+        doAnswer(invocation -> {
+            assertThat(Thread.currentThread()).isSameAs(owner);
+            if (calls.incrementAndGet() <= failures) {
+                throw new IllegalStateException("Injected failure before unlock command");
+            }
+            real.unlock();
+            return null;
+        }).when(injected).unlock();
+        try {
+            assertThat(SyncRoleLockExecutor.run(org.slf4j.LoggerFactory.getLogger(getClass()), key,
+                    SyncLockTimeout.Resolved.fromSeconds(1), () -> "done",
+                    java.util.List.of(faultInjectedManager(key, injected)))).isEqualTo("done");
+            assertThat(calls.get()).isEqualTo(Math.min(failures + 1, 6));
+            // Exhaustion is bounded, not a guarantee of recovery after an arbitrary outage.
+            assertThat(tryAcquireOnAnotherThread(key, 0)).isEqualTo(failures < 6);
+        } finally {
+            if (real.isHeldByCurrentThread()) {
+                real.unlock();
+            }
+        }
+    }
+
+    @Test
+    void builtInStackDoesNotUnlockReplacementAfterLostReply() throws Exception {
+        String key = "stack-replacement";
+        RLock real = redissonClient.getLock(lockManager.buildLockKey(key));
+        RLock injected = spy(real);
+        CountDownLatch acquired = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        ExecutorService other = Executors.newSingleThreadExecutor();
+        java.util.concurrent.atomic.AtomicReference<Future<?>> replacement = new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            if (calls.incrementAndGet() == 1) {
+                real.unlock();
+                replacement.set(other.submit(() -> {
+                    try (LockManager.LockHandle ignored = lockManager.tryAcquire(key, 1).orElseThrow()) {
+                        acquired.countDown();
+                        release.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException(e);
+                    }
+                }));
+                assertThat(acquired.await(5, TimeUnit.SECONDS)).isTrue();
+                throw new IllegalStateException("Injected lost unlock reply");
+            }
+            real.unlock();
+            return null;
+        }).when(injected).unlock();
+        try {
+            SyncRoleLockExecutor.run(org.slf4j.LoggerFactory.getLogger(getClass()), key,
+                    SyncLockTimeout.Resolved.fromSeconds(1), () -> "done",
+                    java.util.List.of(faultInjectedManager(key, injected)));
+            assertThat(calls.get()).isEqualTo(2);
+            assertThat(lockManager.tryAcquire(key, 0)).isEmpty();
+            release.countDown();
+            replacement.get().get(5, TimeUnit.SECONDS);
+            assertThat(tryAcquireOnAnotherThread(key, 0)).isTrue();
+        } finally {
+            release.countDown();
+            other.shutdownNow();
+        }
+    }
+
+    @Test
+    void builtInStackPreservesInterruptAndDoesNotStartRecoveryRound() throws Exception {
+        String key = "stack-release-interrupted";
+        RLock real = redissonClient.getLock(lockManager.buildLockKey(key));
+        RLock injected = spy(real);
+        doAnswer(invocation -> {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Injected failure before unlock command");
+        }).when(injected).unlock();
+        try {
+            SyncRoleLockExecutor.run(org.slf4j.LoggerFactory.getLogger(getClass()), key,
+                    SyncLockTimeout.Resolved.fromSeconds(1), () -> "done",
+                    java.util.List.of(faultInjectedManager(key, injected)));
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            verify(injected).unlock();
+            Thread.interrupted();
+            assertThat(tryAcquireOnAnotherThread(key, 0)).isFalse();
+        } finally {
+            Thread.interrupted();
+            real.unlock();
+        }
+    }
+
     @Nested
     @DisplayName("getOrder tests")
     class GetOrderTests {

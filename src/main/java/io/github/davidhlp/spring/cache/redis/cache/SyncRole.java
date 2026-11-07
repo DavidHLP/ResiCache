@@ -453,6 +453,7 @@ final class SyncRoleLockExecutor {
                 LockManager.LockHandle handle = handles.pop();
                 try {
                     handle.close();
+                    DistributedLockManager.recoverRelease(handle);
                 } catch (Exception e) {
                     FailureReport.error(log, "Failed to release distributed lock", e);
                 }

@@ -101,6 +101,14 @@ coordinate writes and evictions throughout the recovery window. See the
 - **Async methods**: `@Async` cached methods are not supported for sync-lock and
   Bloom-filter enhancements.
 
+- **Native class policies**: FULL-mode real Spring AOP/Redis tests cover class-
+  and method-level `@Cacheable(sync=true)` with default-only `@CacheConfig` names,
+  default key-generator beans, and default manager/resolver beans. Concurrent
+  misses execute one loader under the distributed lock; missing backends fail
+  before loading. Declaration tests compare all four shared defaults with Spring
+  and retain aliases, explicit overrides, inheritance/interface selection and
+  SELECTIVE/NONE boundaries. Native composite annotations, reactive caching and
+  `@Async` synchronization are not added by this evidence.
 - **Cache I/O failures**: GET returns a miss with internal failure metadata;
   PUT, PUT_IF_ABSENT, and CLEAN fail fast with a typed runtime failure retaining
   the original cause;

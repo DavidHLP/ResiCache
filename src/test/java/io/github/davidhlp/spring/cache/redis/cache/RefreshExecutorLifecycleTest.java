@@ -117,7 +117,159 @@ class RefreshExecutorLifecycleTest {
         }
     }
 
-    private static final class ControlledExecutor extends AbstractExecutorService {
+    @Test
+    void gracefulShutdown_drainsAcceptedQueuedWorkWithoutCancellation() {
+        ControlledExecutor pool = new ControlledExecutor();
+        ConcurrentHashMap<String, CompletableFuture<Void>> tasks = new ConcurrentHashMap<>();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ThreadPoolEarlyExpirationExecutor executor = new ThreadPoolEarlyExpirationExecutor(pool, tasks, registry);
+        AtomicInteger executions = new AtomicInteger();
+        try {
+            executor.submit("first", executions::incrementAndGet);
+            executor.submit("second", executions::incrementAndGet);
+            List<CompletableFuture<Void>> accepted = new ArrayList<>(tasks.values());
+            executor.shutdown();
+            assertThat(executions).hasValue(2);
+            assertThat(accepted).allSatisfy(future -> assertThat(future).isCompleted());
+            assertThat(tasks).isEmpty();
+            assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(2);
+            assertThat(registry.get("prerefresh.cancelled").counter().count()).isZero();
+        } finally {
+            executor.shutdown();
+            registry.close();
+        }
+    }
+
+    @Test
+    void forcedShutdown_cancelsQueuedAndRunningFutures() throws Exception {
+        verifyForcedShutdown(false);
+    }
+
+    @Test
+    void interruptedShutdown_cancelsFuturesAndRestoresInterrupt() throws Exception {
+        verifyForcedShutdown(true);
+    }
+
+    private void verifyForcedShutdown(boolean interrupted) throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch releaseIo = new CountDownLatch(1);
+        AtomicBoolean ioFinished = new AtomicBoolean();
+        AtomicBoolean queuedRan = new AtomicBoolean();
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>()) {
+            @Override
+            public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+                if (Thread.interrupted()) {
+                    throw new InterruptedException();
+                }
+                return isTerminated(); // Force the timeout branch while work is still running.
+            }
+        };
+        ConcurrentHashMap<String, CompletableFuture<Void>> tasks = new ConcurrentHashMap<>();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ThreadPoolEarlyExpirationExecutor executor = new ThreadPoolEarlyExpirationExecutor(pool, tasks, registry);
+        try {
+            executor.submit("running", () -> {
+                started.countDown();
+                boolean released = false;
+                while (!released) {
+                    try {
+                        released = releaseIo.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException ignored) {
+                        // Model I/O that ignores the worker's shutdownNow interrupt.
+                    }
+                }
+                ioFinished.set(true);
+            });
+            assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+            executor.submit("queued", () -> queuedRan.set(true));
+            CompletableFuture<Void> running = tasks.get("running");
+            CompletableFuture<Void> queued = tasks.get("queued");
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            executor.shutdown();
+            assertThat(Thread.currentThread().isInterrupted()).isEqualTo(interrupted);
+            Thread.interrupted();
+            assertThat(running).isCancelled();
+            assertThat(queued).isCancelled();
+            assertThat(tasks).isEmpty();
+            assertThat(pool.getQueue()).isEmpty();
+            assertThat(ioFinished).isFalse();
+            assertThat(queuedRan).isFalse();
+            assertThat(registry.get("prerefresh.submitted").counter().count()).isEqualTo(2);
+            assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(2);
+            assertThat(registry.get("prerefresh.cancelled").counter().count()).isEqualTo(2);
+            assertThat(registry.get("prerefresh.outcome").tag("outcome", "cancelled").counter().count())
+                    .isEqualTo(2);
+            executor.shutdown();
+            executor.submit("late", () -> queuedRan.set(true));
+            assertThat(registry.get("prerefresh.outcome").tag("outcome", "rejected").counter().count())
+                    .isEqualTo(1);
+            assertThat(registry.get("prerefresh.cancelled").counter().count()).isEqualTo(2);
+        } finally {
+            Thread.interrupted();
+            releaseIo.countDown();
+            pool.shutdownNow();
+            pool.close();
+            registry.close();
+        }
+        assertThat(ioFinished).isTrue();
+        assertThat(queuedRan).isFalse();
+    }
+
+    @Test
+    void forcedShutdown_waitsForAcceptedSubmissionPublication() throws Exception {
+        CountDownLatch accepted = new CountDownLatch(1);
+        CountDownLatch publish = new CountDownLatch(1);
+        CountDownLatch stopping = new CountDownLatch(1);
+        ControlledExecutor pool = new ControlledExecutor() {
+            @Override
+            public void execute(Runnable work) {
+                super.execute(work);
+                accepted.countDown();
+                try {
+                    assertThat(publish.await(5, TimeUnit.SECONDS)).isTrue();
+                } catch (InterruptedException e) {
+                    throw new AssertionError(e);
+                }
+            }
+
+            @Override
+            public void shutdown() {
+                stopping.countDown();
+            }
+
+            @Override
+            public boolean awaitTermination(long timeout, TimeUnit unit) {
+                return false;
+            }
+        };
+        ConcurrentHashMap<String, CompletableFuture<Void>> tasks = new ConcurrentHashMap<>();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ThreadPoolEarlyExpirationExecutor executor = new ThreadPoolEarlyExpirationExecutor(pool, tasks, registry);
+        ExecutorService callers = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> submission = callers.submit(() -> executor.submit("key", () -> { }));
+            assertThat(accepted.await(5, TimeUnit.SECONDS)).isTrue();
+            Future<?> shutdown = callers.submit(executor::shutdown);
+            assertThat(stopping.await(5, TimeUnit.SECONDS)).isTrue();
+            publish.countDown();
+            submission.get(5, TimeUnit.SECONDS);
+            shutdown.get(5, TimeUnit.SECONDS);
+            assertThat(tasks).isEmpty();
+            assertThat(registry.get("prerefresh.submitted").counter().count()).isEqualTo(1);
+            assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(1);
+            assertThat(registry.get("prerefresh.cancelled").counter().count()).isEqualTo(1);
+        } finally {
+            publish.countDown();
+            callers.shutdownNow();
+            assertThat(callers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            registry.close();
+        }
+    }
+
+    private static class ControlledExecutor extends AbstractExecutorService {
         private final ConcurrentLinkedQueue<Runnable> pending = new ConcurrentLinkedQueue<>();
         private boolean shutdown;
 

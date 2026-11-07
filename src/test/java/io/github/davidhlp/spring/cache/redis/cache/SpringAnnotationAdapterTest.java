@@ -14,6 +14,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CacheConfig;
+import org.springframework.cache.annotation.SpringCacheAnnotationParser;
+import org.springframework.cache.interceptor.CacheableOperation;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.CacheOperation;
@@ -113,4 +116,66 @@ class SpringAnnotationAdapterTest {
 
         assertThat(ops).isEmpty();
     }
+    @CacheConfig(cacheNames = "users", keyGenerator = "defaultKey", cacheManager = "defaultManager")
+    @Cacheable(sync = true)
+    static class ConfigDefaults {
+        public String classDefault(String id) { return id; }
+        @Cacheable(sync = true)
+        public String methodDefault(String id) { return id; }
+        @Cacheable(value = "explicit", key = "#p0", cacheResolver = "explicitResolver")
+        public String explicit(String id) { return id; }
+        @CachePut
+        public String put(String id) { return id; }
+        @CacheEvict
+        public void evict(String id) { }
+    }
+
+    @CacheConfig(cacheNames = "users", keyGenerator = "defaultKey",
+            cacheManager = "ignoredManager", cacheResolver = "defaultResolver")
+    static class ResolverDefaults {
+        @Cacheable(sync = true)
+        public String load(String id) { return id; }
+        @Cacheable(cacheNames = "explicit", keyGenerator = "explicitKey", cacheManager = "explicitManager")
+        public String explicit(String id) { return id; }
+        @CachePut
+        public String put(String id) { return id; }
+        @CacheEvict
+        public void evict(String id) { }
+    }
+
+    @Test
+    void cacheConfigDefaultsMatchSpringForOperationsAndPolicies() throws Exception {
+        var spring = new SpringCacheAnnotationParser();
+        for (Class<?> owner : List.of(ConfigDefaults.class, ResolverDefaults.class)) {
+            var register = new RedisCacheRegister();
+            var source = new RedisCacheOperationSource(NativeAnnotationMode.FULL, register);
+            for (Method method : owner.getDeclaredMethods()) {
+                if (method.isSynthetic()) {
+                    continue;
+                }
+                var expected = spring.parseCacheAnnotations(method);
+                if (expected == null) {
+                    expected = spring.parseCacheAnnotations(owner);
+                }
+                var operations = source.getCacheOperations(method, owner);
+                assertThat(operations).as(method.toString()).hasSize(1);
+                CacheOperation operation = operations.iterator().next();
+                assertDefaults(operation, expected.iterator().next());
+                if (operation instanceof CacheableOperation) {
+                    var policies = register.getSnapshot(method, owner).policyOperations();
+                    assertThat(policies).hasSize(1);
+                    assertDefaults(policies.get(0), operation);
+                }
+            }
+        }
+    }
+
+    private static void assertDefaults(CacheOperation actual, CacheOperation expected) {
+        assertThat(actual.getCacheNames()).isEqualTo(expected.getCacheNames());
+        assertThat(actual.getKey()).isEqualTo(expected.getKey());
+        assertThat(actual.getKeyGenerator()).isEqualTo(expected.getKeyGenerator());
+        assertThat(actual.getCacheManager()).isEqualTo(expected.getCacheManager());
+        assertThat(actual.getCacheResolver()).isEqualTo(expected.getCacheResolver());
+    }
+
 }
