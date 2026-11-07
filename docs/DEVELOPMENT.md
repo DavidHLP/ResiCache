@@ -76,6 +76,24 @@ Tests mirror the source package under `src/test/java`. Integration fixtures and
 application test resources are part of the test contract; do not change a test
 profile to make a local environment appear green.
 
+### Evidence and controlled fixtures
+
+Keep direct source inspection, test design, recorded execution, new execution
+and production evidence distinct. Cite the exact commit/run and logs for an
+execution claim; test code or residual reports alone do not prove that run.
+Independent read-only agreement is additional review, not repeated execution
+of the suite, coverage gate or CI checks.
+
+`DistributedLockManagerIntegrationTest` uses real Redis-backed `RLock` objects
+with controlled failures before dispatch or after unlock to check ownership,
+bounded retries and replacement safety; this is not an arbitrary network
+partition or lost-response exercise. `RefreshExecutorLifecycleTest` uses a
+`ControlledExecutor` and overridden `awaitTermination` to check logical future
+completion/cancellation and submission/publication races, not every executor,
+OS scheduling behavior or the real ten-second wait. `MixedSyncIntegrationTest`
+uses a real Redis-backed lock delegate behind a controlled gate; its interleaving
+is injected rather than an unmodified transport path.
+
 ## Source and style pointers
 
 The module map and dependency direction are in

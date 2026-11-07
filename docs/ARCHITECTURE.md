@@ -205,7 +205,7 @@ documents. Update the owning current-state document when a behavior changes.
 | Current rule | Reason / boundary | Evidence |
 |---|---|---|
 | GET degrades to an observable miss; PUT/PIFA/CLEAN are typed fail-fast; REMOVE is observable best-effort | prevents writes being reported as success while preserving safe loader fallback | `REFERENCE.md`; cache operation tests |
-| Read-through loader write-back is availability-first | a cache write failure must not discard a loaded business value | `PRODUCT.md`; loader tests |
+| Read-through loader write-back is availability-first | a tolerated runtime write-back failure preserves the loaded business value; configuration/call errors and non-runtime failures remain failed loads | `PRODUCT.md`; loader tests |
 | Only internal `cache/` is scanned | avoids implicit host-package registration and keeps implementation hidden | `RedisCacheAutoConfiguration`; auto-configuration tests |
 | Protection switches resolve once and global-off wins | no runtime chain rebuild or hot-update contract exists | `CacheHandlerChainFactoryTest` |
 | Bloom CLEAN keeps membership bits | membership is not current cache-entry state; stale bits are safe false-positives | `COMPATIBILITY.md`; Bloom tests |
