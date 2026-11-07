@@ -1,0 +1,19 @@
+docs/OPERATIONS.md
+  s_889432a42b294a::t_d4420c55bf90db 74-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b1061d8ef94aed10a12925751055a43abc04fabd",
+  "prompts": {},
+  "sessions": {
+    "s_889432a42b294a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b57a-750f-78a2-bf69-bff80fcaec8f",
+        "model": "unknown"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
