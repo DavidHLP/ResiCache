@@ -252,7 +252,8 @@ cache writes instead of cutting them over. For ResiCache keys, use the CLI only
 when the decoded legacy value already has the complete compatible `CachedValue`
 structure, including its nested value/envelope representation and metadata.
 Verify concrete types and typed cache-hit behavior; serializer round-tripping
-alone is insufficient. Field-level type metadata does not require global
+alone is insufficient. CLI report counters describe transformations, not
+application cache hits. Field-level type metadata does not require global
 default typing, and enabling that switch does not supply the missing wrapper.
 
 ### Write preflight and recovery
