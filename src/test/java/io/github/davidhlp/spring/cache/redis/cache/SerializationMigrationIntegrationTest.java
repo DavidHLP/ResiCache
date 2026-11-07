@@ -59,6 +59,13 @@ class SerializationMigrationIntegrationTest extends AbstractRedisClusterIntegrat
     @Autowired
     private RedisProCacheProperties properties;
 
+    @Autowired
+    private org.springframework.cache.CacheManager cacheManager;
+
+    @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("redisCacheTemplate")
+    private org.springframework.data.redis.core.RedisTemplate<String, Object> template;
+
     private SerializationMigrationProperties migration;
 
     @BeforeEach
@@ -71,6 +78,60 @@ class SerializationMigrationIntegrationTest extends AbstractRedisClusterIntegrat
         migration.setBatchSize(20);
         migration.setMaxKeys(20);
         migration.setDryRun(false);
+    }
+
+    @Test
+    void convertedBareValueNeedsApplicationRebuildBeforeTypedHit() {
+        var cache = cacheManager.getCache("migration-typed");
+        byte[] key = cacheKey(cache, "bare");
+        byte[] legacy = new GenericJackson2JsonRedisSerializer().serialize("legacy-value");
+        put(key, legacy, 30);
+        migration.setPattern(new String(key, StandardCharsets.UTF_8));
+        migration.setPhase(SerializationMigrationPhase.CUTOVER);
+        migration.setLegacySerializer(SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
+
+        SerializationMigrationReport report = migrationEngine.migrate();
+
+        assertThat(report.failed()).isZero();
+        assertThat(report.decodedLegacy()).isEqualTo(1);
+        assertThat(SerializationPreFlightProbe.isEnvelope(raw(key))).isTrue();
+        assertThat(cache.get("bare", String.class)).isNull();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        assertThat(cache.get("bare", () -> {
+            calls.incrementAndGet();
+            return "rebuilt-value";
+        })).isEqualTo("rebuilt-value");
+        assertThat(cache.get("bare", String.class)).isEqualTo("rebuilt-value");
+        assertThat(calls).hasValue(1);
+        assertThat(raw(backupKey(key))).isEqualTo(legacy);
+    }
+
+    @Test
+    void convertedCompatibleStorageRetainsTypedCacheHitAndExpiry() {
+        var cache = cacheManager.getCache("migration-typed");
+        cache.put("compatible", "typed-value");
+        assertThat(cache.get("compatible", String.class)).isEqualTo("typed-value");
+        byte[] key = cacheKey(cache, "compatible");
+        Object storage = template.getValueSerializer().deserialize(raw(key));
+        assertThat(storage).isInstanceOf(CachedValue.class);
+        byte[] legacy = new GenericJackson2JsonRedisSerializer().serialize(storage);
+        put(key, legacy, 30);
+        migration.setPattern(new String(key, StandardCharsets.UTF_8));
+        migration.setPhase(SerializationMigrationPhase.CUTOVER);
+        migration.setLegacySerializer(SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
+
+        SerializationMigrationReport report = migrationEngine.migrate();
+
+        assertThat(report.failed()).isZero();
+        assertThat(report.decodedLegacy()).isEqualTo(1);
+        assertThat(cache.get("compatible", String.class)).isEqualTo("typed-value");
+        assertThat(ttl(key)).isBetween(1L, 30L);
+        assertThat(raw(backupKey(key))).isEqualTo(legacy);
+    }
+
+    private byte[] cacheKey(org.springframework.cache.Cache cache, String key) {
+        var redisCache = (org.springframework.data.redis.cache.RedisCache) cache;
+        return bytes(redisCache.getCacheConfiguration().getKeyPrefixFor(cache.getName()) + key);
     }
 
     @Test
