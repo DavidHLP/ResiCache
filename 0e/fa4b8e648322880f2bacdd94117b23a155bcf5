@@ -1,0 +1,33 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManager.java
+  s_3f59a01779410c::t_4907d2bff11428 121-127
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandler.java
+  s_3f59a01779410c::t_0b0fe2f11baca4 114
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncRole.java
+  s_3f59a01779410c::t_63f9ee52eae060 456
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupport.java
+  s_3f59a01779410c::t_d93715101e86b2 144-149,181-182,187-188
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManagerIntegrationTest.java
+  s_3f59a01779410c::t_d5d9e1085234af 516-611
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/MixedSyncIntegrationTest.java
+  s_3f59a01779410c::t_6f2940a48b015a 1-115
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandlerTest.java
+  s_3f59a01779410c::t_3cb00e99383020 181,196,211,226,241,254,260,275,284,288,297,301,311,321,331
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupportTest.java
+  s_3f59a01779410c::t_0949823bc87ada 222-267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0efa4b8e648322880f2bacdd94117b23a155bcf5",
+  "prompts": {},
+  "sessions": {
+    "s_3f59a01779410c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b648-8b79-7373-a8ca-cf36b468bf55",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
