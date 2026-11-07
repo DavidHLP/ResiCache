@@ -73,6 +73,14 @@ README snippet when the properties class or generated metadata differs.
   Spring path unless a ResiCache annotation causes the matching operation to be
   adapted. `FULL` and `NONE` change that adaptation boundary; mixed advisors
   require an explicit, tested choice.
+- Adapted native `@Cacheable` class policies use the selected concrete method,
+  including `sync=true`. `@CacheConfig` supplies omitted cache names,
+  key generator and manager/resolver defaults to both operations and policies.
+  Explicit names (including aliases) override defaults; an explicit key suppresses
+  the default key generator. An explicit manager or resolver suppresses both
+  defaults; otherwise the default resolver takes precedence over the manager.
+  Native PUT/EVICT use the same defaults. This does not add native `@Caching`
+  composite support or change `SELECTIVE`/`NONE` selection.
 - Protection switches are resolved at startup. A global protection-off keeps
   TTL and disables Bloom, sync-lock, early-expiration, and null-value handlers;
   a per-mechanism true cannot re-enable one after global-off.

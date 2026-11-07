@@ -108,6 +108,17 @@ Spring private key fields through reflection.
 Class-level operation discovery and method-level policy application retain the
 current documented behavior in `COMPATIBILITY.md`.
 
+Loader outcomes and chain `CacheResult` publications use distinct internal
+single-flight identities. Identical protocols still share their result; mixed
+protocols retain the same physical distributed lock, local queue and reentrancy
+key, so separating futures does not permit concurrent loads for the same key.
+These identities are internal and require no Redis lock-key or wire migration.
+
+Native operation and policy adapters share `CacheConfig` default application.
+Defaults are read from the selected declaration's class (including Spring merged
+inheritance/interface lookup); the existing Spring method/class selection remains
+in charge. Explicit annotation fields retain precedence.
+
 ## Data and failure ownership
 
 - Spring's cache abstraction remains the host-facing boundary.

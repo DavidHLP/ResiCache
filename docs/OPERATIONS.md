@@ -404,7 +404,13 @@ load coordination, not fencing for authoritative data writes.
 
 Only the acquiring thread can close a built-in lock handle. Close calls unlock
 directly, without an ownership pre-query that could bypass release/renewal cleanup.
-After bounded unlock failure or interrupted retry sleep, the owner may explicitly
+The built-in lock stack keeps the handle for one additional owner-thread close
+round after retryable failure: two rounds of at most three unlock attempts each.
+An interrupted owner does not start the recovery round. After exhaustion or
+interruption the stack discards the handle; the physical lock may still be held
+and renewing. This is bounded recovery, not eventual release during an outage.
+For direct handle callers, after bounded failure or interrupted retry sleep,
+the owner may explicitly
 retry close; interruption remains set. Retry must occur before that thread
 reacquires the same key: Redisson client/thread ownership cannot distinguish a
 later reentrant acquisition. Successful unlock or reported ownership loss makes

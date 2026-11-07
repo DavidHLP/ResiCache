@@ -27,8 +27,11 @@ class SpringCacheableAdapter {
 
 
     public RedisCacheableOperation create(Method method, Cacheable annotation, String key) {
-        RedisCacheAttributes a = toAttributes(annotation);
-        return materialize(method, key, a);
+        return create(method, annotation, key, method);
+    }
+
+    RedisCacheableOperation create(Method method, Cacheable annotation, String key, Object target) {
+        return materialize(method, key, toAttributes(annotation), target);
     }
 
     /**
@@ -63,6 +66,10 @@ class SpringCacheableAdapter {
 
     /** 从 {@link RedisCacheAttributes} 构造 {@link RedisCacheableOperation}。 */
     RedisCacheableOperation materialize(Method method, String key, RedisCacheAttributes a) {
+        return materialize(method, key, a, method);
+    }
+
+    private RedisCacheableOperation materialize(Method method, String key, RedisCacheAttributes a, Object target) {
         RedisCacheableOperation.Builder builder = RedisCacheableOperation.builder()
                 .name(method.getName())
                 .key(key)
@@ -85,6 +92,7 @@ class SpringCacheableAdapter {
         if (hasText(a.getUnless())) {
             builder.unless(a.getUnless());
         }
+        SpringAnnotationAdapter.applyDefaults(builder, target);
         return builder.build();
     }
 

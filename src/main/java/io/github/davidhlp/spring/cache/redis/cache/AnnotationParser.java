@@ -69,7 +69,7 @@ class AnnotationParser {
             final Cacheable springCacheable =
                     AnnotationTargets.findMerged(target, Cacheable.class);
             if (springCacheable != null) {
-                addSpringCacheablePolicy(policyOperations, springCacheable, policyMethod);
+                addSpringCacheablePolicy(policyOperations, springCacheable, policyMethod, target);
             }
         }
 
@@ -185,9 +185,9 @@ class AnnotationParser {
     private void addSpringCacheablePolicy(
             final List<CacheOperation> policyOperations,
             final Cacheable annotation,
-            final Method policyMethod) {
+            final Method policyMethod, final Object target) {
         if (policyMethod != null) {
-            policyOperations.add(springCacheableAdapter.create(policyMethod, annotation, annotation.key()));
+            policyOperations.add(springCacheableAdapter.create(policyMethod, annotation, annotation.key(), target));
         }
     }
 

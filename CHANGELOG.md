@@ -41,6 +41,16 @@ source changes remain unreleased; publication is tracked in
 
 ### Fixed
 
+- Isolate loader and chain-result single-flight futures while retaining the same
+  physical lock and local exclusion across entry protocols.
+- Give the built-in lock stack one bounded owner-thread release recovery round
+  (at most six attempts across two rounds); interruption skips recovery and
+  exhaustion can still leave a renewing lock held.
+- Retain selected-method native class sync policies and share CacheConfig names,
+  key-generator and manager/resolver defaults across operations and policies.
+  Real AOP/Redis tests cover concurrent default-only class/method declarations
+  and fail-closed behavior without a synchronization backend.
+
 - Settle all accepted pre-refresh futures on forced or interrupted shutdown,
   including queued work and submissions still being published. Graceful shutdown
   drains accepted work; cancellation remains best-effort for running I/O.

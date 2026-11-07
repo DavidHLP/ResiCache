@@ -9,6 +9,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CacheConfig;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.interceptor.SimpleKeyGenerator;
@@ -45,8 +49,10 @@ class NativeAnnotationIntegrationTest extends AbstractRedisIntegrationTest {
         assertThat(cache.get("key")).isNull();
     }
 
-    @Autowired private NativeLoadService loadService;
-    @Autowired private NativeLoadState loadState;
+    @Autowired @Qualifier("nativeLoadService") private NativeLoadService loadService;
+    @Autowired private MethodNativeLoadService methodLoadService;
+    @Autowired @Qualifier("nativeLoadState") private NativeLoadState loadState;
+    @Autowired @Qualifier("methodLoadState") private NativeLoadState methodLoadState;
     @Autowired private BloomSupport bloomSupport;
     @Autowired private CacheOperationResolver operationResolver;
     @Autowired private SyncLockTimeout syncLockTimeout;
@@ -54,10 +60,13 @@ class NativeAnnotationIntegrationTest extends AbstractRedisIntegrationTest {
     @Autowired private RedisCacheRegister register;
     @Autowired private RedisConnectionFactory connectionFactory;
 
-    @Test
-    void nativeClassSyncCoalescesConcurrentMissesUnderDistributedLock() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void nativeClassSyncCoalescesConcurrentMissesUnderDistributedLock(boolean methodLevel) throws Exception {
+        NativeLoadService loadService = methodLevel ? methodLoadService : this.loadService;
+        NativeLoadState loadState = methodLevel ? this.methodLoadState : this.loadState;
         String key = "concurrent";
-        cacheManager.getCache("native-class-sync").evict(key);
+        cacheManager.getCache("users").evict(key);
         try (var executor = Executors.newFixedThreadPool(8)) {
             var start = new CountDownLatch(1);
             var ready = new CountDownLatch(8);
@@ -83,22 +92,23 @@ class NativeAnnotationIntegrationTest extends AbstractRedisIntegrationTest {
                 assertThat(result.get(10, TimeUnit.SECONDS)).isEqualTo("loaded-concurrent");
             }
             assertThat(loadState.calls.get()).isEqualTo(1);
-            assertThat(cacheManager.getCache("native-class-sync").get(key, String.class))
+            assertThat(cacheManager.getCache("users").get(key, String.class))
                     .isEqualTo("loaded-concurrent");
         } finally {
             loadState.release.countDown();
         }
     }
 
-    @Test
-    void nativeClassSyncWithoutBackendFailsBeforeLoader() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void nativeClassSyncWithoutBackendFailsBeforeLoader(boolean methodLevel) {
         var properties = new RedisProCacheProperties();
         var noBackend = ResiCacheFeatures.builder()
                 .bloomSupport(bloomSupport)
                 .operationResolver(operationResolver)
                 .syncSupport(new SyncSupport(new ArrayList<>(), properties))
                 .syncLockTimeout(syncLockTimeout).build();
-        var cache = new RedisProCache("native-class-sync",
+        var cache = new RedisProCache("users",
                 RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory),
                 RedisCacheConfiguration.defaultCacheConfig(), noBackend);
         var manager = new SimpleCacheManager();
@@ -108,9 +118,17 @@ class NativeAnnotationIntegrationTest extends AbstractRedisIntegrationTest {
                 RedisProCacheProperties.NativeAnnotationMode.FULL, register);
         var advice = new RedisCacheInterceptor(source, manager,
                 new SimpleKeyGenerator(), metadataResolver);
+        var beans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
+        beans.registerSingleton("cacheManager", manager);
+        beans.registerSingleton("nativeKeys", (org.springframework.cache.interceptor.KeyGenerator)
+                (target, method, args) -> args[0]);
+        beans.registerSingleton("nativeResolver", (org.springframework.cache.interceptor.CacheResolver)
+                context -> List.of(cache));
+        advice.setBeanFactory(beans);
         advice.afterSingletonsInstantiated();
         var state = new NativeLoadState();
-        var factory = new ProxyFactory(new NativeLoadService(state, null, properties));
+        var factory = new ProxyFactory(methodLevel ? new MethodNativeLoadService(state, null, properties)
+                : new NativeLoadService(state, null, properties));
         factory.setProxyTargetClass(true);
         factory.addAdvice(advice);
         var proxy = (NativeLoadService) factory.getProxy();
@@ -126,7 +144,8 @@ class NativeAnnotationIntegrationTest extends AbstractRedisIntegrationTest {
         volatile boolean lockHeld;
     }
 
-    @Cacheable(value = "native-class-sync", key = "#p0", sync = true)
+    @CacheConfig(cacheNames = "users", keyGenerator = "nativeKeys", cacheManager = "cacheManager")
+    @Cacheable(sync = true)
     static class NativeLoadService {
         private final NativeLoadState state;
         private final RedissonClient redisson;
@@ -145,7 +164,7 @@ class NativeAnnotationIntegrationTest extends AbstractRedisIntegrationTest {
                 return "loaded-" + key;
             }
             String lockKey = new DistributedLockManager(redisson, properties)
-                    .buildLockKey("native-class-sync::" + key);
+                    .buildLockKey("users::" + key);
             state.lockHeld = redisson.getLock(lockKey).isHeldByCurrentThread();
             state.entered.countDown();
             if (!state.release.await(5, TimeUnit.SECONDS)) {
@@ -155,13 +174,38 @@ class NativeAnnotationIntegrationTest extends AbstractRedisIntegrationTest {
         }
     }
 
+    @CacheConfig(cacheNames = "users", keyGenerator = "nativeKeys", cacheResolver = "nativeResolver")
+    static class MethodNativeLoadService extends NativeLoadService {
+        MethodNativeLoadService(NativeLoadState state, RedissonClient redisson,
+                RedisProCacheProperties properties) {
+            super(state, redisson, properties);
+        }
+
+        @Override
+        @Cacheable(sync = true)
+        public String load(String key) throws InterruptedException {
+            return super.load(key);
+        }
+    }
+
     @TestConfiguration
     static class NativeWriteConfig {
+        @Bean org.springframework.cache.interceptor.KeyGenerator nativeKeys() {
+            return (target, method, args) -> args[0];
+        }
+        @Bean org.springframework.cache.interceptor.CacheResolver nativeResolver(CacheManager manager) {
+            return context -> List.of(manager.getCache("users"));
+        }
         @Bean NativeLoadState nativeLoadState() { return new NativeLoadState(); }
-        @Bean NativeLoadService nativeLoadService(NativeLoadState state,
+        @Bean NativeLoadService nativeLoadService(@Qualifier("nativeLoadState") NativeLoadState state,
                 RedissonClient redisson,
                 RedisProCacheProperties properties) {
             return new NativeLoadService(state, redisson, properties);
+        }
+        @Bean NativeLoadState methodLoadState() { return new NativeLoadState(); }
+        @Bean MethodNativeLoadService methodLoadService(@Qualifier("methodLoadState") NativeLoadState state,
+                RedissonClient redisson, RedisProCacheProperties properties) {
+            return new MethodNativeLoadService(state, redisson, properties);
         }
         @Bean NativeWriteService nativeWriteService() { return new NativeWriteService(); }
     }
