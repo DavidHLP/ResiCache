@@ -125,7 +125,10 @@ in charge. Explicit annotation fields retain precedence.
 - `RedisProCache` / `RedisProCacheWriter` own cache-manager and writer behavior;
   `CacheResult` carries typed operation outcomes internally.
 - `LoaderOrchestrator` owns the shared read → load → write-back protocol. A
-  successful loaded value is returned even when write-back fails.
+  successful loaded value is returned after an ordinary runtime write-back
+  failure. `IllegalArgumentException` (configuration/call errors), `Error` and
+  other non-runtime failures still produce a failed load; this is not a
+  catch-all availability guarantee.
 - `EarlyRefresh` owns refresh evaluation and the snapshot-CAS task. It reads
   original serialized bytes, deserializes through the configured serializer and
   compares exact Java `long` payload versions. A single-key Lua script compares
@@ -202,7 +205,7 @@ documents. Update the owning current-state document when a behavior changes.
 | Current rule | Reason / boundary | Evidence |
 |---|---|---|
 | GET degrades to an observable miss; PUT/PIFA/CLEAN are typed fail-fast; REMOVE is observable best-effort | prevents writes being reported as success while preserving safe loader fallback | `REFERENCE.md`; cache operation tests |
-| Read-through loader write-back is availability-first | a cache write failure must not discard a loaded business value | `PRODUCT.md`; loader tests |
+| Read-through loader write-back is availability-first | a tolerated runtime write-back failure preserves the loaded business value; configuration/call errors and non-runtime failures remain failed loads | `PRODUCT.md`; loader tests |
 | Only internal `cache/` is scanned | avoids implicit host-package registration and keeps implementation hidden | `RedisCacheAutoConfiguration`; auto-configuration tests |
 | Protection switches resolve once and global-off wins | no runtime chain rebuild or hot-update contract exists | `CacheHandlerChainFactoryTest` |
 | Bloom CLEAN keeps membership bits | membership is not current cache-entry state; stale bits are safe false-positives | `COMPATIBILITY.md`; Bloom tests |

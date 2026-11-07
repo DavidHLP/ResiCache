@@ -38,6 +38,22 @@ at several payload sizes, excluding Redis network I/O. Its mapper codec is a
 reference for adaptation cost; the copied facade recreates the former facade path.
 These are not release SLO gates.
 
+## Interpreting performance evidence
+
+Evaluate three separate questions:
+
+- **Measurement validity and scope:** judge what each method actually measures
+  under its stated setup. Missing production evidence does not by itself
+  invalidate a bounded diagnostic or microbenchmark.
+- **Observed cost:** compare only within the recorded environment and baseline.
+  The annotation-path diagnostic below observed higher sync+Bloom hit latency;
+  its loopback Redis, in-process loader and shared cache manager limit that
+  comparison.
+- **Application benefit:** reduced expensive-miss work under contention needs
+  application-load evidence. A local hit-cost penalty does not disprove that
+  potential benefit, and these measurements do not establish it. Real database,
+  remote-RTT and sustained multi-instance benefit remain unproven.
+
 ## Running the Benchmarks
 
 ```bash

@@ -144,7 +144,7 @@ options are recorded in [`COMPATIBILITY.md`](../COMPATIBILITY.md).
 | PUT_IF_ABSENT | typed runtime failure on failure; it does not become an existing/null result |
 | CLEAN / `allEntries=true` eviction | typed failure boundary, while SCAN plus batched deletion can be partial/non-atomic |
 | REMOVE | observable best-effort removal; removal failure does not throw through the operation |
-| read-through with successful loader | returns the loaded value even if write-back fails; the warning is redacted |
+| read-through with successful loader | returns the loaded value on write-back `RuntimeException` except `IllegalArgumentException`; the warning is redacted. Write-back `IllegalArgumentException`, `Error` and other throwables produce a failed load |
 | read-through with failed loader | surfaces the Spring `Cache.ValueRetrievalException` path with the documented diagnostic handling |
 
 This table summarizes current source behavior and focused tests; update it when

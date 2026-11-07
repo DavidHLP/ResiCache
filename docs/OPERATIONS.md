@@ -256,6 +256,14 @@ alone is insufficient. CLI report counters describe transformations, not
 application cache hits. Field-level type metadata does not require global
 default typing, and enabling that switch does not supply the missing wrapper.
 
+The compatible typed-hit fixture in `SerializationMigrationIntegrationTest`
+starts with the current implementation's `cache.put`, decodes its `CachedValue`
+storage, re-encodes it with the legacy generic JSON serializer, and cuts it over
+before reading through `CacheManager` / typed `Cache.get`. It covers that
+constructed compatible format, the actual read path and remaining TTL, not a
+corpus of bytes from historical applications or releases. Validate representative
+bytes from the actual old application separately before migration.
+
 ### Write preflight and recovery
 
 Before any write phase, inventory the complete intended source set and reserve
@@ -415,5 +423,7 @@ retry close; interruption remains set. Retry must occur before that thread
 reacquires the same key: Redisson client/thread ownership cannot distinguish a
 later reentrant acquisition. Successful unlock or reported ownership loss makes
 the handle terminal. There is no background retry, force-unlock, fixed lease or
-fencing. Controlled tests inject failures before command dispatch; they do not
+fencing. Controlled tests inject faults around real unlock commands; they do not
 establish recovery across arbitrary partitions, lost responses or later reentry.
+See [`DEVELOPMENT.md`](DEVELOPMENT.md#evidence-and-controlled-fixtures) for
+fixture scope.
