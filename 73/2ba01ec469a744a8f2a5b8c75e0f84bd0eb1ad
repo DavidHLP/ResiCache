@@ -1,0 +1,43 @@
+COMPATIBILITY.md
+  s_3f59a01779410c::t_a5f925febfcc85 104-111
+CHANGELOG.md
+  s_3f59a01779410c::t_a5f925febfcc85 44-53
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SpringAnnotationAdapter.java
+  s_3f59a01779410c::t_a5f925febfcc85 12,20,236
+  s_3f59a01779410c::t_ef76f43cd8e9ef 9,122,136,150,156,178,183,205,210,233,237-259
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  s_3f59a01779410c::t_ef76f43cd8e9ef 72,188,190
+docs/ARCHITECTURE.md
+  s_3f59a01779410c::t_a5f925febfcc85 111-121
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SpringAnnotationAdapterTest.java
+  s_3f59a01779410c::t_f65649d1de88c9 153-155
+  s_3f59a01779410c::t_9e15ee0db7f4c6 161
+  s_3f59a01779410c::t_9231cadc421a05 17-19,119-152,156-160,162-180
+docs/REFERENCE.md
+  s_3f59a01779410c::t_a5f925febfcc85 76-83
+docs/OPERATIONS.md
+  s_3f59a01779410c::t_a5f925febfcc85 407-413
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SpringCacheableAdapter.java
+  s_3f59a01779410c::t_ef76f43cd8e9ef 30-34,69-72,95
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/NativeAnnotationIntegrationTest.java
+  s_3f59a01779410c::t_9e15ee0db7f4c6 121-127,148,185,188,193-196,198,209
+  s_3f59a01779410c::t_9231cadc421a05 12-14,22,52-55,63-67,102-104,130-131,178-184,186-187,200,205-208
+  s_3f59a01779410c::t_eae901a0c719ce 69,95,111,147,167,177,197
+  s_3f59a01779410c::t_025059d9c3a46c 189-190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "732ba01ec469a744a8f2a5b8c75e0f84bd0eb1ad",
+  "prompts": {},
+  "sessions": {
+    "s_3f59a01779410c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b648-8b79-7373-a8ca-cf36b468bf55",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
