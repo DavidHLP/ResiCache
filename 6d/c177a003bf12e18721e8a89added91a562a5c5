@@ -1,0 +1,29 @@
+CHANGELOG.md
+  s_889432a42b294a::t_1180f3bd89be34 72-73
+COMPATIBILITY.md
+  s_889432a42b294a::t_0055a7e595d462 180-181
+docs/OPERATIONS.md
+  s_889432a42b294a::t_ebd4c07880f368 53-56
+src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisDeploymentValidator.java
+  s_889432a42b294a::t_e51905e03e4222 23,92-93
+src/main/java/io/github/davidhlp/spring/cache/redis/config/RedisProCacheProperties.java
+  s_889432a42b294a::t_c5d0ab3934c54e 183,207-209
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedissonConfigurationTest.java
+  s_889432a42b294a::t_bef1012865ced4 30-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6dc177a003bf12e18721e8a89added91a562a5c5",
+  "prompts": {},
+  "sessions": {
+    "s_889432a42b294a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b57a-750f-78a2-bf69-bff80fcaec8f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
