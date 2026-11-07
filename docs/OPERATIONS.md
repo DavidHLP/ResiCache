@@ -179,6 +179,15 @@ writes. Provide actual application dual writes separately, or quiesce writers
 and evictions for the affected keys through validation and cutover. CAS rejects
 source changes during cutover; it does not establish a continuous-write protocol.
 
+Rollback also needs a coordinated window: stop writes and evictions for the
+affected keys while validating and restoring them. A missing source is restored
+from its retained backup; the operator cannot distinguish natural expiration
+from an intentional application deletion. Confirm that restoring missing keys
+matches the recovery goal before running `ROLLBACK`. Keep the backup namespace
+reserved for the migration window and retain it until recovery is no longer
+needed. `maxKeys` limits actionable keys, not total SCAN/GET work; use a narrow
+pattern and monitor progress when most keys are already complete or invalid.
+
 ### Prepare and invoke the operator
 
 Use JDK 21 and the checked-out core JAR with its production runtime dependencies.
