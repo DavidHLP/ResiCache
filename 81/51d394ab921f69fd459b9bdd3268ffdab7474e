@@ -1,0 +1,29 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationParser.java
+  s_c067bae2611254::t_eb1359b2d56f9b 72,188-190
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/AnnotationClassLevelPolicyTest.java
+  s_c067bae2611254::t_e9fc1385f6de48 30,68-72,111-162,164
+  s_c067bae2611254::t_d7860c9ab8ae75 5,10-11,83-110
+  s_c067bae2611254::t_e0a2597472bf2b 73-82,163,165
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/NativeAnnotationIntegrationTest.java
+  s_c067bae2611254::t_e9fc1385f6de48 3-5,7-10,12-13,55,61-64,76,83,95,99,102-105,108,110,113,123-125,129,132-133,135-136,151,162-163
+  s_c067bae2611254::t_eb1359b2d56f9b 48-49,53-54,56-60,65-71,73-74,77-82,84-94,96,101,106-107,109,111-112,114-122,126-128,130-131,134,137-143,147-150,152-157,160-161,164-165
+  s_c067bae2611254::t_d7860c9ab8ae75 6,20-22,25-27,144-146
+  s_c067bae2611254::t_55905607a3db15 50-52,97-98,100
+  s_c067bae2611254::t_ebfa616a3f2314 72,75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8151d394ab921f69fd459b9bdd3268ffdab7474e",
+  "prompts": {},
+  "sessions": {
+    "s_c067bae2611254": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b63d-5934-7531-94f1-c94a2dca1ea1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
