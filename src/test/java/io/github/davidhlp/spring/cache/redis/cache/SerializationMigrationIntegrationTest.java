@@ -4,24 +4,39 @@ package io.github.davidhlp.spring.cache.redis.cache;
 
 
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.config.RedisProCacheProperties;
 import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationPhase;
 import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationProperties;
 import io.github.davidhlp.spring.cache.redis.serialization.migration.SerializationMigrationReport;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.connection.RedisClusterConnection;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStringCommands;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
+import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(classes = TestApplication.class)
 @Import({TestRedisConfiguration.class, SerializationMigrationEngine.class})
@@ -133,15 +148,19 @@ class SerializationMigrationIntegrationTest extends AbstractRedisClusterIntegrat
         assertThat(ttl(JDK_KEY)).isBetween(1L, 30L);
     }
 
-    @Test
-    void rollbackRefusesToOverwriteValueWrittenAfterCutover() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rollbackRefusesToOverwriteValueWrittenAfterCutover(boolean envelope) {
         byte[] legacy = new GenericJackson2JsonRedisSerializer().serialize("old");
         put(JSON_KEY, legacy, 30);
         migration.setPhase(SerializationMigrationPhase.CUTOVER);
         migration.setLegacySerializer(
                 SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
         migrationEngine.migrate();
-        byte[] concurrent = new GenericJackson2JsonRedisSerializer().serialize("new-owner");
+        byte[] concurrent = envelope
+                ? new SecureJacksonSerializerFactory().create(new ObjectMapper(), properties.getSerializer())
+                        .serialize("new-owner")
+                : new GenericJackson2JsonRedisSerializer().serialize("new-owner");
         put(JSON_KEY, concurrent, 30);
 
         migration.setPhase(SerializationMigrationPhase.ROLLBACK);
@@ -150,6 +169,163 @@ class SerializationMigrationIntegrationTest extends AbstractRedisClusterIntegrat
         assertThat(rollback.failed()).isEqualTo(1);
         assertThat(rollback.written()).isZero();
         assertThat(raw(JSON_KEY)).isEqualTo(concurrent);
+    }
+
+    @Test
+    void staleMigratorCannotOverwriteBackupEstablishedByNewerCutover() throws Exception {
+        var serializer = new GenericJackson2JsonRedisSerializer();
+        byte[] first = serializer.serialize("v1");
+        byte[] second = serializer.serialize("v2");
+        put(JSON_KEY, first, 30);
+        migration.setPhase(SerializationMigrationPhase.CUTOVER);
+        migration.setLegacySerializer(SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
+        CountDownLatch captured = new CountDownLatch(1);
+        CountDownLatch resume = new CountDownLatch(1);
+        SerializationMigrationEngine stale = pausedAfterSourceRead(captured, resume);
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var pending = executor.submit(stale::migrate);
+            try {
+                assertThat(captured.await(10, TimeUnit.SECONDS)).isTrue();
+                put(JSON_KEY, second, 30);
+                assertThat(migrationEngine.migrate().written()).isEqualTo(2);
+                byte[] current = raw(JSON_KEY);
+                assertThat(SerializationPreFlightProbe.isEnvelope(current)).isTrue();
+                assertThat(raw(backupKey(JSON_KEY))).isEqualTo(second);
+                resume.countDown();
+
+                SerializationMigrationReport rejected = pending.get(10, TimeUnit.SECONDS);
+                assertThat(rejected.failed()).isEqualTo(1);
+                assertThat(rejected.written()).isZero();
+                assertThat(raw(JSON_KEY)).isEqualTo(current);
+                assertThat(raw(backupKey(JSON_KEY))).isEqualTo(second);
+            } finally {
+                resume.countDown();
+            }
+        }
+        migration.setPhase(SerializationMigrationPhase.ROLLBACK);
+        assertThat(migrationEngine.migrate().written()).isEqualTo(1);
+        assertThat(raw(JSON_KEY)).isEqualTo(second);
+    }
+
+    @Test
+    void twoMigratorsWithSameSnapshotAreIdempotent() throws Exception {
+        byte[] legacy = new GenericJackson2JsonRedisSerializer().serialize("same");
+        put(JSON_KEY, legacy, 30);
+        migration.setPhase(SerializationMigrationPhase.CUTOVER);
+        migration.setLegacySerializer(SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
+        CountDownLatch captured = new CountDownLatch(2);
+        CountDownLatch resume = new CountDownLatch(1);
+        SerializationMigrationEngine first = pausedAfterSourceRead(captured, resume);
+        SerializationMigrationEngine second = pausedAfterSourceRead(captured, resume);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var firstRun = executor.submit(first::migrate);
+            var secondRun = executor.submit(second::migrate);
+            try {
+                assertThat(captured.await(10, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                resume.countDown();
+            }
+            SerializationMigrationReport a = firstRun.get(10, TimeUnit.SECONDS);
+            SerializationMigrationReport b = secondRun.get(10, TimeUnit.SECONDS);
+            assertThat(a.failed() + b.failed()).isZero();
+            assertThat(a.written() + b.written()).isEqualTo(2);
+        }
+        assertThat(raw(backupKey(JSON_KEY))).isEqualTo(legacy);
+        assertThat(SerializationPreFlightProbe.isEnvelope(raw(JSON_KEY))).isTrue();
+        assertThat(ttl(JSON_KEY)).isBetween(1L, 30L);
+        migration.setPhase(SerializationMigrationPhase.ROLLBACK);
+        assertThat(migrationEngine.migrate().written()).isEqualTo(1);
+        assertThat(raw(JSON_KEY)).isEqualTo(legacy);
+    }
+
+    @Test
+    void cutoverPreservesConflictingBackupAndItsTtl() {
+        byte[] legacy = new GenericJackson2JsonRedisSerializer().serialize("current");
+        byte[] backup = new GenericJackson2JsonRedisSerializer().serialize("earlier");
+        put(JSON_KEY, legacy, 30);
+        put(backupKey(JSON_KEY), backup, 5);
+        migration.setPhase(SerializationMigrationPhase.CUTOVER);
+        migration.setLegacySerializer(SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
+
+        SerializationMigrationReport report = migrationEngine.migrate();
+
+        assertThat(report.failed()).isEqualTo(1);
+        assertThat(report.written()).isZero();
+        assertThat(raw(JSON_KEY)).isEqualTo(legacy);
+        assertThat(raw(backupKey(JSON_KEY))).isEqualTo(backup);
+        assertThat(ttl(backupKey(JSON_KEY))).isBetween(1L, 5L);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rollbackRestoresMissingSourceUsingRemainingBackupTtl(boolean expire) {
+        byte[] legacy = new GenericJackson2JsonRedisSerializer().serialize("restore");
+        put(JSON_KEY, legacy, 30);
+        migration.setPhase(SerializationMigrationPhase.CUTOVER);
+        migration.setLegacySerializer(SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
+        migrationEngine.migrate();
+        try (RedisConnection connection = connectionFactory.getConnection()) {
+            if (expire) {
+                connection.keyCommands().pExpire(JSON_KEY, 1);
+            } else {
+                connection.keyCommands().del(JSON_KEY);
+            }
+            connection.keyCommands().expire(backupKey(JSON_KEY), Duration.ofSeconds(5));
+        }
+        await().atMost(Duration.ofSeconds(2)).until(() -> raw(JSON_KEY) == null);
+
+        migration.setPhase(SerializationMigrationPhase.ROLLBACK);
+        SerializationMigrationReport report = migrationEngine.migrate();
+
+        assertThat(report.written()).isEqualTo(1);
+        assertThat(report.failed()).isZero();
+        assertThat(raw(JSON_KEY)).isEqualTo(legacy);
+        assertThat(ttl(JSON_KEY)).isBetween(1L, 5L);
+    }
+
+    @Test
+    void cutoverReusesIdenticalBackupWithoutExtendingItsTtl() {
+        byte[] legacy = new GenericJackson2JsonRedisSerializer().serialize("retry");
+        put(JSON_KEY, legacy, 30);
+        put(backupKey(JSON_KEY), legacy, 5);
+        migration.setPhase(SerializationMigrationPhase.CUTOVER);
+        migration.setLegacySerializer(SerializationMigrationProperties.LegacySerializer.GENERIC_JACKSON);
+
+        SerializationMigrationReport report = migrationEngine.migrate();
+
+        assertThat(report.failed()).isZero();
+        assertThat(report.written()).isEqualTo(1);
+        assertThat(raw(backupKey(JSON_KEY))).isEqualTo(legacy);
+        assertThat(ttl(backupKey(JSON_KEY))).isBetween(1L, 5L);
+        assertThat(ttl(JSON_KEY)).isBetween(6L, 30L);
+    }
+
+    // Only the source GET is paused; serialization, scans and writes use the real engine and Cluster.
+    private SerializationMigrationEngine pausedAfterSourceRead(CountDownLatch captured,
+                                                               CountDownLatch resume) {
+        RedisConnectionFactory factory = mock(RedisConnectionFactory.class);
+        when(factory.getConnection()).thenAnswer(invocation -> {
+            RedisClusterConnection real = (RedisClusterConnection) connectionFactory.getConnection();
+            RedisClusterConnection connection = mock(RedisClusterConnection.class, delegatesTo(real));
+            RedisStringCommands strings = mock(RedisStringCommands.class, delegatesTo(real.stringCommands()));
+            doAnswer(read -> {
+                byte[] key = read.getArgument(0);
+                byte[] value = real.stringCommands().get(key);
+                if (Arrays.equals(key, JSON_KEY)) {
+                    captured.countDown();
+                    if (!resume.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Timed out waiting to resume source snapshot");
+                    }
+                }
+                return value;
+            }).when(strings).get(any(byte[].class));
+            when(connection.stringCommands()).thenReturn(strings);
+            return connection;
+        });
+        return new SerializationMigrationEngine(factory, new ObjectMapper(), properties,
+                new SecureJacksonSerializerFactory(), ResolvedMetrics.resolve(null, new MockEnvironment()));
     }
 
     @Test
