@@ -1,0 +1,39 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandler.java
+  s_9d329a28f0996e::t_8d32f06d09d2cf 114
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncRole.java
+  s_9d329a28f0996e::t_8d32f06d09d2cf 456
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupport.java
+  s_9d329a28f0996e::t_8d32f06d09d2cf 144-149,181-182,188
+  s_9d329a28f0996e::t_43553457b1e3d8 187
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/MixedSyncIntegrationTest.java
+  s_9d329a28f0996e::t_19e9724b0ae3b6 13,32-34,39,42,52,54,57-58,64-68
+  s_9d329a28f0996e::t_66af763bae812c 79-82,91-92,103,111
+  s_9d329a28f0996e::t_c413686e1e7deb 1-12,14-31,35-38,40-41,43-51,53,55-56,59-63,69-78,83-90,93-102,104-110,112-115
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManager.java
+  s_9d329a28f0996e::t_8d32f06d09d2cf 121-127,140,149-153,157,161,168-170,173,186
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncLockHandlerTest.java
+  s_9d329a28f0996e::t_8d32f06d09d2cf 181,196,211,226,241,254,260,275,284,288,297,301,311,321,331
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SyncSupportTest.java
+  s_9d329a28f0996e::t_5ba291f0b35ff4 222-267
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManagerIntegrationTest.java
+  s_9d329a28f0996e::t_8d32f06d09d2cf 12-13,36-38,344-365,419-512
+  s_9d329a28f0996e::t_975b9c15a3b137 547-589
+  s_9d329a28f0996e::t_5ba291f0b35ff4 513-514,516-546,590-611
+  s_9d329a28f0996e::t_a2b4e4d47f51b5 515
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e4a65ace1ecc7ec86ea31f4c408a8e04175bc042",
+  "prompts": {},
+  "sessions": {
+    "s_9d329a28f0996e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b63d-5719-7792-a4d0-da72c576eae8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
