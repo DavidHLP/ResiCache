@@ -1,0 +1,32 @@
+docs/PRODUCT.md
+  s_671e183ce614a4::t_5a01afb29d646e 80-81
+  s_671e183ce614a4::t_2faa013a7999fe 76-79,91-93,127-129
+  s_671e183ce614a4::t_a5a9b0ac49ae61 82,130
+docs/OPERATIONS.md
+  s_671e183ce614a4::t_2faa013a7999fe 27-37,43-56,63-136,188-331,383-387,412-425,427
+  s_671e183ce614a4::t_3bca337ea8f199 426,428
+  s_671e183ce614a4::t_7c751cd4632a92 429
+docs/REFERENCE.md
+  s_671e183ce614a4::t_2faa013a7999fe 31-32,34-36,55-57,76-83,88-97,124-125,147,153-184,191-203,214,219-250,257
+docs/DEVELOPMENT.md
+  s_671e183ce614a4::t_2faa013a7999fe 10-11,34-35,37-38,42-44,50-51,65-69,79-96,125-128
+PERFORMANCE.md
+  s_671e183ce614a4::t_2faa013a7999fe 3-5,41-56,61,64,66-67,75-101,108-110,120-121,126,131-133,138,154-156,159
+  s_671e183ce614a4::t_cc306282ff41ff 160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f62740e1472a475b3db8b02ed231b9dbf5832080",
+  "prompts": {},
+  "sessions": {
+    "s_671e183ce614a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b694-4831-7c91-8754-f34f792353da",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
