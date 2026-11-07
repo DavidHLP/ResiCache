@@ -60,14 +60,4 @@ class SerializerWhitelistStartupGuard {
         }
     }
 
-    /**
-     * Reports empty lists or blank prefixes requiring a startup diagnostic.
-     *
-     * <p>package-private 供单元测试,不暴露为 public API。
-     */
-    boolean shouldWarn() {
-        List<String> prefixes =
-            properties.getSerializer().getAllowedPackagePrefixes();
-        return prefixes == null || prefixes.isEmpty() || prefixes.stream().anyMatch(String::isBlank);
-    }
 }
