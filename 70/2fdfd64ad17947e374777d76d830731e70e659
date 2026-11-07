@@ -1,0 +1,39 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RedissonConfigurationTest.java
+  s_eca4aeb16dfcc5::t_02ebcd6e0c0091 302-328,340-347
+  s_eca4aeb16dfcc5::t_47c53735ff2c33 329-339
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/TlsConfigurationValidator.java
+  s_eca4aeb16dfcc5::t_802c464d5b79f5 55,79,83-88,96
+  s_eca4aeb16dfcc5::t_47c53735ff2c33 74-75
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManagerIntegrationTest.java
+  s_eca4aeb16dfcc5::t_02ebcd6e0c0091 12-13,36-38,397-492
+  s_eca4aeb16dfcc5::t_e532f236ae9a22 493
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/DistributedLockManager.java
+  s_eca4aeb16dfcc5::t_802c464d5b79f5 133,150,154,161-163,166,179
+  s_eca4aeb16dfcc5::t_47c53735ff2c33 142-146
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/RedissonConfiguration.java
+  s_eca4aeb16dfcc5::t_802c464d5b79f5 7-8,16-18,83-85,101,106-129
+  s_eca4aeb16dfcc5::t_dee4a7fa20f27e 130-131
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializerWhitelistStartupGuard.java
+  s_eca4aeb16dfcc5::t_802c464d5b79f5 43,47-53,72
+  s_eca4aeb16dfcc5::t_47c53735ff2c33 65
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SerializerWhitelistStartupGuardIntegrationTest.java
+  s_eca4aeb16dfcc5::t_02ebcd6e0c0091 136-145
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SerializerWhitelistStartupGuardTest.java
+  s_eca4aeb16dfcc5::t_02ebcd6e0c0091 70-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "702fdfd64ad17947e374777d76d830731e70e659",
+  "prompts": {},
+  "sessions": {
+    "s_eca4aeb16dfcc5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b601-de62-7cf2-bc28-b6a0ab0f2afc",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
