@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -47,51 +46,14 @@ class EarlyRefresh {
     /** 宽限期:剩余 TTL 低于此值时不再安排刷新(即将过期的数据不值得刷)。 */
     private static final long REFRESH_GRACE_PERIOD_SECONDS = 5;
 
-    /**
-     * 原子缩短 TTL 的 Lua 脚本(版本 CAS).
-     *
-     * <p>语义:{@code GET key},用 cjson 解析 envelope 的 {@code payload.version}
-     * (缓存值版本),若等于 {@code ARGV[1]}(预期版本)则 {@code EXPIRE} 为
-     * {@code ARGV[2]} 秒并返回 1,否则返回 0(值已变,放弃缩短)。顶层
-     * {@code envelope.version} 是格式版本,不能用于 CAS。保证「检查值 version 未变
-     * → 缩短 TTL」的原子性,
-     * 避免异步刷新窗口内值被覆盖后仍缩短 TTL 的竞态.
-     *
-     * <p>版本 CAS 只传 8 字节(long → string),不把整个 CachedValue 序列化值
-     * (可能 N×10KB)送进 Lua 脚本;网络字节数为 O(1) —— 独立于 payload 大小。
-     *
-     * <p>cjson 解析失败防御:解析抛出时返回 0(放弃缩短),与"value 不匹配"
-     * 行为一致(竞态 → 不缩短 → 安全)。Redis 5+ 内置 cjson,旧版本(无 cjson)的实例
-     * 启动期由本脚本抛 Lua 错误 → execute 异常 → handler catch 吞 → 不缩短,行为
-     * 与"value 不匹配"等价。注:ResiCache 3.x 文档要求 Redis 5+。
-     *
-     * <p>参数:
-     * <ul>
-     *   <li>{@code KEYS[1]} — 目标 redis key</li>
-     *   <li>{@code ARGV[1]} — 预期的 payload.version(ASCII 数字字符串,来自 CachedValue.version)</li>
-     *   <li>{@code ARGV[2]} — 缩短后的 TTL 秒数(刷新宽限期)</li>
-     * </ul>
-     */
+    /** Compare bytes and live TTL atomically; Lua never decodes long versions. */
     private static final String ATOMIC_TTL_SHORTEN_SCRIPT =
-        "local current = redis.call('get', KEYS[1]) " +
-        "if current then " +
-        "    local ok, parsed = pcall(cjson.decode, current) " +
-        "    if ok and type(parsed) == 'table' then " +
-        "        if type(parsed[2]) == 'table' and parsed[1] ~= nil then " +
-        "            parsed = parsed[2] " +
-        "        end " +
-        "        local payload = parsed.payload " +
-        "        if type(payload) == 'table' and type(payload[2]) == 'table' and payload[1] ~= nil then " +
-        "            payload = payload[2] " +
-        "        end " +
-        "        if type(payload) == 'table' and payload.version ~= nil " +
-        "                and tostring(payload.version) == ARGV[1] then " +
-        "            redis.call('expire', KEYS[1], ARGV[2]) " +
-        "            return 1 " +
-        "        end " +
-        "    end " +
-        "end " +
-        "return 0";
+        "local current = redis.call('get', KEYS[1]); " +
+        "if not current then return 0 end; " +
+        "if current ~= ARGV[1] then return 2 end; " +
+        "local ttl = redis.call('pttl', KEYS[1]); " +
+        "if ttl >= 0 and ttl <= tonumber(ARGV[2]) then return 3 end; " +
+        "redis.call('pexpire', KEYS[1], ARGV[2]); return 1";
 
     private final Clock clock;
     private final ThreadPoolEarlyExpirationExecutor earlyExpirationExecutor;
@@ -158,8 +120,8 @@ class EarlyRefresh {
 
         EarlyExpirationMode mode = resolveMode(context);
 
-        log.info("Pre-refresh needed: cacheName={}, key={}, mode={}, remainingTtl={}s",
-                 context.getCacheName(), context.getRedisKey(), mode, cachedValue.getRemainingTtl());
+        log.debug("Pre-refresh needed: cacheName={}, keyFingerprint={}, mode={}, remainingTtl={}s",
+                 context.getCacheName(), FailureReport.fingerprint(context.getRedisKey()), mode, cachedValue.getRemainingTtl());
 
         if (mode == EarlyExpirationMode.ASYNC) {
             scheduleAsyncRefresh(context, cachedValue);
@@ -202,88 +164,46 @@ class EarlyRefresh {
         earlyExpirationExecutor.submit(redisKey,
                 () -> performAsyncRefresh(redisKey, cachedValue));
 
-        log.info("Async early-expiration scheduled: cacheName={}, key={}", cacheName, redisKey);
+        log.debug("Async early-expiration evaluated: cacheName={}, keyFingerprint={}",
+                cacheName, FailureReport.fingerprint(redisKey));
     }
 
     /**
-     * 异步提前过期任务体。
-     *
-     * <p>职责:
-     * <ol>
-     *   <li>读 live value:为 null → 调试日志 "key already missing" + return</li>
-     *   <li>读 live TTL:介于 (0, {@value #REFRESH_GRACE_PERIOD_SECONDS}) → 调试日志
-     *       "below grace period" + return(避免刷新即将过期数据)</li>
-     *   <li>{@link #atomicShortenTtlIfValueUnchanged}(redisKey, capturedValue) 走
-     *       Lua CAS:value 未变才 expire,缩短 TTL 至宽限期
-     *       <ul>
-     *         <li>返回 true → 调试日志 "shortened TTL"</li>
-     *         <li>返回 false → 调试日志 "value changed"(并发写覆盖)</li>
-     *       </ul></li>
-     *   <li>I/O 异常交给 executor 的重试与终止诊断，不在任务体内吞掉失败。</li>
-     * </ol>
-     *
-     * <p>设计纪律:
-     * <ul>
-     *   <li><b>package-private 而非 private</b>:直接单测入口 ——
-     *       {@code EarlyExpirationHandlerIntegrationTest} 可绕过 executor 直接调,
-     *       验证 3 个决策分支 + 异常传播,而无需制造并发竞态。
-     *       同文件 {@code atomicShortenTtlIfValueUnchanged} 保持 {@code private}
-     *       因其单测入口已由本方法覆盖。</li>
-     *   <li><b>不返回 mainResult</b>:无返回值,3 决策分支各自有副作用(log + return);
-     *       调用方不需要 mainResult,避免 split-knowledge。</li>
-     *   <li><b>失败归属</b>:executor 隔离最终失败，调用线程不因后台 I/O 失败而失败。</li>
-     * </ul>
-     *
-     * @param redisKey     缓存键(完整 Redis key)
-     * @param capturedValue 触发本次异步刷新的原始缓存值(用于 Lua CAS 比对)
+     * Validates the exact Java long version, then CASes the original wire snapshot.
+     * Cancellation is best-effort; the CAS still protects a replacement after cancellation.
      */
     void performAsyncRefresh(String redisKey, CachedValue capturedValue) {
-        Object rawLiveValue = valueOperations.get(redisKey);
-        if (rawLiveValue == null) {
-            log.debug("Async early-expiration: key already missing: {}", redisKey);
+        byte[] keyBytes = redisTemplate.getStringSerializer().serialize(redisKey);
+        byte[] snapshot = redisTemplate.execute(
+                (org.springframework.data.redis.core.RedisCallback<byte[]>) connection ->
+                        connection.stringCommands().get(keyBytes));
+        if (snapshot == null) {
+            earlyExpirationExecutor.recordOutcome(RefreshTaskMetrics.Outcome.MISSING);
             return;
         }
-        if (!(rawLiveValue instanceof CachedValue liveValue)) {
-            log.debug("Async early-expiration skipped: unsupported cached value type: key={}, type={}",
-                    redisKey, rawLiveValue.getClass().getName());
+        Object rawLiveValue = redisTemplate.getValueSerializer().deserialize(snapshot);
+        if (!(rawLiveValue instanceof CachedValue liveValue)
+                || liveValue.getVersion() != capturedValue.getVersion()) {
+            earlyExpirationExecutor.recordOutcome(RefreshTaskMetrics.Outcome.VERSION_CHANGED);
             return;
         }
-
-        // 检查 TTL 是否即将过期（避免刷新已过期数据）
         long remainingTtl = liveValue.getRemainingTtl();
         if (remainingTtl > 0 && remainingTtl < REFRESH_GRACE_PERIOD_SECONDS) {
-            log.debug("Async early-expiration skipped: key={} remainingTtl={}s is below grace period {}s",
-                      redisKey, remainingTtl, REFRESH_GRACE_PERIOD_SECONDS);
+            earlyExpirationExecutor.recordOutcome(RefreshTaskMetrics.Outcome.BELOW_GRACE);
             return;
         }
-
-        boolean shortened = atomicShortenTtlIfValueUnchanged(redisKey, capturedValue);
-        if (shortened) {
-            log.debug("Async early-expiration shortened TTL: key={}, gracePeriod={}s",
-                      redisKey, REFRESH_GRACE_PERIOD_SECONDS);
-        } else {
-            log.debug("Async early-expiration skipped: value changed: {}", redisKey);
-        }
-    }
-
-    private boolean atomicShortenTtlIfValueUnchanged(String redisKey, CachedValue expectedValue) {
-        return Boolean.TRUE.equals(redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Boolean>) connection -> {
-            RedisSerializer<String> keySerializer = redisTemplate.getStringSerializer();
-
-            byte[] keyBytes = keySerializer.serialize(redisKey);
-            // 仅传 expectedValue 的 version 字段(8 字节)而非整个 serialized
-            // value(O(N×payload_size)字节)—— 脚本 cjson 解析后比较。
-            byte[] versionBytes = String.valueOf(expectedValue.getVersion())
-                    .getBytes(StandardCharsets.UTF_8);
-            byte[] ttlBytes = String.valueOf(REFRESH_GRACE_PERIOD_SECONDS).getBytes(StandardCharsets.UTF_8);
-
-            Long result = connection.eval(
-                ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
-                ReturnType.INTEGER,
-                1,
-                keyBytes, versionBytes, ttlBytes
-            );
-            return result != null && result == 1;
-        }));
+        Long result = redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Long>) connection ->
+                connection.eval(ATOMIC_TTL_SHORTEN_SCRIPT.getBytes(StandardCharsets.UTF_8),
+                        ReturnType.INTEGER, 1, keyBytes, snapshot,
+                        String.valueOf(REFRESH_GRACE_PERIOD_SECONDS * 1000).getBytes(StandardCharsets.UTF_8)));
+        RefreshTaskMetrics.Outcome outcome = switch (result == null ? 0 : result.intValue()) {
+            case 1 -> RefreshTaskMetrics.Outcome.SHORTENED;
+            case 2 -> RefreshTaskMetrics.Outcome.SNAPSHOT_CHANGED;
+            case 3 -> RefreshTaskMetrics.Outcome.TTL_UNCHANGED;
+            default -> RefreshTaskMetrics.Outcome.MISSING;
+        };
+        earlyExpirationExecutor.recordOutcome(outcome);
+        log.debug("Async early-expiration: keyFingerprint={}, outcome={}",
+                FailureReport.fingerprint(redisKey), outcome);
     }
 }

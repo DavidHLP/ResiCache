@@ -34,6 +34,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -395,6 +399,94 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
      * Only the two exception tests construct a separate handler with mocked I/O,
      * because real Redis cannot deterministically inject those failures.
      */
+    @Test
+    void exactLongVersionsSurviveRealSerialization() {
+        for (long version : new long[]{Long.MIN_VALUE, Long.MAX_VALUE, 9007199254740991L,
+                9007199254740992L, 9007199254740993L, -9007199254740993L}) {
+            CachedValue value = createCachedValue(60, System.currentTimeMillis(), version, false);
+            store(value, 30);
+            assertThat(((CachedValue) valueOperations.get(REDIS_KEY)).getVersion()).isEqualTo(version);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, value);
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.MILLISECONDS)).isBetween(1L, 5000L);
+            store(createCachedValue(60, System.currentTimeMillis(), version == Long.MAX_VALUE ? version - 1 : version + 1, false), 30);
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, value);
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
+        }
+    }
+
+    @Test
+    void ttlOnlyInterleavingNeverLengthensExpiry() {
+        CachedValue value = createCachedValue(60, System.currentTimeMillis(), 42L, false);
+        store(value, 30);
+        RedisTemplate<String, Object> interleaved = spy(redisTemplate);
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            if (calls.incrementAndGet() == 2) {
+                redisTemplate.expire(REDIS_KEY, Duration.ofMillis(1500));
+            }
+            return invocation.callRealMethod();
+        }).when(interleaved).execute(any(RedisCallback.class));
+        new EarlyRefresh(Clock.systemUTC(), earlyExpirationExecutor, interleaved, valueOperations)
+                .performAsyncRefresh(REDIS_KEY, value);
+        assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.MILLISECONDS)).isBetween(1L, 1500L);
+        verify(earlyExpirationExecutor).recordOutcome(RefreshTaskMetrics.Outcome.TTL_UNCHANGED);
+        assertThat(((CachedValue) valueOperations.get(REDIS_KEY)).getVersion()).isEqualTo(42L);
+    }
+
+    @Test
+    void persistentEntryUsesOrdinaryGraceTtl() {
+        CachedValue value = createCachedValue(60, System.currentTimeMillis(), 42L, false);
+        valueOperations.set(REDIS_KEY, value);
+        earlyRefresh.performAsyncRefresh(REDIS_KEY, value);
+        assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.MILLISECONDS)).isBetween(1L, 5000L);
+    }
+
+    @Test
+    void cancelledRunningSnapshotCannotExpireSameVersionReplacement() throws Exception {
+        CachedValue value = createCachedValue("old", 60, System.currentTimeMillis(), 42L, false);
+        store(value, 30);
+        java.util.concurrent.CountDownLatch read = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch finished = new java.util.concurrent.CountDownLatch(1);
+        RedisTemplate<String, Object> interleaved = spy(redisTemplate);
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            if (calls.incrementAndGet() == 2) {
+                read.countDown();
+                assertThat(release.await(5, TimeUnit.SECONDS)).isTrue();
+            }
+            return invocation.callRealMethod();
+        }).when(interleaved).execute(any(RedisCallback.class));
+        io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        ThreadPoolEarlyExpirationExecutor worker = new ThreadPoolEarlyExpirationExecutor(1, 1, 1, registry);
+        EarlyRefresh refresh = new EarlyRefresh(Clock.systemUTC(), worker, interleaved, valueOperations);
+        try {
+            worker.submit(REDIS_KEY, () -> {
+                try {
+                    refresh.performAsyncRefresh(REDIS_KEY, value);
+                } finally {
+                    finished.countDown();
+                }
+            });
+            assertThat(read.await(5, TimeUnit.SECONDS)).isTrue();
+            worker.cancel(REDIS_KEY);
+            worker.cancel(REDIS_KEY);
+            store(createCachedValue("replacement", 60, System.currentTimeMillis(), 42L, false), 30);
+            release.countDown();
+            assertThat(finished.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(((CachedValue) valueOperations.get(REDIS_KEY)).getValue()).isEqualTo("replacement");
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
+            assertThat(registry.get("prerefresh.cancelled").counter().count()).isEqualTo(1);
+            assertThat(registry.get("prerefresh.outcome").tag("outcome", "cancelled").counter().count()).isEqualTo(1);
+            assertThat(registry.get("prerefresh.outcome").tag("outcome", "snapshot_changed").counter().count()).isEqualTo(1);
+        } finally {
+            release.countDown();
+            worker.shutdown();
+            registry.close();
+        }
+    }
+
     @Nested
     @DisplayName("performAsyncRefresh tests")
     class PerformAsyncRefreshTests {
@@ -413,18 +505,9 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         @DisplayName("returns early when the live serializer value is not a CachedValue")
         void performAsyncRefresh_rawLiveValue_returnsEarly() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
-            ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
-            when(mockedValueOperations.get(REDIS_KEY)).thenReturn("legacy-value");
-            EarlyRefresh rawValueRefresh = new EarlyRefresh(
-                    Clock.systemUTC(),
-                    earlyExpirationExecutor,
-                    mockedRedisTemplate,
-                    mockedValueOperations);
-
-            rawValueRefresh.performAsyncRefresh(REDIS_KEY, captured);
-
-            verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
+            valueOperations.set(REDIS_KEY, "legacy-value", Duration.ofSeconds(30));
+            earlyRefresh.performAsyncRefresh(REDIS_KEY, captured);
+            assertThat(redisTemplate.getExpire(REDIS_KEY, TimeUnit.SECONDS)).isGreaterThan(5L);
         }
 
         @Test
@@ -475,41 +558,27 @@ class EarlyExpirationHandlerIntegrationTest extends AbstractRedisIntegrationTest
         @DisplayName("propagates a value-fetch exception to the executor retry path")
         void performAsyncRefresh_valueFetchThrows_propagates() {
             CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
-            ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
-            when(mockedValueOperations.get(REDIS_KEY)).thenThrow(new RuntimeException("Redis down"));
+            RedisTemplate<String, Object> faultTemplate = spy(redisTemplate);
+            doThrow(new RuntimeException("Redis down")).when(faultTemplate).execute(any(RedisCallback.class));
             EarlyRefresh faultRefresh = new EarlyRefresh(
-                    Clock.systemUTC(),
-                    earlyExpirationExecutor,
-                    mockedRedisTemplate,
-                    mockedValueOperations);
-
+                    Clock.systemUTC(), earlyExpirationExecutor, faultTemplate, valueOperations);
             assertThatThrownBy(() -> faultRefresh.performAsyncRefresh(REDIS_KEY, captured))
                     .isInstanceOf(RuntimeException.class).hasMessage("Redis down");
-
-            verify(mockedRedisTemplate, never()).execute(any(RedisCallback.class));
         }
 
         @Test
         @DisplayName("propagates a Lua CAS exception to the executor retry path")
         void performAsyncRefresh_casThrows_propagates() {
-            CachedValue captured = createCachedValue(60, System.currentTimeMillis());
-            CachedValue live = createCachedValue(60, System.currentTimeMillis());
-            RedisTemplate<String, Object> mockedRedisTemplate = mock(RedisTemplate.class);
-            ValueOperations<String, Object> mockedValueOperations = mock(ValueOperations.class);
-            when(mockedValueOperations.get(REDIS_KEY)).thenReturn(live);
-            when(mockedRedisTemplate.execute(any(RedisCallback.class)))
-                    .thenThrow(new RuntimeException("Lua eval failed"));
+            CachedValue captured = createCachedValue(60, System.currentTimeMillis(), 42L, false);
+            store(captured, 30);
+            RedisTemplate<String, Object> faultTemplate = spy(redisTemplate);
+            doCallRealMethod().doThrow(new RuntimeException("Lua eval failed"))
+                    .when(faultTemplate).execute(any(RedisCallback.class));
             EarlyRefresh faultRefresh = new EarlyRefresh(
-                    Clock.systemUTC(),
-                    earlyExpirationExecutor,
-                    mockedRedisTemplate,
-                    mockedValueOperations);
-
+                    Clock.systemUTC(), earlyExpirationExecutor, faultTemplate, valueOperations);
             assertThatThrownBy(() -> faultRefresh.performAsyncRefresh(REDIS_KEY, captured))
                     .isInstanceOf(RuntimeException.class).hasMessage("Lua eval failed");
-
-            verify(mockedRedisTemplate).execute(any(RedisCallback.class));
+            verify(faultTemplate, times(2)).execute(any(RedisCallback.class));
         }
     }
 }

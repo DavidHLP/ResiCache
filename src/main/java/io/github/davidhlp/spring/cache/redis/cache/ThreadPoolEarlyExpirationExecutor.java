@@ -96,7 +96,7 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
                 TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(queueCapacity),
                 new EarlyExpirationThreadFactory(),
-                new ThreadPoolExecutor.CallerRunsPolicy());
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     /**
@@ -115,31 +115,33 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         // A completion callback may still be pending when the next submission arrives.
         inFlight.computeIfPresent(key, (k, existing) -> existing.isDone() ? null : existing);
 
-        CompletableFuture<Void> future =
-                inFlight.computeIfAbsent(
-                        key,
-                        k -> {
-                            scheduled.set(true);
-                            return CompletableFuture.runAsync(
-                                    () -> retryPolicy.executeWithRetry(k, task),
-                                    executorService);
-                        });
+        CompletableFuture<Void> future;
+        try {
+            future = inFlight.computeIfAbsent(key, k -> {
+                scheduled.set(true);
+                return CompletableFuture.runAsync(
+                        () -> retryPolicy.executeWithRetry(FailureReport.fingerprint(k), task),
+                        executorService);
+            });
+        } catch (RejectedExecutionException rejected) {
+            metrics.recordOutcome(RefreshTaskMetrics.Outcome.REJECTED);
+            return;
+        }
 
         if (scheduled.get()) {
             metrics.recordSubmitted();
-            // Register only after publication: CallerRunsPolicy can complete
-            // inline, and removing inside computeIfAbsent is a recursive update.
+            // Register after publication: fast completion must not remove inside computeIfAbsent.
             future.whenComplete((result, throwable) -> {
                 inFlight.remove(key, future);
                 metrics.recordCompleted();
-                if (throwable != null) {
+                if (throwable != null && !future.isCancelled()) {
                     FailureReport.error(log, "Async early-expiration failed after all retries",
                             null, key, throwable);
                 }
             });
         }
         if (!scheduled.get() && !future.isDone()) {
-            log.debug("Key {} is already being refreshed, skipping", key);
+            log.debug("Key fingerprint {} is already being refreshed, skipping", FailureReport.fingerprint(key));
         }
     }
 
@@ -155,14 +157,21 @@ class ThreadPoolEarlyExpirationExecutor implements RefreshCancellation {
         }
         CompletableFuture<Void> future = inFlight.remove(key);
         if (future != null) {
-            metrics.recordCancelled();
             boolean cancelled = future.cancel(true);
+            if (cancelled) {
+                metrics.recordCancelled();
+                metrics.recordOutcome(RefreshTaskMetrics.Outcome.CANCELLED);
+            }
             log.debug(
-                    "Cancelled async early-expiration for key: {} (cancelled={}, done={})",
-                    key,
+                    "Cancelled async early-expiration for keyFingerprint: {} (cancelled={}, done={})",
+                    FailureReport.fingerprint(key),
                     cancelled,
                     future.isDone());
         }
+    }
+
+    void recordOutcome(RefreshTaskMetrics.Outcome outcome) {
+        metrics.recordOutcome(outcome);
     }
 
     /**

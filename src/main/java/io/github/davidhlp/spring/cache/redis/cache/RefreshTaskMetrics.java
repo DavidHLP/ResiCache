@@ -8,18 +8,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * 提前过期任务的 Micrometer 指标注册与计数：从 {@code ThreadPoolEarlyExpirationExecutor} 抽出，
- * 将指标注册（3 个 Counter + 2 个 Gauge）与计数逻辑集中于单一协作类，无锁、线程安全。
- *
- * <p>{@code meterRegistry} 永不为 {@code null}：指标未启用（或应用无 {@code MeterRegistry}
- * bean）时它是共享无状态的 {@link DisabledMetricsRegistry#INSTANCE}（唯一判据
- * {@link MetricsWriter#disabled(MeterRegistry)}），此时构造期直接走 null
- * 分支——不构造 meter、不走 deny-all filter、不分配 Noop* counter/gauge，3 个 counter 字段
- * 保持 null，所有 record 方法为空操作。提取收益（locality）：原本散落在执行器构造器与各方法中
- * 的 Counter/Gauge 注册及 null 判定，现收敛为一处，执行器只需调用 {@code recordXxx()}。
+ * Refresh lifecycle counters, finite outcome counters, and executor gauges.
+ * Disabled registries retain no counters or outcome arrays. Completed counts future
+ * terminal states, including cancellation, rather than completed Redis I/O.
  */
 final class RefreshTaskMetrics {
 
+    enum Outcome { MISSING, VERSION_CHANGED, BELOW_GRACE, SHORTENED, SNAPSHOT_CHANGED, TTL_UNCHANGED, REJECTED, CANCELLED }
+
+    private final Counter[] outcomes;
     private final Counter submittedCounter;
     private final Counter completedCounter;
     private final Counter cancelledCounter;
@@ -37,10 +34,17 @@ final class RefreshTaskMetrics {
             ConcurrentHashMap<String, CompletableFuture<Void>> inFlight,
             ExecutorService executorService) {
         if (MetricsWriter.disabled(meterRegistry)) {
+            this.outcomes = null;
             this.submittedCounter = null;
             this.completedCounter = null;
             this.cancelledCounter = null;
             return;
+        }
+        this.outcomes = new Counter[Outcome.values().length];
+        for (Outcome outcome : Outcome.values()) {
+            outcomes[outcome.ordinal()] = MetricsWriter.counter(meterRegistry,
+                    "prerefresh.outcome", "Refresh decisions and executor outcomes", "outcome",
+                    outcome.name().toLowerCase(java.util.Locale.ROOT));
         }
         this.submittedCounter = MetricsWriter.counter(
                 meterRegistry, "prerefresh.submitted", "Number of early-expiration tasks submitted");
@@ -58,6 +62,12 @@ final class RefreshTaskMetrics {
             MetricsWriter.gauge(meterRegistry, "prerefresh.queue.size", tpe,
                     tpe2 -> tpe2.getQueue().size(), "Size of the early-expiration task queue",
                     "component", "prerefresh");
+        }
+    }
+
+    void recordOutcome(Outcome outcome) {
+        if (outcomes != null) {
+            MetricsWriter.increment(outcomes[outcome.ordinal()]);
         }
     }
 

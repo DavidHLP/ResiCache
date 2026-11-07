@@ -40,6 +40,10 @@ import org.springframework.lang.Nullable;
 @Slf4j
 class RedisProCacheWriter implements RedisCacheWriter {
 
+    // One virtual thread per operation isolates blocking Redis I/O from the common pool.
+    private static final java.util.concurrent.Executor ASYNC_EXECUTOR =
+            task -> Thread.ofVirtual().name("resicache-writer-async").start(task);
+
     private final CacheOperationResolver operationResolver;
     private final CacheStatisticsCollector statistics;
     private final CacheValueCodec valueCodec;
@@ -134,9 +138,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
 
     @Override
     public boolean supportsAsyncRetrieve() {
-        // retrieve()/store() 经 resolver.runWithSnapshot 透传方法级元数据
-        // (布隆/同步锁/TTL/空值等 operation 配置)+ MDC 到 commonPool 异步线程,让 SDR 走
-        // 异步 retrieve 路径(性能优化)。边界管理归 MethodMetadataResolver。
+        // The resolver carries method policy and MDC onto isolated asynchronous workers.
         return true;
     }
 
@@ -144,7 +146,7 @@ class RedisProCacheWriter implements RedisCacheWriter {
         MethodSnapshot snapshot = operationResolver.capture();
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
         return CompletableFuture.supplyAsync(
-                () -> operationResolver.runWithSnapshot(snapshot, mdcSnapshot, work));
+                () -> operationResolver.runWithSnapshot(snapshot, mdcSnapshot, work), ASYNC_EXECUTOR);
     }
     @Override
     @NonNull

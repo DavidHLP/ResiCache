@@ -1,5 +1,6 @@
 package io.github.davidhlp.spring.cache.redis.cache;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.davidhlp.spring.cache.redis.chain.CacheOperation;
 import io.github.davidhlp.spring.cache.redis.chain.model.CacheContext;
 import io.github.davidhlp.spring.cache.redis.chain.model.EarlyExpirationDecision;
@@ -19,6 +20,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -66,11 +68,12 @@ class EarlyRefreshTest {
     void asyncRefresh_transientReadFailure_retriesRealTask() {
         ValueOperations<String, Object> values = mock(ValueOperations.class);
         CachedValue cached = CachedValue.forTest("cached", 60, 0L, 1L, false);
-        when(values.get(REDIS_KEY)).thenReturn(cached)
+        when(values.get(REDIS_KEY)).thenReturn(cached);
+        SecureJacksonRedisSerializer serializer = new SecureJacksonRedisSerializer(new ObjectMapper());
+        RedisTemplate<String, Object> redis = mockRedis(serializer);
+        when(redis.execute(any(RedisCallback.class)))
                 .thenThrow(new IllegalStateException("transient read failure"))
-                .thenReturn(cached);
-        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
-        when(redis.execute(any(RedisCallback.class))).thenReturn(true);
+                .thenReturn(serializer.serialize(cached), 1L);
 
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         ThreadPoolEarlyExpirationExecutor executor = inlineExecutor(registry);
@@ -81,8 +84,8 @@ class EarlyRefreshTest {
 
             assertThat(refresh.evaluate(context(operation)).decision())
                     .isEqualTo(EarlyExpirationDecision.asyncRefresh());
-            verify(values, times(3)).get(REDIS_KEY);
-            verify(redis).execute(any(RedisCallback.class));
+            verify(values).get(REDIS_KEY);
+            verify(redis, times(3)).execute(any(RedisCallback.class));
             assertThat(executor.getActiveCount()).isZero();
             assertThat(registry.get("prerefresh.submitted").counter().count()).isEqualTo(1);
             assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(1);
@@ -99,8 +102,14 @@ class EarlyRefreshTest {
         ValueOperations<String, Object> values = mock(ValueOperations.class);
         CachedValue cached = CachedValue.forTest("cached", 60, 0L, 1L, false);
         when(values.get(REDIS_KEY)).thenReturn(cached);
-        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
-        when(redis.execute(any(RedisCallback.class))).thenThrow(new IllegalStateException("CAS failure"));
+        SecureJacksonRedisSerializer serializer = new SecureJacksonRedisSerializer(new ObjectMapper());
+        RedisTemplate<String, Object> redis = mockRedis(serializer);
+        byte[] snapshot = serializer.serialize(cached);
+        IllegalStateException failure = new IllegalStateException("CAS failure");
+        when(redis.execute(any(RedisCallback.class)))
+                .thenReturn(snapshot).thenThrow(failure)
+                .thenReturn(snapshot).thenThrow(failure)
+                .thenReturn(snapshot).thenThrow(failure);
 
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         ThreadPoolEarlyExpirationExecutor executor = inlineExecutor(registry);
@@ -111,7 +120,7 @@ class EarlyRefreshTest {
 
             assertThat(refresh.evaluate(context(operation)).decision())
                     .isEqualTo(EarlyExpirationDecision.asyncRefresh());
-            verify(redis, times(RefreshRetryPolicy.MAX_RETRY_COUNT)).execute(any(RedisCallback.class));
+            verify(redis, times(2 * RefreshRetryPolicy.MAX_RETRY_COUNT)).execute(any(RedisCallback.class));
             assertThat(executor.getActiveCount()).isZero();
             assertThat(registry.get("prerefresh.completed").counter().count()).isEqualTo(1);
             assertThat(executor.getActiveCount()).isZero();
@@ -119,6 +128,13 @@ class EarlyRefreshTest {
             executor.shutdown();
             registry.close();
         }
+    }
+
+    private RedisTemplate<String, Object> mockRedis(SecureJacksonRedisSerializer serializer) {
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        when(redis.getStringSerializer()).thenReturn(org.springframework.data.redis.serializer.RedisSerializer.string());
+        doReturn(serializer).when(redis).getValueSerializer();
+        return redis;
     }
 
     private ThreadPoolEarlyExpirationExecutor inlineExecutor(SimpleMeterRegistry registry) {

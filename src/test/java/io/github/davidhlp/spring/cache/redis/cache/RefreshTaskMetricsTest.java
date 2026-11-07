@@ -27,6 +27,26 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 class RefreshTaskMetricsTest {
 
     @Test
+    void finiteOutcomesHaveOnlyOneBoundedTag() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        try {
+            RefreshTaskMetrics metrics = new RefreshTaskMetrics(registry,
+                    new ConcurrentHashMap<>(), Executors.newSingleThreadExecutor());
+            for (RefreshTaskMetrics.Outcome outcome : RefreshTaskMetrics.Outcome.values()) {
+                metrics.recordOutcome(outcome);
+                assertThat(registry.get("prerefresh.outcome")
+                        .tag("outcome", outcome.name().toLowerCase(java.util.Locale.ROOT))
+                        .counter().count()).isEqualTo(1);
+            }
+            assertThat(registry.find("prerefresh.outcome").counters())
+                    .hasSize(RefreshTaskMetrics.Outcome.values().length)
+                    .allSatisfy(counter -> assertThat(counter.getId().getTags()).hasSize(1));
+        } finally {
+            registry.close();
+        }
+    }
+
+    @Test
     @DisplayName("null meterRegistry — record methods are no-op, no exception")
     void recordMethods_nullRegistry_noOp() {
         RefreshTaskMetrics metrics = new RefreshTaskMetrics(
@@ -37,6 +57,9 @@ class RefreshTaskMetricsTest {
             metrics.recordSubmitted();
             metrics.recordCompleted();
             metrics.recordCancelled();
+            for (RefreshTaskMetrics.Outcome outcome : RefreshTaskMetrics.Outcome.values()) {
+                metrics.recordOutcome(outcome);
+            }
         }).doesNotThrowAnyException();
     }
 
@@ -93,6 +116,9 @@ class RefreshTaskMetricsTest {
             metrics.recordSubmitted();
             metrics.recordCompleted();
             metrics.recordCancelled();
+            for (RefreshTaskMetrics.Outcome outcome : RefreshTaskMetrics.Outcome.values()) {
+                metrics.recordOutcome(outcome);
+            }
         }).doesNotThrowAnyException();
     }
 
@@ -105,7 +131,7 @@ class RefreshTaskMetricsTest {
 
         assertThat(registry.getMeters().stream()
                 .filter(meter -> meter.getId().getType() == Meter.Type.COUNTER)
-                .count()).isEqualTo(3);
+                .count()).isEqualTo(3 + RefreshTaskMetrics.Outcome.values().length);
     }
 
     @Test
