@@ -118,6 +118,13 @@ class DistributedLockManager implements LockManager {
         return end > begin + 1;
     }
 
+    /** One final bounded owner-thread recovery before the built-in stack discards the handle. */
+    static void recoverRelease(LockHandle handle) {
+        if (handle instanceof RedissonLockHandle redisson && !Thread.currentThread().isInterrupted()) {
+            redisson.close();
+        }
+    }
+
     @Override
     public int getOrder() {
         return 0;

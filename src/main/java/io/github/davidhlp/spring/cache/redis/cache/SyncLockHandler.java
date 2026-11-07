@@ -111,7 +111,7 @@ class SyncLockHandler extends AbstractCacheHandler {
         // 写路径走独占执行:写不能 join 他线程的 single-flight 结果(否则本笔写被静默丢弃)。
         CacheResult result = context.getOperation().isWrite()
                 ? syncSupport.executeExclusive(lockKey, work, timeout)
-                : syncSupport.executeSync(lockKey, work, timeout);
+                : syncSupport.executeSyncChain(lockKey, work, timeout);
 
         // 锁内执行完成,终止链
         return HandlerResult.terminate(result);

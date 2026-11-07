@@ -178,7 +178,7 @@ class SyncLockHandlerTest {
         void doHandle_successfulLeader_incrementsAcquiredExactlyOnce() {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenAnswer(invocation -> {
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong())).thenAnswer(invocation -> {
                 java.util.function.Supplier<CacheResult> work = invocation.getArgument(1);
                 return work.get();
             });
@@ -193,7 +193,7 @@ class SyncLockHandlerTest {
         void doHandle_lockTimeout_doesNotIncrementAcquired() {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            when(syncSupport.executeSync(anyString(), any(), anyLong()))
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong()))
                     .thenThrow(new IllegalStateException("Timed out acquiring lock"));
 
             assertThatThrownBy(() -> handler.doHandle(context, NEXT))
@@ -208,7 +208,7 @@ class SyncLockHandlerTest {
         void doHandle_followerRefuses_doesNotIncrementAcquired() {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            when(syncSupport.executeSync(anyString(), any(), anyLong()))
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong()))
                     .thenThrow(new IllegalStateException("follower refuses to wait"));
 
             assertThatThrownBy(() -> handler.doHandle(context, NEXT))
@@ -223,7 +223,7 @@ class SyncLockHandlerTest {
         void doHandle_noBackendFailFast_doesNotIncrementAcquired() {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            when(syncSupport.executeSync(anyString(), any(), anyLong()))
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong()))
                     .thenThrow(new IllegalStateException("No distributed lock backend"));
 
             assertThatThrownBy(() -> handler.doHandle(context, NEXT))
@@ -238,7 +238,7 @@ class SyncLockHandlerTest {
         void doHandle_followerJoinsResult_doesNotIncrementAcquired() {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(CacheResult.success());
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong())).thenReturn(CacheResult.success());
 
             handler.doHandle(context, NEXT);
 
@@ -251,13 +251,13 @@ class SyncLockHandlerTest {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CacheResult expectedResult = CacheResult.success();
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
             HandlerResult result = handler.doHandle(context, NEXT);
 
             assertThat(result.decision()).isEqualTo(FlowControl.TERMINATE);
             assertThat(result.result()).isEqualTo(expectedResult);
-            verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
+            verify(syncSupport).executeSyncChain(eq("test:key"), any(), eq(10L));
         }
 
         @Test
@@ -272,7 +272,7 @@ class SyncLockHandlerTest {
 
             assertThat(result.decision()).isEqualTo(FlowControl.TERMINATE);
             verify(syncSupport).executeExclusive(eq("test:key"), any(), eq(10L));
-            verify(syncSupport, never()).executeSync(anyString(), any(), anyLong());
+            verify(syncSupport, never()).executeSyncChain(anyString(), any(), anyLong());
         }
 
         @Test
@@ -281,11 +281,11 @@ class SyncLockHandlerTest {
             RedisCacheableOperation operation = createSyncOperation(true, 0);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CacheResult expectedResult = CacheResult.success();
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
             handler.doHandle(context, NEXT);
 
-            verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
+            verify(syncSupport).executeSyncChain(eq("test:key"), any(), eq(10L));
         }
 
         @Test
@@ -294,11 +294,11 @@ class SyncLockHandlerTest {
             RedisCacheableOperation operation = createSyncOperation(true, -5);
             CacheContext context = createContext(CacheOperation.GET, operation);
             CacheResult expectedResult = CacheResult.success();
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenReturn(expectedResult);
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong())).thenReturn(expectedResult);
 
             handler.doHandle(context, NEXT);
 
-            verify(syncSupport).executeSync(eq("test:key"), any(), eq(3L));
+            verify(syncSupport).executeSyncChain(eq("test:key"), any(), eq(3L));
         }
 
 
@@ -308,7 +308,7 @@ class SyncLockHandlerTest {
             RedisCacheableOperation operation = createSyncOperation(true, 10);
             CacheContext context = createContext(CacheOperation.GET, operation);
             AtomicInteger advances = new AtomicInteger();
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenAnswer(invocation -> {
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong())).thenAnswer(invocation -> {
                 java.util.function.Supplier<CacheResult> supplier = invocation.getArgument(1);
                 return supplier.get();
             });
@@ -318,7 +318,7 @@ class SyncLockHandlerTest {
                 return CacheResult.success();
             });
 
-            verify(syncSupport).executeSync(eq("test:key"), any(), eq(10L));
+            verify(syncSupport).executeSyncChain(eq("test:key"), any(), eq(10L));
             assertThat(advances.get())
                     .as("剩余链必须在锁内推进恰好一次(句柄被传给锁 lambda)")
                     .isEqualTo(1);
@@ -328,7 +328,7 @@ class SyncLockHandlerTest {
         @DisplayName("单参 handle 由基类提供拒绝推进的 continuation")
         void handle_singleArgForm_usesBaseRejectionContinuation() {
             CacheContext context = createContext(CacheOperation.GET, createSyncOperation(true, 10));
-            when(syncSupport.executeSync(anyString(), any(), anyLong())).thenAnswer(invocation -> {
+            when(syncSupport.executeSyncChain(anyString(), any(), anyLong())).thenAnswer(invocation -> {
                 java.util.function.Supplier<CacheResult> work = invocation.getArgument(1);
                 return work.get();
             });

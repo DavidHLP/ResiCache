@@ -219,4 +219,50 @@ class SyncSupportTest {
         assertThat(result).isEqualTo("value");
         verify(lockManager).tryAcquire("test-key", Long.MAX_VALUE);
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void mixedProtocolsShareLocalQueueButNeverResults(boolean loaderLeader) throws Exception {
+        var properties = new RedisProCacheProperties();
+        properties.getSyncLock().setLocalOnly(true);
+        var support = new SyncSupport(java.util.List.of(), properties);
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var secondWork = new java.util.concurrent.CountDownLatch(1);
+        java.util.function.Supplier<String> firstWork = () -> {
+            entered.countDown();
+            try {
+                if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Test gate timed out");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+            return "first";
+        };
+        java.util.function.Supplier<Integer> otherWork = () -> {
+            secondWork.countDown();
+            return 42;
+        };
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(() -> loaderLeader
+                    ? support.executeSync("same-key", firstWork, 5)
+                    : support.executeSyncChain("same-key", firstWork, 5));
+            assertThat(entered.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            var second = pool.submit(() -> loaderLeader
+                    ? support.executeSyncChain("same-key", otherWork, 5)
+                    : support.executeSync("same-key", otherWork, 5));
+            try {
+                assertThat(secondWork.await(200, java.util.concurrent.TimeUnit.MILLISECONDS)).isFalse();
+            } finally {
+                release.countDown();
+            }
+            assertThat(first.get(5, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo("first");
+            assertThat(second.get(5, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(42);
+            assertThat(support.executeSync("same-key", () ->
+                    support.executeSyncChain("same-key", () -> "nested", 0), 5)).isEqualTo("nested");
+        } finally {
+            release.countDown();
+        }
+    }
 }

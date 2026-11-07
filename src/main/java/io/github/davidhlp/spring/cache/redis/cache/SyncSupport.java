@@ -141,7 +141,12 @@ class SyncSupport {
     <T> T executeSync(final String key,
                       final Supplier<T> loader,
                       final SyncLockTimeout.Resolved timeout) {
-        return electRole(key, loader, timeout).run();
+        return electRole(key, loader, timeout, "value:").run();
+    }
+
+    /** Chain results must never join a loader-outcome publication for the same physical key. */
+    <T> T executeSyncChain(String key, Supplier<T> work, long timeoutSeconds) {
+        return electRole(key, work, SyncLockTimeout.Resolved.fromSeconds(timeoutSeconds), "chain:").run();
     }
 
     /**
@@ -173,12 +178,14 @@ class SyncSupport {
      */
     private <T> SyncRole<T> electRole(String key,
                                       Supplier<T> loader,
-                                      SyncLockTimeout.Resolved timeout) {
+                                      SyncLockTimeout.Resolved timeout,
+                                      String protocol) {
         // 重入 fast-path:当前线程已是此 key 的 leader(chain 内嵌套重入场景)。
         if (state.isReentrant(key)) {
             return new SyncRole.Reentrant<>(loader);
         }
-        SyncRegistration registration = state.publish(key);
+        // Only publication identity includes the result protocol; exclusion and reentrancy use the physical key.
+        SyncRegistration registration = state.publish(protocol + key);
         if (registration.leader()) {
             return new SyncRole.Leader<>(key, timeout, loader, registration,
                     distributedManagers, properties, state);
