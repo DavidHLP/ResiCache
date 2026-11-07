@@ -1,0 +1,29 @@
+CHANGELOG.md
+  s_bb431f90c6d7b9::t_638ddd831f9b25 42-47
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/RefreshExecutorLifecycleTest.java
+  s_bb431f90c6d7b9::t_638ddd831f9b25 120-272
+docs/REFERENCE.md
+  s_bb431f90c6d7b9::t_638ddd831f9b25 169-173
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/ThreadPoolEarlyExpirationExecutor.java
+  s_bb431f90c6d7b9::t_638ddd831f9b25 16-17,111,156,196-199,214,220,226-229
+  s_bb431f90c6d7b9::t_77ca8faf7614e8 230-231
+docs/ARCHITECTURE.md
+  s_bb431f90c6d7b9::t_638ddd831f9b25 134-137
+  s_bb431f90c6d7b9::t_f9665fa258da73 138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dad49dcf0e1482beaa60c07769a80d156dc7e5c1",
+  "prompts": {},
+  "sessions": {
+    "s_bb431f90c6d7b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b644-283e-7410-9f4e-348d2f45b76a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
