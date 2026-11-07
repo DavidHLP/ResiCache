@@ -1,0 +1,24 @@
+src/main/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationEngine.java
+  s_119cf5e74a3c26::t_a01cbd0bbe4813 143,145-147,154-171
+  s_119cf5e74a3c26::t_6aeb02ecac0a1b 172-173
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationIntegrationTest.java
+  s_119cf5e74a3c26::t_5d99004d3e91dc 32
+  s_119cf5e74a3c26::t_747ce17e5a22b9 7,14-16,21-22,26,29,34-39,151-153,160-163,174-329
+  s_119cf5e74a3c26::t_3c1f25d08d7b56 330
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "03a0c76e4f602bd1a9a199f0d1448eef65dafd21",
+  "prompts": {},
+  "sessions": {
+    "s_119cf5e74a3c26": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b601-deed-7ac3-814a-1b7849c1e65c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
