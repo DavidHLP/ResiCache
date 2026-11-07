@@ -1,0 +1,19 @@
+src/test/java/io/github/davidhlp/spring/cache/redis/cache/SerializationMigrationIntegrationTest.java
+  s_889432a42b294a::t_d0cac686ac2311 62-68,83-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7753b3b600f3275488e3e225d7028d19e032fa23",
+  "prompts": {},
+  "sessions": {
+    "s_889432a42b294a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b57a-750f-78a2-bf69-bff80fcaec8f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "DavidHLP <lysf15520112973@163.com>"
+    }
+  }
+}
