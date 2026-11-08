@@ -73,10 +73,13 @@ intentionally narrower than the internal implementation module.
 
 ### Read-through loading
 
-A successful loader value remains available even when the cache write-back
-fails. Loader failures remain observable as the documented Spring failure. This
-availability-first behavior is not a general retry guarantee; the cache is a
-derived acceleration layer. Exact operation semantics are in
+A successful loader value remains available when cache write-back throws a
+`RuntimeException` other than `IllegalArgumentException`. Write-back
+`IllegalArgumentException` configuration/call errors, `Error` and other
+throwables remain failed loads. Loader failures remain observable as the
+documented Spring failure. This availability-first behavior is not a general
+retry guarantee; the cache is a derived acceleration layer. Exact operation
+semantics are in
 [`REFERENCE.md`](REFERENCE.md), and the implementation boundary is in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 

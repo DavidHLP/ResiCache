@@ -119,10 +119,12 @@ coordinate writes and evictions throughout the recovery window. See the
   per-mechanism `false` disables only that mechanism; a per-mechanism `true`
   cannot re-enable a mechanism when the total switch is `false`; changing
   protection configuration requires a restart (no runtime refresh).
-- **Read-through write-back failures**: `get(key, loader)` is
-  availability-first — a successful loader value is always returned; a
-  write-back failure is logged (redacted, no raw key) and does not override
-  the value. Loader failures surface as Spring `Cache.ValueRetrievalException`
+- **Read-through write-back failures**: `get(key, loader)` preserves a
+  successful loader value when write-back throws a `RuntimeException` other
+  than `IllegalArgumentException`; the tolerated failure is logged (redacted,
+  no raw key). Write-back `IllegalArgumentException`, `Error` and other
+  non-runtime failures still produce a failed load. Loader failures surface
+  as Spring `Cache.ValueRetrievalException`
   (type and cause preserved; the diagnostic key is reduced to cache name);
   exception text carries no raw key — the checked-exception wrapper names the
   cache only.
