@@ -1,0 +1,79 @@
+name: Isolated GPG Plugin Check
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - pom.xml
+      - .github/workflows/gpg-plugin-check.yml
+  merge_group:
+    types: [checks_requested]
+permissions:
+  contents: read
+jobs:
+  isolated-signature:
+    name: Disposable-key signature verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-jdk-21
+        with:
+          cache: ''
+      - name: Sign and verify an isolated POM with a disposable key
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Read configuration only: never activate the repository's release profile.
+          version=$(python3 - <<'PY'
+          import re
+          import xml.etree.ElementTree as ET
+          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+          root = ET.parse('pom.xml').getroot()
+          versions = []
+          for profile in root.findall('m:profiles/m:profile', ns):
+              if profile.findtext('m:id', namespaces=ns) == 'release':
+                  for plugin in profile.findall('m:build/m:plugins/m:plugin', ns):
+                      if (plugin.findtext('m:groupId', namespaces=ns) == 'org.apache.maven.plugins'
+                              and plugin.findtext('m:artifactId', namespaces=ns) == 'maven-gpg-plugin'):
+                          versions.append(plugin.findtext('m:version', namespaces=ns))
+          if len(versions) != 1 or not re.fullmatch(r'[0-9]+(?:\.[0-9]+){2}', versions[0] or ''):
+              raise SystemExit('Expected one literal release-profile GPG plugin version')
+          print(versions[0])
+          PY
+          )
+          work=$(mktemp -d)
+          export GNUPGHOME="$work/gnupg"
+          cleanup() {
+            gpgconf --homedir "$GNUPGHOME" --kill gpg-agent || true
+            rm -rf -- "$work"
+          }
+          trap cleanup EXIT
+          mkdir -m 700 "$GNUPGHOME"
+          mkdir -p "$work/probe/.mvn/wrapper"
+          # Copy only the wrapper, not project profiles, extensions or Maven arguments.
+          cp mvnw "$work/probe/mvnw"
+          cp .mvn/wrapper/maven-wrapper.properties "$work/probe/.mvn/wrapper/"
+          cat > "$work/probe/pom.xml" <<'XML'
+          <project xmlns="http://maven.apache.org/POM/4.0.0">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>invalid.example.test</groupId>
+            <artifactId>isolated-signature-probe</artifactId>
+            <version>1.0.0</version>
+            <packaging>pom</packaging>
+          </project>
+          XML
+          printf '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"/>\n' > "$work/settings.xml"
+          gpg --batch --pinentry-mode loopback --passphrase '' \
+            --quick-generate-key 'Disposable CI signing test <test@example.invalid>' ed25519 sign 1d
+          fingerprint=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" {print $10; exit}')
+          test -n "$fingerprint"
+          cd "$work/probe"
+          # This minimal project has no publishing plugins, repositories or credentials.
+          bash ./mvnw -B -ntp -s "$work/settings.xml" \
+            "org.apache.maven.plugins:maven-gpg-plugin:${version}:sign" \
+            -Dgpg.homedir="$GNUPGHOME" -Dgpg.keyname="$fingerprint"
+          signature=target/isolated-signature-probe-1.0.0.pom.asc
+          test -s "$signature"
+          gpg --batch --verify "$signature" pom.xml
