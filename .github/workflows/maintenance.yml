@@ -11,20 +11,12 @@ jobs:
     uses: ./.github/workflows/_verify.yml
   codeql:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-jdk-21
-      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          languages: java-kotlin
-          build-mode: manual
-      - run: ./mvnw -DskipTests package -B
-      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+    uses: ./.github/workflows/_codeql.yml
+    with:
+      upload: always
   quality:
     if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/_quality.yml
